@@ -5611,7 +5611,7 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 	if (DiskDownlinkIsValid(file_header.rootDownlink))
 	{
 		OrioleDBPageDesc *root_desc;
-		char		buf[ORIOLEDB_BLCKSZ];
+		char		pg_attribute_aligned(sizeof(uint32)) buf[ORIOLEDB_BLCKSZ];
 		bool		rerror;
 
 		lock_page(desc->rootInfo.rootPageBlkno);

@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <common/hashfn.h>
+#include <storage/checksum.h>
+#include <storage/checksum_impl.h>
 
 #include "orioledb.h"
 
@@ -1236,7 +1238,7 @@ store_read_page_checkpoint_stats(uint32 checkpointNum)
 static bool
 check_orioledb_page_version(OrioleDBOndiskPageHeader ondisk_page_header)
 {
-	if (ondisk_page_header.page_version != ORIOLEDB_PAGE_VERSION)
+	if (ondisk_page_header.page_version != 1 && ondisk_page_header.page_version != ORIOLEDB_PAGE_VERSION)
 		elog(FATAL, "Page version %u of OrioleDB cluster is not among supported for conversion %u", ondisk_page_header.page_version, ORIOLEDB_PAGE_VERSION);
 
 	return false;
@@ -1281,7 +1283,10 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 	bool		err = false;
 	OrioleDBOndiskPageHeader ondisk_page_header = {0};
 	bool		needs_page_version_convert;
+	uint32		computedCheckSum = 0;
 
+	/* for the checksum computation we need aligned buffer */
+	Assert(((uintptr_t) img % sizeof(uint32)) == 0);
 	Assert(FileExtentOffIsValid(offset));
 	Assert(FileExtentLenIsValid(len));
 
@@ -1310,13 +1315,36 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 			return false;
 
 		ondisk_page_header = *((OrioleDBOndiskPageHeader *) img);
+
 		needs_page_version_convert = check_orioledb_page_version(ondisk_page_header);
+
+		if (ondisk_page_header.page_version > 1)
+		{
+			((OrioleDBOndiskPageHeader *) img)->checkSum = 0;
+
+			computedCheckSum = pg_checksum_block((const PGChecksummablePage *) img);
+
+			elog(DEBUG1, "Read plain disk page: stored checksum %u, computed checksum %u", ondisk_page_header.checkSum, computedCheckSum);
+
+			if (computedCheckSum != ondisk_page_header.checkSum)
+			{
+				ereport(WARNING,
+						(errcode(ERRCODE_DATA_CORRUPTED),
+						 errmsg("page checksum mismatch: stored %u, computed %u",
+								ondisk_page_header.checkSum, computedCheckSum)));
+				/* TODO: maybe ereport(ERROR) here once caller cleanup is safe */
+				return false;
+			}
+
+		}
 
 		elog(DEBUG1, "Read plain disk page: checkpoint %u", ondisk_page_header.checkpointNum);
 	}
 	else
 	{
-		char		buf[ORIOLEDB_BLCKSZ];
+		PGChecksummablePage cp;
+		char	   *buf = (char *) &cp;
+
 		bool		compressed = len != (ORIOLEDB_BLCKSZ / ORIOLEDB_COMP_BLCKSZ);
 
 		if (compressed)
@@ -1331,7 +1359,33 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 				return false;
 
 			ondisk_page_header = *((OrioleDBOndiskPageHeader *) buf);
+
 			needs_page_version_convert = check_orioledb_page_version(ondisk_page_header);
+
+			if (ondisk_page_header.page_version > 1)
+			{
+				((OrioleDBOndiskPageHeader *) buf)->checkSum = 0;
+
+				memset(&buf[read_size], 0, ORIOLEDB_BLCKSZ - read_size);
+
+				computedCheckSum = pg_checksum_block((const PGChecksummablePage *) buf);
+
+				elog(DEBUG1, "Read compressed disk page: stored checksum %u, computed checksum %u", ondisk_page_header.checkSum, computedCheckSum);
+
+				if (computedCheckSum != ondisk_page_header.checkSum)
+				{
+					ereport(WARNING,
+							(errcode(ERRCODE_DATA_CORRUPTED),
+							 errmsg("page checksum mismatch: stored %u, computed %u",
+									ondisk_page_header.checkSum, computedCheckSum)));
+
+					/*
+					 * TODO: maybe ereport(ERROR) here once caller cleanup is
+					 * safe
+					 */
+					return false;
+				}
+			}
 
 			needs_compress_version_convert = check_orioledb_compress_version(ondisk_page_header);
 			Assert(!needs_compress_version_convert);
@@ -1348,21 +1402,37 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 		else
 		{
 			byte_offset = (off_t) offset * (off_t) ORIOLEDB_COMP_BLCKSZ;
-			read_size = O_PAGE_HEADER_SIZE;
+			read_size = ORIOLEDB_BLCKSZ;
 
-			/* details about written image parts are in write_page_to_disk */
-			err = btree_smgr_read(desc, (Pointer) &ondisk_page_header, chkpNum, read_size, byte_offset) != read_size;
-			byte_offset += read_size;
-
+			err = btree_smgr_read(desc, img, chkpNum, read_size, byte_offset) != read_size;
 			if (err)
 				return false;
 
-			read_size = ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE;
-			err = btree_smgr_read(desc, img + O_PAGE_HEADER_SIZE, chkpNum, read_size, byte_offset) != read_size;
-			if (err)
-				return false;
+			ondisk_page_header = *((OrioleDBOndiskPageHeader *) img);
 
 			needs_page_version_convert = check_orioledb_page_version(ondisk_page_header);
+			if (ondisk_page_header.page_version > 1)
+			{
+				((OrioleDBOndiskPageHeader *) img)->checkSum = 0;
+
+				computedCheckSum = pg_checksum_block((const PGChecksummablePage *) img);
+
+				elog(DEBUG1, "Read compressed (len=1) disk page: stored checksum %u, computed checksum %u", ondisk_page_header.checkSum, computedCheckSum);
+
+				if (computedCheckSum != ondisk_page_header.checkSum)
+				{
+					ereport(WARNING,
+							(errcode(ERRCODE_DATA_CORRUPTED),
+							 errmsg("page checksum mismatch: stored %u, computed %u",
+									ondisk_page_header.checkSum, computedCheckSum)));
+
+					/*
+					 * TODO: maybe ereport(ERROR) here once caller cleanup is
+					 * safe
+					 */
+					return false;
+				}
+			}
 			elog(DEBUG1, "Read disk page: checkpoint %u size %d", ondisk_page_header.checkpointNum, ORIOLEDB_BLCKSZ);
 		}
 	}
@@ -1400,11 +1470,18 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 				   Pointer page, off_t page_size)
 {
 
+	StaticAssertDecl(ORIOLEDB_BLCKSZ == BLCKSZ, "OrioleDB BLCKSZ doesn't match PG BLCKSZ");
+
 	off_t		byte_offset,
 				write_size;
 	bool		err = false;
 	uint32		chkpNum = 0;
-	char		buf[ORIOLEDB_BLCKSZ];
+
+	/* for the aligment required by pg_checksum_block */
+	PGChecksummablePage cp;
+	char	   *buf = (char *) &cp;
+
+	OrioleDBOndiskPageHeader *ondisk_page_header;
 
 	Assert(FileExtentOffIsValid(extent->off));
 
@@ -1416,36 +1493,14 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 		byte_offset &= S3_OFFSET_MASK;
 	}
 
-	if (!OCompressIsValid(desc->compress))
+	memset(buf, 0, O_PAGE_HEADER_SIZE);
+
+	ondisk_page_header = (OrioleDBOndiskPageHeader *) buf;
+	ondisk_page_header->checkpointNum = curChkpNum;
+	ondisk_page_header->page_version = ORIOLEDB_PAGE_VERSION;
+
+	if (OCompressIsValid(desc->compress))
 	{
-		OrioleDBOndiskPageHeader *ondisk_page_header;
-
-		/*
-		 * Easy case, write whole page to uncompressed index.
-		 */
-		Assert(extent->len == 1);
-		Assert(page_size == ORIOLEDB_BLCKSZ);
-
-		if (use_device)
-			byte_offset *= (off_t) ORIOLEDB_COMP_BLCKSZ;
-		else
-			byte_offset *= (off_t) ORIOLEDB_BLCKSZ;
-		write_size = ORIOLEDB_BLCKSZ;
-
-		memset(buf, 0, O_PAGE_HEADER_SIZE);
-		ondisk_page_header = (OrioleDBOndiskPageHeader *) buf;
-		ondisk_page_header->checkpointNum = curChkpNum;
-		ondisk_page_header->page_version = ORIOLEDB_PAGE_VERSION;
-		memcpy(&buf[O_PAGE_HEADER_SIZE], page + O_PAGE_HEADER_SIZE, ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE);
-
-		err = btree_smgr_write(desc, buf, chkpNum, write_size, byte_offset) != write_size;
-
-		elog(DEBUG1, "Wrote plain disk page: checkpoint %u", curChkpNum);
-	}
-	else
-	{
-		OrioleDBOndiskPageHeader ondisk_page_header = {0};
-
 		byte_offset *= (off_t) ORIOLEDB_COMP_BLCKSZ;
 
 		/*
@@ -1453,44 +1508,58 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 		 */
 		Assert(sizeof(((OrioleDBOndiskPageHeader *) 0)->compress_page_size) == sizeof(uint16));
 		Assert(ORIOLEDB_BLCKSZ < UINT16_MAX);
+		ondisk_page_header->compress_page_size = page_size;
+		ondisk_page_header->compress_version = ORIOLEDB_COMPRESS_VERSION;
 
-		/* Write header first */
-		ondisk_page_header.compress_page_size = page_size;
-		ondisk_page_header.checkpointNum = curChkpNum;
-		ondisk_page_header.compress_version = ORIOLEDB_COMPRESS_VERSION;
-		ondisk_page_header.page_version = ORIOLEDB_PAGE_VERSION;
-
-		write_size = O_PAGE_HEADER_SIZE;
-		err = btree_smgr_write(desc, (char *) &ondisk_page_header, chkpNum, write_size, byte_offset) != write_size;
-		byte_offset += write_size;
-
-		if (err)
-			return false;
-
-		/* Write everything left except header, which is already written */
 		if (page_size != ORIOLEDB_BLCKSZ)
 		{
 			/*
 			 * Compressed chunks don't have external header, just make up for
 			 * length
 			 */
-			write_size = extent->len * ORIOLEDB_COMP_BLCKSZ - O_PAGE_HEADER_SIZE;
-			err = btree_smgr_write(desc, page, chkpNum, write_size, byte_offset) != write_size;
+			write_size = extent->len * ORIOLEDB_COMP_BLCKSZ;
+
+			/*
+			 * zero all the way to the block end, so we dont have stack
+			 * garbage and whatever write_size-page_size has
+			 */
+			memcpy(&buf[O_PAGE_HEADER_SIZE], page, page_size);
+			memset(&buf[O_PAGE_HEADER_SIZE + page_size], 0, ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE - page_size);
 		}
 		else
 		{
-			/*
-			 * For non-compresses page cut already written header and make up
-			 * for length
-			 */
-			page += O_PAGE_HEADER_SIZE;
-			write_size = ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE;
-			err = btree_smgr_write(desc, page, chkpNum, write_size, byte_offset) != write_size;
+			/* Non-comprssed page really looks like a plain page */
+			write_size = ORIOLEDB_BLCKSZ;
+			memcpy(&buf[O_PAGE_HEADER_SIZE], page + O_PAGE_HEADER_SIZE, ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE);
 		}
 
-		elog(DEBUG1, "Wrote disk page: checkpoint %u size %d", curChkpNum, (int) page_size);
-
+		/* now buf has header then page in full, can be written in one call */
 	}
+	else
+	{
+		/*
+		 * Easy case, write whole page to uncompressed index.
+		 */
+		Assert(extent->len == 1);
+		Assert(page_size == ORIOLEDB_BLCKSZ);
+
+		write_size = ORIOLEDB_BLCKSZ;
+
+		if (use_device)
+			byte_offset *= (off_t) ORIOLEDB_COMP_BLCKSZ;
+		else
+			byte_offset *= (off_t) ORIOLEDB_BLCKSZ;
+
+		memcpy(&buf[O_PAGE_HEADER_SIZE], page + O_PAGE_HEADER_SIZE, ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE);
+		/* now buf has header then page in full, can be written in one call */
+	}
+
+	ondisk_page_header->checkSum = pg_checksum_block(&cp);
+	/* TODO: blckid thingy here */
+
+	err = btree_smgr_write(desc, buf, chkpNum, write_size, byte_offset) != write_size;
+
+	elog(DEBUG1, "Wrote disk page: checkpoint %u size %d", curChkpNum, (int) page_size);
 
 	return !err;
 }
@@ -1517,7 +1586,7 @@ load_page(OBTreeFindPageContext *context)
 	OFixedKey	target_hikey;
 	int			target_level;
 	Page		page;
-	char		buf[ORIOLEDB_BLCKSZ];
+	char		pg_attribute_aligned(sizeof(uint32)) buf[ORIOLEDB_BLCKSZ];
 	bool		was_modify;
 	bool		was_downlink_location;
 	bool		was_fetch = false;

@@ -82,7 +82,7 @@ struct BTreeSeqScan
 {
 	BTreeDescr *desc;
 
-	char		leafImg[ORIOLEDB_BLCKSZ];
+	char		pg_attribute_aligned(sizeof(uint32)) leafImg[ORIOLEDB_BLCKSZ];
 	char		histImg[ORIOLEDB_BLCKSZ];
 
 	/*

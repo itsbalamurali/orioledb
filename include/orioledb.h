@@ -100,7 +100,7 @@
 #define ORIOLEDB_VERSION "OrioleDB beta 16"
 #define ORIOLEDB_BINARY_VERSION 9
 #define ORIOLEDB_SYS_TREE_VERSION	1	/* Version of system catalog */
-#define ORIOLEDB_PAGE_VERSION		1	/* Version of binary page format */
+#define ORIOLEDB_PAGE_VERSION		2	/* Version of binary page format */
 #define ORIOLEDB_COMPRESS_VERSION	1	/* Version of page compression (only
 										 * for compressed pages) */
 
@@ -385,7 +385,7 @@ typedef struct
 	 * pages it should be used for conversion of uncompressed images
 	 */
 	uint8		page_version;
-	uint32		reserved1;
+	uint32		checkSum;
 	uint32		reserved2;
 } OrioleDBOndiskPageHeader;
 

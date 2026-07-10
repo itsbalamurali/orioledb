@@ -228,6 +228,64 @@ class AmcheckTest(BaseTest):
 		self.assertTrue(any('check failed' in r[1] for r in rows),
 		                f"unexpected verify_orioledb output: {rows!r}")
 
+	def test_verify_orioledb_page_corruption(self):
+		"""
+		Corrupting the on-disk page should result in the checksum mismatch.
+		"""
+
+		import struct
+
+		node = self.node
+
+		node.start()
+		node.safe_psql(
+		    'postgres', """
+			CREATE EXTENSION IF NOT EXISTS orioledb;
+			CREATE TABLE o_corrupt (
+				k int PRIMARY KEY,
+				v text NOT NULL
+			) USING orioledb;
+			INSERT INTO o_corrupt
+				SELECT i, repeat('x', 200) FROM generate_series(1, 1000) i;
+			CHECKPOINT;
+		""")
+
+		datoid, pkey_relnode = node.execute(
+		    'postgres', """
+			SELECT (SELECT oid FROM pg_database WHERE datname='postgres'),
+			       (SELECT relfilenode FROM pg_class
+			        WHERE relname='o_corrupt_pkey');
+		""")[0]
+
+		node.stop()
+
+		# Pick the page file and write garbage somewhere
+		# On restart we should get checksum error
+		pattern = os.path.join(node.data_dir, 'orioledb_data', str(datoid),
+		                       f'{pkey_relnode}')
+		page_files = sorted(glob.glob(pattern))
+		self.assertTrue(page_files, f"no page files matched {pattern}")
+		with open(page_files[-1], 'r+b') as f:
+			f.seek(16000)
+			f.write(struct.pack('<Q', 0xDEADBEEF))
+
+		node.start()
+		# The checksum error emitted as  a WARNING inside
+		# read_page_from_disk because WARNING doesn't longjmp.
+		# After the cleanup, load_page raises the generic
+		# ereport(errcode_for_file_access, "could not read page ...: %m").
+		# Curiously during my tests it gives UndefinedFile.
+		# Looks like the last errno from somewhere.
+		#
+		# Assert on any Exception and grep the server log for the WARNING
+		# text to confirm the checksum error.
+		with self.assertRaises(Exception):
+			node.execute(
+			    'postgres',
+			    "SELECT * FROM verify_orioledb('o_corrupt'::regclass);")
+		with open(os.path.join(node.logs_dir, 'postgresql.log')) as f:
+			self.assertIn("page checksum mismatch", f.read())
+
 	def test_verify_orioledb_during_checkpoint(self):
 		"""
 		With the checkpointer parked inside our pkey tree via a stopevent,
