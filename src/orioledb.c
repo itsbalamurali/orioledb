@@ -917,8 +917,9 @@ _PG_init(void)
 							 NULL,
 							 NULL);
 	DefineCustomBoolVariable("orioledb.page_checksum",
-							 "Enables page checksum computation and verification",
-							 NULL,
+							 "Compute and store page checksums when writing pages to disk",
+							 "Pages are always verified on read when they carry a checksum; "
+							 "turning this off only stops newly written pages from getting one.",
 							 &page_checksum,
 							 true,
 							 PGC_POSTMASTER,

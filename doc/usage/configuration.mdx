@@ -227,7 +227,9 @@ regions in file from occupying disk space. It's an experimental option.
 | ----------- | --- |
 | **Default** | on  |
 
-Compute, store and verify page checksums on disk IO
+Compute and store page checksums when writing pages to disk. Pages are always
+verified on read when they carry a checksum, independent of this setting.
+Turning it off only stops newly written pages from getting one.
 
 ### `orioledb.strict_mode`
 

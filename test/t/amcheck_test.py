@@ -228,14 +228,23 @@ class AmcheckTest(BaseTest):
 		self.assertTrue(any('check failed' in r[1] for r in rows),
 		                f"unexpected verify_orioledb output: {rows!r}")
 
-	def verify_orioledb_page_checksum_base(self, guc_value, corrupt):
+	def verify_orioledb_page_checksum_base(self,
+	                                       guc_value,
+	                                       corrupt,
+	                                       read_guc_value=None):
 		"""
-		Shared helper for the orioledb.page_checksum GUC tests. Starts a
-		node with the given GUC value, creates + checkpoints a table,
-		optionally corrupts a page byte on disk, restarts, and asserts on
-		the log depending on the (guc, corrupt) combination.
+		Shared helper for the orioledb.page_checksum GUC tests. Writes and
+		checkpoints a table with orioledb.page_checksum = guc_value, optionally
+		corrupts a page byte on disk, restarts with
+		orioledb.page_checksum = read_guc_value (defaults to guc_value), and
+		asserts on the log. Whether corruption is caught depends on whether the
+		page carries a checksum (the write-time guc_value), not on the
+		read-time value, since read verification is not gated by the GUC.
 		"""
 		import struct
+
+		if read_guc_value is None:
+			read_guc_value = guc_value
 
 		node = self.node
 		node.append_conf('postgresql.conf',
@@ -273,6 +282,8 @@ class AmcheckTest(BaseTest):
 				f.seek(16000)
 				f.write(struct.pack('<Q', 0xDEADBEEF))
 
+		node.append_conf('postgresql.conf',
+		                 f"orioledb.page_checksum = {read_guc_value}\n")
 		node.start()
 		if guc_value == 'on' and corrupt:
 			# The checksum error is emitted as a WARNING inside
@@ -281,8 +292,8 @@ class AmcheckTest(BaseTest):
 			# ereport(errcode_for_file_access, "could not read page ...: %m"),
 			# whose SQLSTATE comes from errcode_for_file_access() reading
 			# errno. The checksum path doesn't set errno, so whatever value
-			# happens to be there gets mapped -- in practice ENOENT,
-			# surfaced as UndefinedFile.
+			# happens to be there gets mapped (in practice ENOENT,
+			# surfaced as UndefinedFile).
 			#
 			# Assert on any Exception and grep the server log for the
 			# WARNING text to confirm the checksum path fired.
@@ -293,8 +304,9 @@ class AmcheckTest(BaseTest):
 			with open(os.path.join(node.logs_dir, 'postgresql.log')) as f:
 				self.assertIn("page checksum mismatch", f.read())
 		elif corrupt:
-			# GUC off: corruption is on disk but the read path skips
-			# verification, so no WARNING should fire.
+			# GUC off at write time => pages have checkSum == 0, so the read
+			# path's zero-sentinel skips them and no WARNING fires (regardless
+			# of the read-side GUC).
 			node.execute(
 			    'postgres',
 			    "SELECT * FROM verify_orioledb('o_corrupt'::regclass);")
@@ -310,10 +322,23 @@ class AmcheckTest(BaseTest):
 
 	def test_verify_orioledb_page_corruption_silenced_when_guc_is_off(self):
 		"""
-		With GUC off, corruption on disk must not produce a
-		WARNING - verification is skipped.
+		With the GUC off at write time, pages get no checksum (checkSum == 0),
+		so the read path's zero-sentinel skips them and corruption on disk
+		produces no WARNING. Read-side verification is not gated by the GUC
+		otherwise: a page that carries a checksum is always checked.
 		"""
 		self.verify_orioledb_page_checksum_base("off", corrupt=True)
+
+	def test_verify_orioledb_page_corruption_caught_when_guc_turned_off(self):
+		"""
+		A page written with a checksum must still be verified after the node
+		restarts with orioledb.page_checksum = off. Turning the GUC off only
+		stops new pages from getting a checksum; it must not silence checks on
+		pages that already carry one.
+		"""
+		self.verify_orioledb_page_checksum_base("on",
+		                                        corrupt=True,
+		                                        read_guc_value="off")
 
 	def test_verify_orioledb_during_checkpoint(self):
 		"""
