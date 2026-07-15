@@ -228,15 +228,18 @@ class AmcheckTest(BaseTest):
 		self.assertTrue(any('check failed' in r[1] for r in rows),
 		                f"unexpected verify_orioledb output: {rows!r}")
 
-	def test_verify_orioledb_page_corruption(self):
+	def verify_orioledb_page_checksum_base(self, guc_value, corrupt):
 		"""
-		Corrupting the on-disk page should result in the checksum mismatch.
+		Shared helper for the orioledb.page_checksum GUC tests. Starts a
+		node with the given GUC value, creates + checkpoints a table,
+		optionally corrupts a page byte on disk, restarts, and asserts on
+		the log depending on the (guc, corrupt) combination.
 		"""
-
 		import struct
 
 		node = self.node
-
+		node.append_conf('postgresql.conf',
+		                 f"orioledb.page_checksum = {guc_value}\n")
 		node.start()
 		node.safe_psql(
 		    'postgres', """
@@ -259,32 +262,58 @@ class AmcheckTest(BaseTest):
 
 		node.stop()
 
-		# Pick the page file and write garbage somewhere
-		# On restart we should get checksum error
-		pattern = os.path.join(node.data_dir, 'orioledb_data', str(datoid),
-		                       f'{pkey_relnode}')
-		page_files = sorted(glob.glob(pattern))
-		self.assertTrue(page_files, f"no page files matched {pattern}")
-		with open(page_files[-1], 'r+b') as f:
-			f.seek(16000)
-			f.write(struct.pack('<Q', 0xDEADBEEF))
+		if corrupt:
+			# Pick the page file and write garbage somewhere.
+			# On restart we should get a checksum error IF the GUC is on.
+			pattern = os.path.join(node.data_dir, 'orioledb_data', str(datoid),
+			                       f'{pkey_relnode}')
+			page_files = sorted(glob.glob(pattern))
+			self.assertTrue(page_files, f"no page files matched {pattern}")
+			with open(page_files[-1], 'r+b') as f:
+				f.seek(16000)
+				f.write(struct.pack('<Q', 0xDEADBEEF))
 
 		node.start()
-		# The checksum error emitted as  a WARNING inside
-		# read_page_from_disk because WARNING doesn't longjmp.
-		# After the cleanup, load_page raises the generic
-		# ereport(errcode_for_file_access, "could not read page ...: %m").
-		# Curiously during my tests it gives UndefinedFile.
-		# Looks like the last errno from somewhere.
-		#
-		# Assert on any Exception and grep the server log for the WARNING
-		# text to confirm the checksum error.
-		with self.assertRaises(Exception):
+		if guc_value == 'on' and corrupt:
+			# The checksum error is emitted as a WARNING inside
+			# read_page_from_disk because WARNING doesn't longjmp.
+			# After the cleanup, load_page raises the generic
+			# ereport(errcode_for_file_access, "could not read page ...: %m"),
+			# whose SQLSTATE comes from errcode_for_file_access() reading
+			# errno. The checksum path doesn't set errno, so whatever value
+			# happens to be there gets mapped -- in practice ENOENT,
+			# surfaced as UndefinedFile.
+			#
+			# Assert on any Exception and grep the server log for the
+			# WARNING text to confirm the checksum path fired.
+			with self.assertRaises(Exception):
+				node.execute(
+				    'postgres',
+				    "SELECT * FROM verify_orioledb('o_corrupt'::regclass);")
+			with open(os.path.join(node.logs_dir, 'postgresql.log')) as f:
+				self.assertIn("page checksum mismatch", f.read())
+		elif corrupt:
+			# GUC off: corruption is on disk but the read path skips
+			# verification, so no WARNING should fire.
 			node.execute(
 			    'postgres',
 			    "SELECT * FROM verify_orioledb('o_corrupt'::regclass);")
-		with open(os.path.join(node.logs_dir, 'postgresql.log')) as f:
-			self.assertIn("page checksum mismatch", f.read())
+			with open(os.path.join(node.logs_dir, 'postgresql.log')) as f:
+				self.assertNotIn("page checksum mismatch", f.read())
+
+	def test_verify_orioledb_page_corruption(self):
+		"""
+		With GUC on, corrupting an on-disk page must produce a
+		'page checksum mismatch' WARNING in the log.
+		"""
+		self.verify_orioledb_page_checksum_base("on", corrupt=True)
+
+	def test_verify_orioledb_page_corruption_silenced_when_guc_is_off(self):
+		"""
+		With GUC off, corruption on disk must not produce a
+		WARNING - verification is skipped.
+		"""
+		self.verify_orioledb_page_checksum_base("off", corrupt=True)
 
 	def test_verify_orioledb_during_checkpoint(self):
 		"""

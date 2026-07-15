@@ -100,7 +100,7 @@
 #define ORIOLEDB_VERSION "OrioleDB beta 16"
 #define ORIOLEDB_BINARY_VERSION 9
 #define ORIOLEDB_SYS_TREE_VERSION	1	/* Version of system catalog */
-#define ORIOLEDB_PAGE_VERSION		2	/* Version of binary page format */
+#define ORIOLEDB_PAGE_VERSION		1	/* Version of binary page format */
 #define ORIOLEDB_COMPRESS_VERSION	1	/* Version of page compression (only
 										 * for compressed pages) */
 
@@ -385,7 +385,8 @@ typedef struct
 	 * pages it should be used for conversion of uncompressed images
 	 */
 	uint8		page_version;
-	uint32		checkSum;
+	uint16		checkSum;
+	uint16		reserved1;
 	uint32		reserved2;
 } OrioleDBOndiskPageHeader;
 
@@ -458,6 +459,7 @@ extern int	max_io_concurrency;
 extern bool use_mmap;
 extern bool use_device;
 extern bool orioledb_use_sparse_files;
+extern bool page_checksum;
 extern int	device_fd;
 extern char *device_filename;
 extern Pointer mmap_data;
