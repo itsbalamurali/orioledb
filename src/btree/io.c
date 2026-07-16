@@ -1263,11 +1263,10 @@ check_orioledb_page_checksum(OrioleDBOndiskPageHeader ondisk_page_header,
 		return true;
 	}
 
-	/*
-	 * A page carrying a checksum is always verified, regardless of the
-	 * page_checksum GUC: turning that GUC off only stops newly written pages
-	 * from getting a checksum.
-	 */
+	if (!page_checksum)
+	{
+		return true;
+	}
 
 	((OrioleDBOndiskPageHeader *) buf)->checkSum = 0;
 
