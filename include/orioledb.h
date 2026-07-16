@@ -390,6 +390,76 @@ typedef struct
 	uint32		reserved2;
 } OrioleDBOndiskPageHeader;
 
+/* number of checksums to calculate in parallel */
+#define N_SUMS 32
+/* prime multiplier of FNV-1a hash */
+#define FNV_PRIME 16777619
+
+typedef union
+{
+	OrioleDBOndiskPageHeader phdr;
+	uint32		data[ORIOLEDB_BLCKSZ / (sizeof(uint32) * N_SUMS)][N_SUMS];
+} OrioleDBChecksummablePage;
+
+StaticAssertDecl(sizeof(OrioleDBChecksummablePage) == ORIOLEDB_BLCKSZ,
+				 "OrioleDBChecksummablePage size doesn't match ORIOLEDB_BLCKSZ");
+
+/*
+ * Base offsets to initialize each of the parallel FNV hashes into a
+ * different initial state.
+ */
+static const uint32 checksumBaseOffsets[N_SUMS] = {
+	0x5B1F36E9, 0xB8525960, 0x02AB50AA, 0x1DE66D2A,
+	0x79FF467A, 0x9BB9F8A3, 0x217E7CD2, 0x83E13D2C,
+	0xF8D4474F, 0xE39EB970, 0x42C6AE16, 0x993216FA,
+	0x7B093B5D, 0x98DAFF3C, 0xF718902A, 0x0B1C9CDB,
+	0xE58F764B, 0x187636BC, 0x5D7B3BB1, 0xE73DE7DE,
+	0x92BEC979, 0xCCA6C0B2, 0x304A0979, 0x85AA43D4,
+	0x783125BB, 0x6CA8EAA2, 0xE407EAC6, 0x4B5CFC3E,
+	0x9FBF8C76, 0x15CA20BE, 0xF2CA9FD3, 0x959BD756
+};
+
+/*
+ * Calculate one round of the checksum.
+ */
+#define CHECKSUM_COMP(checksum, value) \
+do { \
+	uint32 __tmp = (checksum) ^ (value); \
+	(checksum) = __tmp * FNV_PRIME ^ (__tmp >> 17); \
+} while (0)
+
+/*
+ * Block checksum algorithm.  The page must be adequately aligned
+ * (at least on 4-byte boundary).
+ */
+static inline uint32
+oriole_checksum_block(const OrioleDBChecksummablePage *page)
+{
+	uint32		sums[N_SUMS];
+	uint32		result = 0;
+	uint32		i,
+				j;
+
+	/* initialize partial checksums to their corresponding offsets */
+	memcpy(sums, checksumBaseOffsets, sizeof(checksumBaseOffsets));
+
+	/* main checksum calculation */
+	for (i = 0; i < (uint32) (ORIOLEDB_BLCKSZ / (sizeof(uint32) * N_SUMS)); i++)
+		for (j = 0; j < N_SUMS; j++)
+			CHECKSUM_COMP(sums[j], page->data[i][j]);
+
+	/* finally add in two rounds of zeroes for additional mixing */
+	for (i = 0; i < 2; i++)
+		for (j = 0; j < N_SUMS; j++)
+			CHECKSUM_COMP(sums[j], 0);
+
+	/* xor fold partial checksums together */
+	for (i = 0; i < N_SUMS; i++)
+		result ^= sums[i];
+
+	return result;
+}
+
 StaticAssertDecl(sizeof(OrioleDBPageHeader) == sizeof(OrioleDBOndiskPageHeader),
 				 "sizes of OrioleDBPageHeader and OrioleDBOndiskPageHeader are not equal");
 #define O_PAGE_HEADER_SIZE		sizeof(OrioleDBPageHeader)

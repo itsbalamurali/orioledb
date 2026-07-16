@@ -18,8 +18,6 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <common/hashfn.h>
-#include <storage/checksum.h>
-#include <storage/checksum_impl.h>
 
 #include "orioledb.h"
 
@@ -1270,7 +1268,7 @@ check_orioledb_page_checksum(OrioleDBOndiskPageHeader ondisk_page_header,
 
 	((OrioleDBOndiskPageHeader *) buf)->checkSum = 0;
 
-	computedCheckSum = (uint16) ((pg_checksum_block((const PGChecksummablePage *) buf) % 65535) + 1);
+	computedCheckSum = (uint16) ((oriole_checksum_block((const OrioleDBChecksummablePage *) buf) % 65535) + 1);
 
 	elog(DEBUG1, "Read %s disk page: stored checksum %u, computed checksum %u",
 		 label, ondisk_page_header.checkSum, computedCheckSum);
@@ -1362,7 +1360,7 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 	}
 	else
 	{
-		PGChecksummablePage cp;
+		OrioleDBChecksummablePage cp;
 		char	   *buf = (char *) &cp;
 
 		bool		compressed = len != (ORIOLEDB_BLCKSZ / ORIOLEDB_COMP_BLCKSZ);
@@ -1455,16 +1453,13 @@ static bool
 write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 				   Pointer page, off_t page_size)
 {
-
-	StaticAssertDecl(ORIOLEDB_BLCKSZ == BLCKSZ, "OrioleDB BLCKSZ doesn't match PG BLCKSZ");
-
 	off_t		byte_offset,
 				write_size;
 	bool		err = false;
 	uint32		chkpNum = 0;
 
-	/* for the aligment required by pg_checksum_block */
-	PGChecksummablePage cp;
+	/* for the aligment required by oriole_checksum_block */
+	OrioleDBChecksummablePage cp;
 	char	   *buf = (char *) &cp;
 
 	OrioleDBOndiskPageHeader *ondisk_page_header;
@@ -1545,7 +1540,7 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 	if (page_checksum)
 	{
 		/* mirror checksum_impl.h */
-		ondisk_page_header->checkSum = (uint16) ((pg_checksum_block(&cp) % 65535) + 1);
+		ondisk_page_header->checkSum = (uint16) ((oriole_checksum_block(&cp) % 65535) + 1);
 		/* TODO: blckid thingy here */
 	}
 	err = btree_smgr_write(desc, buf, chkpNum, write_size, byte_offset) != write_size;
