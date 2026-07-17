@@ -62,6 +62,7 @@ pub struct LogicalXidCtx {
 ///
 /// Mirrors `OSnapshot` in `include/transam/oxid.h`.
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct OSnapshot {
     pub csn: CommitSeqNo,
     pub xlogptr: XLogRecPtr,

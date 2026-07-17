@@ -18,7 +18,7 @@ pub struct OScanState {
     pub scandesc: pg_sys::IndexScanDescData,
     pub ixNum: std::ffi::c_int,
     pub cxt: MemoryContext,
-    pub scanDir: pg_sys::ScanDirection,
+    pub scanDir: pg_sys::ScanDirection::Type,
     pub addJunk: bool,
     pub onlyCurIx: bool,
     pub returning: bool,
@@ -30,7 +30,7 @@ pub struct OScanState {
     pub curKeyRange: [u8; 128], // OBTreeKeyRange
     pub iterator: *mut std::ffi::c_void, // BTreeIterator
     pub indexQuals: *mut pg_sys::List,
-    pub cmd: pg_sys::CmdType,
+    pub cmd: pg_sys::CmdType::Type,
     pub oSnapshot: [u8; 16], // OSnapshot
 }
 

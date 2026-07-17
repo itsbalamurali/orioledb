@@ -9,7 +9,7 @@
  *-------------------------------------------------------------------------
  */
 
-use pgrx::pg_sys::{self, Relation, CommandId, IndexUniqueCheck, ItemPointer};
+use pgrx::pg_sys::{self, Relation, CommandId, pg_sys::IndexUniqueCheck::Type, ItemPointer};
 use crate::{OXid, CommitSeqNo};
 use crate::tableam::descr::{OTableDescr, OIndexDescr};
 use crate::tableam::key_range::OBTreeKeyBound;
@@ -62,7 +62,7 @@ pub struct OLockCallbackArg {
     pub descr: *mut OTableDescr,
     pub oxid: OXid,
     pub csn: CommitSeqNo,
-    pub waitPolicy: pg_sys::LockWaitPolicy,
+    pub waitPolicy: pg_sys::LockWaitPolicy::Type,
     pub tupUndoLocation: u64,
     pub deleted: std::ffi::c_int,
     pub modifyCid: CommandId,
@@ -121,7 +121,7 @@ pub unsafe extern "C" fn o_tbl_insert_with_arbiter(
     slot: *mut pg_sys::TupleTableSlot,
     arbiterIndexes: *mut pg_sys::List,
     cid: CommandId,
-    lockmode: pg_sys::LockTupleMode,
+    lockmode: pg_sys::LockTupleMode::Type,
     lockedSlot: *mut pg_sys::TupleTableSlot,
     estate: *mut pg_sys::EState,
     resultRelInfo: *mut pg_sys::ResultRelInfo,
@@ -133,7 +133,7 @@ pub unsafe extern "C" fn o_tbl_insert_with_arbiter(
             slot: *mut pg_sys::TupleTableSlot,
             arbiterIndexes: *mut pg_sys::List,
             cid: CommandId,
-            lockmode: pg_sys::LockTupleMode,
+            lockmode: pg_sys::LockTupleMode::Type,
             lockedSlot: *mut pg_sys::TupleTableSlot,
             estate: *mut pg_sys::EState,
             resultRelInfo: *mut pg_sys::ResultRelInfo,
@@ -151,7 +151,7 @@ pub unsafe extern "C" fn o_tbl_index_insert(
     oxid: OXid,
     csn: CommitSeqNo,
     callbackInfo: *mut std::ffi::c_void, // BTreeModifyCallbackInfo
-    checkUnique: IndexUniqueCheck,
+    checkUnique: pg_sys::IndexUniqueCheck::Type,
 ) -> OTableModifyResult {
     // Note: in operations.h, o_tbl_index_insert returns OBTreeModifyResult.
     // We mock/forward via C interface.
@@ -164,7 +164,7 @@ pub unsafe extern "C" fn o_tbl_index_insert(
             oxid: OXid,
             csn: CommitSeqNo,
             callbackInfo: *mut std::ffi::c_void,
-            checkUnique: IndexUniqueCheck,
+            checkUnique: pg_sys::IndexUniqueCheck::Type,
         ) -> OTableModifyResult;
     }
     o_tbl_index_insert_c(descr, id, own_tup, slot, oxid, csn, callbackInfo, checkUnique)
@@ -174,7 +174,7 @@ pub unsafe extern "C" fn o_tbl_index_insert(
 pub unsafe extern "C" fn o_tbl_lock(
     descr: *mut OTableDescr,
     pkey: *mut OBTreeKeyBound,
-    mode: pg_sys::LockTupleMode,
+    mode: pg_sys::LockTupleMode::Type,
     oxid: OXid,
     larg: *mut OLockCallbackArg,
     hint: *mut pg_sys::BTreeLocationHint,
@@ -183,7 +183,7 @@ pub unsafe extern "C" fn o_tbl_lock(
         fn o_tbl_lock_c(
             descr: *mut OTableDescr,
             pkey: *mut OBTreeKeyBound,
-            mode: pg_sys::LockTupleMode,
+            mode: pg_sys::LockTupleMode::Type,
             oxid: OXid,
             larg: *mut OLockCallbackArg,
             hint: *mut pg_sys::BTreeLocationHint,
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn o_update_secondary_index(
     oldSlot: *mut pg_sys::TupleTableSlot,
     oxid: OXid,
     csn: CommitSeqNo,
-    checkUnique: IndexUniqueCheck,
+    checkUnique: pg_sys::IndexUniqueCheck::Type,
 ) -> OTableModifyResult {
     extern "C" {
         fn o_update_secondary_index_c(
@@ -244,7 +244,7 @@ pub unsafe extern "C" fn o_update_secondary_index(
             oldSlot: *mut pg_sys::TupleTableSlot,
             oxid: OXid,
             csn: CommitSeqNo,
-            checkUnique: IndexUniqueCheck,
+            checkUnique: pg_sys::IndexUniqueCheck::Type,
         ) -> OTableModifyResult;
     }
     o_update_secondary_index_c(id, ix_num, new_valid, old_valid, newSlot, new_ix_tup, oldSlot, oxid, csn, checkUnique)

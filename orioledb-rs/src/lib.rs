@@ -18,6 +18,8 @@ pub mod utils;
 pub mod workers;
 
 pub type Oid = pg_sys::Oid;
+pub type CommitSeqNo = u64;
+pub type OXid = u64;
 
 // ---------------------------------------------------------------------------
 // Constants & Custom Types
@@ -25,6 +27,11 @@ pub type Oid = pg_sys::Oid;
 pub const O_SERIALIZABLE_TABLE_LOCK: c_int = 0;
 pub const O_SERIALIZABLE_ERROR: c_int = 1;
 pub const O_SERIALIZABLE_REPEATABLE_READ: c_int = 2;
+
+// PostgreSQL error codes (MAKE_SQLSTATE macro results)
+pub const ERRCODE_INTERNAL_ERROR: i32 = pgrx::errcode::PgSqlErrorCode::ERRCODE_INTERNAL_ERROR as i32;
+pub const ERRCODE_CONFIG_FILE_ERROR: i32 = pgrx::errcode::PgSqlErrorCode::ERRCODE_CONFIG_FILE_ERROR as i32;
+pub const ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE: i32 = pgrx::errcode::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE as i32;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -476,19 +483,25 @@ pub static mut local_ppool: LocalPagePoolStruct = LocalPagePoolStruct {
     base: PagePool { ops: std::ptr::null() },
 };
 
+// Hook type aliases for PG18 (these are no longer in pg_sys by these names)
+type base_init_startup_hook_type = Option<unsafe extern "C-unwind" fn()>;
+type database_size_hook_type = Option<unsafe extern "C-unwind" fn(dbOid: pg_sys::Oid) -> i64>;
+type AcceptInvalidationMessagesHookType = Option<unsafe extern "C-unwind" fn()>;
+type CheckPoint_hook_type = Option<unsafe extern "C-unwind" fn(checkPoint: *mut pg_sys::CheckPoint)>;
+
 static mut prev_shmem_startup_hook: pg_sys::shmem_startup_hook_type = None;
 static mut prev_shmem_request_hook: Option<unsafe extern "C-unwind" fn()> = None;
-static mut prev_base_init_startup_hook: pg_sys::base_init_startup_hook_type = None;
+static mut prev_base_init_startup_hook: base_init_startup_hook_type = None;
 static mut prev_get_relation_info_hook: pg_sys::get_relation_info_hook_type = None;
 #[no_mangle]
-pub static mut prev_database_size_hook: pg_sys::database_size_hook_type = None;
-static mut prev_AcceptInvalidationMessagesHook: pg_sys::AcceptInvalidationMessagesHookType = None;
+pub static mut prev_database_size_hook: database_size_hook_type = None;
+static mut prev_AcceptInvalidationMessagesHook: AcceptInvalidationMessagesHookType = None;
 
 #[cfg(not(any(feature = "pg18", feature = "pg19")))]
 static mut prev_skip_tree_height_hook: Option<unsafe extern "C-unwind" fn(indexRelation: Relation) -> bool> = None;
 
 #[no_mangle]
-pub static mut next_CheckPoint_hook: pg_sys::CheckPoint_hook_type = None;
+pub static mut next_CheckPoint_hook: CheckPoint_hook_type = None;
 
 static mut serializable_mode_options: [pg_sys::config_enum_entry; 4] = [
     pg_sys::config_enum_entry {
@@ -546,14 +559,14 @@ extern "C-unwind" {
     pub fn o_perform_checkpoint(redo_pos: pg_sys::XLogRecPtr, flags: c_int);
     pub fn o_after_checkpoint_cleanup_hook(checkpoint_redo: pg_sys::XLogRecPtr, flags: c_int);
 
-    pub fn undo_xact_callback(event: pg_sys::XactEvent, arg: *mut c_void);
-    pub fn undo_subxact_callback(event: pg_sys::SubXactEvent, mySubid: pg_sys::SubTransactionId, parentSubid: pg_sys::SubTransactionId, arg: *mut c_void);
+    pub fn undo_xact_callback(event: pg_sys::XactEvent::Type, arg: *mut c_void);
+    pub fn undo_subxact_callback(event: pg_sys::SubXactEvent::Type, mySubid: pg_sys::SubTransactionId, parentSubid: pg_sys::SubTransactionId, arg: *mut c_void);
     pub fn undo_snapshot_register_hook(snapshot: *mut c_void);
     pub fn undo_snapshot_deregister_hook(snapshot: *mut c_void);
     pub fn release_undo_size(undo_type: c_int);
 
-    pub fn orioledb_enable_rewind_check_hook(newval: *mut bool, extra: *mut *mut c_void, source: pg_sys::GucSource) -> bool;
-    pub fn orioledb_replay_until_lsn_check_hook(newval: *mut *mut c_char, extra: *mut *mut c_void, source: pg_sys::GucSource) -> bool;
+    pub fn orioledb_enable_rewind_check_hook(newval: *mut bool, extra: *mut *mut c_void, source: pg_sys::GucSource::Type) -> bool;
+    pub fn orioledb_replay_until_lsn_check_hook(newval: *mut *mut c_char, extra: *mut *mut c_void, source: pg_sys::GucSource::Type) -> bool;
     pub fn orioledb_replay_until_lsn_assign_hook(newval: *const c_char, extra: *mut c_void);
 
     pub fn o_ppool_estimate_space(pool: *mut c_void, offset: usize, count: usize, debug: bool) -> usize;
@@ -589,7 +602,6 @@ extern "C-unwind" {
     pub fn wait_for_oxid(oxid: u64, wait: bool) -> bool;
     pub fn o_recovery_shutdown_hook(code: c_int, arg: pg_sys::Datum);
 
-    pub fn orioledb_calculate_database_size(dbOid: Oid) -> i64;
     pub fn stopevents_make_cxt();
 
     pub static mut old_set_rel_pathlist_hook: pg_sys::set_rel_pathlist_hook_type;
@@ -624,7 +636,7 @@ extern "C-unwind" {
     pub fn o_page_desc_init(desc: *mut OrioleDBPageDesc);
     pub fn orioledb_memsize() -> usize;
     pub fn orioledb_check_shmem();
-    pub fn check_debug_max_bridge_ctid(newval: *mut *mut c_char, extra: *mut *mut c_void, source: pg_sys::GucSource) -> bool;
+    pub fn check_debug_max_bridge_ctid(newval: *mut *mut c_char, extra: *mut *mut c_void, source: pg_sys::GucSource::Type) -> bool;
     pub fn assign_debug_max_bridge_ctid(newval: *const c_char, extra: *mut c_void);
 }
 
@@ -635,6 +647,18 @@ extern "C-unwind" {
     pub fn orioledb_rm_desc(buf: pg_sys::StringInfo, record: *mut pg_sys::XLogReaderState);
     pub fn orioledb_rm_identify(info: u8) -> *const c_char;
     pub fn orioledb_decode(record: *mut c_void);
+}
+
+// OrioleDB-patched PostgreSQL hook globals (not in standard pgrx bindings)
+extern "C" {
+    pub static mut CheckPoint_hook: CheckPoint_hook_type;
+    pub static mut AcceptInvalidationMessagesHook: AcceptInvalidationMessagesHookType;
+    pub static mut database_size_hook: database_size_hook_type;
+    pub static mut base_init_startup_hook: base_init_startup_hook_type;
+    pub static mut AddinShmemInitLock: pg_sys::LWLock;
+    pub static mut autovacuum_worker_slots: c_int;
+    pub static mut after_checkpoint_cleanup_hook: Option<unsafe extern "C-unwind" fn(checkpoint_redo: pg_sys::XLogRecPtr, flags: c_int)>;
+    pub static mut CustomErrorCleanupHook: Option<unsafe extern "C-unwind" fn()>;
 }
 
 // ---------------------------------------------------------------------------
@@ -751,7 +775,7 @@ unsafe extern "C-unwind" fn orioledb_shmem_startup() {
         prev();
     }
     shared_segment = std::ptr::null_mut();
-    pg_sys::LWLockAcquire(pg_sys::AddinShmemInitLock, pg_sys::LWLockMode_LW_EXCLUSIVE);
+    pg_sys::LWLockAcquire(AddinShmemInitLock, pg_sys::LWLockMode_LW_EXCLUSIVE);
     
     let mut found = false;
     shared_segment = pg_sys::ShmemInitStruct(
@@ -769,7 +793,7 @@ unsafe extern "C-unwind" fn orioledb_shmem_startup() {
     init_btree_io_lwlocks();
     o_btree_init_unique_lwlocks();
     pg_sys::before_shmem_exit(Some(orioledb_on_shmem_exit), pg_sys::Datum::from(0));
-    pg_sys::LWLockRelease(pg_sys::AddinShmemInitLock);
+    pg_sys::LWLockRelease(AddinShmemInitLock);
     
     shared_segment_initialized = true;
 }
@@ -787,7 +811,7 @@ unsafe extern "C-unwind" fn orioledb_on_shmem_exit(_code: c_int, _arg: Datum) {
 }
 
 unsafe extern "C-unwind" fn o_base_init_startup_hook() {
-    if pg_sys::MyBackendType == pg_sys::BackendType_B_STARTUP {
+    if pg_sys::MyBackendType == pg_sys::BackendType::B_STARTUP {
         if remove_old_checkpoint_files {
             pg_sys::elog(pg_sys::LOG as i32, b"Cleanup of old files at startup. Checkpoint %d\0".as_ptr() as *const c_char, (*checkpoint_state).lastCheckpointNumber);
             recovery_cleanup_old_files((*checkpoint_state).lastCheckpointNumber, true);
@@ -827,7 +851,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     #[cfg(feature = "pg18")]
     {
         max_procs = pg_sys::MaxConnections 
-            + pg_sys::autovacuum_worker_slots 
+            + autovacuum_worker_slots 
             + 1 
             + pg_sys::max_worker_processes 
             + pg_sys::max_wal_senders 
@@ -905,7 +929,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         if debug_disable_pools_limit { 1 } else { min_pool_size },
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -920,7 +944,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         if debug_disable_pools_limit { 1 } else { min_pool_size },
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -935,7 +959,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         if debug_disable_pools_limit { 1 } else { min_pool_size },
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -950,7 +974,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         16 * max_procs,
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -965,7 +989,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         if debug_disable_pools_limit { 1 } else { 8192 },
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -1010,7 +1034,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         128,
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -1025,7 +1049,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         6,
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -1079,7 +1103,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         512,
         2147483647,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_KB as i32,
+        pg_sys::GUC_UNIT_KB as i32,
         None,
         None,
         None,
@@ -1124,7 +1148,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         1,
         1024,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -1210,7 +1234,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         0,
         c_int::MAX,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_BLOCKS as i32,
+        pg_sys::GUC_UNIT_BLOCKS as i32,
         None,
         None,
         None,
@@ -1322,7 +1346,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         128,
         2147483647,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_KB as i32,
+        pg_sys::GUC_UNIT_KB as i32,
         None,
         None,
         None,
@@ -1337,7 +1361,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         1,
         pg_sys::MaxBackends,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_KB as i32,
+        pg_sys::GUC_UNIT_KB as i32,
         None,
         None,
         None,
@@ -1352,7 +1376,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         1,
         c_int::MAX,
         PGC_SIGHUP,
-        pg_sys::GucUnit_GUC_UNIT_MB as i32,
+        pg_sys::GUC_UNIT_MB as i32,
         None,
         None,
         None,
@@ -1471,7 +1495,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         1,
         86400,
         PGC_POSTMASTER,
-        pg_sys::GucUnit_GUC_UNIT_S as i32,
+        pg_sys::GUC_UNIT_S as i32,
         None,
         None,
         None,
@@ -1521,10 +1545,10 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     if orioledb_s3_mode {
         if s3_host.is_null() || s3_region.is_null() || s3_accesskey.is_null() || s3_secretkey.is_null() {
             pg_sys::ereport!(
-                pg_sys::PgLogLevel::FATAL,
-                pg_sys::errcode(pg_sys::ERRCODE_CONFIG_FILE_ERROR),
-                pg_sys::errmsg("missing options for S3 connection"),
-                pg_sys::errdetail("For OrioleDB S3 mode you need to specify orioledb.s3_host, orioledb.s3_region, orioledb.s3_accesskey and orioledb.s3_secretkey.")
+                20i32,
+                pgrx::errcode(crate::ERRCODE_CONFIG_FILE_ERROR),
+                pgrx::errmsg("missing options for S3 connection"),
+                pgrx::errdetail("For OrioleDB S3 mode you need to specify orioledb.s3_host, orioledb.s3_region, orioledb.s3_accesskey and orioledb.s3_secretkey.")
             );
         }
     }
@@ -1610,10 +1634,10 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         if !s3_check_control(&mut check_errmsg, &mut check_errdetail) {
             s3_delete_lock_file();
             pg_sys::ereport!(
-                pg_sys::PgLogLevel::FATAL,
-                pg_sys::errcode(pg_sys::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-                pg_sys::errmsg("%s", check_errmsg),
-                pg_sys::errdetail("%s", check_errdetail)
+                20i32,
+                pgrx::errcode(crate::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+                pgrx::errmsg("%s", check_errmsg),
+                pgrx::errdetail("%s", check_errdetail)
             );
         }
     }
@@ -1633,17 +1657,17 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     btree_insert_context = pg_sys::AllocSetContextCreateInternal(
         pg_sys::TopMemoryContext,
         b"orioledb B-tree insert context\0".as_ptr() as *const c_char,
-        pg_sys::ALLOCSET_DEFAULT_SIZES[0],
-        pg_sys::ALLOCSET_DEFAULT_SIZES[1],
-        pg_sys::ALLOCSET_DEFAULT_SIZES[2],
+        pg_sys::ALLOCSET_DEFAULT_MINSIZE,
+        pg_sys::ALLOCSET_DEFAULT_INITSIZE,
+        pg_sys::ALLOCSET_DEFAULT_MAXSIZE,
     );
 
     btree_seqscan_context = pg_sys::AllocSetContextCreateInternal(
         pg_sys::TopMemoryContext,
         b"orioledb B-tree sequential scans context\0".as_ptr() as *const c_char,
-        pg_sys::ALLOCSET_DEFAULT_SIZES[0],
-        pg_sys::ALLOCSET_DEFAULT_SIZES[1],
-        pg_sys::ALLOCSET_DEFAULT_SIZES[2],
+        pg_sys::ALLOCSET_DEFAULT_MINSIZE,
+        pg_sys::ALLOCSET_DEFAULT_INITSIZE,
+        pg_sys::ALLOCSET_DEFAULT_MAXSIZE,
     );
 
     // Setup hooks
@@ -1653,16 +1677,16 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     prev_shmem_startup_hook = pg_sys::shmem_startup_hook;
     pg_sys::shmem_startup_hook = Some(orioledb_shmem_startup);
     
-    next_CheckPoint_hook = pg_sys::CheckPoint_hook;
-    pg_sys::CheckPoint_hook = Some(o_perform_checkpoint);
+    next_CheckPoint_hook = CheckPoint_hook;
+    CheckPoint_hook = Some(o_perform_checkpoint);
     
     old_set_rel_pathlist_hook = pg_sys::set_rel_pathlist_hook;
     pg_sys::set_rel_pathlist_hook = Some(orioledb_set_rel_pathlist_hook);
     
     pg_sys::set_plain_rel_pathlist_hook = Some(orioledb_set_plain_rel_pathlist_hook);
 
-    prev_AcceptInvalidationMessagesHook = pg_sys::AcceptInvalidationMessagesHook;
-    pg_sys::AcceptInvalidationMessagesHook = Some(orioledb_AcceptInvalidationMessagesHook);
+    prev_AcceptInvalidationMessagesHook = AcceptInvalidationMessagesHook;
+    AcceptInvalidationMessagesHook = Some(orioledb_AcceptInvalidationMessagesHook);
     
     pg_sys::RegisterXactCallback(Some(undo_xact_callback), std::ptr::null_mut());
     pg_sys::RegisterSubXactCallback(Some(undo_subxact_callback), std::ptr::null_mut());
@@ -1670,13 +1694,13 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     pg_sys::get_xidless_commit_lsn_hook = Some(orioledb_get_xidless_commit_lsn);
     pg_sys::CacheRegisterUsercacheCallback(Some(orioledb_usercache_hook), 0);
     
-    pg_sys::after_checkpoint_cleanup_hook = Some(o_after_checkpoint_cleanup_hook);
+    after_checkpoint_cleanup_hook = Some(o_after_checkpoint_cleanup_hook);
 
     pg_sys::RegisterCustomRmgr(142, &mut rmgr);
     
     pg_sys::RedoShutdownHook = Some(o_recovery_shutdown_hook);
     pg_sys::snapshot_hook = Some(orioledb_snapshot_hook);
-    pg_sys::CustomErrorCleanupHook = Some(orioledb_error_cleanup_hook);
+    CustomErrorCleanupHook = Some(orioledb_error_cleanup_hook);
     pg_sys::snapshot_register_hook = Some(undo_snapshot_register_hook);
     pg_sys::snapshot_deregister_hook = Some(undo_snapshot_deregister_hook);
     pg_sys::reset_xmin_hook = Some(orioledb_reset_xmin_hook);
@@ -1693,16 +1717,16 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     pg_sys::xact_redo_hook = Some(o_xact_redo_hook);
     pg_sys::pg_newlocale_from_collation_hook = Some(o_newlocale_from_collation);
     
-    prev_base_init_startup_hook = pg_sys::base_init_startup_hook;
-    pg_sys::base_init_startup_hook = Some(o_base_init_startup_hook);
+    prev_base_init_startup_hook = base_init_startup_hook;
+    base_init_startup_hook = Some(o_base_init_startup_hook);
     
     pg_sys::IndexAMRoutineHook = Some(orioledb_indexam_routine_hook);
     pg_sys::getRunningTransactionsExtension = Some(orioledb_get_running_transactions_extension);
     pg_sys::waitSnapshotHook = Some(orioledb_wait_snapshot);
     pg_sys::GetReplayXlogPtrHook = Some(recovery_get_effective_replay_ptr);
     
-    prev_database_size_hook = pg_sys::database_size_hook;
-    pg_sys::database_size_hook = Some(orioledb_calculate_database_size);
+    prev_database_size_hook = database_size_hook;
+    database_size_hook = Some(orioledb_calculate_database_size);
     
     pg_sys::RecoveryStopsBeforeHook = Some(orioledb_recovery_stops_before_hook);
 

@@ -378,7 +378,7 @@ pub struct OScanState {
     pub scandesc: pg_sys::IndexScanDescData,
     pub ixNum: OIndexNumber,
     pub cxt: pg_sys::MemoryContext,
-    pub scanDir: pg_sys::ScanDirection,
+    pub scanDir: pg_sys::ScanDirection::Type,
     pub addJunk: bool,
     pub onlyCurIx: bool,
     pub returning: bool,
@@ -390,7 +390,7 @@ pub struct OScanState {
     pub curKeyRange: OBTreeKeyRange,
     pub iterator: *mut BTreeIterator,
     pub indexQuals: *mut pg_sys::List,
-    pub cmd: pg_sys::CmdType,
+    pub cmd: pg_sys::CmdType::Type,
     pub oSnapshot: OSnapshot,
     pub xs_rowid: pg_sys::NullableDatum,
     pub xs_want_rowid: bool,
@@ -564,7 +564,7 @@ extern "C" {
         oxid: OXid,
         csn: CommitSeqNo,
         callbackInfo: *mut BTreeModifyCallbackInfo,
-        checkUnique: pg_sys::IndexUniqueCheck,
+        checkUnique: pg_sys::IndexUniqueCheck::Type,
     ) -> OBTreeModifyResult;
     pub fn o_update_secondary_index(
         index_descr: *mut OIndexDescr,
@@ -576,7 +576,7 @@ extern "C" {
         old_slot: *mut pg_sys::TupleTableSlot,
         oxid: OXid,
         csn: CommitSeqNo,
-        checkUnique: pg_sys::IndexUniqueCheck,
+        checkUnique: pg_sys::IndexUniqueCheck::Type,
     ) -> OTableModifyResult;
     pub fn o_tbl_index_delete(
         index_descr: *mut OIndexDescr,
@@ -629,7 +629,7 @@ extern "C" {
         root: *mut pg_sys::PlannerInfo,
         clauses: *mut pg_sys::List,
         varRelid: c_int,
-        jointype: pg_sys::JoinType,
+        jointype: pg_sys::JoinType::Type,
         sjinfo: *mut pg_sys::SpecialJoinInfo,
     ) -> pg_sys::Selectivity;
     pub fn genericcostestimate(
@@ -682,7 +682,7 @@ extern "C" {
         isnull: *mut bool,
         tupleid: pg_sys::Datum,
         heapRel: pg_sys::Relation,
-        checkUnique: pg_sys::IndexUniqueCheck,
+        checkUnique: pg_sys::IndexUniqueCheck::Type,
         indexUnchanged: bool,
         indexInfo: *mut pg_sys::IndexInfo,
     ) -> bool;
@@ -704,7 +704,7 @@ extern "C" {
         orderbys: pg_sys::ScanKey,
         norderbys: c_int,
     );
-    pub fn btgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection) -> bool;
+    pub fn btgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection::Type) -> bool;
     pub fn btgetbitmap(scan: pg_sys::IndexScanDesc, tbm: *mut pg_sys::TIDBitmap) -> i64;
     pub fn btendscan(scan: pg_sys::IndexScanDesc);
     pub fn btbeginscan(rel: pg_sys::Relation, nkeys: c_int, norderbys: c_int) -> pg_sys::IndexScanDesc;
@@ -838,6 +838,37 @@ pub unsafe fn linitial_int(l: *mut pg_sys::List) -> c_int {
 #[inline]
 pub unsafe fn list_make1_oid(oid: pg_sys::Oid) -> *mut pg_sys::List {
     pg_sys::lcons_oid(oid, std::ptr::null_mut())
+}
+
+#[inline]
+pub unsafe fn is_a(node: *mut c_void, tag: pg_sys::NodeTag) -> bool {
+    if node.is_null() {
+        return false;
+    }
+    (*(node as *const pg_sys::Node)).type_ == tag
+}
+
+#[inline]
+pub unsafe fn lsecond(list: *mut pg_sys::List) -> *mut c_void {
+    let head = pg_sys::list_head(list);
+    if head.is_null() {
+        return std::ptr::null_mut();
+    }
+    let second = lnext(list, head);
+    if second.is_null() {
+        std::ptr::null_mut()
+    } else {
+        (*second).ptr_value
+    }
+}
+
+#[inline]
+pub unsafe fn linitial_oid(list: *mut pg_sys::List) -> pg_sys::Oid {
+    let head = pg_sys::list_head(list);
+    if head.is_null() {
+        return pg_sys::InvalidOid;
+    }
+    (*head).oid_value
 }
 
 #[inline]
@@ -1083,8 +1114,8 @@ unsafe fn o_report_duplicate(rel: pg_sys::Relation, id: *mut OIndexDescr, slot: 
     if is_primary && is_ctid {
         pg_sys::ereport!(
             pg_sys::ERROR,
-            pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR),
-            pg_sys::errmsg("ctid index key duplicate.")
+            pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR),
+            pgrx::errmsg("ctid index key duplicate.")
         );
     } else {
         let str_info = pg_sys::makeStringInfo();
@@ -1125,13 +1156,13 @@ unsafe fn o_report_duplicate(rel: pg_sys::Relation, id: *mut OIndexDescr, slot: 
         }
         pg_sys::appendStringInfo(str_info, b")\0".as_ptr() as *const c_char);
 
-        if pg_sys::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
-            pg_sys::errcode(pg_sys::ERRCODE_UNIQUE_VIOLATION as i32);
-            pg_sys::errmsg(
+        if pgrx::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
+            pgrx::errcode(pg_sys::ERRCODE_UNIQUE_VIOLATION as i32);
+            pgrx::errmsg(
                 b"duplicate key value violates unique constraint \"%s\"\0".as_ptr() as *const c_char,
                 (*id).name.data.as_ptr(),
             );
-            pg_sys::errdetail(
+            pgrx::errdetail(
                 b"Key %s already exists.\0".as_ptr() as *const c_char,
                 (*str_info).data,
             );
@@ -1143,7 +1174,7 @@ unsafe fn o_report_duplicate(rel: pg_sys::Relation, id: *mut OIndexDescr, slot: 
                     b"sk\0".as_ptr() as *const c_char
                 },
             );
-            pg_sys::errfinish(std::ptr::null(), 0, std::ptr::null());
+            pgrx::errfinish(std::ptr::null(), 0, std::ptr::null());
         }
     }
 }
@@ -1228,7 +1259,7 @@ unsafe extern "C-unwind" fn orioledb_aminsert(
     isnull: *mut bool,
     tupleid: pg_sys::ItemPointer,
     heapRel: pg_sys::Relation,
-    checkUnique: pg_sys::IndexUniqueCheck,
+    checkUnique: pg_sys::IndexUniqueCheck::Type,
     indexUnchanged: bool,
     indexInfo: *mut pg_sys::IndexInfo,
 ) -> bool {
@@ -1409,7 +1440,7 @@ unsafe extern "C-unwind" fn orioledb_amupdate(
     isnullOld: *mut bool,
     oldTupleid: pg_sys::Datum,
     heapRel: pg_sys::Relation,
-    checkUnique: pg_sys::IndexUniqueCheck,
+    checkUnique: pg_sys::IndexUniqueCheck::Type,
     indexUnchanged: bool,
     indexInfo: *mut pg_sys::IndexInfo,
 ) -> bool {
@@ -1556,19 +1587,19 @@ unsafe extern "C-unwind" fn orioledb_amupdate(
                     }
                     pg_sys::appendStringInfo(str_info, b")\0".as_ptr() as *const c_char);
 
-                    if pg_sys::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
-                        pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR as i32);
-                        pg_sys::errmsg(
+                    if pgrx::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
+                        pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR as i32);
+                        pgrx::errmsg(
                             b"unable to remove tuple from secondary index in \"%s\"\0".as_ptr() as *const c_char,
                             pg_sys::RelationGetRelationName(rel),
                         );
-                        pg_sys::errdetail(
+                        pgrx::errdetail(
                             b"Unable to remove %s from index \"%s\"\0".as_ptr() as *const c_char,
                             (*str_info).data,
                             (*index_descr).name.data.as_ptr(),
                         );
                         pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char);
-                        pg_sys::errfinish(std::ptr::null(), 0, std::ptr::null());
+                        pgrx::errfinish(std::ptr::null(), 0, std::ptr::null());
                     }
                 }
             }
@@ -1588,8 +1619,8 @@ unsafe extern "C-unwind" fn orioledb_amupdate(
                 }
                 pg_sys::ereport!(
                     pg_sys::ERROR,
-                    pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR),
-                    pg_sys::errmsg("Unsupported BTreeOperationType.")
+                    pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR),
+                    pgrx::errmsg("Unsupported BTreeOperationType.")
                 );
             }
         }
@@ -1712,19 +1743,19 @@ unsafe extern "C-unwind" fn orioledb_amdelete(
                         pg_sys::pfree(tuple.data as *mut c_void);
                     }
 
-                    if pg_sys::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
-                        pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR as i32);
-                        pg_sys::errmsg(
+                    if pgrx::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
+                        pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR as i32);
+                        pgrx::errmsg(
                             b"unable to remove tuple from secondary index in \"%s\"\0".as_ptr() as *const c_char,
                             pg_sys::RelationGetRelationName(rel),
                         );
-                        pg_sys::errdetail(
+                        pgrx::errdetail(
                             b"Unable to remove %s from index \"%s\"\0".as_ptr() as *const c_char,
                             (*str_info).data,
                             (*index_descr).name.data.as_ptr(),
                         );
                         pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char);
-                        pg_sys::errfinish(std::ptr::null(), 0, std::ptr::null());
+                        pgrx::errfinish(std::ptr::null(), 0, std::ptr::null());
                     }
                 }
             }
@@ -1734,8 +1765,8 @@ unsafe extern "C-unwind" fn orioledb_amdelete(
                 }
                 pg_sys::ereport!(
                     pg_sys::ERROR,
-                    pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR),
-                    pg_sys::errmsg("Unsupported BTreeOperationType.")
+                    pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR),
+                    pgrx::errmsg("Unsupported BTreeOperationType.")
                 );
             }
         }
@@ -1821,15 +1852,15 @@ unsafe extern "C-unwind" fn orioledb_amcostestimate(
             let clause = (*rinfo).clause;
             let mut clause_op = pg_sys::InvalidOid;
 
-            if pg_sys::is_a(clause as *mut c_void, pg_sys::NodeTag_T_OpExpr) {
+            if is_a(clause as *mut c_void, pg_sys::NodeTag_T_OpExpr) {
                 let op = clause as *mut pg_sys::OpExpr;
                 clause_op = (*op).opno;
-            } else if pg_sys::is_a(clause as *mut c_void, pg_sys::NodeTag_T_RowCompareExpr) {
+            } else if is_a(clause as *mut c_void, pg_sys::NodeTag_T_RowCompareExpr) {
                 let rc = clause as *mut pg_sys::RowCompareExpr;
-                clause_op = pg_sys::linitial_oid((*rc).opnos);
-            } else if pg_sys::is_a(clause as *mut c_void, pg_sys::NodeTag_T_ScalarArrayOpExpr) {
+                clause_op = linitial_oid((*rc).opnos);
+            } else if is_a(clause as *mut c_void, pg_sys::NodeTag_T_ScalarArrayOpExpr) {
                 let saop = clause as *mut pg_sys::ScalarArrayOpExpr;
-                let other_operand = pg_sys::lsecond((*saop).args) as *mut pg_sys::Node;
+                let other_operand = lsecond((*saop).args) as *mut pg_sys::Node;
                 #[cfg(any(feature = "pg17", feature = "pg18", feature = "pg19"))]
                 let alength = estimate_array_length(root, other_operand);
                 #[cfg(not(any(feature = "pg17", feature = "pg18", feature = "pg19")))]
@@ -1840,14 +1871,14 @@ unsafe extern "C-unwind" fn orioledb_amcostestimate(
                 if alength > 1 {
                     num_sa_scans *= alength as f64;
                 }
-            } else if pg_sys::is_a(clause as *mut c_void, pg_sys::NodeTag_T_NullTest) {
+            } else if is_a(clause as *mut c_void, pg_sys::NodeTag_T_NullTest) {
                 let nt = clause as *mut pg_sys::NullTest;
                 if (*nt).nulltesttype == pg_sys::NullTestType::IS_NULL {
                     found_is_null_op = true;
                     eq_qual_here = true;
                 }
             } else {
-                pg_sys::elog!(pg_sys::ERROR, "unsupported indexqual type");
+                pgrx::elog!(pgrx::PgLogLevel::ERROR, "unsupported indexqual type");
             }
 
             if OidIsValid(clause_op) {
@@ -1952,7 +1983,7 @@ unsafe extern "C-unwind" fn orioledb_amcostestimate(
 
         if !hook_taken {
             vardata.statsTuple = pg_sys::SearchSysCache3(
-                pg_sys::SysCacheIdentifier_STATRELATTINH as c_int,
+                pg_sys::SysCacheIdentifier::STATRELATTINH as c_int,
                 pg_sys::ObjectIdGetDatum(relid),
                 pg_sys::Int16GetDatum(colnum as i16),
                 pg_sys::BoolGetDatum((*rte).inh),
@@ -2012,7 +2043,7 @@ unsafe extern "C-unwind" fn orioledb_amcostestimate(
 
         if !hook_taken {
             vardata.statsTuple = pg_sys::SearchSysCache3(
-                pg_sys::SysCacheIdentifier_STATRELATTINH as c_int,
+                pg_sys::SysCacheIdentifier::STATRELATTINH as c_int,
                 pg_sys::ObjectIdGetDatum(relid),
                 pg_sys::Int16GetDatum(colnum as i16),
                 pg_sys::BoolGetDatum(false),
@@ -2135,7 +2166,7 @@ unsafe extern "C-unwind" fn orioledb_amoptions(reloptions: pg_sys::Datum, valida
 unsafe extern "C-unwind" fn orioledb_amproperty(
     _index_oid: pg_sys::Oid,
     attno: c_int,
-    prop: pg_sys::IndexAMProperty,
+    prop: pg_sys::IndexAMProperty::Type,
     _propname: *const c_char,
     res: *mut bool,
     _isnull: *mut bool,
@@ -2615,7 +2646,7 @@ unsafe fn fill_itup(
     pg_sys::ExecClearTuple(slot);
 }
 
-unsafe extern "C-unwind" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection) -> bool {
+unsafe extern "C-unwind" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection::Type) -> bool {
     let o_scan = scan as *mut OScanState;
     let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
 
@@ -2769,7 +2800,7 @@ unsafe extern "C-unwind" fn bridged_aminsert(
     isnull: *mut bool,
     tupleid: pg_sys::ItemPointer,
     heapRel: pg_sys::Relation,
-    checkUnique: pg_sys::IndexUniqueCheck,
+    checkUnique: pg_sys::IndexUniqueCheck::Type,
     indexUnchanged: bool,
     indexInfo: *mut pg_sys::IndexInfo,
 ) -> bool {

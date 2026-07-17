@@ -133,9 +133,9 @@ pub unsafe extern "C" fn orioledb_parallelscan_initialize_inner(pscan: pg_sys::P
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn orioledb_calculate_relation_size(rel: Relation, forkNumber: pg_sys::ForkNumber, method: u8) -> i64 {
+pub unsafe extern "C" fn orioledb_calculate_relation_size(rel: Relation, forkNumber: pg_sys::ForkNumber::Type, method: u8) -> i64 {
     extern "C" {
-        fn orioledb_calculate_relation_size_c(rel: Relation, forkNumber: pg_sys::ForkNumber, method: u8) -> i64;
+        fn orioledb_calculate_relation_size_c(rel: Relation, forkNumber: pg_sys::ForkNumber::Type, method: u8) -> i64;
     }
     orioledb_calculate_relation_size_c(rel, forkNumber, method)
 }

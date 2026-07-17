@@ -146,9 +146,9 @@ unsafe fn o_elog(elevel: c_int, msg: &str) {
     let func = b"bgwriter_main\0".as_ptr() as *const c_char;
     let c_msg = CString::new(msg).unwrap();
 
-    if pg_sys::errstart(elevel, domain) {
-        let _ = pg_sys::errmsg(c_msg.as_ptr());
-        pg_sys::errfinish(file, 0, func);
+    if pgrx::errstart(elevel, domain) {
+        let _ = pgrx::errmsg(c_msg.as_ptr());
+        pgrx::errfinish(file, 0, func);
     }
 }
 
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn register_bgwriter(num: c_int) {
     let mut worker: pg_sys::BackgroundWorker = std::mem::zeroed();
 
     worker.bgw_flags = pg_sys::BGWORKER_SHMEM_ACCESS as i32;
-    worker.bgw_start_time = pg_sys::BgWorkerStartTime_BgWorkerStart_PostmasterStart;
+    worker.bgw_start_time = pg_sys::BgWorkerStartTime::BgWorkerStart_PostmasterStart;
     worker.bgw_restart_time = 0;
     worker.bgw_main_arg = pg_sys::Datum::from(num as usize);
 
@@ -318,7 +318,7 @@ pub unsafe extern "C" fn bgwriter_main(main_arg: pg_sys::Datum) {
                     std::ptr::addr_of!((*undo_meta).lastUsedLocation),
                 );
 
-                if writeInProgressLocation + undo_circular_buffer_size as u64 <
+                if writeInProgressLocation + (undo_circular_buffer_size as u64) <
                     lastUsedLocation + (undo_circular_buffer_size as u64) / 20
                 {
                     let minProcReservedLocation = pg_atomic_read_u64(

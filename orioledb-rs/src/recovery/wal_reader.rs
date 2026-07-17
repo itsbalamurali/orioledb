@@ -16,7 +16,7 @@ use std::ffi::{c_char, c_int, c_void};
 use pgrx::pg_sys;
 use crate::recovery::worker::{OXid, CommitSeqNo, OTuple};
 use crate::recovery::wal::ORelOids;
-use crate::recovery::recovery::OSnapshot;
+use crate::transam::oxid::OSnapshot;
 
 pub const O_BTREE_MAX_TUPLE_SIZE: usize = 2688;
 

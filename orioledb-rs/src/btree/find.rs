@@ -34,7 +34,7 @@ extern "C" {
     pub fn init_page_find_context(
         context: *mut std::ffi::c_void,
         desc: *mut BTreeDescr,
-        csn: pgrx::pg_sys::CommitSeqNo,
+        csn: crate::CommitSeqNo,
         flags: u32,
     );
 

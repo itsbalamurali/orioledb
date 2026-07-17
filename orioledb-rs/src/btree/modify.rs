@@ -34,7 +34,7 @@ extern "C" {
         key: *mut std::ffi::c_void,
         key_type: BTreeKeyType,
         oxid: OXid,
-        csn: pgrx::pg_sys::CommitSeqNo,
+        csn: crate::CommitSeqNo,
         lock_mode: i32,
         callback_info: *mut std::ffi::c_void,
     ) -> OBTreeModifyResult;
@@ -45,7 +45,7 @@ extern "C" {
         key: OTuple,
         key_type: BTreeKeyType,
         oxid: OXid,
-        csn: pgrx::pg_sys::CommitSeqNo,
+        csn: crate::CommitSeqNo,
     ) -> OBTreeModifyResult;
 
     /// Delete a tuple whose primary key has changed.
@@ -54,7 +54,7 @@ extern "C" {
         key: OTuple,
         key_type: BTreeKeyType,
         oxid: OXid,
-        csn: pgrx::pg_sys::CommitSeqNo,
+        csn: crate::CommitSeqNo,
     ) -> OBTreeModifyResult;
 
     /// Insert `tuple` while checking for unique-constraint violations.
@@ -64,7 +64,7 @@ extern "C" {
         key: *mut std::ffi::c_void,
         key_type: BTreeKeyType,
         oxid: OXid,
-        csn: pgrx::pg_sys::CommitSeqNo,
+        csn: crate::CommitSeqNo,
         callback_info: *mut std::ffi::c_void,
     ) -> OBTreeModifyResult;
 }

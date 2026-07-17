@@ -139,7 +139,7 @@ extern "C" {
 pub unsafe extern "C" fn recovery_worker_register(worker_id: c_int) -> *mut pg_sys::BackgroundWorkerHandle {
     let mut worker: pg_sys::BackgroundWorker = std::mem::zeroed();
     worker.bgw_flags = pg_sys::BGWORKER_SHMEM_ACCESS as i32;
-    worker.bgw_start_time = pg_sys::BgWorkerStartTime_BgWorkerStart_PostmasterStart;
+    worker.bgw_start_time = pg_sys::BgWorkerStartTime::BgWorkerStart_PostmasterStart;
     worker.bgw_restart_time = pg_sys::BGW_NEVER_RESTART;
     worker.bgw_main_arg = pg_sys::Datum::from(worker_id as usize);
 

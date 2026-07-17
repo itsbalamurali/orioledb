@@ -27,17 +27,17 @@ const fn make_sqlstate(c1: u8, c2: u8, c3: u8, c4: u8, c5: u8) -> i32 {
  * Exit from an orioledb worker
  */
 unsafe fn o_worker_shutdown(elevel: c_int) {
-    debug_assert_eq!(pg_sys::MyBackendType, pg_sys::BackendType_B_BG_WORKER);
+    debug_assert_eq!(pg_sys::MyBackendType, pg_sys::BackendType::B_BG_WORKER);
 
     let domain = std::ptr::null();
     let file = b"interrupt.rs\0".as_ptr() as *const c_char;
     let func = b"o_worker_shutdown\0".as_ptr() as *const c_char;
     let msg = b"terminating orioledb worker due to administrator command\0".as_ptr() as *const c_char;
 
-    if pg_sys::errstart(elevel, domain) {
-        let _ = pg_sys::errcode(make_sqlstate(b'5', b'7', b'P', b'0', b'1'));
-        let _ = pg_sys::errmsg(msg);
-        pg_sys::errfinish(file, 29, func);
+    if pgrx::errstart(elevel, domain) {
+        let _ = pgrx::errcode(make_sqlstate(b'5', b'7', b'P', b'0', b'1'));
+        let _ = pgrx::errmsg(msg);
+        pgrx::errfinish(file, 29, func);
     }
 }
 

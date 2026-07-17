@@ -13,6 +13,11 @@
 use pgrx::pg_sys::{self, Datum, Oid};
 use std::ptr;
 
+#[inline]
+pub unsafe fn OidIsValid(oid: Oid) -> bool {
+    oid != pg_sys::InvalidOid
+}
+
 pub const O_VALUE_BOUND_INCLUSIVE: u8 = 0x01;
 pub const O_VALUE_BOUND_NULL: u8 = 0x02;
 pub const O_VALUE_BOUND_UNBOUNDED: u8 = 0x04;
@@ -371,7 +376,7 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
                             if !sentinel && !have_next && !have_prior {
                                 low.flags = O_VALUE_BOUND_LOWER | O_VALUE_BOUND_INCLUSIVE;
                                 high.flags = O_VALUE_BOUND_UPPER | O_VALUE_BOUND_INCLUSIVE;
-                                let sub_type = if pg_sys::OidIsValid(key.sk_subtype) { key.sk_subtype } else { field.inputtype };
+                                let sub_type = if OidIsValid(key.sk_subtype) { key.sk_subtype } else { field.inputtype };
                                 o_fill_key_bounds(key.sk_argument, sub_type, &mut low, &mut high, field);
                                 res.low.keys[attnum] = low;
                                 res.high.keys[attnum] = high;
@@ -381,7 +386,7 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
                             
                             if have_next {
                                 low.flags = O_VALUE_BOUND_LOWER;
-                                let sub_type = if pg_sys::OidIsValid(key.sk_subtype) { key.sk_subtype } else { field.inputtype };
+                                let sub_type = if OidIsValid(key.sk_subtype) { key.sk_subtype } else { field.inputtype };
                                 o_fill_key_bounds(key.sk_argument, sub_type, &mut low, ptr::null_mut(), field);
                                 res.low.keys[attnum] = low;
                             } else if !array_key.low_compare.is_null() {
@@ -390,7 +395,7 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
                                 if lk.sk_strategy == pg_sys::BTGreaterEqualStrategyNumber as std::ffi::c_int {
                                     low.flags |= O_VALUE_BOUND_INCLUSIVE;
                                 }
-                                let sub_type = if pg_sys::OidIsValid(lk.sk_subtype) { lk.sk_subtype } else { field.inputtype };
+                                let sub_type = if OidIsValid(lk.sk_subtype) { lk.sk_subtype } else { field.inputtype };
                                 o_fill_key_bounds(lk.sk_argument, sub_type, &mut low, ptr::null_mut(), field);
                                 res.low.keys[attnum] = low;
                             } else if !array_key.null_elem && field.nullfirst {
@@ -399,7 +404,7 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
                             
                             if have_prior {
                                 high.flags = O_VALUE_BOUND_UPPER;
-                                let sub_type = if pg_sys::OidIsValid(key.sk_subtype) { key.sk_subtype } else { field.inputtype };
+                                let sub_type = if OidIsValid(key.sk_subtype) { key.sk_subtype } else { field.inputtype };
                                 o_fill_key_bounds(key.sk_argument, sub_type, ptr::null_mut(), &mut high, field);
                                 res.high.keys[attnum] = high;
                             } else if !array_key.high_compare.is_null() {
@@ -408,7 +413,7 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
                                 if hk.sk_strategy == pg_sys::BTLessEqualStrategyNumber as std::ffi::c_int {
                                     high.flags |= O_VALUE_BOUND_INCLUSIVE;
                                 }
-                                let sub_type = if pg_sys::OidIsValid(hk.sk_subtype) { hk.sk_subtype } else { field.inputtype };
+                                let sub_type = if OidIsValid(hk.sk_subtype) { hk.sk_subtype } else { field.inputtype };
                                 o_fill_key_bounds(hk.sk_argument, sub_type, ptr::null_mut(), &mut high, field);
                                 res.high.keys[attnum] = high;
                             } else if !array_key.null_elem && !field.nullfirst {
@@ -469,7 +474,7 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
             }
         } else {
             let mut type_ = key.sk_subtype;
-            if !pg_sys::OidIsValid(type_) {
+            if !OidIsValid(type_) {
                 type_ = field.inputtype;
             }
             

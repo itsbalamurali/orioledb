@@ -319,7 +319,7 @@ extern "C" {
         slot: *mut pgrx::pg_sys::TupleTableSlot,
         rowid_values: *mut pgrx::pg_sys::Datum,
         rowid_isnull: *mut bool,
-        tuple_csn: pgrx::pg_sys::CommitSeqNo,
+        tuple_csn: crate::CommitSeqNo,
         hint: *mut BTreeLocationHint,
     ) -> *mut pgrx::pg_sys::varlena;
 }
