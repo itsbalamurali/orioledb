@@ -1,0 +1,14 @@
+services:
+  jepsen-client:
+    image: "jepsen-client:latest"
+    container_name: jepsen-client
+    environment:
+      JEPSEN_POSTGRES_USER: "${POSTGRES_USER}"
+      JEPSEN_POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      JEPSEN_NODE: orioledb
+      JEPSEN_ISSOLATION: repeatable-read
+    platform: linux/amd64
+    build: ./jepsen
+    depends_on:
+      test.orioledb:
+        condition: service_healthy

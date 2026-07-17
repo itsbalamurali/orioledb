@@ -1,0 +1,39 @@
+services:
+  test.orioledb:
+    # TODO: hashed version
+    image: orioledb-antithesis:latest
+    container_name: orioledb
+    hostname: orioledb
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    #ports:
+    #  - "5432:5432"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-h",
+          "localhost",
+          "-p",
+          "5432",
+          "-U",
+          "${POSTGRES_USER}",
+          "-d",
+          "${POSTGRES_DB}",
+        ]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+  health-checker:
+    image: health-checker:latest
+    container_name: health-checker
+    platform: linux/amd64
+    build: ./health-checker
+    depends_on:
+      test.orioledb:
+        condition: service_healthy
