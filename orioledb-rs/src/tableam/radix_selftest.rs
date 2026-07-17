@@ -1,14 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * radix_selftest.rs
- *		Runtime self-test for the fixed-length-key variant of the radix tree
- *		and the key bitmap implementation.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! radix_selftest.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/radix_selftest.rs
 
 use pgrx::pg_sys::{self, Datum, FunctionCallInfo};
 use crate::tableam::key_bitmap::{

@@ -23,9 +23,7 @@ const fn make_sqlstate(c1: u8, c2: u8, c3: u8, c4: u8, c5: u8) -> i32 {
         + (((c5 - b'0') as i32) << 24)
 }
 
-/*
- * Exit from an orioledb worker
- */
+/// Exits from an orioledb worker.
 unsafe fn o_worker_shutdown(elevel: c_int) {
     debug_assert_eq!(pg_sys::MyBackendType, pg_sys::BackendType::B_BG_WORKER);
 
@@ -43,10 +41,7 @@ unsafe fn o_worker_shutdown(elevel: c_int) {
 
 #[no_mangle]
 pub unsafe extern "C" fn o_worker_handle_interrupts() {
-    /*
-     * In case of a pending shutdown request we just raise an ERROR message
-     * currently.
-     */
+    // If a shutdown request is pending, raise an ERROR immediately.
     if pg_sys::ShutdownRequestPending as i32 != 0 {
         o_worker_shutdown(pg_sys::ERROR as c_int);
     }

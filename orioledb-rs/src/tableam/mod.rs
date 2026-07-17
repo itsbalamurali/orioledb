@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * mod.rs
- *		Table Access Method modules declaration for OrioleDB.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! mod.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/mod.rs
 
 pub mod bitmap_scan;
 pub mod descr;

@@ -1,14 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * key_range.rs
- *		Function dealing with key ranges for planning and execution stage
- *		in OrioleDB.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! key_range.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/key_range.rs
 
 use pgrx::pg_sys::{self, Datum, Oid};
 use std::ptr;

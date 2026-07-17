@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * index_scan.rs
- *		Index scan declarations and helper functions for orioledb table scan.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! index_scan.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/index_scan.rs
 
 use pgrx::pg_sys::{self, Relation, Snapshot, MemoryContext};
 use crate::tableam::bitmap_scan::OPlanState;

@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * operations.rs
- *		Declarations and FFI signatures of table-level operations in OrioleDB.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! operations.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/operations.rs
 
 use pgrx::pg_sys::{self, Relation, CommandId, pg_sys::IndexUniqueCheck::Type, ItemPointer};
 use crate::{OXid, CommitSeqNo};

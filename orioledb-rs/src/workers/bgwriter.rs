@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * bgwriter.rs
- *		Routines for background writer process.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/orioledb-rs/src/workers/bgwriter.rs
- *
- *-------------------------------------------------------------------------
- */
+//! bgwriter.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/workers/bgwriter.rs
 
 use std::ffi::{c_char, c_int, CString};
 use pgrx::pg_sys;

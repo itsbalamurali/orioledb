@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * descr.rs
- *		Declarations of descriptors used for table access method definition.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! descr.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/descr.rs
 
 use pgrx::pg_sys::{self, Oid};
 use crate::OXid;

@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * scan.rs
- *		Scan Provider for orioledb tables.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! scan.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/scan.rs
 
 use pgrx::pg_sys::{self, Index, PlannerInfo, RangeTblEntry, RelOptInfo};
 use crate::tableam::bitmap_scan::OPlanState;

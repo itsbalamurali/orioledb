@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * toast.rs
- * 		Low-level implementation for orioledb TOAST implementation.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tuple/toast.rs
- *
- *-------------------------------------------------------------------------
- */
+//! toast.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tuple/toast.rs
 
 use std::ffi::{c_char, c_int, c_void};
 use pgrx::pg_sys::{Datum, TupleDesc, Tuplesortstate, Oid, Size, Pointer};

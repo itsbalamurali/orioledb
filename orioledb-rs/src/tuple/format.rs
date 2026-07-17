@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * format.rs
- * 		Routines for accessing tuples in orioledb format.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tuple/format.rs
- *
- *-------------------------------------------------------------------------
- */
+//! format.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tuple/format.rs
 
 use std::ffi::{c_char, c_int};
 use pgrx::pg_sys::{Datum, TupleDesc, bits8, FormData_pg_attribute};

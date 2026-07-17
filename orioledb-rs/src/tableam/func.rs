@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * func.rs
- *		SQL functions implementation for orioledb module.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! func.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/func.rs
 
 use pgrx::pg_sys::{self, Datum, FunctionCallInfo};
 

@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * logical.rs
- *		Support for logical decoding of OrioleDB tables.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  orioledb-rs/src/recovery/logical.rs
- *
- *-------------------------------------------------------------------------
- */
+//! logical.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/recovery/logical.rs
 
 use pgrx::pg_sys;
 

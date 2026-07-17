@@ -1,17 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * handler.rs
- *		Implementation of btree index access method handler and
- *		generic bridged index access method handler.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/orioledb-rs/src/indexam/handler.rs
- *
- *-------------------------------------------------------------------------
- */
+//! handler.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/indexam/handler.rs
 
 use std::ffi::{c_char, c_int, c_void};
 use pgrx::pg_sys;

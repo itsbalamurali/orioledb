@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * tree.rs
- *		Implementation of BTree interface for OrioleDB tables.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! tree.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/tree.rs
 
 use pgrx::pg_sys::{self, Datum, Oid};
 use crate::tableam::descr::{BTreeDescr, OIndexDescr};

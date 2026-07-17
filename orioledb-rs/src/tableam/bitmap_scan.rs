@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * bitmap_scan.rs
- *		Bitmap scan implementation and helpers for OrioleDB.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! bitmap_scan.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/bitmap_scan.rs
 
 use pgrx::pg_sys::{self, Oid, MemoryContext};
 use crate::tableam::key_bitmap::OKeyBitmap;

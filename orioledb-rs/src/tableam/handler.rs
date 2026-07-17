@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * handler.rs
- *		Table access method handler declarations and implementations for OrioleDB.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! handler.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/handler.rs
 
 use pgrx::pg_sys::{self, Oid, Relation, Size};
 use crate::tableam::descr::OTableDescr;

@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * worker.rs
- *		Recovery worker process implementation.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  orioledb-rs/src/recovery/worker.rs
- *
- *-------------------------------------------------------------------------
- */
+//! worker.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/recovery/worker.rs
 
 use std::ffi::{c_char, c_int, c_void, CString};
 use pgrx::pg_sys;

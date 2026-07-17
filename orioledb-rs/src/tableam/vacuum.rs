@@ -1,13 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * vacuum.rs
- *		Vacuum implementation and helper function declarations for OrioleDB bridged indexes.
- *
- * Copyright (c) 2025-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- *-------------------------------------------------------------------------
- */
+//! vacuum.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tableam/vacuum.rs
 
 use pgrx::pg_sys::{self, Relation, BufferAccessStrategy};
 use crate::tableam::descr::OTableDescr;

@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * sort.rs
- * 		Implementation of orioledb tuple sorting.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tuple/sort.rs
- *
- *-------------------------------------------------------------------------
- */
+//! sort.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/tuple/sort.rs
 
 use std::ffi::{c_char, c_int, c_void};
 use pgrx::pg_sys::{Datum, TupleDesc, SortTuple, Tuplesortstate, Oid, NameData};

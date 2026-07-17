@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * recovery.rs
- *		General routines for orioledb recovery.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  orioledb-rs/src/recovery/recovery.rs
- *
- *-------------------------------------------------------------------------
- */
+//! recovery.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/recovery/recovery.rs
 
 use std::ffi::{c_int, c_void};
 use pgrx::pg_sys;

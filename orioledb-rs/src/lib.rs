@@ -5,17 +5,17 @@ use pgrx::prelude::*;
 ::pgrx::pg_module_magic!(name, version);
 
 pub mod btree;
-pub mod catalog;
-pub mod checkpoint;
-pub mod indexam;
-pub mod recovery;
-pub mod rewind;
-pub mod s3;
-pub mod tableam;
+// pub mod catalog;
+// pub mod checkpoint;
+// pub mod indexam;
+// pub mod recovery;
+// pub mod rewind;
+// pub mod s3;
+// pub mod tableam;
 pub mod transam;
-pub mod tuple;
+// pub mod tuple;
 pub mod utils;
-pub mod workers;
+// pub mod workers;
 
 pub type Oid = pg_sys::Oid;
 pub type CommitSeqNo = u64;

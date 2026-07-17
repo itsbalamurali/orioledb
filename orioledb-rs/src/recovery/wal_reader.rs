@@ -1,16 +1,10 @@
-/*-------------------------------------------------------------------------
- *
- * wal_reader.rs
- * 		WAL parser declarations for OrioleDB.
- *
- * Copyright (c) 2026, Oriole DB Inc.
- * Copyright (c) 2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  orioledb-rs/src/recovery/wal_reader.rs
- *
- *-------------------------------------------------------------------------
- */
+//! wal_reader.rs
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+//!
+//! IDENTIFICATION
+//!   contrib/orioledb/orioledb-rs/src/recovery/wal_reader.rs
 
 use std::ffi::{c_char, c_int, c_void};
 use pgrx::pg_sys;
