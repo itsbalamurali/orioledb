@@ -60,16 +60,16 @@ const ENC_MAX: usize = 32;
 fn enc_tuple(t: &EncTuple, out: &mut [u8]) {
     out.fill(0);
     let off = ENC_MAX - (4 + 8 + 2);
-    enc_be((t.a as u32) ^ 0x80000000, 4, out, off);
+    enc_be(((t.a as u32) ^ 0x80000000) as u64, 4, out, off);
     enc_be((t.b as u64) ^ 0x8000000000000000, 8, out, off + 4);
-    enc_be((t.c as u16) ^ 0x8000, 2, out, off + 12);
+    enc_be(((t.c as u16) ^ 0x8000) as u64, 2, out, off + 12);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn orioledb_encode_selftest(fcinfo: FunctionCallInfo) -> Datum {
     let fcinfo = &*fcinfo;
     let nkeys = if fcinfo.nargs >= 1 {
-        fcinfo.args[0].value.value() as i32
+        (*fcinfo.args.as_ptr()).value.value() as i32
     } else {
         1000
     };
@@ -131,7 +131,7 @@ fn fkey_inc(key: &mut [u8; OKBM_FIXED_BYTES]) -> bool {
 pub unsafe extern "C" fn orioledb_keybitmap_selftest(fcinfo: FunctionCallInfo) -> Datum {
     let fcinfo = &*fcinfo;
     let nkeys = if fcinfo.nargs >= 1 {
-        fcinfo.args[0].value.value() as i32
+        (*fcinfo.args.as_ptr()).value.value() as i32
     } else {
         1000
     };

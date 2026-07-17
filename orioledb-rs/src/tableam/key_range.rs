@@ -177,7 +177,7 @@ pub unsafe extern "C" fn o_key_data_update_array_key_range(
         let attnum = (key.sk_attno - 1) as usize;
         
         if (key.sk_flags & pg_sys::SK_SEARCHARRAY as std::ffi::c_int) != 0
-            && key.sk_strategy == pg_sys::BTEqualStrategyNumber as std::ffi::c_int
+            && key.sk_strategy == pg_sys::BTEqualStrategyNumber as u16
         {
             if !current_array_key.is_null() {
                 let array_key = &*current_array_key;
@@ -278,14 +278,14 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
         
         let mut low = OBTreeValueBound {
             value: Datum::from(0usize),
-            type_: 0,
+            type_: pg_sys::InvalidOid,
             flags: O_VALUE_BOUND_MINUS_INFINITY,
             comparator: ptr::null_mut(),
             exclusion_fn: ptr::null_mut(),
         };
         let mut high = OBTreeValueBound {
             value: Datum::from(0usize),
-            type_: 0,
+            type_: pg_sys::InvalidOid,
             flags: O_VALUE_BOUND_PLUS_INFINITY,
             comparator: ptr::null_mut(),
             exclusion_fn: ptr::null_mut(),
@@ -352,7 +352,7 @@ pub unsafe extern "C" fn o_key_data_to_key_range(
         }
         
         if (key.sk_flags & pg_sys::SK_SEARCHARRAY as std::ffi::c_int) != 0
-            && key.sk_strategy == pg_sys::BTEqualStrategyNumber as std::ffi::c_int
+            && key.sk_strategy == pg_sys::BTEqualStrategyNumber as u16
         {
             if !current_array_key.is_null() {
                 let array_key = &*current_array_key;

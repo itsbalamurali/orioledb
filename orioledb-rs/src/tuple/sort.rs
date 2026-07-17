@@ -16,8 +16,10 @@ use std::ffi::{c_char, c_int, c_void};
 use pgrx::pg_sys::{Datum, TupleDesc, SortTuple, Tuplesortstate, Oid, NameData};
 use crate::tuple::format::{
     OTuple, OTupleFixedFormatSpec, OTupleAttrCompact, o_fastgetattr, o_tuple_size,
-    ORelOids, OIndexType, maxalign, O_TUPLE_FLAGS_FIXED_FORMAT, OInMemoryBlkno, BTreeRootInfo,
+    ORelOids, OIndexType, maxalign, O_TUPLE_FLAGS_FIXED_FORMAT,
 };
+use crate::OInMemoryBlkno;
+use crate::btree::btree::BTreeRootInfo;
 
 #[repr(C)]
 pub struct OIndexBuildSortArg {
@@ -259,7 +261,7 @@ unsafe fn read_o_tuple(ptr: *mut std::ffi::c_void) -> OTuple {
     }
 }
 
-unsafe extern "C" fn comparetup_orioledb_index(
+unsafe extern "C-unwind" fn comparetup_orioledb_index(
     a: *const SortTuple,
     b: *const SortTuple,
     state: *mut Tuplesortstate,
@@ -333,7 +335,7 @@ unsafe extern "C" fn comparetup_orioledb_index(
     0
 }
 
-unsafe extern "C" fn writetup_orioledb_index(
+unsafe extern "C-unwind" fn writetup_orioledb_index(
     state: *mut Tuplesortstate,
     tape: *mut pgrx::pg_sys::LogicalTape,
     stup: *mut SortTuple,
@@ -355,7 +357,7 @@ unsafe extern "C" fn writetup_orioledb_index(
     }
 }
 
-unsafe extern "C" fn readtup_orioledb_index(
+unsafe extern "C-unwind" fn readtup_orioledb_index(
     state: *mut Tuplesortstate,
     stup: *mut SortTuple,
     tape: *mut pgrx::pg_sys::LogicalTape,
@@ -389,7 +391,7 @@ unsafe extern "C" fn readtup_orioledb_index(
     (*stup).isnull1 = isnull;
 }
 
-unsafe extern "C" fn removeabbrev_orioledb_index(
+unsafe extern "C-unwind" fn removeabbrev_orioledb_index(
     state: *mut Tuplesortstate,
     stups: *mut SortTuple,
     count: c_int,
@@ -433,7 +435,7 @@ pub unsafe extern "C" fn tuplesort_begin_orioledb_index(
     randomAccess: bool,
     coordinate: pgrx::pg_sys::SortCoordinate,
 ) -> *mut Tuplesortstate {
-    let state = pgrx::pg_sys::tuplesort_begin_common(workMem, coordinate, randomAccess);
+    let state = pgrx::pg_sys::tuplesort_begin_common(workMem, coordinate, randomAccess as i32);
     let base = TuplesortstateGetPublic(state);
 
     let oldcontext = pgrx::pg_sys::MemoryContextSwitchTo((*base).maincontext);
@@ -485,7 +487,7 @@ pub unsafe extern "C" fn tuplesort_begin_orioledb_toast(
     randomAccess: bool,
     coordinate: pgrx::pg_sys::SortCoordinate,
 ) -> *mut Tuplesortstate {
-    let state = pgrx::pg_sys::tuplesort_begin_common(workMem, coordinate, randomAccess);
+    let state = pgrx::pg_sys::tuplesort_begin_common(workMem, coordinate, randomAccess as i32);
     let base = TuplesortstateGetPublic(state);
 
     let oldcontext = pgrx::pg_sys::MemoryContextSwitchTo((*base).maincontext);
@@ -520,9 +522,9 @@ pub unsafe extern "C" fn tuplesort_begin_orioledb_toast(
     }
 
     let mut field = OIndexField {
-        inputtype: 0,
-        opfamily: 0,
-        opclass: 0,
+        inputtype: pgrx::pg_sys::InvalidOid,
+        opfamily: pgrx::pg_sys::InvalidOid,
+        opclass: pgrx::pg_sys::InvalidOid,
         collation: pgrx::pg_sys::DEFAULT_COLLATION_OID,
         ascending: false,
         nullfirst: false,
@@ -531,12 +533,12 @@ pub unsafe extern "C" fn tuplesort_begin_orioledb_toast(
         hash_fn: std::ptr::null_mut(),
     };
 
-    const INT2OID: pgrx::pg_sys::Oid = 21;
-    const INT4OID: pgrx::pg_sys::Oid = 23;
-    const INT2_BTREE_OPS_OID: pgrx::pg_sys::Oid = 1979;
-    const INT4_BTREE_OPS_OID: pgrx::pg_sys::Oid = 1978;
-    const F_HASHINT2: pgrx::pg_sys::Oid = 450;
-    const F_HASHINT4: pgrx::pg_sys::Oid = 451;
+    const INT2OID: pgrx::pg_sys::Oid = pgrx::pg_sys::Oid::from_u32(21);
+    const INT4OID: pgrx::pg_sys::Oid = pgrx::pg_sys::Oid::from_u32(23);
+    const INT2_BTREE_OPS_OID: pgrx::pg_sys::Oid = pgrx::pg_sys::Oid::from_u32(1979);
+    const INT4_BTREE_OPS_OID: pgrx::pg_sys::Oid = pgrx::pg_sys::Oid::from_u32(1978);
+    const F_HASHINT2: pgrx::pg_sys::Oid = pgrx::pg_sys::Oid::from_u32(450);
+    const F_HASHINT4: pgrx::pg_sys::Oid = pgrx::pg_sys::Oid::from_u32(451);
 
     let sortKey = (*base).sortKeys.add(key_fields as usize);
     (*sortKey).ssup_cxt = pgrx::pg_sys::CurrentMemoryContext;
@@ -620,6 +622,7 @@ pub unsafe extern "C" fn tuplesort_putotuple(state: *mut Tuplesortstate, tup: OT
         ),
         isnull1: isnull,
         tuple: tuple_alloc,
+        srctape: 0,
     };
 
     let abbreviate = (*(*base).sortKeys.add(0)).abbrev_converter.is_some() && !stup.isnull1;

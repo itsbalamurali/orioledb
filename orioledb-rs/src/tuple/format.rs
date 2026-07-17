@@ -118,7 +118,7 @@ pub struct BridgeData {
     pub attnum: pgrx::pg_sys::AttrNumber,
 }
 
-pub type OTupleAttrCompact = FormData_pg_attribute;
+pub type OTupleAttrCompact = pgrx::pg_sys::CompactAttribute;
 pub type OTupleAttrFull = FormData_pg_attribute;
 
 pub const fn maxalign(len: usize) -> usize {
@@ -136,15 +136,14 @@ pub unsafe fn att_isnull(attnum: usize, bits: *const u8) -> bool {
 }
 
 pub unsafe fn TupleDescAttr(tupdesc: TupleDesc, i: usize) -> *mut FormData_pg_attribute {
-    let attrs_ptr = std::ptr::addr_of!((*tupdesc).attrs) as *mut FormData_pg_attribute;
-    attrs_ptr.add(i)
+    pgrx::pg_sys::TupleDescAttr(tupdesc, i as c_int)
 }
 
-pub unsafe fn OTupleDescAttrFast(tupdesc: TupleDesc, i: usize) -> *mut FormData_pg_attribute {
-    TupleDescAttr(tupdesc, i)
+pub unsafe fn OTupleDescAttrFast(tupdesc: TupleDesc, i: usize) -> *mut OTupleAttrCompact {
+    pgrx::pg_sys::TupleDescCompactAttr(tupdesc, i as c_int)
 }
 
-pub unsafe fn OTupleDescAttrSlow(tupdesc: TupleDesc, i: usize) -> *mut FormData_pg_attribute {
+pub unsafe fn OTupleDescAttrSlow(tupdesc: TupleDesc, i: usize) -> *mut OTupleAttrFull {
     TupleDescAttr(tupdesc, i)
 }
 
@@ -162,6 +161,27 @@ pub fn att_align_nominal_ptr(ptr: *mut c_char, attalign: c_char) -> *mut c_char 
     let addr = ptr as usize;
     let aligned = att_align_nominal(addr, attalign);
     aligned as *mut c_char
+}
+
+pub fn att_nominal_alignby(cur_offset: usize, attalignby: u8) -> usize {
+    let alignby = attalignby as usize;
+    (cur_offset + (alignby - 1)) & !(alignby - 1)
+}
+
+pub unsafe fn att_pointer_alignby(cur_offset: usize, attalignby: u8, attlen: i16, attptr: *const c_char) -> usize {
+    if attlen == -1 && *(attptr as *const u8) != 0 {
+        cur_offset
+    } else {
+        att_nominal_alignby(cur_offset, attalignby)
+    }
+}
+
+pub fn o_att_align_nominal(att: &OTupleAttrCompact, cur_offset: usize) -> usize {
+    att_nominal_alignby(cur_offset, att.attalignby)
+}
+
+pub unsafe fn o_att_align_pointer(att: &OTupleAttrCompact, cur_offset: usize, attlen: i16, attptr: *const c_char) -> usize {
+    att_pointer_alignby(cur_offset, att.attalignby, attlen, attptr)
 }
 
 #[repr(C, packed)]
@@ -217,7 +237,7 @@ pub unsafe fn VARSIZE_ANY(ptr: *const c_char) -> usize {
 }
 
 pub unsafe fn VARSIZE_ANY_EXHDR(value: Datum) -> usize {
-    pgrx::pg_sys::VARSIZE_ANY_EXHDR(value as *mut pgrx::pg_sys::varlena) as usize
+    pgrx::pg_sys::VARSIZE_ANY_EXHDR(value.value() as *mut pgrx::pg_sys::varlena) as usize
 }
 
 pub unsafe fn VARATT_CAN_MAKE_SHORT(ptr: *const c_char) -> bool {
@@ -261,27 +281,14 @@ pub unsafe fn att_addlength_pointer(cur_offset: usize, attlen: i16, attptr: *con
 
 pub unsafe fn att_align_datum(cur_offset: usize, attalign: c_char, attlen: i16, attval: Datum) -> usize {
     if attlen == -1 {
-        att_align_pointer(cur_offset, attalign, attlen, attval as *const c_char)
+        att_align_pointer(cur_offset, attalign, attlen, attval.value() as *const c_char)
     } else {
         att_align_nominal(cur_offset, attalign)
     }
 }
 
 pub unsafe fn att_addlength_datum(cur_offset: usize, attlen: i16, attval: Datum) -> usize {
-    att_addlength_pointer(cur_offset, attlen, attval as *const c_char)
-}
-
-pub fn o_att_align_nominal(att: &FormData_pg_attribute, cur_offset: usize) -> usize {
-    att_align_nominal(cur_offset, att.attalign)
-}
-
-pub unsafe fn o_att_align_pointer(
-    att: &FormData_pg_attribute,
-    cur_offset: usize,
-    attlen: i16,
-    attptr: *const c_char,
-) -> usize {
-    att_align_pointer(cur_offset, att.attalign, attlen, attptr)
+    att_addlength_pointer(cur_offset, attlen, attval.value() as *const c_char)
 }
 
 #[cfg(target_endian = "big")]
@@ -310,27 +317,42 @@ pub fn VARLENA_ATT_IS_PACKABLE(att: &FormData_pg_attribute) -> bool {
     att.attstorage != 'p' as i8
 }
 
-pub unsafe fn fetchatt(att: *const FormData_pg_attribute, attval: *const c_char) -> Datum {
+pub trait OTupleAttr {
+    fn attlen(&self) -> i16;
+    fn attbyval(&self) -> bool;
+}
+
+impl OTupleAttr for FormData_pg_attribute {
+    fn attlen(&self) -> i16 { self.attlen }
+    fn attbyval(&self) -> bool { self.attbyval }
+}
+
+impl OTupleAttr for pgrx::pg_sys::CompactAttribute {
+    fn attlen(&self) -> i16 { self.attlen }
+    fn attbyval(&self) -> bool { self.attbyval }
+}
+
+pub unsafe fn fetchatt<T: OTupleAttr>(att: *const T, attval: *const c_char) -> Datum {
     let att = &*att;
-    if att.attbyval {
-        match att.attlen {
-            1 => *(attval as *const u8) as Datum,
-            2 => *(attval as *const u16) as Datum,
-            4 => *(attval as *const u32) as Datum,
-            8 => *(attval as *const u64) as Datum,
-            _ => panic!("Unsupported attlen for attbyval: {}", att.attlen),
+    if att.attbyval() {
+        match att.attlen() {
+            1 => Datum::from(*(attval as *const u8) as usize),
+            2 => Datum::from(*(attval as *const u16) as usize),
+            4 => Datum::from(*(attval as *const u32) as usize),
+            8 => Datum::from(*(attval as *const u64) as usize),
+            _ => panic!("Unsupported attlen for attbyval: {}", att.attlen()),
         }
     } else {
-        attval as Datum
+        Datum::from(attval as usize)
     }
 }
 
 pub unsafe fn store_att_byval(ptr: *mut c_char, newval: Datum, attlen: i16) {
     match attlen {
-        1 => *(ptr as *mut u8) = newval as u8,
-        2 => *(ptr as *mut u16) = newval as u16,
-        4 => *(ptr as *mut u32) = newval as u32,
-        8 => *(ptr as *mut u64) = newval as u64,
+        1 => *(ptr as *mut u8) = newval.value() as u8,
+        2 => *(ptr as *mut u16) = newval.value() as u16,
+        4 => *(ptr as *mut u32) = newval.value() as u32,
+        8 => *(ptr as *mut u64) = newval.value() as u64,
         _ => panic!("Unsupported attlen for store_att_byval: {}", attlen),
     }
 }
@@ -354,7 +376,7 @@ pub unsafe fn o_fastgetattr(
             }
         } else {
             *isnull = true;
-            0
+            Datum::from(0)
         }
     } else {
         let header = tup.data as *const OTupleHeaderData;
@@ -369,7 +391,7 @@ pub unsafe fn o_fastgetattr(
             let bits = tup.data.add(SizeOfOTupleHeader) as *const u8;
             if att_isnull((attnum - 1) as usize, bits) {
                 *isnull = true;
-                0
+                Datum::from(0)
             } else {
                 o_toast_nocachegetattr(tup, attnum, tuple_desc, spec, isnull)
             }
@@ -478,14 +500,14 @@ pub unsafe extern "C" fn o_tuple_next_field_offset(
     if !state.slow && att.attcacheoff >= 0 {
         state.off = att.attcacheoff as u32;
     } else if att.attlen == -1 {
-        if !state.slow && state.off == o_att_align_nominal(att, state.off) {
+        if !state.slow && state.off as usize == o_att_align_nominal(att, state.off as usize) {
             att.attcacheoff = state.off as i32;
         } else {
-            state.off = o_att_align_pointer(att, state.off, -1, state.tp.add(state.off as usize)) as u32;
+            state.off = o_att_align_pointer(att, state.off as usize, -1, state.tp.add(state.off as usize)) as u32;
             state.slow = true;
         }
     } else {
-        state.off = o_att_align_nominal(att, state.off) as u32;
+        state.off = o_att_align_nominal(att, state.off as usize) as u32;
         if !state.slow {
             att.attcacheoff = state.off as i32;
         }
@@ -524,7 +546,7 @@ pub unsafe extern "C" fn o_tuple_read_next_field(
         } else {
             *isnull = true;
             state.attnum += 1;
-            return 0;
+            return Datum::from(0);
         }
     }
 
@@ -532,7 +554,7 @@ pub unsafe extern "C" fn o_tuple_read_next_field(
         *isnull = true;
         state.slow = true;
         state.attnum += 1;
-        return 0;
+        return Datum::from(0);
     }
 
     *isnull = false;
@@ -653,7 +675,7 @@ pub unsafe extern "C" fn o_toast_nocachegetattr(
     let tup = tuple.data as *mut OTupleHeaderData;
     let tp: *mut c_char;
     let mut slow = false;
-    let mut result: Datum = 0;
+    let mut result = Datum::from(0);
 
     *is_null = false;
     attnum -= 1;
@@ -697,7 +719,7 @@ pub unsafe extern "C" fn o_toast_nocachegetattr(
 
     if *is_null && (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) == 0 && !(*tup).hasnulls() && (*tup).natts < (*tupleDesc).natts as u16 {
         *is_null = true;
-        return 0;
+        return Datum::from(0);
     }
 
     assert!(!*is_null);
@@ -737,7 +759,7 @@ unsafe fn o_tuple_compute_data_size(
     natts: c_int,
 ) -> usize {
     let mut data_length = 0;
-    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber;
+    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber as i16;
     let mut ctid_off = 0;
 
     if !iptr.is_null() {
@@ -750,9 +772,9 @@ unsafe fn o_tuple_compute_data_size(
     for i in 0..natts {
         let val: Datum;
         if i == 0 && !iptr.is_null() {
-            val = iptr as Datum;
+            val = Datum::from(iptr as usize);
         } else if has_bridge_ctid && i == ((*bridge_data).attnum - 1) as i32 {
-            val = &(*bridge_data).bridge_iptr as *const pgrx::pg_sys::ItemPointerData as Datum;
+            val = Datum::from(&(*bridge_data).bridge_iptr as *const pgrx::pg_sys::ItemPointerData as usize);
         } else {
             if !to_toast.is_null() && *to_toast.offset((i - ctid_off) as isize) == ORIOLEDB_TO_TOAST_ON as i8 {
                 data_length += std::mem::size_of::<OToastValue>();
@@ -765,11 +787,11 @@ unsafe fn o_tuple_compute_data_size(
         }
 
         let atti = &*TupleDescAttr(tupleDesc, i as usize);
-        if ATT_IS_PACKABLE(atti) && VARATT_CAN_MAKE_SHORT(val as *const c_char) {
-            data_length += VARATT_CONVERTED_SHORT_SIZE(val as *const c_char);
-        } else if atti.attlen == -1 && VARATT_IS_EXTERNAL_EXPANDED(val as *const c_char) {
+        if ATT_IS_PACKABLE(atti) && VARATT_CAN_MAKE_SHORT(val.value() as *const c_char) {
+            data_length += VARATT_CONVERTED_SHORT_SIZE(val.value() as *const c_char);
+        } else if atti.attlen == -1 && VARATT_IS_EXTERNAL_EXPANDED(val.value() as *const c_char) {
             data_length = att_align_nominal(data_length, atti.attalign);
-            data_length += pgrx::pg_sys::EOH_get_flat_size(val as *mut pgrx::pg_sys::ExpandedObjectHeader);
+            data_length += pgrx::pg_sys::EOH_get_flat_size(val.value() as *mut pgrx::pg_sys::ExpandedObjectHeader);
         } else {
             data_length = att_align_datum(data_length, atti.attalign, atti.attlen, val);
             data_length = att_addlength_datum(data_length, atti.attlen, val);
@@ -794,7 +816,7 @@ pub unsafe extern "C" fn o_new_tuple_size(
     let mut fixedFormat = version == 0;
     let mut natts = (*tupleDesc).natts;
     let mut ctid_off = 0;
-    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber;
+    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber as i16;
 
     if !iptr.is_null() {
         ctid_off += 1;
@@ -851,7 +873,7 @@ pub unsafe extern "C" fn o_tuple_fill(
     let mut hasnull = false;
     let mut fixedFormat = version == 0;
     let data: *mut c_char;
-    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber;
+    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber as i16;
 
     if !iptr.is_null() {
         ctid_off += 1;
@@ -904,11 +926,11 @@ pub unsafe extern "C" fn o_tuple_fill(
 
         if i == 0 && !iptr.is_null() {
             cur_to_toast = false;
-            value = iptr as Datum;
+            value = Datum::from(iptr as usize);
             null = false;
         } else if has_bridge_ctid && i == ((*bridge_data).attnum - 1) as i32 {
             cur_to_toast = false;
-            value = &(*bridge_data).bridge_iptr as *const pgrx::pg_sys::ItemPointerData as Datum;
+            value = Datum::from(&(*bridge_data).bridge_iptr as *const pgrx::pg_sys::ItemPointerData as usize);
             null = false;
         } else {
             cur_to_toast = !to_toast.is_null() && *to_toast.offset((i - ctid_off) as isize) == ORIOLEDB_TO_TOAST_ON as i8;
@@ -927,7 +949,7 @@ pub unsafe extern "C" fn o_tuple_fill(
             toastValue.raw_size = crate::tuple::toast::o_get_raw_size(value);
             toastValue.toasted_size = crate::tuple::toast::o_get_src_size(value);
 
-            let val_ptr = value as *const c_char;
+            let val_ptr = value.value() as *const c_char;
             if VARATT_IS_COMPRESSED(val_ptr) {
                 let mut cmp = att.attcompression;
                 if cmp == pgrx::pg_sys::InvalidCompressionMethod as i8 {
@@ -972,7 +994,7 @@ pub unsafe extern "C" fn o_tuple_fill(
             store_att_byval(data_ptr, value, att.attlen);
             data_length = att.attlen as usize;
         } else if att.attlen == -1 {
-            let val = value as *mut pgrx::pg_sys::varlena;
+            let val = value.value() as *mut pgrx::pg_sys::varlena;
             let val_ptr = val as *const c_char;
 
             if pgrx::pg_sys::VARATT_IS_EXTERNAL(val) {
@@ -1002,14 +1024,13 @@ pub unsafe extern "C" fn o_tuple_fill(
                 std::ptr::copy_nonoverlapping(val as *const u8, data_ptr as *mut u8, data_length);
             }
         } else if att.attlen == -2 {
-            assert_eq!(att.attalign as u8 as char, 'c');
-            data_length = std::ffi::CStr::from_ptr(value as *const c_char).to_bytes().len() + 1;
-            std::ptr::copy_nonoverlapping(value as *const u8, data_ptr as *mut u8, data_length);
+            data_length = std::ffi::CStr::from_ptr(value.value() as *const c_char).to_bytes().len() + 1;
+            std::ptr::copy_nonoverlapping(value.value() as *const u8, data_ptr as *mut u8, data_length);
         } else {
             data_ptr = att_align_nominal_ptr(data_ptr, att.attalign);
             assert!(att.attlen > 0);
             data_length = att.attlen as usize;
-            std::ptr::copy_nonoverlapping(value as *const u8, data_ptr as *mut u8, data_length);
+            std::ptr::copy_nonoverlapping(value.value() as *const u8, data_ptr as *mut u8, data_length);
         }
 
         data_ptr = data_ptr.add(data_length);

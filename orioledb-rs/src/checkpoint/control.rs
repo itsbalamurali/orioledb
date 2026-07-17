@@ -5,7 +5,8 @@
 // Copyright (c) 2024-2026, Oriole DB Inc.
 // Copyright (c) 2025-2026, Supabase Inc.
 
-use pgrx::pg_sys::{CommitSeqNo, XLogRecPtr};
+use pgrx::pg_sys::XLogRecPtr;
+use crate::CommitSeqNo;
 
 use crate::transam::oxid::OXid;
 use crate::transam::undo::{UndoLocation, UNDO_LOGS_COUNT};

@@ -54,8 +54,76 @@ pub struct XidFileRec {
     pub retain_location: UndoLocation,
 }
 
-/// Opaque handle for checkpoint shared-memory state (concrete layout lives in C).
-pub enum CheckpointState {}
+#[repr(C, align(8))]
+#[derive(Clone, Copy)]
+pub struct OFixedShmemKey {
+    pub fixedData: [std::os::raw::c_char; 2688],
+    pub formatFlags: u8,
+    pub notNull: bool,
+    pub len: std::os::raw::c_int,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CheckpointPageInfo {
+    pub bound: std::os::raw::c_int,
+    pub nextkeyType: std::os::raw::c_int,
+    pub image: [std::os::raw::c_char; 8192],
+    pub hikey: OFixedShmemKey,
+    pub nextkey: OFixedShmemKey,
+    pub lokey: OFixedShmemKey,
+    pub blkno: OInMemoryBlkno,
+    pub hikeyBlkno: OInMemoryBlkno,
+    pub offset: u16,
+    pub leftmost: bool,
+    pub autonomous: bool,
+    pub autonomousTupleExist: bool,
+    pub autonomousLeftmost: bool,
+}
+
+#[repr(C)]
+pub struct CheckpointState {
+    pub controlIdentifier: u64,
+    pub changecount: u32,
+    pub lastCheckpointNumber: u32,
+    pub treeType: std::os::raw::c_int,
+    pub datoid: Oid,
+    pub reloid: Oid,
+    pub relnode: Oid,
+    pub tablespace: Oid,
+    pub completed: bool,
+    pub curKeyType: std::os::raw::c_int,
+    pub curKeyValue: OFixedShmemKey,
+    pub stack: [CheckpointPageInfo; 32],
+    pub pid: std::os::raw::c_int,
+    pub dirtyPagesEstimate: f64,
+    pub pagesWritten: u64,
+    pub oTablesMetaTrancheId: std::os::raw::c_int,
+    pub oTablesMetaLock: pgrx::pg_sys::LWLock,
+    pub oSysTreesTrancheId: std::os::raw::c_int,
+    pub oSysTreesLock: pgrx::pg_sys::LWLock,
+    pub oSharedRootInfoInsertTrancheId: std::os::raw::c_int,
+    pub oSharedRootInfoInsertLocks: [pgrx::pg_sys::LWLock; 128],
+    pub checkpointerLatch: *mut pgrx::pg_sys::Latch,
+    pub autonomousLevel: pgrx::pg_sys::pg_atomic_uint32,
+    pub replayStartPtr: XLogRecPtr,
+    pub controlReplayStartPtr: XLogRecPtr,
+    pub sysTreesStartPtr: XLogRecPtr,
+    pub controlSysTreesStartPtr: XLogRecPtr,
+    pub toastConsistentPtr: XLogRecPtr,
+    pub controlToastConsistentPtr: XLogRecPtr,
+    pub mmapDataLength: pgrx::pg_sys::pg_atomic_uint64,
+    pub xidQueueCheckpointNum: u32,
+    pub oXidQueueTrancheId: std::os::raw::c_int,
+    pub oXidQueueLock: pgrx::pg_sys::LWLock,
+    pub oXidQueueFlushTrancheId: std::os::raw::c_int,
+    pub oXidQueueFlushLock: pgrx::pg_sys::LWLock,
+    pub copyBlknoTrancheId: std::os::raw::c_int,
+    pub oMetaTrancheId: std::os::raw::c_int,
+    pub punchHolesTrancheId: std::os::raw::c_int,
+    pub xidRecLastPos: pgrx::pg_sys::pg_atomic_uint64,
+    pub xidRecFlushPos: pgrx::pg_sys::pg_atomic_uint64,
+}
 
 // ---------------------------------------------------------------------------
 // Extern C declarations

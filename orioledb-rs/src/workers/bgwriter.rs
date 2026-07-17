@@ -168,7 +168,7 @@ pub unsafe extern "C" fn register_bgwriter(num: c_int) {
     worker.bgw_flags = pg_sys::BGWORKER_SHMEM_ACCESS as i32;
     worker.bgw_start_time = pg_sys::BgWorkerStartTime_BgWorkerStart_PostmasterStart;
     worker.bgw_restart_time = 0;
-    worker.bgw_main_arg = num as pg_sys::Datum;
+    worker.bgw_main_arg = pg_sys::Datum::from(num as usize);
 
     copy_to_c_char_array("orioledb", &mut worker.bgw_library_name);
     copy_to_c_char_array("bgwriter_main", &mut worker.bgw_function_name);
@@ -178,12 +178,12 @@ pub unsafe extern "C" fn register_bgwriter(num: c_int) {
     );
     copy_to_c_char_array("orioledb background writer", &mut worker.bgw_type);
 
-    pg_sys::RegisterBackgroundWorker(&worker);
+    pg_sys::RegisterBackgroundWorker(&mut worker);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn bgwriter_main(main_arg: pg_sys::Datum) {
-    BGWriterNum = main_arg as i32;
+    BGWriterNum = main_arg.value() as i32;
 
     pg_sys::RegisterTimeout(pg_sys::TimeoutId_DEADLOCK_TIMEOUT, Some(CheckDeadLockAlert));
 
@@ -264,8 +264,8 @@ pub unsafe extern "C" fn bgwriter_main(main_arg: pg_sys::Datum) {
             );
             pg_sys::ResetLatch(pg_sys::MyLatch);
 
-            if (rc & pg_sys::WL_POSTMASTER_DEATH as i32) != 0 {
-                pg_sys::ShutdownRequestPending = true;
+             if (rc & pg_sys::WL_POSTMASTER_DEATH as i32) != 0 {
+                pg_sys::ShutdownRequestPending = 1;
             }
 
             if pg_sys::InterruptPending as i32 != 0 {
@@ -287,7 +287,7 @@ pub unsafe extern "C" fn bgwriter_main(main_arg: pg_sys::Datum) {
                     while need_eviction || need_write {
                         let mut shutdown_pending: c_int = pg_sys::ShutdownRequestPending as c_int;
                         ppool_run_maintenance(pool, need_eviction, &mut shutdown_pending);
-                        pg_sys::ShutdownRequestPending = shutdown_pending != 0;
+                        pg_sys::ShutdownRequestPending = shutdown_pending;
                         i += 1;
 
                         if i >= bgwriter_lru_maxpages * (pg_sys::BLCKSZ as i32 / ORIOLEDB_BLCKSZ as i32) {
@@ -318,13 +318,13 @@ pub unsafe extern "C" fn bgwriter_main(main_arg: pg_sys::Datum) {
                     std::ptr::addr_of!((*undo_meta).lastUsedLocation),
                 );
 
-                if writeInProgressLocation + undo_circular_buffer_size <
-                    lastUsedLocation + undo_circular_buffer_size / 20
+                if writeInProgressLocation + undo_circular_buffer_size as u64 <
+                    lastUsedLocation + (undo_circular_buffer_size as u64) / 20
                 {
                     let minProcReservedLocation = pg_atomic_read_u64(
                         std::ptr::addr_of!((*undo_meta).minProcReservedLocation),
                     );
-                    let targetLocation = lastUsedLocation - (19 * undo_circular_buffer_size) / 20;
+                    let targetLocation = lastUsedLocation - (19 * undo_circular_buffer_size as u64) / 20;
 
                     if targetLocation < minProcReservedLocation {
                         evict_undo_to_disk(

@@ -9,7 +9,8 @@
  *-------------------------------------------------------------------------
  */
 
-use pgrx::pg_sys::{self, Oid, OXid};
+use pgrx::pg_sys::{self, Oid};
+use crate::OXid;
 use crate::tableam::key_range::{OIndexField, INDEX_MAX_KEYS, OComparator};
 
 #[repr(C)]

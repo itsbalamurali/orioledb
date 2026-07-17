@@ -35,7 +35,7 @@ pub struct ORelOids {
 impl ORelOids {
     /// Return `true` when all three OIDs are non-zero / valid.
     pub fn is_valid(self) -> bool {
-        self.datoid != 0 && self.reloid != 0 && self.relnode != 0
+        self.datoid.to_u32() != 0 && self.reloid.to_u32() != 0 && self.relnode.to_u32() != 0
     }
 }
 

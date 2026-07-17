@@ -5,7 +5,8 @@
 // Copyright (c) 2021-2026, Oriole DB Inc.
 // Copyright (c) 2025-2026, Supabase Inc.
 
-use pgrx::pg_sys::{CommitSeqNo, MemoryContext};
+use pgrx::pg_sys::MemoryContext;
+use crate::CommitSeqNo;
 use super::btree::{BTreeDescr, BTreeKeyType, OTuple};
 
 /// Opaque B-tree iterator handle (allocated by the C layer).

@@ -24,8 +24,8 @@ pub type UndoLocation = u64;
 pub type OInMemoryBlkno = u32;
 
 // Constants
-pub const F_BTHANDLER: pg_sys::Oid = 330;
-pub const HEAP_TABLE_AM_OID: pg_sys::Oid = 2;
+pub const F_BTHANDLER: pg_sys::Oid = pg_sys::Oid::from_u32(330);
+pub const HEAP_TABLE_AM_OID: pg_sys::Oid = pg_sys::Oid::from_u32(2);
 pub const BTMaxStrategyNumber: usize = 5;
 pub const BTNProcs: usize = 5;
 pub const BTOPTIONS_PROC: usize = 4;
@@ -268,7 +268,7 @@ pub enum OBTreeWaitCallbackAction {
 #[repr(C)]
 pub struct BTreeModifyCallbackInfo {
     pub waitCallback: Option<
-        unsafe extern "C" fn(
+        unsafe extern "C-unwind" fn(
             desc: *mut BTreeDescr,
             oldTup: OTuple,
             newTup: *mut OTuple,
@@ -281,7 +281,7 @@ pub struct BTreeModifyCallbackInfo {
         ) -> OBTreeWaitCallbackAction,
     >,
     pub modifyCallback: Option<
-        unsafe extern "C" fn(
+        unsafe extern "C-unwind" fn(
             desc: *mut BTreeDescr,
             oldTup: OTuple,
             newTup: *mut OTuple,
@@ -294,7 +294,7 @@ pub struct BTreeModifyCallbackInfo {
         ) -> OBTreeModifyCallbackAction,
     >,
     pub modifyDeletedCallback: Option<
-        unsafe extern "C" fn(
+        unsafe extern "C-unwind" fn(
             desc: *mut BTreeDescr,
             oldTup: OTuple,
             newTup: *mut OTuple,
@@ -309,7 +309,7 @@ pub struct BTreeModifyCallbackInfo {
     >,
     pub needsUndoForSelfCreated: bool,
     pub arg: *mut c_void,
-    pub postUndoRecorded: Option<unsafe extern "C" fn(undoLoc: UndoLocation, arg: *mut c_void)>,
+    pub postUndoRecorded: Option<unsafe extern "C-unwind" fn(undoLoc: UndoLocation, arg: *mut c_void)>,
 }
 
 #[repr(u32)]
@@ -392,6 +392,8 @@ pub struct OScanState {
     pub indexQuals: *mut pg_sys::List,
     pub cmd: pg_sys::CmdType,
     pub oSnapshot: OSnapshot,
+    pub xs_rowid: pg_sys::NullableDatum,
+    pub xs_want_rowid: bool,
 }
 
 #[repr(u32)]
@@ -626,7 +628,7 @@ extern "C" {
     pub fn clauselist_selectivity(
         root: *mut pg_sys::PlannerInfo,
         clauses: *mut pg_sys::List,
-        varRelid: pg_sys::Oid,
+        varRelid: c_int,
         jointype: pg_sys::JoinType,
         sjinfo: *mut pg_sys::SpecialJoinInfo,
     ) -> pg_sys::Selectivity;
@@ -749,8 +751,8 @@ extern "C" {
         name: *const c_char,
         desc: *const c_char,
         default_val: *const c_char,
-        validate: Option<unsafe extern "C" fn(*const c_char)>,
-        fill: Option<unsafe extern "C" fn(*const c_char) -> *mut c_void>,
+        validate: Option<unsafe extern "C-unwind" fn(*const c_char)>,
+        fill: Option<unsafe extern "C-unwind" fn(*const c_char) -> *mut c_void>,
         offset: pg_sys::Size,
     );
     pub fn build_local_reloptions(
@@ -758,6 +760,10 @@ extern "C" {
         reloptions: pg_sys::Datum,
         validate: bool,
     ) -> *mut pg_sys::bytea;
+}
+
+unsafe extern "C-unwind" fn release_sys_cache_wrapper(tuple: *mut pg_sys::HeapTupleData) {
+    pg_sys::ReleaseSysCache(tuple);
 }
 
 // Local global list of bridged AMs
@@ -791,35 +797,35 @@ pub unsafe fn OidIsValid(oid: pg_sys::Oid) -> bool {
 
 #[inline]
 pub unsafe fn CStringGetDatum(s: *const c_char) -> pg_sys::Datum {
-    s as pg_sys::Datum
+    pg_sys::Datum::from(s as usize)
 }
 
 #[inline]
 pub unsafe fn DatumGetPointer(d: pg_sys::Datum) -> pg_sys::Pointer {
-    d as pg_sys::Pointer
+    d.value() as pg_sys::Pointer
 }
 
 #[inline]
 pub unsafe fn PointerGetDatum(p: pg_sys::Pointer) -> pg_sys::Datum {
-    p as pg_sys::Datum
+    pg_sys::Datum::from(p as usize)
 }
 
 #[inline]
 pub unsafe fn lfirst(lc: *mut pg_sys::ListCell) -> *mut c_void {
-    (*lc).value.ptr_value
+    (*lc).ptr_value
 }
 
 #[inline]
 pub unsafe fn lfirst_int(lc: *mut pg_sys::ListCell) -> c_int {
-    (*lc).value.int_value as c_int
+    (*lc).int_value as c_int
 }
 
 #[inline]
-pub unsafe fn lnext(lc: *mut pg_sys::ListCell) -> *mut pg_sys::ListCell {
-    if lc.is_null() {
+pub unsafe fn lnext(l: *const pg_sys::List, lc: *mut pg_sys::ListCell) -> *mut pg_sys::ListCell {
+    if l.is_null() || lc.is_null() {
         std::ptr::null_mut()
     } else {
-        (*lc).next
+        pg_sys::lnext(l, lc)
     }
 }
 
@@ -848,17 +854,17 @@ pub unsafe fn STOPEVENT(event_id: c_int, params: *mut pg_sys::Jsonb) {
 
 // BTree Handler Implementation
 
-unsafe extern "C" fn orioledb_btree_handler() -> *mut pg_sys::IndexAmRoutine {
+unsafe extern "C-unwind" fn orioledb_btree_handler() -> *mut pg_sys::IndexAmRoutine {
     let amroutine = pg_sys::newNode(
         std::mem::size_of::<pg_sys::IndexAmRoutine>(),
         pg_sys::NodeTag_T_IndexAmRoutine,
     ) as *mut pg_sys::IndexAmRoutine;
 
     orioledb_check_shmem();
-
-    (*amroutine).amstrategies = BTMaxStrategyNumber as c_int;
-    (*amroutine).amsupport = BTNProcs as c_int;
-    (*amroutine).amoptsprocnum = BTOPTIONS_PROC as c_int;
+    (*amroutine).type_ = pg_sys::NodeTag::T_IndexAmRoutine;
+    (*amroutine).amstrategies = BTMaxStrategyNumber as u16;
+    (*amroutine).amsupport = BTNProcs as u16;
+    (*amroutine).amoptsprocnum = BTOPTIONS_PROC as u16;
     (*amroutine).amcanorder = true;
     (*amroutine).amcanorderbyop = false;
     (*amroutine).amcanbackward = false;
@@ -874,18 +880,16 @@ unsafe extern "C" fn orioledb_btree_handler() -> *mut pg_sys::IndexAmRoutine {
     (*amroutine).amcaninclude = true;
     (*amroutine).amusemaintenanceworkmem = false;
     (*amroutine).amsummarizing = false;
-    (*amroutine).ammvccaware = true;
     (*amroutine).amparallelvacuumoptions =
-        (pg_sys::VACUUM_OPTION_PARALLEL_BULKDEL | pg_sys::VACUUM_OPTION_PARALLEL_COND_CLEANUP) as c_int;
+        (pg_sys::VACUUM_OPTION_PARALLEL_BULKDEL | pg_sys::VACUUM_OPTION_PARALLEL_COND_CLEANUP) as u8;
     (*amroutine).amkeytype = pg_sys::InvalidOid;
 
     (*amroutine).ambuild = Some(orioledb_ambuild);
-    (*amroutine).amreuse = Some(orioledb_amreuse);
+    // (*amroutine).amreuse = Some(orioledb_amreuse);
     (*amroutine).ambuildempty = Some(orioledb_ambuildempty);
-    (*amroutine).aminsert = None;
-    (*amroutine).aminsertextended = Some(orioledb_aminsert);
-    (*amroutine).amupdate = Some(orioledb_amupdate);
-    (*amroutine).amdelete = Some(orioledb_amdelete);
+    (*amroutine).aminsert = Some(orioledb_aminsert);
+    // (*amroutine).amupdate = Some(orioledb_amupdate);
+    // (*amroutine).amdelete = Some(orioledb_amdelete);
     (*amroutine).ambulkdelete = Some(orioledb_ambulkdelete);
     (*amroutine).amvacuumcleanup = Some(orioledb_amvacuumcleanup);
     (*amroutine).amcanreturn = Some(orioledb_amcanreturn);
@@ -914,7 +918,7 @@ unsafe extern "C" fn orioledb_btree_handler() -> *mut pg_sys::IndexAmRoutine {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn orioledb_indexam_routine_hook(
+pub unsafe extern "C-unwind" fn orioledb_indexam_routine_hook(
     tamoid: pg_sys::Oid,
     amhandler: pg_sys::Oid,
 ) -> *mut pg_sys::IndexAmRoutine {
@@ -930,9 +934,9 @@ pub unsafe extern "C" fn orioledb_indexam_routine_hook(
             pg_sys::SysCacheIdentifier_AMNAME as c_int,
             pg_sys::Anum_pg_am_oid as pg_sys::AttrNumber,
             key1,
-            0,
-            0,
-            0,
+            pg_sys::Datum::from(0),
+            pg_sys::Datum::from(0),
+            pg_sys::Datum::from(0),
         );
     }
 
@@ -949,7 +953,7 @@ pub unsafe extern "C" fn orioledb_indexam_routine_hook(
                     std::ptr::copy_nonoverlapping(&((*bridged).routine), amroutine, 1);
                     break;
                 }
-                lc = lnext(lc);
+                lc = lnext(bridged_ams, lc);
             }
 
             if amroutine.is_null() {
@@ -961,7 +965,7 @@ pub unsafe extern "C" fn orioledb_indexam_routine_hook(
                 (*bridged).original_routine = DatumGetPointer(datum) as *mut pg_sys::IndexAmRoutine;
                 (*bridged).routine = *(*bridged).original_routine;
                 (*bridged).routine.ambuild = Some(bridged_ambuild);
-                (*bridged).routine.aminsertextended = Some(bridged_aminsert);
+                (*bridged).routine.aminsert = Some(bridged_aminsert);
                 (*bridged).routine.ambeginscan = Some(bridged_ambeginscan);
                 pg_sys::MemoryContextSwitchTo(old_mcxt);
 
@@ -975,7 +979,7 @@ pub unsafe extern "C" fn orioledb_indexam_routine_hook(
     std::ptr::null_mut()
 }
 
-unsafe extern "C" fn orioledb_amreuse(index: pg_sys::Relation) {
+unsafe extern "C-unwind" fn orioledb_amreuse(index: pg_sys::Relation) {
     if !o_reuse_indices.is_null() {
         o_reuse_indices = pg_sys::lappend_oid(o_reuse_indices, (*index).rd_id);
     } else {
@@ -983,7 +987,7 @@ unsafe extern "C" fn orioledb_amreuse(index: pg_sys::Relation) {
     }
 }
 
-unsafe extern "C" fn orioledb_ambuild(
+unsafe extern "C-unwind" fn orioledb_ambuild(
     heap: pg_sys::Relation,
     index: pg_sys::Relation,
     indexInfo: *mut pg_sys::IndexInfo,
@@ -1017,7 +1021,11 @@ unsafe extern "C" fn orioledb_ambuild(
     (*result).index_tuples = 0.0;
 
     if in_nontransactional_truncate || !OidIsValid(o_saved_relrewrite) {
-        let mut tbl_oids = ORelOids { datoid: 0, reloid: 0, relnode: 0 };
+        let mut tbl_oids = ORelOids {
+            datoid: pg_sys::InvalidOid,
+            reloid: pg_sys::InvalidOid,
+            relnode: pg_sys::InvalidOid,
+        };
         ORelOidsSetFromRel(&mut tbl_oids, heap);
         let o_table = o_tables_get(tbl_oids);
 
@@ -1043,11 +1051,11 @@ unsafe extern "C" fn orioledb_ambuild(
     result
 }
 
-unsafe extern "C" fn orioledb_ambuildempty(index: pg_sys::Relation) {
+unsafe extern "C-unwind" fn orioledb_ambuildempty(index: pg_sys::Relation) {
     btbuildempty(index);
 }
 
-unsafe extern "C" fn o_insert_callback(
+unsafe extern "C-unwind" fn o_insert_callback(
     descr: *mut BTreeDescr,
     tup: OTuple,
     newtup: *mut OTuple,
@@ -1098,8 +1106,8 @@ unsafe fn o_report_duplicate(rel: pg_sys::Relation, id: *mut OIndexDescr, slot: 
 
         pg_sys::appendStringInfo(str_info, b"(\0".as_ptr() as *const c_char);
         for i in 0..(*id).nUniqueFields {
-            let value = (*slot).tts_values[i as usize];
-            let isnull = (*slot).tts_isnull[i as usize];
+            let value = *(*slot).tts_values.add(i as usize);
+            let isnull = *(*slot).tts_isnull.add(i as usize);
 
             if i != 0 {
                 pg_sys::appendStringInfo(str_info, b", \0".as_ptr() as *const c_char);
@@ -1117,23 +1125,26 @@ unsafe fn o_report_duplicate(rel: pg_sys::Relation, id: *mut OIndexDescr, slot: 
         }
         pg_sys::appendStringInfo(str_info, b")\0".as_ptr() as *const c_char);
 
-        pg_sys::ereport!(
-            pg_sys::ERROR,
-            pg_sys::errcode(pg_sys::ERRCODE_UNIQUE_VIOLATION),
+        if pg_sys::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
+            pg_sys::errcode(pg_sys::ERRCODE_UNIQUE_VIOLATION as i32);
             pg_sys::errmsg(
-                "duplicate key value violates unique constraint \"%s\"",
-                (*id).name.data.as_ptr()
-            ),
-            pg_sys::errdetail("Key %s already exists.", (*str_info).data),
+                b"duplicate key value violates unique constraint \"%s\"\0".as_ptr() as *const c_char,
+                (*id).name.data.as_ptr(),
+            );
+            pg_sys::errdetail(
+                b"Key %s already exists.\0".as_ptr() as *const c_char,
+                (*str_info).data,
+            );
             pg_sys::errtableconstraint(
                 rel,
                 if (*id).desc.r#type == OIndexType::OIndexPrimary {
                     b"pk\0".as_ptr() as *const c_char
                 } else {
                     b"sk\0".as_ptr() as *const c_char
-                }
-            )
-        );
+                },
+            );
+            pg_sys::errfinish(std::ptr::null(), 0, std::ptr::null());
+        }
     }
 }
 
@@ -1147,7 +1158,7 @@ unsafe fn append_rowid_values(
     csn: *mut CommitSeqNo,
     version: *mut u32,
 ) {
-    let rowid = pg_sys::pg_detoast_datum(pk_datum as *mut pg_sys::varlena);
+    let rowid = pg_sys::pg_detoast_datum(pk_datum.value() as *mut pg_sys::varlena);
     let mut p = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize)) as *mut c_void;
 
     if !(*id).primaryIsCtid {
@@ -1201,7 +1212,7 @@ unsafe fn detoast_passed_values(
     for i in 0..pk_from {
         let att = pg_sys::TupleDescAttr((*index_descr).nonLeafTupdesc, i);
         if !*isnull.add(i as usize) && (*att).attlen == -1 {
-            let varlena = *values.add(i as usize) as *mut pg_sys::varlena;
+            let varlena = (*values.add(i as usize)).value() as *mut pg_sys::varlena;
             if pg_sys::VARATT_IS_EXTENDED(varlena) {
                 let tmp = PointerGetDatum(pg_sys::pg_detoast_datum(varlena) as pg_sys::Pointer);
                 *values.add(i as usize) = tmp;
@@ -1211,11 +1222,11 @@ unsafe fn detoast_passed_values(
     }
 }
 
-unsafe extern "C" fn orioledb_aminsert(
+unsafe extern "C-unwind" fn orioledb_aminsert(
     rel: pg_sys::Relation,
     values: *mut pg_sys::Datum,
     isnull: *mut bool,
-    mut tupleid: pg_sys::Datum,
+    tupleid: pg_sys::ItemPointer,
     heapRel: pg_sys::Relation,
     checkUnique: pg_sys::IndexUniqueCheck,
     indexUnchanged: bool,
@@ -1224,7 +1235,11 @@ unsafe extern "C" fn orioledb_aminsert(
     let options = (*rel).rd_options as *mut OBTOptions;
 
     if !options.is_null() && !(*options).orioledb_index {
-        let mut oids = ORelOids { datoid: 0, reloid: 0, relnode: 0 };
+        let mut oids = ORelOids {
+            datoid: pg_sys::InvalidOid,
+            reloid: pg_sys::InvalidOid,
+            relnode: pg_sys::InvalidOid,
+        };
         ORelOidsSetFromRel(&mut oids, heapRel);
         let descr = o_fetch_table_descr(oids);
         let rowid = pg_sys::pg_detoast_datum(tupleid as *mut pg_sys::varlena);
@@ -1240,14 +1255,14 @@ unsafe extern "C" fn orioledb_aminsert(
             p as *mut ORowIdBridgeData
         };
 
-        tupleid = PointerGetDatum(&mut (*bridge_data).bridgeCtid as *mut pg_sys::ItemPointerData as pg_sys::Pointer);
+        let target_tupleid = PointerGetDatum(&mut (*bridge_data).bridgeCtid as *mut pg_sys::ItemPointerData as pg_sys::Pointer);
 
         if !indexUnchanged {
             return btinsert(
                 rel,
                 values,
                 isnull,
-                tupleid,
+                target_tupleid,
                 heapRel,
                 checkUnique,
                 indexUnchanged,
@@ -1266,7 +1281,11 @@ unsafe extern "C" fn orioledb_aminsert(
         return true;
     }
 
-    let mut oids = ORelOids { datoid: 0, reloid: 0, relnode: 0 };
+    let mut oids = ORelOids {
+        datoid: pg_sys::InvalidOid,
+        reloid: pg_sys::InvalidOid,
+        relnode: pg_sys::InvalidOid,
+    };
     ORelOidsSetFromRel(&mut oids, rel);
     let ix_type = o_index_rel_get_ix_type(rel);
     let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
@@ -1294,7 +1313,7 @@ unsafe extern "C" fn orioledb_aminsert(
         let mut cur_attr = 0;
         for i in 0..(*rel).rd_att.as_ref().unwrap().natts {
             if !duplicate.is_null() && linitial_int(duplicate) == cur_attr {
-                lc = lnext(lc);
+                lc = lnext(duplicates, lc);
                 duplicate = if !lc.is_null() {
                     lfirst(lc) as *mut pg_sys::List
                 } else {
@@ -1314,7 +1333,7 @@ unsafe extern "C" fn orioledb_aminsert(
         index_descr,
         (*primary).nonLeafTupdesc,
         &mut (*primary).nonLeafSpec,
-        tupleid,
+        PointerGetDatum(tupleid as pg_sys::Pointer),
         values,
         isnull,
         &mut csn,
@@ -1379,7 +1398,7 @@ unsafe extern "C" fn orioledb_aminsert(
     success
 }
 
-unsafe extern "C" fn orioledb_amupdate(
+unsafe extern "C-unwind" fn orioledb_amupdate(
     rel: pg_sys::Relation,
     new_valid: bool,
     old_valid: bool,
@@ -1413,7 +1432,11 @@ unsafe extern "C" fn orioledb_amupdate(
         return true;
     }
 
-    let mut oids = ORelOids { datoid: 0, reloid: 0, relnode: 0 };
+    let mut oids = ORelOids {
+        datoid: pg_sys::InvalidOid,
+        reloid: pg_sys::InvalidOid,
+        relnode: pg_sys::InvalidOid,
+    };
     ORelOidsSetFromRel(&mut oids, rel);
     let ix_type = o_index_rel_get_ix_type(rel);
     let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
@@ -1533,20 +1556,20 @@ unsafe extern "C" fn orioledb_amupdate(
                     }
                     pg_sys::appendStringInfo(str_info, b")\0".as_ptr() as *const c_char);
 
-                    pg_sys::ereport!(
-                        pg_sys::ERROR,
-                        pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR),
+                    if pg_sys::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
+                        pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR as i32);
                         pg_sys::errmsg(
-                            "unable to remove tuple from secondary index in \"%s\"",
-                            pg_sys::RelationGetRelationName(rel)
-                        ),
+                            b"unable to remove tuple from secondary index in \"%s\"\0".as_ptr() as *const c_char,
+                            pg_sys::RelationGetRelationName(rel),
+                        );
                         pg_sys::errdetail(
-                            "Unable to remove %s from index \"%s\"",
+                            b"Unable to remove %s from index \"%s\"\0".as_ptr() as *const c_char,
                             (*str_info).data,
-                            (*index_descr).name.data.as_ptr()
-                        ),
-                        pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char)
-                    );
+                            (*index_descr).name.data.as_ptr(),
+                        );
+                        pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char);
+                        pg_sys::errfinish(std::ptr::null(), 0, std::ptr::null());
+                    }
                 }
             }
             BTreeOperationType::BTreeOperationInsert => {
@@ -1582,7 +1605,7 @@ unsafe extern "C" fn orioledb_amupdate(
     result.success
 }
 
-unsafe extern "C" fn orioledb_amdelete(
+unsafe extern "C-unwind" fn orioledb_amdelete(
     rel: pg_sys::Relation,
     values: *mut pg_sys::Datum,
     isnull: *mut bool,
@@ -1600,7 +1623,11 @@ unsafe extern "C" fn orioledb_amdelete(
         return true;
     }
 
-    let mut oids = ORelOids { datoid: 0, reloid: 0, relnode: 0 };
+    let mut oids = ORelOids {
+        datoid: pg_sys::InvalidOid,
+        reloid: pg_sys::InvalidOid,
+        relnode: pg_sys::InvalidOid,
+    };
     ORelOidsSetFromRel(&mut oids, rel);
     let ix_type = o_index_rel_get_ix_type(rel);
     let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
@@ -1685,20 +1712,20 @@ unsafe extern "C" fn orioledb_amdelete(
                         pg_sys::pfree(tuple.data as *mut c_void);
                     }
 
-                    pg_sys::ereport!(
-                        pg_sys::ERROR,
-                        pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR),
+                    if pg_sys::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
+                        pg_sys::errcode(pg_sys::ERRCODE_INTERNAL_ERROR as i32);
                         pg_sys::errmsg(
-                            "unable to remove tuple from secondary index in \"%s\"",
-                            pg_sys::RelationGetRelationName(rel)
-                        ),
+                            b"unable to remove tuple from secondary index in \"%s\"\0".as_ptr() as *const c_char,
+                            pg_sys::RelationGetRelationName(rel),
+                        );
                         pg_sys::errdetail(
-                            "Unable to remove %s from index \"%s\"",
+                            b"Unable to remove %s from index \"%s\"\0".as_ptr() as *const c_char,
                             (*str_info).data,
-                            (*index_descr).name.data.as_ptr()
-                        ),
-                        pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char)
-                    );
+                            (*index_descr).name.data.as_ptr(),
+                        );
+                        pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char);
+                        pg_sys::errfinish(std::ptr::null(), 0, std::ptr::null());
+                    }
                 }
             }
             _ => {
@@ -1721,7 +1748,7 @@ unsafe extern "C" fn orioledb_amdelete(
     result.success
 }
 
-unsafe extern "C" fn orioledb_ambulkdelete(
+unsafe extern "C-unwind" fn orioledb_ambulkdelete(
     info: *mut pg_sys::IndexVacuumInfo,
     stats: *mut pg_sys::IndexBulkDeleteResult,
     callback: pg_sys::IndexBulkDeleteCallback,
@@ -1734,7 +1761,7 @@ unsafe extern "C" fn orioledb_ambulkdelete(
     stats
 }
 
-unsafe extern "C" fn orioledb_amvacuumcleanup(
+unsafe extern "C-unwind" fn orioledb_amvacuumcleanup(
     info: *mut pg_sys::IndexVacuumInfo,
     stats: *mut pg_sys::IndexBulkDeleteResult,
 ) -> *mut pg_sys::IndexBulkDeleteResult {
@@ -1745,7 +1772,7 @@ unsafe extern "C" fn orioledb_amvacuumcleanup(
     stats
 }
 
-unsafe extern "C" fn orioledb_amcanreturn(index: pg_sys::Relation, attno: c_int) -> bool {
+unsafe extern "C-unwind" fn orioledb_amcanreturn(index: pg_sys::Relation, attno: c_int) -> bool {
     let options = (*index).rd_options as *mut OBTOptions;
     if !options.is_null() && !(*options).orioledb_index {
         return btcanreturn(index, attno);
@@ -1753,7 +1780,7 @@ unsafe extern "C" fn orioledb_amcanreturn(index: pg_sys::Relation, attno: c_int)
     true
 }
 
-unsafe extern "C" fn orioledb_amcostestimate(
+unsafe extern "C-unwind" fn orioledb_amcostestimate(
     root: *mut pg_sys::PlannerInfo,
     path: *mut pg_sys::IndexPath,
     loop_count: f64,
@@ -1831,15 +1858,15 @@ unsafe extern "C" fn orioledb_amcostestimate(
             }
 
             index_bound_quals = pg_sys::lappend(index_bound_quals, rinfo as *mut c_void);
-            lc2 = lnext(lc2);
+            lc2 = lnext((*iclause).indexquals, lc2);
         }
 
-        lc = lnext(lc);
+        lc = lnext(clauses, lc);
     }
 
     let mut num_index_tuples: f64;
     if (*index).unique
-        && indexcol == (*index).nkeycolumns - 1
+        && indexcol as i32 == (*index).nkeycolumns as i32 - 1
         && eq_qual_here
         && !found_saop
         && !found_is_null_op
@@ -1850,7 +1877,7 @@ unsafe extern "C" fn orioledb_amcostestimate(
         let btree_selectivity = clauselist_selectivity(
             root,
             selectivity_quals,
-            (*(*index).rel).relid,
+            (*(*index).rel).relid as c_int,
             pg_sys::JoinType::JOIN_INNER,
             std::ptr::null_mut(),
         );
@@ -1909,7 +1936,7 @@ unsafe extern "C" fn orioledb_amcostestimate(
 
         let mut vardata: pg_sys::VariableStatData = std::mem::zeroed();
         let hook_ptr: Option<
-            unsafe extern "C" fn(
+            unsafe extern "C-unwind" fn(
                 *mut pg_sys::PlannerInfo,
                 *mut pg_sys::RangeTblEntry,
                 pg_sys::AttrNumber,
@@ -1918,7 +1945,7 @@ unsafe extern "C" fn orioledb_amcostestimate(
         > = std::mem::transmute(get_relation_stats_hook);
 
         let hook_taken = if let Some(hook) = hook_ptr {
-            hook(root, rte, colnum, &mut vardata)
+            hook(root, rte, colnum as pg_sys::AttrNumber, &mut vardata)
         } else {
             false
         };
@@ -1927,10 +1954,10 @@ unsafe extern "C" fn orioledb_amcostestimate(
             vardata.statsTuple = pg_sys::SearchSysCache3(
                 pg_sys::SysCacheIdentifier_STATRELATTINH as c_int,
                 pg_sys::ObjectIdGetDatum(relid),
-                pg_sys::Int16GetDatum(colnum),
+                pg_sys::Int16GetDatum(colnum as i16),
                 pg_sys::BoolGetDatum((*rte).inh),
             );
-            vardata.freefunc = Some(pg_sys::ReleaseSysCache);
+            vardata.freefunc = Some(release_sys_cache_wrapper);
         }
 
         if !vardata.statsTuple.is_null() {
@@ -1955,9 +1982,9 @@ unsafe extern "C" fn orioledb_amcostestimate(
                     var_correlation = -var_correlation;
                 }
                 if (*index).nkeycolumns > 1 {
-                    costs.indexCorrelation = var_correlation * 0.75;
+                    costs.indexCorrelation = (var_correlation * 0.75) as f64;
                 } else {
-                    costs.indexCorrelation = var_correlation;
+                    costs.indexCorrelation = var_correlation as f64;
                 }
                 free_attstatsslot(&mut sslot);
             }
@@ -1969,7 +1996,7 @@ unsafe extern "C" fn orioledb_amcostestimate(
 
         let mut vardata: pg_sys::VariableStatData = std::mem::zeroed();
         let hook_ptr: Option<
-            unsafe extern "C" fn(
+            unsafe extern "C-unwind" fn(
                 *mut pg_sys::PlannerInfo,
                 pg_sys::Oid,
                 pg_sys::AttrNumber,
@@ -1987,10 +2014,10 @@ unsafe extern "C" fn orioledb_amcostestimate(
             vardata.statsTuple = pg_sys::SearchSysCache3(
                 pg_sys::SysCacheIdentifier_STATRELATTINH as c_int,
                 pg_sys::ObjectIdGetDatum(relid),
-                pg_sys::Int16GetDatum(colnum),
+                pg_sys::Int16GetDatum(colnum as i16),
                 pg_sys::BoolGetDatum(false),
             );
-            vardata.freefunc = Some(pg_sys::ReleaseSysCache);
+            vardata.freefunc = Some(release_sys_cache_wrapper);
         }
 
         if !vardata.statsTuple.is_null() {
@@ -2015,9 +2042,9 @@ unsafe extern "C" fn orioledb_amcostestimate(
                     var_correlation = -var_correlation;
                 }
                 if (*index).nkeycolumns > 1 {
-                    costs.indexCorrelation = var_correlation * 0.75;
+                    costs.indexCorrelation = (var_correlation * 0.75) as f64;
                 } else {
-                    costs.indexCorrelation = var_correlation;
+                    costs.indexCorrelation = var_correlation as f64;
                 }
                 free_attstatsslot(&mut sslot);
             }
@@ -2032,7 +2059,7 @@ unsafe extern "C" fn orioledb_amcostestimate(
     *indexPages = costs.numIndexPages;
 }
 
-unsafe extern "C" fn validate_index_compress(value: *const c_char) {
+unsafe extern "C-unwind" fn validate_index_compress(value: *const c_char) {
     if !value.is_null() {
         validate_compress(o_parse_compress(value), b"Index\0".as_ptr() as *const c_char);
     }
@@ -2044,9 +2071,9 @@ const OFFSETOF_DEDUPLICATE: usize = 16;
 const OFFSETOF_COMPRESS: usize = 24;
 const OFFSETOF_ORIOLEDB_INDEX: usize = 28;
 
-unsafe extern "C" fn orioledb_amoptions(reloptions: pg_sys::Datum, validate: bool) -> *mut pg_sys::bytea {
+unsafe extern "C-unwind" fn orioledb_amoptions(reloptions: pg_sys::Datum, validate: bool) -> *mut pg_sys::bytea {
     static mut relopts_set: bool = false;
-    static mut relopts: pg_sys::local_relopts = std::mem::transmute([0u8; std::mem::size_of::<pg_sys::local_relopts>()]);
+    static mut relopts: pg_sys::local_relopts = unsafe { std::mem::transmute([0u8; std::mem::size_of::<pg_sys::local_relopts>()]) };
 
     if !relopts_set {
         let oldcxt = pg_sys::MemoryContextSwitchTo(pg_sys::TopMemoryContext);
@@ -2105,7 +2132,7 @@ unsafe extern "C" fn orioledb_amoptions(reloptions: pg_sys::Datum, validate: boo
     build_local_reloptions(&mut relopts, reloptions, validate)
 }
 
-unsafe extern "C" fn orioledb_amproperty(
+unsafe extern "C-unwind" fn orioledb_amproperty(
     _index_oid: pg_sys::Oid,
     attno: c_int,
     prop: pg_sys::IndexAMProperty,
@@ -2125,8 +2152,8 @@ unsafe extern "C" fn orioledb_amproperty(
     }
 }
 
-unsafe extern "C" fn orioledb_ambuildphasename(phasenum: i64) -> *mut c_char {
-    match phasenum {
+unsafe extern "C-unwind" fn orioledb_ambuildphasename(phasenum: i64) -> *mut c_char {
+    match phasenum as u32 {
         pg_sys::PROGRESS_CREATEIDX_SUBPHASE_INITIALIZE => b"initializing\0".as_ptr() as *mut c_char,
         pg_sys::PROGRESS_BTREE_PHASE_INDEXBUILD_TABLESCAN => b"scanning table\0".as_ptr() as *mut c_char,
         pg_sys::PROGRESS_BTREE_PHASE_PERFORMSORT_1 => b"sorting live tuples\0".as_ptr() as *mut c_char,
@@ -2136,11 +2163,11 @@ unsafe extern "C" fn orioledb_ambuildphasename(phasenum: i64) -> *mut c_char {
     }
 }
 
-unsafe extern "C" fn orioledb_amvalidate(_opclassoid: pg_sys::Oid) -> bool {
+unsafe extern "C-unwind" fn orioledb_amvalidate(_opclassoid: pg_sys::Oid) -> bool {
     true
 }
 
-unsafe extern "C" fn orioledb_amadjustmembers(
+unsafe extern "C-unwind" fn orioledb_amadjustmembers(
     _opfamilyoid: pg_sys::Oid,
     _opclassoid: pg_sys::Oid,
     _operators: *mut pg_sys::List,
@@ -2148,7 +2175,7 @@ unsafe extern "C" fn orioledb_amadjustmembers(
 ) {
 }
 
-unsafe extern "C" fn orioledb_ambeginscan(
+unsafe extern "C-unwind" fn orioledb_ambeginscan(
     rel: pg_sys::Relation,
     nkeys: c_int,
     norderbys: c_int,
@@ -2170,9 +2197,13 @@ unsafe extern "C" fn orioledb_ambeginscan(
 
     (*scan).parallel_scan = std::ptr::null_mut();
     (*scan).xs_temp_snap = false;
-    (*scan).xs_want_rowid = true;
+    (*o_scan).xs_want_rowid = true;
 
-    let mut oids = ORelOids { datoid: 0, reloid: 0, relnode: 0 };
+    let mut oids = ORelOids {
+        datoid: pg_sys::InvalidOid,
+        reloid: pg_sys::InvalidOid,
+        relnode: pg_sys::InvalidOid,
+    };
     ORelOidsSetFromRel(&mut oids, rel);
     let ix_type = o_index_rel_get_ix_type(rel);
     let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
@@ -2201,13 +2232,13 @@ unsafe extern "C" fn orioledb_ambeginscan(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn o_get_num_prefix_exact_keys(scankey: pg_sys::ScanKey, nscankeys: c_int) -> c_int {
+pub unsafe extern "C-unwind" fn o_get_num_prefix_exact_keys(scankey: pg_sys::ScanKey, nscankeys: c_int) -> c_int {
     let mut prev_attr: pg_sys::AttrNumber = 0;
     let mut i = 0;
 
     while i < nscankeys {
         let key = &*scankey.add(i as usize);
-        if key.sk_attno != prev_attr + 1 || key.sk_strategy != BTEqualStrategyNumber {
+        if key.sk_attno != prev_attr + 1 || key.sk_strategy != BTEqualStrategyNumber as u16 {
             break;
         }
         prev_attr = key.sk_attno;
@@ -2218,7 +2249,7 @@ pub unsafe extern "C" fn o_get_num_prefix_exact_keys(scankey: pg_sys::ScanKey, n
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn o_adjust_num_prefix_exact_keys(
+pub unsafe extern "C-unwind" fn o_adjust_num_prefix_exact_keys(
     so: pg_sys::BTScanOpaque,
     numPrefixExactKeys: c_int,
 ) -> c_int {
@@ -2238,7 +2269,7 @@ pub unsafe extern "C" fn o_adjust_num_prefix_exact_keys(
     adjusted
 }
 
-unsafe extern "C" fn orioledb_amrescan(
+unsafe extern "C-unwind" fn orioledb_amrescan(
     scan: pg_sys::IndexScanDesc,
     scankey: pg_sys::ScanKey,
     nscankeys: c_int,
@@ -2269,19 +2300,20 @@ unsafe fn fill_hitup(
     tuple_csn: CommitSeqNo,
     hint: *mut BTreeLocationHint,
 ) {
+    let o_scan = scan as *mut OScanState;
     (*scan).xs_hitupdesc = (*descr).tupdesc;
     let slot = (*descr).oldTuple;
     tts_orioledb_store_tuple(slot, tuple, descr, tuple_csn, PrimaryIndexNumber, true, hint);
 
-    if !(*scan).xs_rowid.isnull {
-        pg_sys::pfree(DatumGetPointer((*scan).xs_rowid.value) as *mut c_void);
-        (*scan).xs_rowid.isnull = true;
+    if !(*o_scan).xs_rowid.isnull {
+        pg_sys::pfree(DatumGetPointer((*o_scan).xs_rowid.value) as *mut c_void);
+        (*o_scan).xs_rowid.isnull = true;
     }
 
-    (*scan).xs_rowid.value = pg_sys::slot_getsysattr(
+    (*o_scan).xs_rowid.value = pg_sys::slot_getsysattr(
         slot,
-        RowIdAttributeNumber,
-        &mut (*scan).xs_rowid.isnull,
+        RowIdAttributeNumber as i32,
+        &mut (*o_scan).xs_rowid.isnull,
     );
 
     if !(*scan).xs_hitup.is_null() {
@@ -2334,7 +2366,7 @@ unsafe fn search_next_dup_range(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn o_new_rowid(
+pub unsafe extern "C-unwind" fn o_new_rowid(
     primary: *mut OIndexDescr,
     slot: *mut pg_sys::TupleTableSlot,
     rowid_values: *mut pg_sys::Datum,
@@ -2362,7 +2394,7 @@ pub unsafe extern "C" fn o_new_rowid(
         }
 
         let rowid = pg_sys::MemoryContextAllocZero((*slot).tts_mcxt, actual_size) as *mut pg_sys::bytea;
-        (*rowid).vl_len_ = (actual_size as u32) << 2; // SET_VARSIZE macro
+        *(std::ptr::addr_of_mut!((*rowid).vl_len_) as *mut u32) = (actual_size as u32) << 2; // SET_VARSIZE macro
 
         ptr = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize));
         std::ptr::copy_nonoverlapping(&add_ctid, ptr as *mut ORowIdAddendumCtid, 1);
@@ -2412,7 +2444,7 @@ pub unsafe extern "C" fn o_new_rowid(
         actual_size += pg_sys::MAXALIGN(tuple_size as usize);
 
         let rowid = pg_sys::MemoryContextAllocZero((*slot).tts_mcxt, actual_size) as *mut pg_sys::bytea;
-        (*rowid).vl_len_ = (actual_size as u32) << 2; // SET_VARSIZE macro
+        *(std::ptr::addr_of_mut!((*rowid).vl_len_) as *mut u32) = (actual_size as u32) << 2; // SET_VARSIZE macro
 
         ptr = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize));
         if (*primary).bridging {
@@ -2489,8 +2521,8 @@ unsafe fn fill_itup(
                 && i >= linitial_int(duplicate) + dup_range_start
                 && i <= linitial_int(duplicate) + dup_range_start - 1 + dup_range_diff
             {
-                (*slot).tts_values[i as usize] = 0;
-                (*slot).tts_isnull[i as usize] = true;
+                *(*slot).tts_values.add(i as usize) = pg_sys::Datum::from(0);
+                *(*slot).tts_isnull.add(i as usize) = true;
             } else {
                 if !duplicate.is_null() && i == linitial_int(duplicate) + dup_range_start - 1 {
                     lc_id = dup_range_start - 1;
@@ -2508,15 +2540,15 @@ unsafe fn fill_itup(
                         duplicate = std::ptr::null_mut();
                     }
                 }
-                (*slot).tts_values[i as usize] = (*slot).tts_values[cur_attr as usize];
-                (*slot).tts_isnull[i as usize] = (*slot).tts_isnull[cur_attr as usize];
+                *(*slot).tts_values.add(i as usize) = *(*slot).tts_values.add(cur_attr as usize);
+                *(*slot).tts_isnull.add(i as usize) = *(*slot).tts_isnull.add(cur_attr as usize);
                 cur_attr -= 1;
             }
             i -= 1;
         }
     }
 
-    let mut temp_rowid_values = [0 as pg_sys::Datum; 2 * INDEX_MAX_KEYS];
+    let mut temp_rowid_values = [pg_sys::Datum::from(0); 2 * INDEX_MAX_KEYS];
     let mut temp_rowid_isnull = [true; 2 * INDEX_MAX_KEYS];
     let mut rowid_values = std::ptr::null_mut();
     let mut rowid_isnull = std::ptr::null_mut();
@@ -2525,14 +2557,14 @@ unsafe fn fill_itup(
         let mut i = 0;
         while i < (*index_descr).nPrimaryFields {
             let attnum = (*index_descr).primaryFieldsAttnums[i as usize] - 1;
-            temp_rowid_values[i as usize] = (*slot).tts_values[attnum as usize];
-            temp_rowid_isnull[i as usize] = (*slot).tts_isnull[attnum as usize];
+            temp_rowid_values[i as usize] = *(*slot).tts_values.add(attnum as usize);
+            temp_rowid_isnull[i as usize] = *(*slot).tts_isnull.add(attnum as usize);
             i += 1;
         }
 
         let primary = GET_PRIMARY(descr);
         while i < (*(*primary).nonLeafTupdesc).natts {
-            temp_rowid_values[i as usize] = 0;
+            temp_rowid_values[i as usize] = pg_sys::Datum::from(0);
             temp_rowid_isnull[i as usize] = true;
             i += 1;
         }
@@ -2555,12 +2587,12 @@ unsafe fn fill_itup(
         hint,
     );
 
-    if !(*scan).xs_rowid.isnull {
-        pg_sys::pfree(DatumGetPointer((*scan).xs_rowid.value) as *mut c_void);
-        (*scan).xs_rowid.isnull = true;
+    if !(*o_scan).xs_rowid.isnull {
+        pg_sys::pfree(DatumGetPointer((*o_scan).xs_rowid.value) as *mut c_void);
+        (*o_scan).xs_rowid.isnull = true;
     }
-    (*scan).xs_rowid.isnull = false;
-    (*scan).xs_rowid.value = PointerGetDatum(rowid as pg_sys::Pointer);
+    (*o_scan).xs_rowid.isnull = false;
+    (*o_scan).xs_rowid.value = PointerGetDatum(rowid as pg_sys::Pointer);
 
     if !(*scan).xs_itup.is_null() {
         pg_sys::pfree((*scan).xs_itup as *mut c_void);
@@ -2583,7 +2615,7 @@ unsafe fn fill_itup(
     pg_sys::ExecClearTuple(slot);
 }
 
-unsafe extern "C" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection) -> bool {
+unsafe extern "C-unwind" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection) -> bool {
     let o_scan = scan as *mut OScanState;
     let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
 
@@ -2600,7 +2632,8 @@ unsafe extern "C" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sy
     } else {
         // O_LOAD_SNAPSHOT macro equivalent
         let snap = (*scan).xs_snapshot;
-        (*o_scan).oSnapshot.csn = (*snap).xmin; // Or correct translation of snapshot loading
+        (*o_scan).oSnapshot.xmin = (*snap).xmin.into_inner() as u64;
+        (*o_scan).oSnapshot.csn = (*snap).xmin.into_inner() as u64;
         (*o_scan).oSnapshot.cid = (*snap).curcid;
     }
 
@@ -2621,9 +2654,9 @@ unsafe extern "C" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sy
     );
 
     if tuple.data.is_null() {
-        if !(*scan).xs_rowid.isnull {
-            pg_sys::pfree(DatumGetPointer((*scan).xs_rowid.value) as *mut c_void);
-            (*scan).xs_rowid.isnull = true;
+        if !(*o_scan).xs_rowid.isnull {
+            pg_sys::pfree(DatumGetPointer((*o_scan).xs_rowid.value) as *mut c_void);
+            (*o_scan).xs_rowid.isnull = true;
         }
         if !(*scan).xs_itup.is_null() {
             pg_sys::pfree((*scan).xs_itup as *mut c_void);
@@ -2633,7 +2666,7 @@ unsafe extern "C" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sy
             pg_sys::pfree((*scan).xs_hitup as *mut c_void);
             (*scan).xs_hitup = std::ptr::null_mut();
         }
-        (*scan).xs_rowid.isnull = true;
+        (*o_scan).xs_rowid.isnull = true;
         false
     } else {
         if (*scan).xs_want_itup {
@@ -2645,7 +2678,7 @@ unsafe extern "C" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sy
     }
 }
 
-unsafe extern "C" fn orioledb_amgetbitmap(scan: pg_sys::IndexScanDesc, tbm: *mut pg_sys::TIDBitmap) -> i64 {
+unsafe extern "C-unwind" fn orioledb_amgetbitmap(scan: pg_sys::IndexScanDesc, tbm: *mut pg_sys::TIDBitmap) -> i64 {
     let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
     if !options.is_null() && !(*options).orioledb_index {
         return btgetbitmap(scan, tbm);
@@ -2653,7 +2686,7 @@ unsafe extern "C" fn orioledb_amgetbitmap(scan: pg_sys::IndexScanDesc, tbm: *mut
     0
 }
 
-unsafe extern "C" fn orioledb_amendscan(scan: pg_sys::IndexScanDesc) {
+unsafe extern "C-unwind" fn orioledb_amendscan(scan: pg_sys::IndexScanDesc) {
     let o_scan = scan as *mut OScanState;
     let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
 
@@ -2672,7 +2705,7 @@ unsafe extern "C" fn orioledb_amendscan(scan: pg_sys::IndexScanDesc) {
 // Parallel scan estimation
 
 #[cfg(any(feature = "pg18", feature = "pg19"))]
-unsafe extern "C" fn orioledb_amestimateparallelscan(
+unsafe extern "C-unwind" fn orioledb_amestimateparallelscan(
     _indexRelation: pg_sys::Relation,
     _nkeys: c_int,
     _norderbys: c_int,
@@ -2681,7 +2714,7 @@ unsafe extern "C" fn orioledb_amestimateparallelscan(
 }
 
 #[cfg(feature = "pg17")]
-unsafe extern "C" fn orioledb_amestimateparallelscan(
+unsafe extern "C-unwind" fn orioledb_amestimateparallelscan(
     _nkeys: c_int,
     _norderbys: c_int,
 ) -> pg_sys::Size {
@@ -2689,13 +2722,13 @@ unsafe extern "C" fn orioledb_amestimateparallelscan(
 }
 
 #[cfg(not(any(feature = "pg17", feature = "pg18", feature = "pg19")))]
-unsafe extern "C" fn orioledb_amestimateparallelscan() -> pg_sys::Size {
+unsafe extern "C-unwind" fn orioledb_amestimateparallelscan() -> pg_sys::Size {
     std::mem::size_of::<u8>()
 }
 
-unsafe extern "C" fn orioledb_aminitparallelscan(_target: *mut c_void) {}
+unsafe extern "C-unwind" fn orioledb_aminitparallelscan(_target: *mut c_void) {}
 
-unsafe extern "C" fn orioledb_amparallelrescan(_scan: pg_sys::IndexScanDesc) {}
+unsafe extern "C-unwind" fn orioledb_amparallelrescan(_scan: pg_sys::IndexScanDesc) {}
 
 // Bridged Handler Implementation
 
@@ -2708,12 +2741,12 @@ unsafe fn find_bridged_am(index: pg_sys::Relation) -> *mut pg_sys::IndexAmRoutin
             amroutine = (*bridged).original_routine;
             break;
         }
-        lc = lnext(lc);
+        lc = lnext(bridged_ams, lc);
     }
     amroutine
 }
 
-unsafe extern "C" fn bridged_ambuild(
+unsafe extern "C-unwind" fn bridged_ambuild(
     heap: pg_sys::Relation,
     index: pg_sys::Relation,
     indexInfo: *mut pg_sys::IndexInfo,
@@ -2730,17 +2763,21 @@ unsafe extern "C" fn bridged_ambuild(
     }
 }
 
-unsafe extern "C" fn bridged_aminsert(
+unsafe extern "C-unwind" fn bridged_aminsert(
     rel: pg_sys::Relation,
     values: *mut pg_sys::Datum,
     isnull: *mut bool,
-    mut tupleid: pg_sys::Datum,
+    tupleid: pg_sys::ItemPointer,
     heapRel: pg_sys::Relation,
     checkUnique: pg_sys::IndexUniqueCheck,
     indexUnchanged: bool,
     indexInfo: *mut pg_sys::IndexInfo,
 ) -> bool {
-    let mut oids = ORelOids { datoid: 0, reloid: 0, relnode: 0 };
+    let mut oids = ORelOids {
+        datoid: pg_sys::InvalidOid,
+        reloid: pg_sys::InvalidOid,
+        relnode: pg_sys::InvalidOid,
+    };
     ORelOidsSetFromRel(&mut oids, heapRel);
     let descr = o_fetch_table_descr(oids);
 
@@ -2761,14 +2798,14 @@ unsafe extern "C" fn bridged_aminsert(
         return true;
     }
 
-    tupleid = PointerGetDatum(&mut (*bridge_data).bridgeCtid as *mut pg_sys::ItemPointerData as pg_sys::Pointer);
+    let target_tupleid = PointerGetDatum(&mut (*bridge_data).bridgeCtid as *mut pg_sys::ItemPointerData as pg_sys::Pointer);
 
     let amroutine = find_bridged_am(rel);
-    ((*amroutine).aminsertextended.unwrap())(
+    ((*amroutine).aminsert.unwrap())(
         rel,
         values,
         isnull,
-        tupleid,
+        target_tupleid.value() as *mut pg_sys::ItemPointerData,
         heapRel,
         checkUnique,
         indexUnchanged,
@@ -2776,7 +2813,7 @@ unsafe extern "C" fn bridged_aminsert(
     )
 }
 
-unsafe extern "C" fn bridged_ambeginscan(
+unsafe extern "C-unwind" fn bridged_ambeginscan(
     rel: pg_sys::Relation,
     nkeys: c_int,
     norderbys: c_int,

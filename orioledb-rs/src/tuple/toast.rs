@@ -13,13 +13,14 @@
  */
 
 use std::ffi::{c_char, c_int, c_void};
-use pgrx::pg_sys::{Datum, TupleDesc, BTreeDescr, Tuplesortstate, Oid, Size, Pointer};
+use pgrx::pg_sys::{Datum, TupleDesc, Tuplesortstate, Oid, Size, Pointer};
+use crate::btree::btree::BTreeDescr;
 use crate::tuple::format::{
     OTuple, OTupleFixedFormatSpec, OToastValue, ORelOids, BridgeData,
     o_fastgetattr, o_fastgetattr_ptr, o_tuple_size, o_form_tuple,
     SizeOfOTupleHeader, TupleDescAttr, maxalign, BITMAPLEN, att_isnull,
     VARATT_IS_EXTERNAL, VARATT_IS_COMPRESSED, VARATT_IS_EXTERNAL_EXPANDED,
-    VARSIZE_ANY, VARSIZE_ANY_EXHDR, VARSIZE, varattrib_1b_toast,
+    VARSIZE_ANY, VARSIZE_ANY_EXHDR, VARSIZE, varattrib_1b,
 };
 use crate::tuple::sort::OIndexDescr;
 
@@ -140,20 +141,20 @@ pub unsafe fn VARATT_IS_EXTERNAL_ORIOLEDB(ptr: *const c_char) -> bool {
 }
 
 pub unsafe fn o_get_raw_size(value: Datum) -> i32 {
-    let ptr = value as *const c_char;
+    let ptr = value.value() as *const c_char;
     if VARATT_IS_EXTERNAL_ORIOLEDB(ptr) {
         let mut ote = std::mem::MaybeUninit::<OToastExternal>::uninit();
         std::ptr::copy_nonoverlapping(
-            pgrx::pg_sys::VARATT_EXTERNAL_GET_POINTER(value as *mut pgrx::pg_sys::varlena) as *const u8,
+            pgrx::pg_sys::VARATT_EXTERNAL_GET_POINTER(value.value() as *mut pgrx::pg_sys::varlena) as *const u8,
             ote.as_mut_ptr() as *mut u8,
             O_TOAST_EXTERNAL_SZ,
         );
         let ote = ote.assume_init();
         ote.raw_size
-    } else if pgrx::pg_sys::VARATT_IS_EXTERNAL(value as *mut pgrx::pg_sys::varlena) {
+    } else if pgrx::pg_sys::VARATT_IS_EXTERNAL(value.value() as *mut pgrx::pg_sys::varlena) {
         (pgrx::pg_sys::toast_raw_datum_size(value) - 4) as i32
     } else if VARATT_IS_COMPRESSED(ptr) {
-        let attr = value as *const pgrx::pg_sys::varlena;
+        let attr = value.value() as *const pgrx::pg_sys::varlena;
         let rawsize_ptr = (attr as *const u8).add(4) as *const i32;
         *rawsize_ptr
     } else {
@@ -162,19 +163,19 @@ pub unsafe fn o_get_raw_size(value: Datum) -> i32 {
 }
 
 pub unsafe fn o_get_src_size(value: Datum) -> i32 {
-    let ptr = value as *const c_char;
+    let ptr = value.value() as *const c_char;
     if VARATT_IS_EXTERNAL_ORIOLEDB(ptr) {
         let mut ote = std::mem::MaybeUninit::<OToastExternal>::uninit();
         std::ptr::copy_nonoverlapping(
-            pgrx::pg_sys::VARATT_EXTERNAL_GET_POINTER(value as *mut pgrx::pg_sys::varlena) as *const u8,
+            pgrx::pg_sys::VARATT_EXTERNAL_GET_POINTER(value.value() as *mut pgrx::pg_sys::varlena) as *const u8,
             ote.as_mut_ptr() as *mut u8,
             O_TOAST_EXTERNAL_SZ,
         );
         let ote = ote.assume_init();
         ote.toasted_size
-    } else if pgrx::pg_sys::VARATT_IS_EXTERNAL_ONDISK(value as *mut pgrx::pg_sys::varlena) {
+    } else if pgrx::pg_sys::VARATT_IS_EXTERNAL_ONDISK(value.value() as *mut pgrx::pg_sys::varlena) {
         (pgrx::pg_sys::toast_datum_size(value) + 4) as i32
-    } else if pgrx::pg_sys::VARATT_IS_EXTERNAL(value as *mut pgrx::pg_sys::varlena) {
+    } else if pgrx::pg_sys::VARATT_IS_EXTERNAL(value.value() as *mut pgrx::pg_sys::varlena) {
         pgrx::pg_sys::toast_datum_size(value) as i32
     } else {
         VARSIZE_ANY(ptr) as i32
@@ -201,7 +202,7 @@ unsafe extern "C" fn tableGetMaxChunkSize(key: *mut c_void, arg: *mut c_void) ->
     let tkey = key as *mut OToastKey;
     let toast = (*(arg as *mut OTableToastArg)).toast;
     let primary = (*(arg as *mut OTableToastArg)).pk;
-    let mut values = [0 as Datum; 16 + 3];
+    let mut values = [Datum::from(0); 16 + 3];
     let mut isnull = [false; 16 + 3];
 
     let natts = (*(*primary).nonLeafTupdesc).natts;
@@ -209,15 +210,16 @@ unsafe extern "C" fn tableGetMaxChunkSize(key: *mut c_void, arg: *mut c_void) ->
         let attnum = i + 1;
         values[i as usize] = o_fastgetattr((*tkey).pk_tuple, attnum, (*primary).nonLeafTupdesc, &(*primary).nonLeafSpec, &mut isnull[i as usize]);
     }
-    values[natts as usize] = 0;
-    values[(natts + 1) as usize] = 0;
+    values[natts as usize] = Datum::from(0);
+    values[(natts + 1) as usize] = Datum::from(0);
 
     let mut data = pgrx::pg_sys::varlena {
         vl_len_: [0; 4],
+        vl_dat: pgrx::pg_sys::__IncompleteArrayField::new(),
     };
     // SET_VARSIZE(&data, 4)
     data.vl_len_[0] = 4;
-    values[(natts + 2) as usize] = &data as *const pgrx::pg_sys::varlena as Datum;
+    values[(natts + 2) as usize] = Datum::from(&data as *const pgrx::pg_sys::varlena as usize);
 
     let min_tuple_size = crate::tuple::format::o_new_tuple_size(
         (*toast).leafTupdesc,
@@ -284,7 +286,7 @@ unsafe extern "C" fn tableGetTupleChunknum(tuple: OTuple, arg: *mut c_void) -> u
     let toast = (*toast_arg).toast;
     let pk_natts = (*(*toast_arg).pk).nonLeafTupdesc.as_ref().unwrap().natts;
     let mut isnull = false;
-    o_fastgetattr(tuple, pk_natts + CHUNKN_POS, (*toast).leafTupdesc, &(*toast).leafSpec, &mut isnull) as u32
+    o_fastgetattr(tuple, pk_natts + CHUNKN_POS, (*toast).leafTupdesc, &(*toast).leafSpec, &mut isnull).value() as u32
 }
 
 unsafe extern "C" fn tableGetTupleDataSize(tuple: OTuple, arg: *mut c_void) -> u32 {
@@ -329,7 +331,7 @@ unsafe fn o_create_toast_tuple(
 ) -> OTuple {
     let primary = (*arg).pk;
     let toast = (*arg).toast;
-    let mut values = [0 as Datum; 16 + 3];
+    let mut values = [Datum::from(0); 16 + 3];
     let mut isnull = [false; 16 + 3];
 
     let natts = (*(*primary).nonLeafTupdesc).natts;
@@ -337,9 +339,9 @@ unsafe fn o_create_toast_tuple(
         let attnum = i + 1;
         values[i as usize] = o_fastgetattr(tkey.pk_tuple, attnum, (*primary).nonLeafTupdesc, &(*primary).nonLeafSpec, &mut isnull[i as usize]);
     }
-    values[natts as usize] = tkey.attnum as Datum;
-    values[(natts + 1) as usize] = tkey.chunknum as Datum;
-    values[(natts + 2) as usize] = data as Datum;
+    values[natts as usize] = Datum::from(tkey.attnum as usize);
+    values[(natts + 1) as usize] = Datum::from(tkey.chunknum as usize);
+    values[(natts + 2) as usize] = Datum::from(data as usize);
 
     o_form_tuple((*toast).leafTupdesc, &mut (*toast).leafSpec, 1, values.as_mut_ptr(), isnull.as_mut_ptr(), std::ptr::null_mut())
 }
@@ -350,7 +352,7 @@ unsafe fn o_create_toast_key(
 ) -> OTuple {
     let primary = (*arg).pk;
     let toast = (*arg).toast;
-    let mut values = [0 as Datum; 16 + 2];
+    let mut values = [Datum::from(0); 16 + 2];
     let mut isnull = [false; 16 + 2];
 
     let natts = (*(*primary).nonLeafTupdesc).natts;
@@ -358,8 +360,8 @@ unsafe fn o_create_toast_key(
         let attnum = i + 1;
         values[i as usize] = o_fastgetattr(tkey.pk_tuple, attnum, (*primary).nonLeafTupdesc, &(*primary).nonLeafSpec, &mut isnull[i as usize]);
     }
-    values[natts as usize] = tkey.attnum as Datum;
-    values[(natts + 1) as usize] = tkey.chunknum as Datum;
+    values[natts as usize] = Datum::from(tkey.attnum as usize);
+    values[(natts + 1) as usize] = Datum::from(tkey.chunknum as usize);
 
     o_form_tuple((*toast).nonLeafTupdesc, &mut (*toast).nonLeafSpec, 0, values.as_mut_ptr(), isnull.as_mut_ptr(), std::ptr::null_mut())
 }

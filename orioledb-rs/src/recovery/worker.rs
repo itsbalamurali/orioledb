@@ -76,6 +76,7 @@ pub enum RecoveryMsgType {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct OTuple {
     pub data: *mut c_void,
     pub formatFlags: u8,
@@ -140,7 +141,7 @@ pub unsafe extern "C" fn recovery_worker_register(worker_id: c_int) -> *mut pg_s
     worker.bgw_flags = pg_sys::BGWORKER_SHMEM_ACCESS as i32;
     worker.bgw_start_time = pg_sys::BgWorkerStartTime_BgWorkerStart_PostmasterStart;
     worker.bgw_restart_time = pg_sys::BGW_NEVER_RESTART;
-    worker.bgw_main_arg = worker_id as pg_sys::Datum;
+    worker.bgw_main_arg = pg_sys::Datum::from(worker_id as usize);
 
     let library_name = CString::new("orioledb").unwrap();
     let function_name = CString::new("recovery_worker_main").unwrap();

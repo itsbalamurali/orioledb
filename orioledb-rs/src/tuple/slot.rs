@@ -14,11 +14,13 @@
 
 use std::ffi::{c_char, c_int, c_void};
 use pgrx::pg_sys::{
-    Datum, TupleTableSlot, TupleTableSlotOps, TupleDesc, CommitSeqNo,
+    Datum, TupleTableSlot, TupleTableSlotOps, TupleDesc,
     StringInfo, Tuplesortstate, Bitmapset, ItemPointer, Oid, ExprState, bytea,
 };
+use crate::CommitSeqNo;
 use crate::tuple::format::{OTuple, OTupleReaderState, BridgeData};
-use crate::tuple::sort::{OIndexDescr, BTreeLocationHint};
+use crate::tuple::sort::OIndexDescr;
+use crate::btree::btree::BTreeLocationHint;
 use crate::tuple::toast::OTableDescr;
 
 #[repr(C)]

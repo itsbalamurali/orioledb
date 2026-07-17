@@ -128,6 +128,7 @@ pub struct UndoRetainSharedLocations {
 ///
 /// Mirrors `UndoStackLocations` in `include/transam/undo.h`.
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct UndoStackLocations {
     pub location: UndoLocation,
     pub branch_location: UndoLocation,

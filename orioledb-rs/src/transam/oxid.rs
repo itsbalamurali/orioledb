@@ -8,8 +8,9 @@
 #![allow(non_snake_case, non_camel_case_types)]
 
 use pgrx::pg_sys::{
-    CommitSeqNo, CommandId, Oid, SubTransactionId, TransactionId, XLogRecPtr,
+    CommandId, Oid, SubTransactionId, TransactionId, XLogRecPtr,
 };
+use crate::CommitSeqNo;
 use std::ffi::c_void;
 
 /// Orioledb transaction identifier (64-bit extended XID).

@@ -135,16 +135,16 @@ pub unsafe extern "C" fn recovery_shmem_init(mut ptr: *mut c_void, found: bool) 
         pg_sys::pg_atomic_init_u32(worker_finish_count, 0);
         pg_sys::pg_atomic_init_u32(idx_worker_finish_count, 0);
         pg_sys::pg_atomic_init_u32(worker_ptrs_changes, 0);
-        pg_sys::pg_atomic_init_u64(recovery_ptr, pg_sys::InvalidXLogRecPtr);
-        pg_sys::pg_atomic_init_u64(recovery_finished_list_ptr, pg_sys::InvalidXLogRecPtr);
-        pg_sys::pg_atomic_init_u64(recovery_main_retain_ptr, pg_sys::InvalidXLogRecPtr);
+        pg_sys::pg_atomic_init_u64(recovery_ptr, pg_sys::InvalidXLogRecPtr as u64);
+        pg_sys::pg_atomic_init_u64(recovery_finished_list_ptr, pg_sys::InvalidXLogRecPtr as u64);
+        pg_sys::pg_atomic_init_u64(recovery_main_retain_ptr, pg_sys::InvalidXLogRecPtr as u64);
 
         std::ptr::write_bytes(recovery_undo_loc_flush as *mut c_void, 0, std::mem::size_of::<RecoveryUndoLocFlush>());
         pg_sys::SpinLockInit(&mut (*recovery_undo_loc_flush).exitLock);
 
         for i in 0..total_workers {
-            pg_sys::pg_atomic_init_u64(&mut (*worker_ptrs.add(i as usize)).commitPtr, pg_sys::InvalidXLogRecPtr);
-            pg_sys::pg_atomic_init_u64(&mut (*worker_ptrs.add(i as usize)).retainPtr, pg_sys::InvalidXLogRecPtr);
+            pg_sys::pg_atomic_init_u64(&mut (*worker_ptrs.add(i as usize)).commitPtr, pg_sys::InvalidXLogRecPtr as u64);
+            pg_sys::pg_atomic_init_u64(&mut (*worker_ptrs.add(i as usize)).retainPtr, pg_sys::InvalidXLogRecPtr as u64);
             (*worker_ptrs.add(i as usize)).flushedUndoLocCompletedCheckpointNumber = 0;
             pg_sys::pg_atomic_clear_flag(&mut (*worker_ptrs.add(i as usize)).hasTempFile);
         }

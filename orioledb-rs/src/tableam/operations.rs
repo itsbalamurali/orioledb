@@ -9,7 +9,8 @@
  *-------------------------------------------------------------------------
  */
 
-use pgrx::pg_sys::{self, Relation, OXid, CommitSeqNo, CommandId, IndexUniqueCheck, ItemPointer};
+use pgrx::pg_sys::{self, Relation, CommandId, IndexUniqueCheck, ItemPointer};
+use crate::{OXid, CommitSeqNo};
 use crate::tableam::descr::{OTableDescr, OIndexDescr};
 use crate::tableam::key_range::OBTreeKeyBound;
 
