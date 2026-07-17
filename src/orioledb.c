@@ -135,7 +135,6 @@ bool		debug_disable_bgwriter = false;
 bool		use_mmap = false;
 bool		use_device = false;
 bool		orioledb_use_sparse_files = false;
-bool		page_checksum = true;
 char	   *device_filename = NULL;
 Pointer		mmap_data = NULL;
 int			device_fd;
@@ -911,16 +910,6 @@ _PG_init(void)
 							 NULL,
 							 &orioledb_use_sparse_files,
 							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-	DefineCustomBoolVariable("orioledb.page_checksum",
-							 "Enables page checksum computation and verification",
-							 NULL,
-							 &page_checksum,
-							 true,
 							 PGC_POSTMASTER,
 							 0,
 							 NULL,

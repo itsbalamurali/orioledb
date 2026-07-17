@@ -1255,16 +1255,11 @@ check_orioledb_page_checksum(OrioleDBOndiskPageHeader ondisk_page_header,
 {
 	uint16		computedCheckSum = 0;
 
-	/* page was written with checksums disabled */
-	if (((OrioleDBOndiskPageHeader *) buf)->checkSum == 0)
-	{
+	/*
+	 * We've taken the pg_checksums approach with offline pages rewrite
+	 */
+	if (!DataChecksumsEnabled())
 		return true;
-	}
-
-	if (!page_checksum)
-	{
-		return true;
-	}
 
 	((OrioleDBOndiskPageHeader *) buf)->checkSum = 0;
 
@@ -1537,7 +1532,7 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 
 	ondisk_page_header->checkSum = 0;
 	/* if enabled, ->checkSum won't be zero (+1) */
-	if (page_checksum)
+	if (DataChecksumsEnabled())
 	{
 		/* mirror checksum_impl.h */
 		ondisk_page_header->checkSum = (uint16) ((oriole_checksum_block(&cp) % 65535) + 1);

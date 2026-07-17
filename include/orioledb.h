@@ -529,7 +529,6 @@ extern int	max_io_concurrency;
 extern bool use_mmap;
 extern bool use_device;
 extern bool orioledb_use_sparse_files;
-extern bool page_checksum;
 extern int	device_fd;
 extern char *device_filename;
 extern Pointer mmap_data;
