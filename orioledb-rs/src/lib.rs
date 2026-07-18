@@ -5,7 +5,7 @@ use pgrx::prelude::*;
 ::pgrx::pg_module_magic!(name, version);
 
 pub mod btree;
-// pub mod catalog;
+pub mod catalog;
 // pub mod checkpoint;
 // pub mod indexam;
 // pub mod recovery;
@@ -29,9 +29,9 @@ pub const O_SERIALIZABLE_ERROR: c_int = 1;
 pub const O_SERIALIZABLE_REPEATABLE_READ: c_int = 2;
 
 // PostgreSQL error codes (MAKE_SQLSTATE macro results)
-pub const ERRCODE_INTERNAL_ERROR: i32 = pgrx::errcode::PgSqlErrorCode::ERRCODE_INTERNAL_ERROR as i32;
-pub const ERRCODE_CONFIG_FILE_ERROR: i32 = pgrx::errcode::PgSqlErrorCode::ERRCODE_CONFIG_FILE_ERROR as i32;
-pub const ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE: i32 = pgrx::errcode::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE as i32;
+pub const ERRCODE_INTERNAL_ERROR: i32 = pg_sys::errcodes::PgSqlErrorCode::ERRCODE_INTERNAL_ERROR as i32;
+pub const ERRCODE_CONFIG_FILE_ERROR: i32 = pg_sys::errcodes::PgSqlErrorCode::ERRCODE_CONFIG_FILE_ERROR as i32;
+pub const ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE: i32 = pg_sys::errcodes::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE as i32;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -487,7 +487,7 @@ pub static mut local_ppool: LocalPagePoolStruct = LocalPagePoolStruct {
 type base_init_startup_hook_type = Option<unsafe extern "C-unwind" fn()>;
 type database_size_hook_type = Option<unsafe extern "C-unwind" fn(dbOid: pg_sys::Oid) -> i64>;
 type AcceptInvalidationMessagesHookType = Option<unsafe extern "C-unwind" fn()>;
-type CheckPoint_hook_type = Option<unsafe extern "C-unwind" fn(checkPoint: *mut pg_sys::CheckPoint)>;
+type CheckPoint_hook_type = Option<unsafe extern "C-unwind" fn(redo_pos: pg_sys::XLogRecPtr, flags: c_int)>;
 
 static mut prev_shmem_startup_hook: pg_sys::shmem_startup_hook_type = None;
 static mut prev_shmem_request_hook: Option<unsafe extern "C-unwind" fn()> = None;
@@ -541,8 +541,7 @@ extern "C-unwind" {
     pub fn s3_queue_shmem_init(ptr: *mut c_void, found: bool);
     pub fn s3_headers_shmem_size() -> usize;
     pub fn s3_headers_shmem_init(ptr: *mut c_void, found: bool);
-    pub fn stopevents_shmem_size() -> usize;
-    pub fn stopevents_shmem_init(ptr: *mut c_void, found: bool);
+
     pub fn rewind_shmem_size() -> usize;
     pub fn rewind_shmem_init(ptr: *mut c_void, found: bool);
     pub fn logical_xid_shmem_size() -> usize;
@@ -602,11 +601,10 @@ extern "C-unwind" {
     pub fn wait_for_oxid(oxid: u64, wait: bool) -> bool;
     pub fn o_recovery_shutdown_hook(code: c_int, arg: pg_sys::Datum);
 
-    pub fn stopevents_make_cxt();
 
     pub static mut old_set_rel_pathlist_hook: pg_sys::set_rel_pathlist_hook_type;
     pub fn orioledb_set_rel_pathlist_hook(root: *mut pg_sys::PlannerInfo, rel: *mut pg_sys::RelOptInfo, rti: pg_sys::Index, rte: *mut pg_sys::RangeTblEntry);
-    pub fn orioledb_set_plain_rel_pathlist_hook(root: *mut pg_sys::PlannerInfo, rel: *mut pg_sys::RelOptInfo, relation: pg_sys::Relation, rte: *mut pg_sys::RangeTblEntry);
+    pub fn orioledb_set_plain_rel_pathlist_hook(root: *mut pg_sys::PlannerInfo, rel: *mut pg_sys::RelOptInfo, rti: pg_sys::Index, rte: *mut pg_sys::RangeTblEntry);
 
     pub fn orioledb_get_running_transactions_extension(extension: *mut c_void);
     pub fn orioledb_wait_snapshot(extension: *mut c_void);
@@ -628,7 +626,7 @@ extern "C-unwind" {
     pub fn orioledb_recovery_stops_before_hook(record: *mut pg_sys::XLogReaderState) -> bool;
     pub fn orioledb_vacuum_horizon_hook(relation: pg_sys::Relation) -> pg_sys::TransactionId;
     pub fn o_xact_redo_hook(record: *mut pg_sys::XLogReaderState);
-    pub fn orioledb_indexam_routine_hook(relation: pg_sys::Relation, amroutine: *mut pg_sys::IndexAMRoutine);
+    pub fn orioledb_indexam_routine_hook(relation: pg_sys::Relation, amroutine: *mut pg_sys::IndexAmRoutine);
     pub fn recovery_get_effective_replay_ptr() -> pg_sys::XLogRecPtr;
     pub fn orioledb_get_xidless_commit_lsn(backendId: c_int, lsn: *mut pg_sys::XLogRecPtr) -> bool;
     pub fn orioledb_skip_tree_height_hook(indexRelation: Relation) -> bool;
@@ -647,6 +645,17 @@ extern "C-unwind" {
     pub fn orioledb_rm_desc(buf: pg_sys::StringInfo, record: *mut pg_sys::XLogReaderState);
     pub fn orioledb_rm_identify(info: u8) -> *const c_char;
     pub fn orioledb_decode(record: *mut c_void);
+
+    pub fn orioledb_AcceptInvalidationMessagesHook();
+    pub fn orioledb_usercache_hook(arg: Datum, arg1: Oid, arg2: Oid, arg3: Oid);
+    pub fn orioledb_get_relation_info_hook(
+        root: *mut pg_sys::PlannerInfo,
+        relationObjectId: Oid,
+        inhparent: bool,
+        rel: *mut pg_sys::RelOptInfo,
+    );
+    pub fn CacheRegisterUsercacheCallback(callback: Option<unsafe extern "C-unwind" fn(arg: Datum, arg1: Oid, arg2: Oid, arg3: Oid)>, arg: Datum);
+    pub fn o_recovery_cleanup();
 }
 
 // OrioleDB-patched PostgreSQL hook globals (not in standard pgrx bindings)
@@ -659,6 +668,23 @@ extern "C" {
     pub static mut autovacuum_worker_slots: c_int;
     pub static mut after_checkpoint_cleanup_hook: Option<unsafe extern "C-unwind" fn(checkpoint_redo: pg_sys::XLogRecPtr, flags: c_int)>;
     pub static mut CustomErrorCleanupHook: Option<unsafe extern "C-unwind" fn()>;
+
+    pub static mut set_plain_rel_pathlist_hook: pg_sys::set_rel_pathlist_hook_type;
+    pub static mut get_xidless_commit_lsn_hook: Option<unsafe extern "C-unwind" fn(backendId: c_int, lsn: *mut pg_sys::XLogRecPtr) -> bool>;
+    pub static mut RedoShutdownHook: Option<unsafe extern "C-unwind" fn(code: c_int, arg: pg_sys::Datum)>;
+    pub static mut snapshot_hook: Option<unsafe extern "C-unwind" fn(snapshot: pg_sys::Snapshot)>;
+    pub static mut snapshot_register_hook: Option<unsafe extern "C-unwind" fn(snapshot: *mut c_void)>;
+    pub static mut snapshot_deregister_hook: Option<unsafe extern "C-unwind" fn(snapshot: *mut c_void)>;
+    pub static mut reset_xmin_hook: Option<unsafe extern "C-unwind" fn()>;
+
+    pub static mut xact_redo_hook: Option<unsafe extern "C-unwind" fn(record: *mut pg_sys::XLogReaderState)>;
+    pub static mut pg_newlocale_from_collation_hook: Option<unsafe extern "C-unwind" fn() -> bool>;
+    pub static mut IndexAMRoutineHook: Option<unsafe extern "C-unwind" fn(relation: pg_sys::Relation, amroutine: *mut pg_sys::IndexAmRoutine)>;
+    pub static mut getRunningTransactionsExtension: Option<unsafe extern "C-unwind" fn(extension: *mut c_void)>;
+    pub static mut waitSnapshotHook: Option<unsafe extern "C-unwind" fn(extension: *mut c_void)>;
+    pub static mut GetReplayXlogPtrHook: Option<unsafe extern "C-unwind" fn() -> pg_sys::XLogRecPtr>;
+    pub static mut RecoveryStopsBeforeHook: Option<unsafe extern "C-unwind" fn(record: *mut pg_sys::XLogReaderState) -> bool>;
+    pub static mut VacuumHorizonHook: Option<unsafe extern "C-unwind" fn(relation: pg_sys::Relation) -> pg_sys::TransactionId>;
 }
 
 // ---------------------------------------------------------------------------
@@ -676,8 +702,8 @@ unsafe extern "C-unwind" fn s3_queue_shmem_init_wrapper(ptr: *mut c_void, found:
 unsafe extern "C-unwind" fn s3_headers_shmem_size_wrapper() -> usize { s3_headers_shmem_size() }
 unsafe extern "C-unwind" fn s3_headers_shmem_init_wrapper(ptr: *mut c_void, found: bool) { s3_headers_shmem_init(ptr, found); }
 
-unsafe extern "C-unwind" fn stopevents_shmem_size_wrapper() -> usize { stopevents_shmem_size() }
-unsafe extern "C-unwind" fn stopevents_shmem_init_wrapper(ptr: *mut c_void, found: bool) { stopevents_shmem_init(ptr, found); }
+unsafe extern "C-unwind" fn stopevents_shmem_size_wrapper() -> usize { crate::utils::stopevent::StopEventShmemSize() }
+unsafe extern "C-unwind" fn stopevents_shmem_init_wrapper(ptr: *mut c_void, found: bool) { crate::utils::stopevent::StopEventShmemInit(ptr, found); }
 
 unsafe extern "C-unwind" fn rewind_shmem_size_wrapper() -> usize { rewind_shmem_size() }
 unsafe extern "C-unwind" fn rewind_shmem_init_wrapper(ptr: *mut c_void, found: bool) { rewind_shmem_init(ptr, found); }
@@ -775,7 +801,7 @@ unsafe extern "C-unwind" fn orioledb_shmem_startup() {
         prev();
     }
     shared_segment = std::ptr::null_mut();
-    pg_sys::LWLockAcquire(AddinShmemInitLock, pg_sys::LWLockMode_LW_EXCLUSIVE);
+    pg_sys::LWLockAcquire(std::ptr::addr_of_mut!(AddinShmemInitLock), pg_sys::LWLockMode::LW_EXCLUSIVE);
     
     let mut found = false;
     shared_segment = pg_sys::ShmemInitStruct(
@@ -793,7 +819,7 @@ unsafe extern "C-unwind" fn orioledb_shmem_startup() {
     init_btree_io_lwlocks();
     o_btree_init_unique_lwlocks();
     pg_sys::before_shmem_exit(Some(orioledb_on_shmem_exit), pg_sys::Datum::from(0));
-    pg_sys::LWLockRelease(AddinShmemInitLock);
+    pg_sys::LWLockRelease(std::ptr::addr_of_mut!(AddinShmemInitLock));
     
     shared_segment_initialized = true;
 }
@@ -813,7 +839,11 @@ unsafe extern "C-unwind" fn orioledb_on_shmem_exit(_code: c_int, _arg: Datum) {
 unsafe extern "C-unwind" fn o_base_init_startup_hook() {
     if pg_sys::MyBackendType == pg_sys::BackendType::B_STARTUP {
         if remove_old_checkpoint_files {
-            pg_sys::elog(pg_sys::LOG as i32, b"Cleanup of old files at startup. Checkpoint %d\0".as_ptr() as *const c_char, (*checkpoint_state).lastCheckpointNumber);
+            pgrx::ereport!(
+                PgLogLevel::LOG,
+                pg_sys::errcodes::PgSqlErrorCode::ERRCODE_SUCCESSFUL_COMPLETION,
+                format!("Cleanup of old files at startup. Checkpoint {}", (*checkpoint_state).lastCheckpointNumber)
+            );
             recovery_cleanup_old_files((*checkpoint_state).lastCheckpointNumber, true);
             recovery_cleanup_old_files((*checkpoint_state).lastCheckpointNumber, false);
         }
@@ -1544,11 +1574,11 @@ pub unsafe extern "C-unwind" fn _PG_init() {
 
     if orioledb_s3_mode {
         if s3_host.is_null() || s3_region.is_null() || s3_accesskey.is_null() || s3_secretkey.is_null() {
-            pg_sys::ereport!(
-                20i32,
-                pgrx::errcode(crate::ERRCODE_CONFIG_FILE_ERROR),
-                pgrx::errmsg("missing options for S3 connection"),
-                pgrx::errdetail("For OrioleDB S3 mode you need to specify orioledb.s3_host, orioledb.s3_region, orioledb.s3_accesskey and orioledb.s3_secretkey.")
+            pgrx::ereport!(
+                PgLogLevel::ERROR,
+                pg_sys::errcodes::PgSqlErrorCode::ERRCODE_CONFIG_FILE_ERROR,
+                "missing options for S3 connection",
+                "For OrioleDB S3 mode you need to specify orioledb.s3_host, orioledb.s3_region, orioledb.s3_accesskey and orioledb.s3_secretkey."
             );
         }
     }
@@ -1583,7 +1613,10 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     let page_descs_raw_size = orioledb_buffers_count * std::mem::size_of::<OrioleDBPageDesc>();
     page_descs_size = (page_descs_raw_size + 63) & !63;
 
+    #[cfg(any(feature = "pg13", feature = "pg14"))]
     pg_sys::EmitWarningsOnPlaceholders(b"pg_stat_statements\0".as_ptr() as *const c_char);
+    #[cfg(not(any(feature = "pg13", feature = "pg14")))]
+    pg_sys::MarkGUCPrefixReserved(b"pg_stat_statements\0".as_ptr() as *const c_char);
 
     page_pools_size[1] = (o_ppool_estimate_space(&mut page_pools[1] as *mut OPagePool as *mut c_void, 0, free_tree_buffers_count, debug_disable_pools_limit) + 63) & !63;
     page_pools_size[2] = (o_ppool_estimate_space(&mut page_pools[2] as *mut OPagePool as *mut c_void, free_tree_buffers_count, catalog_buffers_count, debug_disable_pools_limit) + 63) & !63;
@@ -1592,10 +1625,15 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     local_ppool_init(&mut local_ppool as *mut LocalPagePoolStruct as *mut c_void);
 
     if !device_filename.is_null() {
-        device_fd = pg_sys::BasicOpenFile(device_filename, pg_sys::O_RDWR as i32);
+        device_fd = pg_sys::BasicOpenFile(device_filename, libc::O_RDWR as i32);
         device_length = device_length_guc as usize * blcksz;
         if device_fd < 0 {
-            pg_sys::elog(pg_sys::LOG as i32, b"can't open device file %s\0".as_ptr() as *const c_char, device_filename);
+            let filename = std::ffi::CStr::from_ptr(device_filename).to_string_lossy();
+            pgrx::ereport!(
+                PgLogLevel::LOG,
+                pg_sys::errcodes::PgSqlErrorCode::ERRCODE_SUCCESSFUL_COMPLETION,
+                format!("can't open device file {}", filename)
+            );
         } else if use_mmap {
             mmap_data = libc::mmap(
                 std::ptr::null_mut(),
@@ -1607,7 +1645,12 @@ pub unsafe extern "C-unwind" fn _PG_init() {
             );
             if mmap_data == libc::MAP_FAILED {
                 mmap_data = std::ptr::null_mut();
-                pg_sys::elog(pg_sys::LOG as i32, b"can't map device file %s\0".as_ptr() as *const c_char, device_filename);
+                let filename = std::ffi::CStr::from_ptr(device_filename).to_string_lossy();
+                pgrx::ereport!(
+                    PgLogLevel::LOG,
+                    pg_sys::errcodes::PgSqlErrorCode::ERRCODE_SUCCESSFUL_COMPLETION,
+                    format!("can't map device file {}", filename)
+                );
             }
         }
         if device_fd >= 0 {
@@ -1633,11 +1676,21 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         s3_put_lock_file();
         if !s3_check_control(&mut check_errmsg, &mut check_errdetail) {
             s3_delete_lock_file();
-            pg_sys::ereport!(
-                20i32,
-                pgrx::errcode(crate::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-                pgrx::errmsg("%s", check_errmsg),
-                pgrx::errdetail("%s", check_errdetail)
+            let errmsg = if check_errmsg.is_null() {
+                "S3 control check failed".to_string()
+            } else {
+                std::ffi::CStr::from_ptr(check_errmsg).to_string_lossy().into_owned()
+            };
+            let errdetail = if check_errdetail.is_null() {
+                "".to_string()
+            } else {
+                std::ffi::CStr::from_ptr(check_errdetail).to_string_lossy().into_owned()
+            };
+            pgrx::ereport!(
+                PgLogLevel::ERROR,
+                pg_sys::errcodes::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE,
+                errmsg,
+                errdetail
             );
         }
     }
@@ -1657,17 +1710,17 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     btree_insert_context = pg_sys::AllocSetContextCreateInternal(
         pg_sys::TopMemoryContext,
         b"orioledb B-tree insert context\0".as_ptr() as *const c_char,
-        pg_sys::ALLOCSET_DEFAULT_MINSIZE,
-        pg_sys::ALLOCSET_DEFAULT_INITSIZE,
-        pg_sys::ALLOCSET_DEFAULT_MAXSIZE,
+        pg_sys::ALLOCSET_DEFAULT_MINSIZE as usize,
+        pg_sys::ALLOCSET_DEFAULT_INITSIZE as usize,
+        pg_sys::ALLOCSET_DEFAULT_MAXSIZE as usize,
     );
 
     btree_seqscan_context = pg_sys::AllocSetContextCreateInternal(
         pg_sys::TopMemoryContext,
         b"orioledb B-tree sequential scans context\0".as_ptr() as *const c_char,
-        pg_sys::ALLOCSET_DEFAULT_MINSIZE,
-        pg_sys::ALLOCSET_DEFAULT_INITSIZE,
-        pg_sys::ALLOCSET_DEFAULT_MAXSIZE,
+        pg_sys::ALLOCSET_DEFAULT_MINSIZE as usize,
+        pg_sys::ALLOCSET_DEFAULT_INITSIZE as usize,
+        pg_sys::ALLOCSET_DEFAULT_MAXSIZE as usize,
     );
 
     // Setup hooks
@@ -1683,7 +1736,7 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     old_set_rel_pathlist_hook = pg_sys::set_rel_pathlist_hook;
     pg_sys::set_rel_pathlist_hook = Some(orioledb_set_rel_pathlist_hook);
     
-    pg_sys::set_plain_rel_pathlist_hook = Some(orioledb_set_plain_rel_pathlist_hook);
+    set_plain_rel_pathlist_hook = Some(orioledb_set_plain_rel_pathlist_hook);
 
     prev_AcceptInvalidationMessagesHook = AcceptInvalidationMessagesHook;
     AcceptInvalidationMessagesHook = Some(orioledb_AcceptInvalidationMessagesHook);
@@ -1691,19 +1744,19 @@ pub unsafe extern "C-unwind" fn _PG_init() {
     pg_sys::RegisterXactCallback(Some(undo_xact_callback), std::ptr::null_mut());
     pg_sys::RegisterSubXactCallback(Some(undo_subxact_callback), std::ptr::null_mut());
     
-    pg_sys::get_xidless_commit_lsn_hook = Some(orioledb_get_xidless_commit_lsn);
-    pg_sys::CacheRegisterUsercacheCallback(Some(orioledb_usercache_hook), 0);
+    get_xidless_commit_lsn_hook = Some(orioledb_get_xidless_commit_lsn);
+    CacheRegisterUsercacheCallback(Some(orioledb_usercache_hook), pg_sys::Datum::from(0));
     
     after_checkpoint_cleanup_hook = Some(o_after_checkpoint_cleanup_hook);
 
     pg_sys::RegisterCustomRmgr(142, &mut rmgr);
     
-    pg_sys::RedoShutdownHook = Some(o_recovery_shutdown_hook);
-    pg_sys::snapshot_hook = Some(orioledb_snapshot_hook);
+    RedoShutdownHook = Some(o_recovery_shutdown_hook);
+    snapshot_hook = Some(orioledb_snapshot_hook);
     CustomErrorCleanupHook = Some(orioledb_error_cleanup_hook);
-    pg_sys::snapshot_register_hook = Some(undo_snapshot_register_hook);
-    pg_sys::snapshot_deregister_hook = Some(undo_snapshot_deregister_hook);
-    pg_sys::reset_xmin_hook = Some(orioledb_reset_xmin_hook);
+    snapshot_register_hook = Some(undo_snapshot_register_hook);
+    snapshot_deregister_hook = Some(undo_snapshot_deregister_hook);
+    reset_xmin_hook = Some(orioledb_reset_xmin_hook);
     
     prev_get_relation_info_hook = pg_sys::get_relation_info_hook;
     pg_sys::get_relation_info_hook = Some(orioledb_get_relation_info_hook);
@@ -1714,28 +1767,28 @@ pub unsafe extern "C-unwind" fn _PG_init() {
         pg_sys::skip_tree_height_hook = Some(orioledb_skip_tree_height_hook);
     }
     
-    pg_sys::xact_redo_hook = Some(o_xact_redo_hook);
-    pg_sys::pg_newlocale_from_collation_hook = Some(o_newlocale_from_collation);
+    xact_redo_hook = Some(o_xact_redo_hook);
+    pg_newlocale_from_collation_hook = Some(o_newlocale_from_collation);
     
     prev_base_init_startup_hook = base_init_startup_hook;
     base_init_startup_hook = Some(o_base_init_startup_hook);
     
-    pg_sys::IndexAMRoutineHook = Some(orioledb_indexam_routine_hook);
-    pg_sys::getRunningTransactionsExtension = Some(orioledb_get_running_transactions_extension);
-    pg_sys::waitSnapshotHook = Some(orioledb_wait_snapshot);
-    pg_sys::GetReplayXlogPtrHook = Some(recovery_get_effective_replay_ptr);
+    IndexAMRoutineHook = Some(orioledb_indexam_routine_hook);
+    getRunningTransactionsExtension = Some(orioledb_get_running_transactions_extension);
+    waitSnapshotHook = Some(orioledb_wait_snapshot);
+    GetReplayXlogPtrHook = Some(recovery_get_effective_replay_ptr);
     
     prev_database_size_hook = database_size_hook;
     database_size_hook = Some(orioledb_calculate_database_size);
     
-    pg_sys::RecoveryStopsBeforeHook = Some(orioledb_recovery_stops_before_hook);
+    RecoveryStopsBeforeHook = Some(orioledb_recovery_stops_before_hook);
 
     if enable_rewind {
-        pg_sys::VacuumHorizonHook = Some(orioledb_vacuum_horizon_hook);
+        VacuumHorizonHook = Some(orioledb_vacuum_horizon_hook);
     }
     
     orioledb_setup_ddl_hooks();
-    stopevents_make_cxt();
+    crate::utils::stopevent::stopevents_make_cxt();
 }
 
 static mut rmgr: pg_sys::RmgrData = pg_sys::RmgrData {
@@ -1746,7 +1799,12 @@ static mut rmgr: pg_sys::RmgrData = pg_sys::RmgrData {
     rm_desc: Some(orioledb_rm_desc),
     rm_identify: Some(orioledb_rm_identify),
     rm_mask: None,
-    rm_decode: unsafe { std::mem::transmute(Some(orioledb_decode as *const ())) },
+    rm_decode: unsafe {
+        std::mem::transmute::<
+            unsafe extern "C-unwind" fn(*mut c_void),
+            Option<unsafe extern "C-unwind" fn(*mut pg_sys::LogicalDecodingContext, *mut pg_sys::XLogRecordBuffer)>,
+        >(orioledb_decode as unsafe extern "C-unwind" fn(*mut c_void))
+    },
 };
 
 #[pg_extern]
@@ -1766,12 +1824,12 @@ fn orioledb_commit_hash() -> &'static str {
 
 #[pg_extern]
 unsafe fn orioledb_parallel_debug_start() {
-    pg_sys::debug_parallel_query = pg_sys::DebugParallelMode_DEBUG_PARALLEL_REGRESS;
+    pg_sys::debug_parallel_query = pg_sys::DebugParallelMode::DEBUG_PARALLEL_REGRESS as i32;
 }
 
 #[pg_extern]
 unsafe fn orioledb_parallel_debug_stop() {
-    pg_sys::debug_parallel_query = pg_sys::DebugParallelMode_DEBUG_PARALLEL_OFF;
+    pg_sys::debug_parallel_query = pg_sys::DebugParallelMode::DEBUG_PARALLEL_OFF as i32;
 }
 
 #[pg_extern]

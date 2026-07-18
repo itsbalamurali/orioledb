@@ -45,6 +45,17 @@ pub struct XidMeta {
     pub cleaned_xmin: std::sync::atomic::AtomicU64,
     pub cleaned_checkpoint_xmin: std::sync::atomic::AtomicU64,
     pub cleaned_checkpoint_xmax: std::sync::atomic::AtomicU64,
+
+    pub xminMutex: pg_sys::slock_t,
+
+    pub xidMapTrancheId: std::ffi::c_int,
+    pub xidMapWriteLock: pg_sys::LWLock,
+
+    pub sysXidUndoLocationTrancheId: std::ffi::c_int,
+    pub sysXidUndoLocationLock: pg_sys::LWLock,
+    pub sysXidUndoLocationChangeCount: u32,
+
+    pub nextCommitSeqNo: std::sync::atomic::AtomicU64,
 }
 
 /// Logical decoding XID context.
