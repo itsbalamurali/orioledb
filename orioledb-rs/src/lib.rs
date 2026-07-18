@@ -91,12 +91,13 @@ pub static mut ORIOLE_DB_PAGE_DESC: *mut local_ppool_page_descs = std::ptr::null
 pub static mut ORIOLEDB_SERIALIZABLE_MODE: std::os::raw::c_int = O_SERIALIZABLE_TABLE_LOCK;
 pub static mut ORIOLEDB_DEBUG_DISABLE_MULTI_INSERT: bool = false;
 
-static const struct config_enum_entry serializable_mode_options[] = {
-	{"table_lock", O_SERIALIZABLE_TABLE_LOCK, false},
-	{"error", O_SERIALIZABLE_ERROR, false},
-	{"repeatable_read", O_SERIALIZABLE_REPEATABLE_READ, false},
-	{NULL, 0, false}
-};
+static SERIALIZABLE_MODE_OPTIONS: &[ConfigEnumEntry] = &[
+	ConfigEnumEntry { b"table_lock"\0".as_ptr() as *const std::os::raw::c_char, O_SERIALIZABLE_TABLE_LOCK, false },
+	ConfigEnumEntry { b"error"\0".as_ptr() as *const std::os::raw::c_char, O_SERIALIZABLE_ERROR, false },
+	ConfigEnumEntry { b"repeatable_read"\0".as_ptr() as *const std::os::raw::c_char, O_SERIALIZABLE_REPEATABLE_READ, false },
+	ConfigEnumEntry { std::ptr::null(), 0, false }
+];
+
 
 static mut MAIN_BUFFERS_GUC: std::os::raw::c_int = 0;
 static mut UNDO_BUFFERS_GUC: std::os::raw::c_int = 0;

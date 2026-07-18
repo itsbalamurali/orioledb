@@ -1,105 +1,82 @@
 import os
 import re
 
-def to_upper_snake(name):
-    """Converts camelCase or mixedCase names into UPPER_SNAKE_CASE."""
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    s2 = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1)
-    return s2.replace('-', '_').upper()
-
-def process_line(line):
+def transform_struct_array(match_text):
     """
-    Evaluates individual lines. Safely skips functions and filters out
-    standalone global variables for conversion.
+    Parses a C static const array of structures and rewrites it into an
+    idiomatic Rust read-only static slice of structures.
     """
-    trimmed = line.strip()
+    # Extract structural components
+    header_match = re.search(r'static\s+const\s+struct\s+(\w+)\s+(\w+)\[\]\s*=\s*\{', match_text)
+    if not header_match:
+        return match_text
 
-    # Absolute Guardrails: Do not touch comments, functions, macro calls, or block logic
-    if (not trimmed or
-        trimmed.startswith('//') or
-        trimmed.startswith('/*') or
-        '(' in trimmed or
-        ')' in trimmed or
-        '{' in trimmed or
-        '}' in trimmed or
-        trimmed.startswith('pub mod') or
-        trimmed.startswith('use ')):
-        return line
+    struct_type = header_match.group(1).strip()
+    array_name = header_match.group(2).strip()
 
-    # Ensure it looks like a variable definition ending with a semicolon
-    if not trimmed.endswith(';'):
-        return line
+    # Convert name to UPPER_SNAKE_CASE for Rust static style conventions
+    rust_name = re.sub(r'(?<!^)(?=[A-Z])', '_', array_name).upper()
+    # Map the type name to CamelCase
+    rust_type = "".join([part.capitalize() for part in struct_type.split('_')])
 
-    is_static = trimmed.startswith('static ')
-    clean_line = re.sub(r'^static\s+', '', trimmed)
+    # Extract all elements inside the outer braces
+    body_match = re.search(r'=\s*\{(.*)\};', match_text, re.DOTALL)
+    if not body_match:
+        return match_text
 
-    # Match syntax pattern: Type name = value; or Type name;
-    match = re.match(r'^([\w\s:&*]+?)\s+\b([A-Za-z0-9_]+)\b(?:\s*=\s*(.*?))?\s*;', clean_line)
-    if not match:
-        return line
+    raw_body = body_match.group(1).strip()
 
-    raw_type = match.group(1).strip()
-    var_name = match.group(2).strip()
-    raw_val = match.group(3).strip() if match.group(3) else None
+    # Parse individual entries matching {...}
+    entries = re.findall(r'\{([^{}]+)\}', raw_body)
+    rust_entries = []
 
-    # Skip accidental keyword matches
-    if var_name in ['return', 'pub', 'static', 'fn', 'struct', 'enum']:
-        return line
+    for entry in entries:
+        # Split tokens by comma
+        tokens = [t.strip() for t in entry.split(',')]
+        if not tokens:
+            continue
 
-    # 1. Normalize Names to UPPER_SNAKE_CASE
-    rust_name = to_upper_snake(var_name)
+        # Transform string literals or NULL tokens
+        processed_tokens = []
+        for token in tokens:
+            if token == 'NULL':
+                processed_tokens.append('std::ptr::null()')
+            elif token.startswith('"') and token.endswith('"'):
+                # Append c-string termination or keep standard literal depending on implementation
+                processed_tokens.append(f"b{token}\\0\".as_ptr() as *const std::os::raw::c_char")
+            else:
+                processed_tokens.append(token)
 
-    # 2. Normalize and Map Types
-    if '*' in raw_type or '&mut' in raw_type:
-        clean_t = raw_type.replace('*', '').replace('&mut', '').replace(':', '').strip()
-        rust_type = f"*mut {clean_t}"
-        default_val = "std::ptr::null_mut()"
-    else:
-        type_mapping = {
-            'bool': ('bool', 'false'),
-            'int': ('std::os::raw::c_int', '0'),
-            'Size': ('Size', '0'),
-            'Pointer': ('Pointer', 'std::ptr::null_mut()')
-        }
-        rust_type, default_val = type_mapping.get(raw_type, (raw_type, 'std::mem::zeroed()'))
+        # Format as an anonymous initialization mapping to the structural layout
+        rust_entries.append(f"\t{rust_type} {{ {', '.join(processed_tokens)} }}")
 
-    # 3. Handle Assignment Values
-    if raw_val:
-        if raw_val == 'NULL':
-            rust_val = "std::ptr::null_mut()"
-        elif raw_val.lower() in ['true', 'false']:
-            rust_val = raw_val.lower()
-        else:
-            rust_val = raw_val
-    else:
-        rust_val = default_val
-
-    # 4. Construct Final Rust Code String, matching the original line's indentation
-    indent = line[:len(line) - len(line.lstrip())]
-    visibility = "" if is_static else "pub "
-
-    return f"{indent}{visibility}static mut {rust_name}: {rust_type} = {rust_val};\n"
+    # Combine into a clean Rust static block statement
+    rust_code = f"static {rust_name}: &[{rust_type}] = &[\n"
+    rust_code += ",\n".join(rust_entries)
+    rust_code += "\n];\n"
+    return rust_code
 
 def process_file(file_path):
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-        lines = f.readlines()
+        content = f.read()
 
-    new_lines = []
-    for line in lines:
-        new_lines.append(process_line(line))
+    # Regex targeting the multi-line signature block of static const arrays down to its closing balance };
+    array_pattern = r'static\s+const\s+struct\s+\w+\s+\w+\[\]\s*=\s*\{.*?\};'
+
+    updated_content = re.sub(array_pattern, lambda m: transform_struct_array(m.group(0)), content, flags=re.DOTALL)
 
     with open(file_path, 'w', encoding='utf-8') as f:
-        f.writelines(new_lines)
+        f.write(updated_content)
 
 def walk_and_convert(target_dir):
-    print(f"Executing strict line-by-line variable parsing across '{target_dir}'...")
+    print(f"Migrating C structural array declarations across '{target_dir}'...")
     for root, _, files in os.walk(target_dir):
         for file in files:
             if file.endswith('.rs'):
                 file_path = os.path.join(root, file)
                 process_file(file_path)
-                print(f"✓ Formatted variables safely: {file_path}")
-    print("Variable declaration conversion completed successfully!")
+                print(f"✓ Transformed static configuration array: {file_path}")
+    print("Static structural configuration mapping complete.")
 
 if __name__ == "__main__":
     walk_and_convert('src')

@@ -140,41 +140,18 @@ static const const: &mut char excludeDirContents[] =
 //
 // List of files excluded from backups.
 //
-static const struct exclude_list_item excludeFiles[] =
-{
-	// Skip auto conf temporary file.
-	{PG_AUTOCONF_FILENAME ".tmp", false},
+static EXCLUDE_FILES: &[ExcludeListItem] = &[
+	ExcludeListItem { PG_AUTOCONF_FILENAME ".tmp", false },
+	ExcludeListItem { LOG_METAINFO_DATAFILE_TMP, false },
+	ExcludeListItem { RELCACHE_INIT_FILENAME, true },
+	ExcludeListItem { BACKUP_LABEL_FILE, false },
+	ExcludeListItem { TABLESPACE_MAP, false },
+	ExcludeListItem { b"backup_manifest"\0".as_ptr() as *const std::os::raw::c_char, false },
+	ExcludeListItem { b"postmaster.pid"\0".as_ptr() as *const std::os::raw::c_char, false },
+	ExcludeListItem { b"postmaster.opts"\0".as_ptr() as *const std::os::raw::c_char, false },
+	ExcludeListItem { std::ptr::null(), false }
+];
 
-	// Skip current log file temporary file
-	{LOG_METAINFO_DATAFILE_TMP, false},
-
-	//
-// Skip relation cache because it is rebuilt on startup.  This includes
-// temporary files.
-//
-	{RELCACHE_INIT_FILENAME, true},
-
-	//
-// backup_label and tablespace_map should not exist in a running cluster
-// capable of doing an online backup, but exclude them just in case.
-//
-	{BACKUP_LABEL_FILE, false},
-	{TABLESPACE_MAP, false},
-
-	//
-// If there's a backup_manifest, it belongs to a backup that was used to
-// start this server. It not: &mut is* correct for this backup. Our
-// backup_manifest is injected into the backup separately if users want
-// it.
-//
-	{"backup_manifest", false},
-
-	{"postmaster.pid", false},
-	{"postmaster.opts", false},
-
-	// end of list
-	{NULL, false}
-};
 
 //
 // Information about a tablespace
