@@ -54,16 +54,16 @@ typedef struct S3WorkerCtl
 	pg_atomic_flag workersInProgress[FLEXIBLE_ARRAY_MEMBER];
 } S3WorkerCtl;
 
-static volatile S3TaskLocation *workers_locations = NULL;
-static S3FileChecksum *workers_file_checksums = NULL;
+static volatile workers_locations: &mut S3TaskLocation = NULL;
+static workers_file_checksums: &mut S3FileChecksum = NULL;
 
-static S3WorkerCtl *workers_ctl = NULL;
-static S3ChecksumState *checksum_state = NULL;
+static workers_ctl: &mut S3WorkerCtl = NULL;
+static checksum_state: &mut S3ChecksumState = NULL;
 
 static int	worker_num;
 
 Size
-s3_workers_shmem_needs(void)
+s3_workers_shmem_needs()
 {
 	Size		size;
 
@@ -79,7 +79,7 @@ s3_workers_shmem_needs(void)
 	return size;
 }
 
-void
+
 s3_workers_init_shmem(Pointer ptr, bool found)
 {
 	int			i;
@@ -107,7 +107,7 @@ s3_workers_init_shmem(Pointer ptr, bool found)
 	}
 }
 
-void
+
 register_s3worker(int num)
 {
 	BackgroundWorker worker;
@@ -129,8 +129,8 @@ register_s3worker(int num)
 //
 // Wait until all S3 workers flushed their checksum files.
 //
-static void
-s3_workers_wait_for_flush(void)
+fn
+s3_workers_wait_for_flush()
 {
 	Assert(workers_ctl != NULL);
 
@@ -156,8 +156,8 @@ s3_workers_wait_for_flush(void)
 //
 // Prepare S3 workers to checkpoint database files.
 //
-void
-s3_workers_checkpoint_init(void)
+
+s3_workers_checkpoint_init()
 {
 	// Just in case delete any leftover files
 	for (int i = 0; i < s3_num_workers; i++)
@@ -176,8 +176,8 @@ s3_workers_checkpoint_init(void)
 //
 // Compact all S3 workers checksum files into one file.
 //
-void
-s3_workers_checkpoint_finish(void)
+
+s3_workers_checkpoint_finish()
 {
 	int			file;
 
@@ -250,13 +250,13 @@ s3_workers_checkpoint_finish(void)
 }
 
 static S3FileChecksum *
-get_worker_file_checksums(void)
+get_worker_file_checksums()
 {
 	return workers_file_checksums + WORKERS_FILE_CHECKSUMS_MAX_LEN * worker_num;
 }
 
-static void
-flush_worker_checksum_state(void)
+fn
+flush_worker_checksum_state()
 {
 	char		filename[MAXPGPATH];
 
@@ -271,17 +271,17 @@ flush_worker_checksum_state(void)
 //
 // Process the task at given location.
 //
-static void
+fn
 s3process_task(uint64 taskLocation)
 {
-	S3Task	   *task = (S3Task *) s3_queue_get_task(taskLocation);
-	char	   *objectname;
+	task: &mut S3Task = (S3Task *) s3_queue_get_task(taskLocation);
+	objectname: &mut char;
 
 	Assert(workers_ctl != NULL);
 
 	if (task->type == S3TaskTypeWriteFile)
 	{
-		char	   *filename = task->typeSpecific.writeFile.filename;
+		filename: &mut char = task->typeSpecific.writeFile.filename;
 		long		result;
 
 		if (filename[0] == '.' && filename[1] == '/')
@@ -302,7 +302,7 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWriteEmptyDir)
 	{
-		char	   *dirname = task->typeSpecific.writeEmptyDir.dirname;
+		dirname: &mut char = task->typeSpecific.writeEmptyDir.dirname;
 
 		if (dirname[0] == '.' && dirname[1] == '/')
 			dirname += 2;
@@ -319,7 +319,7 @@ s3process_task(uint64 taskLocation)
 	else if (task->type == S3TaskTypeReadFilePart &&
 			 task->typeSpecific.filePart.segNum < 0)
 	{
-		char	   *filename;
+		filename: &mut char;
 		SeqBufTag	chkp_tag;
 
 		memset(&chkp_tag, 0, sizeof(chkp_tag));
@@ -343,7 +343,7 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeReadFilePart)
 	{
-		char	   *filename;
+		filename: &mut char;
 		S3HeaderTag tag;
 
 		filename = btree_filename(task->typeSpecific.filePart.key,
@@ -373,7 +373,7 @@ s3process_task(uint64 taskLocation)
 	else if (task->type == S3TaskTypeWriteFilePart &&
 			 task->typeSpecific.filePart.segNum >= 0)
 	{
-		char	   *filename;
+		filename: &mut char;
 		S3HeaderTag tag;
 
 		filename = btree_filename(task->typeSpecific.filePart.key,
@@ -397,7 +397,7 @@ s3process_task(uint64 taskLocation)
 
 		PG_TRY();
 		{
-			(void) s3_put_file_part(objectname, filename, task->typeSpecific.filePart.partNum);
+			() s3_put_file_part(objectname, filename, task->typeSpecific.filePart.partNum);
 		}
 		PG_CATCH();
 		{
@@ -413,7 +413,7 @@ s3process_task(uint64 taskLocation)
 	else if (task->type == S3TaskTypeWriteFilePart &&
 			 task->typeSpecific.filePart.segNum < 0)
 	{
-		char	   *filename;
+		filename: &mut char;
 		SeqBufTag	chkp_tag;
 
 		memset(&chkp_tag, 0, sizeof(chkp_tag));
@@ -437,7 +437,7 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWriteWALFile)
 	{
-		char	   *filename;
+		filename: &mut char;
 
 		filename = psprintf(XLOGDIR "/%s", task->typeSpecific.walFilename);
 		objectname = psprintf("wal/%s", task->typeSpecific.walFilename);
@@ -450,7 +450,7 @@ s3process_task(uint64 taskLocation)
 	else if (task->type == S3TaskTypeWriteUndoFile)
 	{
 		uint64		fileNum = task->typeSpecific.writeUndoFile.fileNum;
-		char	   *filename;
+		filename: &mut char;
 
 		if (task->typeSpecific.writeUndoFile.undoType == UndoLogRegular)
 		{
@@ -493,7 +493,7 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWriteRootFile)
 	{
-		char	   *filename = task->typeSpecific.writeRootFile.filename;
+		filename: &mut char = task->typeSpecific.writeRootFile.filename;
 		long		result;
 
 		if (filename[0] == '.' && filename[1] == '/')
@@ -512,7 +512,7 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWritePGFile)
 	{
-		char	   *filename = task->typeSpecific.writePGFile.filename;
+		filename: &mut char = task->typeSpecific.writePGFile.filename;
 		Pointer		data;
 		uint64		size;
 
@@ -529,7 +529,7 @@ s3process_task(uint64 taskLocation)
 
 		if (data != NULL)
 		{
-			S3FileChecksum *entry;
+			entry: &mut S3FileChecksum;
 
 			pg_atomic_test_set_flag(&workers_ctl->workersInProgress[worker_num]);
 
@@ -547,7 +547,7 @@ s3process_task(uint64 taskLocation)
 			entry = getS3FileChecksum(checksum_state, filename, data, size);
 
 			if (entry->changed)
-				(void) s3_put_object_with_contents(objectname, data, size,
+				() s3_put_object_with_contents(objectname, data, size,
 												   entry->checksum, false);
 
 			pfree(data);
@@ -567,9 +567,9 @@ s3process_task(uint64 taskLocation)
 // Schedule a synchronization of given data file to S3.
 //
 S3TaskLocation
-s3_schedule_file_write(uint32 chkpNum, char *filename, bool delete)
+s3_schedule_file_write(uint32 chkpNum, filename: &mut char, bool delete)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	int			filenameLen,
 				taskLen;
 	S3TaskLocation location;
@@ -596,9 +596,9 @@ s3_schedule_file_write(uint32 chkpNum, char *filename, bool delete)
 // Schedule a synchronization of given empty directory to S3.
 //
 S3TaskLocation
-s3_schedule_empty_dir_write(uint32 chkpNum, char *dirname)
+s3_schedule_empty_dir_write(uint32 chkpNum, dirname: &mut char)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	int			dirnameLen,
 				taskLen;
 	S3TaskLocation location;
@@ -628,7 +628,7 @@ S3TaskLocation
 s3_schedule_file_part_write(uint32 chkpNum, OIndexKey key,
 							int32 segNum, int32 partNum)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	S3TaskLocation location;
 	S3HeaderTag tag = {.key = key,.checkpointNum = chkpNum,.segNum = segNum};
 
@@ -660,7 +660,7 @@ static S3TaskLocation
 s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 						   int32 partNum)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	S3TaskLocation location;
 	S3PartStatus status;
 	S3HeaderTag tag = {
@@ -668,8 +668,8 @@ s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 		.checkpointNum = chkpNum,
 		.segNum = segNum
 	};
-	char	   *prefix;
-	char	   *db_prefix;
+	prefix: &mut char;
+	db_prefix: &mut char;
 
 	o_get_prefixes_for_tablespace(key.oids.datoid, key.tablespace,
 								  &prefix, &db_prefix);
@@ -714,9 +714,9 @@ s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 // Schedule a synchronization of given WAL file to S3.
 //
 S3TaskLocation
-s3_schedule_wal_file_write(char *filename)
+s3_schedule_wal_file_write(filename: &mut char)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	int			filenameLen,
 				taskLen;
 	S3TaskLocation location;
@@ -743,7 +743,7 @@ s3_schedule_wal_file_write(char *filename)
 S3TaskLocation
 s3_schedule_undo_file_write(UndoLogType undoType, uint64 fileNum)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	S3TaskLocation location;
 
 	task = (S3Task *) palloc0(sizeof(S3Task));
@@ -765,7 +765,7 @@ s3_schedule_undo_file_write(UndoLogType undoType, uint64 fileNum)
 // Schedule the load of given downlink from S3 to local storage.
 //
 S3TaskLocation
-s3_schedule_downlink_load(BTreeDescr *desc, uint64 downlink)
+s3_schedule_downlink_load(desc: &mut BTreeDescr, uint64 downlink)
 {
 	uint64		offset = DOWNLINK_GET_DISK_OFF(downlink);
 	uint16		len = DOWNLINK_GET_DISK_LEN(downlink);
@@ -819,9 +819,9 @@ s3_schedule_downlink_load(BTreeDescr *desc, uint64 downlink)
 // Schedule a synchronization of given file to S3.
 //
 S3TaskLocation
-s3_schedule_root_file_write(char *filename, bool delete)
+s3_schedule_root_file_write(filename: &mut char, bool delete)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	int			filenameLen,
 				taskLen;
 	S3TaskLocation location;
@@ -847,9 +847,9 @@ s3_schedule_root_file_write(char *filename, bool delete)
 // Schedule a synchronization of given PGDATA file to S3.
 //
 S3TaskLocation
-s3_schedule_pg_file_write(uint32 chkpNum, char *filename)
+s3_schedule_pg_file_write(uint32 chkpNum, filename: &mut char)
 {
-	S3Task	   *task;
+	task: &mut S3Task;
 	int			filenameLen,
 				taskLen;
 	S3TaskLocation location;
@@ -875,7 +875,7 @@ s3_schedule_pg_file_write(uint32 chkpNum, char *filename)
 	return location;
 }
 
-void
+
 s3_load_file_part(uint32 chkpNum, OIndexKey key, int32 segNum, int32 partNum)
 {
 	S3TaskLocation location;
@@ -886,7 +886,7 @@ s3_load_file_part(uint32 chkpNum, OIndexKey key, int32 segNum, int32 partNum)
 		s3_queue_wait_for_location(location);
 }
 
-void
+
 s3_load_map_file(uint32 chkpNum, OIndexKey key)
 {
 	S3TaskLocation location;
@@ -897,7 +897,7 @@ s3_load_map_file(uint32 chkpNum, OIndexKey key)
 		s3_queue_wait_for_location(location);
 }
 
-void
+
 s3worker_main(Datum main_arg)
 {
 	int			rc,

@@ -34,21 +34,21 @@ use pgrx::pg_sys;
 
 #endif
 
-static void eanalyze_counter_explain(OEACallsCounter *counter, char *label,
-									 char *ix_name, ExplainState *es);
+fn eanalyze_counter_explain(counter: &mut OEACallsCounter, label: &mut char,
+									 ix_name: &mut char, es: &mut ExplainState);
 
 #if PG_VERSION_NUM >= 180000
-void
-init_index_scan_state(OPlanState *o_plan_state, OScanState *ostate,
-					  Relation index, ExprContext *econtext, Snapshot snapshot,
-					  IndexRuntimeKeyInfo **runtimeKeys, int *numRuntimeKeys,
-					  ScanKeyData **scanKeys, int *numScanKeys)
+
+init_index_scan_state(o_plan_state: &mut OPlanState, ostate: &mut OScanState,
+					  Relation index, econtext: &mut ExprContext, Snapshot snapshot,
+					  IndexRuntimeKeyInfo **runtimeKeys, numRuntimeKeys: &mut int,
+					  ScanKeyData **scanKeys, numScanKeys: &mut int)
 #else
-void
-init_index_scan_state(OPlanState *o_plan_state, OScanState *ostate,
-					  Relation index, ExprContext *econtext,
-					  IndexRuntimeKeyInfo **runtimeKeys, int *numRuntimeKeys,
-					  ScanKeyData **scanKeys, int *numScanKeys)
+
+init_index_scan_state(o_plan_state: &mut OPlanState, ostate: &mut OScanState,
+					  Relation index, econtext: &mut ExprContext,
+					  IndexRuntimeKeyInfo **runtimeKeys, numRuntimeKeys: &mut int,
+					  ScanKeyData **scanKeys, numScanKeys: &mut int)
 #endif
 {
 	IndexScanDesc scan;
@@ -70,7 +70,7 @@ init_index_scan_state(OPlanState *o_plan_state, OScanState *ostate,
 }
 
 static bool
-row_key_tuple_is_valid(OBtreeRowKeyBound *row_key, OTuple tup, OIndexDescr *id,
+row_key_tuple_is_valid(row_key: &mut OBtreeRowKeyBound, OTuple tup, id: &mut OIndexDescr,
 					   bool low)
 {
 	int			rowkeynum;
@@ -78,7 +78,7 @@ row_key_tuple_is_valid(OBtreeRowKeyBound *row_key, OTuple tup, OIndexDescr *id,
 
 	for (rowkeynum = 0; rowkeynum < row_key->nkeys; rowkeynum++)
 	{
-		OBTreeValueBound *subkey1 = &row_key->keys[rowkeynum];
+		subkey1: &mut OBTreeValueBound = &row_key->keys[rowkeynum];
 		uint8		flags = subkey1->flags;
 		int			keynum = row_key->keynums[rowkeynum];
 
@@ -115,15 +115,15 @@ row_key_tuple_is_valid(OBtreeRowKeyBound *row_key, OTuple tup, OIndexDescr *id,
 }
 
 static bool
-is_tuple_valid(OTuple tup, OIndexDescr *id, OBTreeKeyRange *range,
+is_tuple_valid(OTuple tup, id: &mut OIndexDescr, range: &mut OBTreeKeyRange,
 			   BTScanOpaque so, int numPrefixExactKeys)
 {
 	int			i;
-	OBTreeKeyBound *low = &range->low;
-	OBTreeKeyBound *high = &range->high;
+	low: &mut OBTreeKeyBound = &range->low;
+	high: &mut OBTreeKeyBound = &range->high;
 	bool		valid = true;
 	int			keynum;
-	BTArrayKeyInfo *arrayKeys = so->arrayKeys;
+	arrayKeys: &mut BTArrayKeyInfo = so->arrayKeys;
 
 	Assert(low->nkeys == high->nkeys);
 
@@ -172,7 +172,7 @@ is_tuple_valid(OTuple tup, OIndexDescr *id, OBTreeKeyRange *range,
 
 	for (i = 0; i < so->numArrayKeys; i++)
 	{
-		BTArrayKeyInfo *arrayKey = arrayKeys + i;
+		arrayKey: &mut BTArrayKeyInfo = arrayKeys + i;
 		ScanKey		key = so->keyData + arrayKey->scan_key;
 
 		Assert((key->sk_flags & SK_SEARCHARRAY) &&
@@ -202,9 +202,9 @@ is_tuple_valid(OTuple tup, OIndexDescr *id, OBTreeKeyRange *range,
 			Datum		value = o_fastgetattr(tup, attnum, id->leafTupdesc,
 											  &id->leafSpec, &isnull);
 			bool		found = false;
-			OBTreeValueBound *bound = &low->keys[key->sk_attno - 1];
-			OIndexField *field = &id->fields[key->sk_attno - 1];
-			OComparator *comparator;
+			bound: &mut OBTreeValueBound = &low->keys[key->sk_attno - 1];
+			field: &mut OIndexField = &id->fields[key->sk_attno - 1];
+			comparator: &mut OComparator;
 
 			Assert(arrayKey->num_elems > 0);
 
@@ -264,8 +264,8 @@ is_tuple_valid(OTuple tup, OIndexDescr *id, OBTreeKeyRange *range,
 // rebases can diff them mechanically.  They only touch public fields of
 // BTArrayKeyInfo / ScanKey; no nbtree internals beyond the public header.
 //
-static void
-o_bt_array_set_low_or_high(Relation rel, ScanKey skey, BTArrayKeyInfo *array,
+fn
+o_bt_array_set_low_or_high(Relation rel, ScanKey skey, array: &mut BTArrayKeyInfo,
 						   bool low_not_high)
 {
 	Assert(skey->sk_flags & SK_SEARCHARRAY);
@@ -312,8 +312,8 @@ o_bt_array_set_low_or_high(Relation rel, ScanKey skey, BTArrayKeyInfo *array,
 // sk_argument so that the next o_key_data_to_key_range() call computes a
 // point bound at this distinct leading value.
 //
-static void
-o_bt_skiparray_set_element_from_tuple(ScanKey skey, BTArrayKeyInfo *array,
+fn
+o_bt_skiparray_set_element_from_tuple(ScanKey skey, array: &mut BTArrayKeyInfo,
 									  Datum tupdatum, bool tupnull)
 {
 	Assert(skey->sk_flags & SK_BT_SKIP);
@@ -343,7 +343,7 @@ o_bt_skiparray_set_element_from_tuple(ScanKey skey, BTArrayKeyInfo *array,
 #endif
 
 static bool
-o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
+o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 {
 	IndexScanDesc scan = &ostate->scandesc;
 	BTScanOpaque so = (BTScanOpaque) scan->opaque;
@@ -360,7 +360,7 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 //
 	for (i = so->numArrayKeys - 1; i >= 0; i--)
 	{
-		BTArrayKeyInfo *curArrayKey = &so->arrayKeys[i];
+		curArrayKey: &mut BTArrayKeyInfo = &so->arrayKeys[i];
 		ScanKey		skey = &so->keyData[curArrayKey->scan_key];
 		int			cur_elem = curArrayKey->cur_elem;
 		int			num_elems = curArrayKey->num_elems;
@@ -528,10 +528,10 @@ scan_has_skip_array(BTScanOpaque so)
 #endif
 
 static bool
-switch_to_next_range(OIndexDescr *indexDescr, OScanState *ostate,
+switch_to_next_range(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 					 MemoryContext tupleCxt)
 {
-	OBTreeKeyBound *bound;
+	bound: &mut OBTreeKeyBound;
 	IndexScanDesc scan = &ostate->scandesc;
 	BTScanOpaque so = (BTScanOpaque) scan->opaque;
 	MemoryContext oldcontext;
@@ -669,7 +669,7 @@ switch_to_next_range(OIndexDescr *indexDescr, OScanState *ostate,
 // should reopen the iterator); false otherwise.
 //
 static bool
-o_skip_arrays_observe_tuple(OIndexDescr *indexDescr, OScanState *ostate,
+o_skip_arrays_observe_tuple(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 							OTuple tup)
 {
 	IndexScanDesc scan = &ostate->scandesc;
@@ -681,7 +681,7 @@ o_skip_arrays_observe_tuple(OIndexDescr *indexDescr, OScanState *ostate,
 
 	for (int i = 0; i < so->numArrayKeys; i++)
 	{
-		BTArrayKeyInfo *array = &so->arrayKeys[i];
+		array: &mut BTArrayKeyInfo = &so->arrayKeys[i];
 		ScanKey		skey = &so->keyData[array->scan_key];
 		AttrNumber	attnum;
 		Datum		value;
@@ -728,9 +728,9 @@ o_skip_arrays_observe_tuple(OIndexDescr *indexDescr, OScanState *ostate,
 #endif
 
 OTuple
-o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
-				CommitSeqNo *tupleCsn, MemoryContext tupleCxt,
-				BTreeLocationHint *hint)
+o_iterate_index(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
+				tupleCsn: &mut CommitSeqNo, MemoryContext tupleCxt,
+				hint: &mut BTreeLocationHint)
 {
 	OTuple		tup = {0};
 	bool		tup_fetched = false;
@@ -748,7 +748,7 @@ o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
 
 	do
 	{
-		OBTreeKeyBound *bound;
+		bound: &mut OBTreeKeyBound;
 		bool		tup_is_valid = true;
 
 		if (ostate->exact)
@@ -807,7 +807,7 @@ o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
 					if (tup_is_valid && indexDescr->desc.type == oIndexExclusion)
 					{
 						TupleDesc	tupdesc;
-						OTupleFixedFormatSpec *spec;
+						spec: &mut OTupleFixedFormatSpec;
 						int			i,
 									attnum;
 						Datum		value;
@@ -818,8 +818,8 @@ o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
 
 						for (i = 0; i < indexDescr->nKeyFields; i++)
 						{
-							OBTreeKeyBound *low = &ostate->curKeyRange.low;
-							OBTreeValueBound *key = &low->keys[i];
+							low: &mut OBTreeKeyBound = &ostate->curKeyRange.low;
+							key: &mut OBTreeValueBound = &low->keys[i];
 							int			cmp;
 
 							attnum = i + 1;
@@ -903,7 +903,7 @@ o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
 
 				if (!ostate->exact && !ostate->curKeyRange.empty)
 				{
-					OBTreeKeyBound *new_bound;
+					new_bound: &mut OBTreeKeyBound;
 
 					new_bound = (ostate->scanDir == ForwardScanDirection
 								 ? &ostate->curKeyRange.low
@@ -936,11 +936,11 @@ o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
 }
 
 OTuple
-o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
-					 CommitSeqNo *tupleCsn, bool scan_primary,
-					 MemoryContext tupleCxt, BTreeLocationHint *hint)
+o_index_scan_getnext(descr: &mut OTableDescr, ostate: &mut OScanState,
+					 tupleCsn: &mut CommitSeqNo, bool scan_primary,
+					 MemoryContext tupleCxt, hint: &mut BTreeLocationHint)
 {
-	OIndexDescr *id = descr->indices[ostate->ixNum];
+	id: &mut OIndexDescr = descr->indices[ostate->ixNum];
 	OTuple		tup;
 
 	descr->noInvalidation = true;
@@ -994,7 +994,7 @@ o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
 		{
 			OBTreeKeyBound bound;
 			OTuple		ptup;
-			OIndexDescr *primary = GET_PRIMARY(descr);
+			primary: &mut OIndexDescr = GET_PRIMARY(descr);
 
 			// fetch primary index key from tuple and search raw tuple
 			o_fill_pindex_tuple_key_bound(&id->desc, tup, &bound);
@@ -1027,10 +1027,10 @@ o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
 
 // fetches next tuple for oIterateDirectModify
 TupleTableSlot *
-o_exec_fetch(OScanState *ostate, ScanState *ss)
+o_exec_fetch(ostate: &mut OScanState, ss: &mut ScanState)
 {
-	OTableDescr *descr = relation_get_descr(ss->ss_currentRelation);
-	TupleTableSlot *slot;
+	descr: &mut OTableDescr = relation_get_descr(ss->ss_currentRelation);
+	slot: &mut TupleTableSlot;
 	OTuple		tuple;
 	bool		scan_primary = ostate->ixNum == PrimaryIndexNumber ||
 		!ostate->onlyCurIx;
@@ -1067,7 +1067,7 @@ o_exec_fetch(OScanState *ostate, ScanState *ss)
 
 // checks quals for a tuple slot
 bool
-o_exec_qual(ExprContext *econtext, ExprState *qual, TupleTableSlot *slot)
+o_exec_qual(econtext: &mut ExprContext, qual: &mut ExprState, slot: &mut TupleTableSlot)
 {
 	if (qual == NULL)
 		return true;
@@ -1081,8 +1081,8 @@ o_exec_qual(ExprContext *econtext, ExprState *qual, TupleTableSlot *slot)
 // needed.
 //
 TupleTableSlot *
-o_exec_project(ProjectionInfo *projInfo, ExprContext *econtext,
-			   TupleTableSlot *scanTuple, TupleTableSlot *innerTuple)
+o_exec_project(projInfo: &mut ProjectionInfo, econtext: &mut ExprContext,
+			   scanTuple: &mut TupleTableSlot, innerTuple: &mut TupleTableSlot)
 {
 	if (!projInfo || TupIsNull(scanTuple))
 		return scanTuple;
@@ -1096,8 +1096,8 @@ o_exec_project(ProjectionInfo *projInfo, ExprContext *econtext,
 // explain analyze
 
 // initialize explain analyze counters
-void
-eanalyze_counters_init(OEACallsCounters *eacc, OTableDescr *descr)
+
+eanalyze_counters_init(eacc: &mut OEACallsCounters, descr: &mut OTableDescr)
 {
 	memset(eacc, 0, sizeof(*eacc));
 	eacc->oids = descr->oids;
@@ -1108,18 +1108,18 @@ eanalyze_counters_init(OEACallsCounters *eacc, OTableDescr *descr)
 }
 
 // adds explain analyze info for particular index
-static void
-eanalyze_counter_explain(OEACallsCounter *counter, char *label,
-						 char *ix_name, ExplainState *es)
+fn
+eanalyze_counter_explain(counter: &mut OEACallsCounter, label: &mut char,
+						 ix_name: &mut char, es: &mut ExplainState)
 {
 	StringInfoData explain;
-	char	   *fnames[EA_COUNTERS_NUM] = {"read", "lock", "evict",
+	fnames: &mut char[EA_COUNTERS_NUM] = {"read", "lock", "evict",
 	"write", "load"};
 	uint32		counts[EA_COUNTERS_NUM],
 				i;
 	bool		is_first,
 				is_null;
-	char	   *label_upcase = NULL;
+	label_upcase: &mut char = NULL;
 
 	Assert(counter != NULL);
 
@@ -1183,7 +1183,7 @@ eanalyze_counter_explain(OEACallsCounter *counter, char *label,
 				case EXPLAIN_FORMAT_XML:
 				case EXPLAIN_FORMAT_YAML:
 					{
-						char	   *fname = pstrdup(fnames[i]);
+						fname: &mut char = pstrdup(fnames[i]);
 
 						fname[0] = toupper(fname[0]);
 						ExplainPropertyUInteger(fname, NULL, counts[i], es);
@@ -1211,9 +1211,9 @@ eanalyze_counter_explain(OEACallsCounter *counter, char *label,
 }
 
 // adds explain analyze info for particular index
-void
-eanalyze_counters_explain(OTableDescr *descr, OEACallsCounters *counters,
-						  ExplainState *es)
+
+eanalyze_counters_explain(descr: &mut OTableDescr, counters: &mut OEACallsCounters,
+						  es: &mut ExplainState)
 {
 	StringInfoData label;
 	int			i;

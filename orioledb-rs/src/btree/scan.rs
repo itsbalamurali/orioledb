@@ -76,7 +76,7 @@ typedef struct
 
 struct BTreeSeqScan
 {
-	BTreeDescr *desc;
+	desc: &mut BTreeDescr;
 
 	char		leafImg[ORIOLEDB_BLCKSZ];
 	char		histImg[ORIOLEDB_BLCKSZ];
@@ -159,12 +159,12 @@ struct BTreeSeqScan
 	BTreeSeqScanStatus status;
 	MemoryContext mctx;
 
-	BTreeSeqScanDiskDownlink *diskDownlinks;
+	diskDownlinks: &mut BTreeSeqScanDiskDownlink;
 	int64		downlinksCount; // Used only for serial scan
 	int64		downlinkIndex;
 	int64		allocatedDownlinks;
 
-	BTreeIterator *iter;
+	iter: &mut BTreeIterator;
 	OTuple		iterEnd;
 
 	//
@@ -175,7 +175,7 @@ struct BTreeSeqScan
 //
 	uint32		checkpointNumber;
 
-	BTreeMetaPage *metaPageBlkno;
+	metaPageBlkno: &mut BTreeMetaPage;
 	dlist_node	listNode;
 
 	OFixedKey	nextKey;
@@ -185,8 +185,8 @@ struct BTreeSeqScan
 	BlockNumber samplingNumber;
 	BlockNumber samplingNext;
 
-	BTreeSeqScanCallbacks *cb;
-	void	   *arg;
+	cb: &mut BTreeSeqScanCallbacks;
+		   *arg;
 	bool		isSingleLeafPage;	// Scan couldn't read first internal page
 	OFixedKey	keyRangeLow,
 				keyRangeHigh;
@@ -195,7 +195,7 @@ struct BTreeSeqScan
 	// Private parallel worker info in a backend
 	ParallelOScanDesc poscan;
 	int			workerNumber;
-	dsm_segment *dsmSeg;
+	dsmSeg: &mut dsm_segment;
 
 	// Ensures scan cleanup on transaction abort or resource owner release
 	ResourceOwner resowner;
@@ -203,10 +203,10 @@ struct BTreeSeqScan
 
 static dlist_head listOfScans = DLIST_STATIC_INIT(listOfScans);
 
-static void scan_make_iterator(BTreeSeqScan *scan, OTuple startKey, OTuple keyRangeHigh);
-static void get_next_key(BTreeSeqScan *scan, BTreePageItemLocator *intLoc, OFixedKey *nextKey, Page page);
-static void ResourceOwnerRememberBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan);
-static void ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan);
+fn scan_make_iterator(scan: &mut BTreeSeqScan, OTuple startKey, OTuple keyRangeHigh);
+fn get_next_key(scan: &mut BTreeSeqScan, intLoc: &mut BTreePageItemLocator, nextKey: &mut OFixedKey, Page page);
+fn ResourceOwnerRememberBTreeSeqScan(ResourceOwner owner, scan: &mut BTreeSeqScan);
+fn ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, scan: &mut BTreeSeqScan);
 
 //
 // Resource owner integration for BTreeSeqScan.
@@ -219,8 +219,8 @@ static void ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *s
 // callback.
 //
 #if PG_VERSION_NUM >= 170000
-static void ResOwnerReleaseBTreeSeqScan(Datum res);
-static char *ResOwnerPrintBTreeSeqScan(Datum res);
+fn ResOwnerReleaseBTreeSeqScan(Datum res);
+static ResOwnerPrintBTreeSeqScan: &mut char(Datum res);
 
 static const ResourceOwnerDesc btree_seq_scan_resowner_desc =
 {
@@ -232,15 +232,15 @@ static const ResourceOwnerDesc btree_seq_scan_resowner_desc =
 };
 #endif
 
-BTreeScanShmem *btreeScanShmem;
+btreeScanShmem: &mut BTreeScanShmem;
 
 Size
-btree_scan_shmem_needs(void)
+btree_scan_shmem_needs()
 {
 	return CACHELINEALIGN(sizeof(BTreeScanShmem));
 }
 
-void
+
 btree_scan_init_shmem(Pointer ptr, bool found)
 {
 	btreeScanShmem = (BTreeScanShmem *) ptr;
@@ -272,7 +272,7 @@ btree_scan_init_shmem(Pointer ptr, bool found)
 // bitmap fetch layer rechecks each tuple, so over-reading the range is safe).
 //
 static inline bool
-seq_leaf_partial_ensure(BTreeSeqScan *scan, Page p, BTreePageItemLocator *loc)
+seq_leaf_partial_ensure(scan: &mut BTreeSeqScan, Page p, loc: &mut BTreePageItemLocator)
 {
 	if (!scan->leafPartial.isPartial || p != scan->leafImg)
 		return true;
@@ -292,7 +292,7 @@ seq_leaf_partial_ensure(BTreeSeqScan *scan, Page p, BTreePageItemLocator *loc)
 // scan->intPartialFailed and returns false on a concurrent modification.
 //
 static inline bool
-seq_int_partial_ensure_hikeys(BTreeSeqScan *scan)
+seq_int_partial_ensure_hikeys(scan: &mut BTreeSeqScan)
 {
 	if (!scan->context.partial.isPartial ||
 		scan->context.partial.hikeysChunkIsLoaded)
@@ -313,7 +313,7 @@ seq_int_partial_ensure_hikeys(BTreeSeqScan *scan)
 // Sets scan->intPartialFailed and returns false on a concurrent modification.
 //
 static inline bool
-seq_int_partial_ensure(BTreeSeqScan *scan, BTreePageItemLocator *loc)
+seq_int_partial_ensure(scan: &mut BTreeSeqScan, loc: &mut BTreePageItemLocator)
 {
 	if (!scan->context.partial.isPartial)
 		return true;
@@ -327,10 +327,10 @@ seq_int_partial_ensure(BTreeSeqScan *scan, BTreePageItemLocator *loc)
 	return true;
 }
 
-static void
-load_first_historical_page(BTreeSeqScan *scan)
+fn
+load_first_historical_page(scan: &mut BTreeSeqScan)
 {
-	BTreePageHeader *header = (BTreePageHeader *) scan->leafImg;
+	header: &mut BTreePageHeader = (BTreePageHeader *) scan->leafImg;
 	Pointer		key = NULL;
 	BTreeKeyType kind = BTreeKeyNone;
 	OFixedKey	lokey,
@@ -349,7 +349,7 @@ load_first_historical_page(BTreeSeqScan *scan)
 
 	//
 // Seed histImg with the live page: differential page-level undo images
-// (UndoPageImage*Diff) reconstruct the historical page by transforming
+// (Diff: &mut UndoPageImage) reconstruct the historical page by transforming
 // the newer page in place, so the chain walk must start from the live
 // page.
 //
@@ -366,7 +366,7 @@ load_first_historical_page(BTreeSeqScan *scan)
 					 errmsg("snapshot too old")));
 		}
 
-		(void) get_page_from_undo(scan->desc, header->undoLocation, key, kind,
+		() get_page_from_undo(scan->desc, header->undoLocation, key, kind,
 								  scan->histImg, NULL, NULL, NULL,
 								  lokeyPtr, &hikey.tuple);
 
@@ -390,11 +390,11 @@ load_first_historical_page(BTreeSeqScan *scan)
 
 	if (!O_TUPLE_IS_NULL(lokey.tuple))
 	{
-		(void) btree_page_search(scan->desc, scan->histImg,
+		() btree_page_search(scan->desc, scan->histImg,
 								 (Pointer) &lokey.tuple,
 								 BTreeKeyNonLeafKey, NULL,
 								 &scan->histLoc);
-		(void) page_locator_find_real_item(scan->histImg, NULL, &scan->histLoc);
+		() page_locator_find_real_item(scan->histImg, NULL, &scan->histLoc);
 	}
 	else
 	{
@@ -403,10 +403,10 @@ load_first_historical_page(BTreeSeqScan *scan)
 
 }
 
-static void
-load_next_historical_page(BTreeSeqScan *scan)
+fn
+load_next_historical_page(scan: &mut BTreeSeqScan)
 {
-	BTreePageHeader *header = (BTreePageHeader *) scan->leafImg;
+	header: &mut BTreePageHeader = (BTreePageHeader *) scan->leafImg;
 	OFixedKey	prevHikey;
 
 	copy_fixed_hikey(scan->desc, &prevHikey, scan->histImg);
@@ -430,7 +430,7 @@ load_next_historical_page(BTreeSeqScan *scan)
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("snapshot too old")));
 		}
-		(void) get_page_from_undo(scan->desc, header->undoLocation,
+		() get_page_from_undo(scan->desc, header->undoLocation,
 								  (Pointer) &prevHikey.tuple, BTreeKeyNonLeafKey,
 								  scan->histImg, NULL, NULL, NULL,
 								  NULL, NULL);
@@ -440,17 +440,17 @@ load_next_historical_page(BTreeSeqScan *scan)
 }
 
 static Jsonb *
-btree_lokey_stopevent_params(BTreeDescr *desc, OTuple lokey,
+btree_lokey_stopevent_params(desc: &mut BTreeDescr, OTuple lokey,
 							 bool prevIsLeftmostOrNone)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 	btree_desc_stopevent_params_internal(desc, &state);
 	jsonb_push_key(&state, "lokey");
-	(void) o_btree_key_to_jsonb(desc, lokey, &state);
+	() o_btree_key_to_jsonb(desc, lokey, &state);
 	jsonb_push_bool_key(&state, "prevIsLeftmostOrNone", prevIsLeftmostOrNone);
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
@@ -465,10 +465,10 @@ btree_lokey_stopevent_params(BTreeDescr *desc, OTuple lokey,
 // a page in a shared state and updating prevHikey.
 //
 static bool
-load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
+load_next_internal_page(scan: &mut BTreeSeqScan, OTuple prevHikey,
 						Page page,
-						BTreePageItemLocator *intLoc,
-						OffsetNumber *startOffset,
+						intLoc: &mut BTreePageItemLocator,
+						startOffset: &mut OffsetNumber,
 						const bool prevIsLeftmostOrNone,
 						bool isBitmapJump)
 {
@@ -633,8 +633,8 @@ load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
 	return has_next;
 }
 
-static void
-add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
+fn
+add_on_disk_downlink(scan: &mut BTreeSeqScan, uint64 downlink, CommitSeqNo csn)
 {
 	ParallelOScanDesc poscan = scan->poscan;
 
@@ -657,7 +657,7 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 		while (true)
 		{
 			uint64		index;
-			BTreeSeqScanDiskDownlink *shared;
+			shared: &mut BTreeSeqScanDiskDownlink;
 
 			LWLockAcquire(&poscan->downlinksPublish, LW_SHARED);
 
@@ -690,7 +690,7 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 			// Re-check: another worker may have already grown it
 			if (poscan->dsmAllocated <= (uint64) index)
 			{
-				dsm_segment *newSeg;
+				newSeg: &mut dsm_segment;
 				uint64		newAllocated = poscan->dsmAllocated * 2;
 				uint64		oldCount = pg_atomic_read_u64(&poscan->downlinksCount);
 
@@ -724,7 +724,7 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 }
 
 static int
-cmp_downlinks(const void *p1, const void *p2)
+cmp_downlinks(p1: &mut const, p2: &mut const)
 {
 	uint64		d1 = ((BTreeSeqScanDiskDownlink *) p1)->downlink;
 	uint64		d2 = ((BTreeSeqScanDiskDownlink *) p2)->downlink;
@@ -737,8 +737,8 @@ cmp_downlinks(const void *p1, const void *p2)
 		return 1;
 }
 
-static void
-switch_to_disk_scan(BTreeSeqScan *scan)
+fn
+switch_to_disk_scan(scan: &mut BTreeSeqScan)
 {
 	ParallelOScanDesc poscan = scan->poscan;
 
@@ -818,8 +818,8 @@ switch_to_disk_scan(BTreeSeqScan *scan)
 // downlink or hikey of internal page hikey if we're considering the last
 // downlink.
 //
-static void
-scan_make_iterator(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRangeHigh)
+fn
+scan_make_iterator(scan: &mut BTreeSeqScan, OTuple keyRangeLow, OTuple keyRangeHigh)
 {
 	MemoryContext mctx;
 
@@ -847,16 +847,16 @@ scan_make_iterator(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRangeHigh)
 }
 
 // Output item downlink and key using provided page and current locator
-static void
-get_current_downlink_key(BTreeSeqScan *scan,
-						 BTreePageItemLocator *loc,
+fn
+get_current_downlink_key(scan: &mut BTreeSeqScan,
+						 loc: &mut BTreePageItemLocator,
 						 OffsetNumber startOffset,
 						 OTuple prevHiKey,
-						 OFixedKey *curKey,
-						 uint64 *downlink,
+						 curKey: &mut OFixedKey,
+						 downlink: &mut uint64,
 						 Page page)
 {
-	BTreeNonLeafTuphdr *tuphdr;
+	tuphdr: &mut BTreeNonLeafTuphdr;
 	OTuple		tuple;
 
 	//
@@ -898,8 +898,8 @@ get_current_downlink_key(BTreeSeqScan *scan,
 }
 
 // Output next key and locator on a provided internal page
-static void
-get_next_key(BTreeSeqScan *scan, BTreePageItemLocator *intLoc, OFixedKey *nextKey, Page page)
+fn
+get_next_key(scan: &mut BTreeSeqScan, intLoc: &mut BTreePageItemLocator, nextKey: &mut OFixedKey, Page page)
 {
 	BTREE_PAGE_LOCATOR_NEXT(page, intLoc);
 	if (BTREE_PAGE_LOCATOR_IS_VALID(page, intLoc))
@@ -937,9 +937,9 @@ get_next_key(BTreeSeqScan *scan, BTreePageItemLocator *intLoc, OFixedKey *nextKe
 // is then unusable and the next get_next_downlink() call re-reads the page whole
 // before touching it.
 //
-static void
-internal_skip_to_next_key(BTreeSeqScan *scan, Page page,
-						  BTreePageItemLocator *intLoc, OTuple boundary)
+fn
+internal_skip_to_next_key(scan: &mut BTreeSeqScan, Page page,
+						  intLoc: &mut BTreePageItemLocator, OTuple boundary)
 {
 	OFixedKey	probe;
 
@@ -1001,8 +1001,8 @@ internal_skip_to_next_key(BTreeSeqScan *scan, Page page,
 // current internal page.
 //
 static bool
-get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
-				  OFixedKey *keyRangeLow, OFixedKey *keyRangeHigh)
+get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
+				  keyRangeLow: &mut OFixedKey, keyRangeHigh: &mut OFixedKey)
 {
 	ParallelOScanDesc poscan = scan->poscan;
 
@@ -1193,8 +1193,8 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 		// Parallel case
 		while (true)
 		{
-			BTreeIntPageParallelData *curPage;
-			BTreeIntPageParallelData *nextPage;
+			curPage: &mut BTreeIntPageParallelData;
+			nextPage: &mut BTreeIntPageParallelData;
 			BTreePageItemLocator loc;
 
 			SpinLockAcquire(&poscan->intpageAccess);
@@ -1340,8 +1340,8 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 // Hikey of leaf page should match to next downlink or internal page hikey if
 // we're considering the last downlink.
 //
-static void
-check_in_memory_leaf_page(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRangeHigh)
+fn
+check_in_memory_leaf_page(scan: &mut BTreeSeqScan, OTuple keyRangeLow, OTuple keyRangeHigh)
 {
 	OTuple		leafHikey;
 	bool		result = false;
@@ -1380,7 +1380,7 @@ check_in_memory_leaf_page(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRang
 // - Reached the end of internal page.
 //
 static bool
-iterate_internal_page(BTreeSeqScan *scan)
+iterate_internal_page(scan: &mut BTreeSeqScan)
 {
 	uint64		downlink = 0;
 
@@ -1418,7 +1418,7 @@ iterate_internal_page(BTreeSeqScan *scan)
 			else if (DOWNLINK_IS_IN_MEMORY(downlink))
 			{
 				ReadPageResult result;
-				PartialPageState *leafPartial = NULL;
+				leafPartial: &mut PartialPageState = NULL;
 
 				if (scan->poscan)
 					pg_atomic_fetch_sub_u32(&scan->poscan->downlinksWritersInProgress, 1);
@@ -1529,11 +1529,11 @@ iterate_internal_page(BTreeSeqScan *scan)
 }
 
 static bool
-load_next_disk_leaf_page(BTreeSeqScan *scan)
+load_next_disk_leaf_page(scan: &mut BTreeSeqScan)
 {
 	FileExtent	extent;
 	bool		success;
-	BTreePageHeader *header;
+	header: &mut BTreePageHeader;
 	BTreeSeqScanDiskDownlink downlink;
 	ParallelOScanDesc poscan = scan->poscan;
 
@@ -1595,7 +1595,7 @@ load_next_disk_leaf_page(BTreeSeqScan *scan)
 }
 
 static inline bool
-single_leaf_page_rel(BTreeSeqScan *scan)
+single_leaf_page_rel(scan: &mut BTreeSeqScan)
 {
 	if (scan->poscan)
 		return (scan->poscan->flags & O_PARALLEL_IS_SINGLE_LEAF_PAGE) != 0;
@@ -1603,14 +1603,14 @@ single_leaf_page_rel(BTreeSeqScan *scan)
 		return scan->isSingleLeafPage;
 }
 
-static void
-init_checkpoit_number(BTreeSeqScan *scan)
+fn
+init_checkpoit_number(scan: &mut BTreeSeqScan)
 {
 	uint32		checkpointNumberBefore,
 				checkpointNumberAfter;
 	bool		checkpointConcurrent;
-	BTreeMetaPage *metaPage;
-	BTreeDescr *desc = scan->desc;
+	metaPage: &mut BTreeMetaPage;
+	desc: &mut BTreeDescr = scan->desc;
 
 	o_btree_load_shmem(scan->desc);
 	metaPage = BTREE_GET_META(scan->desc);
@@ -1627,7 +1627,7 @@ init_checkpoit_number(BTreeSeqScan *scan)
 													   &checkpointConcurrent);
 	while (true)
 	{
-		(void) pg_atomic_fetch_add_u32(&metaPage->numSeqScans[checkpointNumberBefore % NUM_SEQ_SCANS_ARRAY_SIZE], 1);
+		() pg_atomic_fetch_add_u32(&metaPage->numSeqScans[checkpointNumberBefore % NUM_SEQ_SCANS_ARRAY_SIZE], 1);
 		checkpointNumberAfter = get_cur_checkpoint_number(&desc->oids,
 														  desc->type,
 														  &checkpointConcurrent);
@@ -1637,18 +1637,18 @@ init_checkpoit_number(BTreeSeqScan *scan)
 			scan->checkpointNumberSet = true;
 			break;
 		}
-		(void) pg_atomic_fetch_sub_u32(&metaPage->numSeqScans[checkpointNumberBefore % NUM_SEQ_SCANS_ARRAY_SIZE], 1);
+		() pg_atomic_fetch_sub_u32(&metaPage->numSeqScans[checkpointNumberBefore % NUM_SEQ_SCANS_ARRAY_SIZE], 1);
 		checkpointNumberBefore = checkpointNumberAfter;
 	}
 	END_CRIT_SECTION();
 }
 
-static void
-init_btree_seq_scan(BTreeSeqScan *scan)
+fn
+init_btree_seq_scan(scan: &mut BTreeSeqScan)
 {
 	ParallelOScanDesc poscan = scan->poscan;
 	BlockSampler sampler = scan->sampler;
-	BTreeDescr *desc = scan->desc;
+	desc: &mut BTreeDescr = scan->desc;
 
 	if (poscan)
 	{
@@ -1763,11 +1763,11 @@ init_btree_seq_scan(BTreeSeqScan *scan)
 }
 
 static BTreeSeqScan *
-make_btree_seq_scan_internal(BTreeDescr *desc, OSnapshot *oSnapshot,
-							 BTreeSeqScanCallbacks *cb, void *arg,
+make_btree_seq_scan_internal(desc: &mut BTreeDescr, oSnapshot: &mut OSnapshot,
+							 cb: &mut BTreeSeqScanCallbacks,  *arg,
 							 BlockSampler sampler, ParallelOScanDesc poscan)
 {
-	BTreeSeqScan *scan = (BTreeSeqScan *) MemoryContextAlloc(btree_seqscan_context,
+	scan: &mut BTreeSeqScan = (BTreeSeqScan *) MemoryContextAlloc(btree_seqscan_context,
 															 sizeof(BTreeSeqScan));
 
 	scan->poscan = poscan;
@@ -1822,29 +1822,29 @@ make_btree_seq_scan_internal(BTreeDescr *desc, OSnapshot *oSnapshot,
 }
 
 BTreeSeqScan *
-make_btree_seq_scan(BTreeDescr *desc, OSnapshot *oSnapshot, void *poscan)
+make_btree_seq_scan(desc: &mut BTreeDescr, oSnapshot: &mut OSnapshot,  *poscan)
 {
 	return make_btree_seq_scan_internal(desc, oSnapshot, NULL, NULL, NULL, poscan);
 }
 
 BTreeSeqScan *
-make_btree_seq_scan_cb(BTreeDescr *desc, OSnapshot *oSnapshot,
-					   BTreeSeqScanCallbacks *cb, void *arg)
+make_btree_seq_scan_cb(desc: &mut BTreeDescr, oSnapshot: &mut OSnapshot,
+					   cb: &mut BTreeSeqScanCallbacks,  *arg)
 {
 	return make_btree_seq_scan_internal(desc, oSnapshot, cb, arg, NULL, NULL);
 }
 
 BTreeSeqScan *
-make_btree_sampling_scan(BTreeDescr *desc, BlockSampler sampler)
+make_btree_sampling_scan(desc: &mut BTreeDescr, BlockSampler sampler)
 {
 	return make_btree_seq_scan_internal(desc, &o_in_progress_snapshot,
 										NULL, NULL, sampler, NULL);
 }
 
 static OTuple
-btree_seq_scan_get_tuple_from_iterator(BTreeSeqScan *scan,
-									   CommitSeqNo *tupleCsn,
-									   BTreeLocationHint *hint)
+btree_seq_scan_get_tuple_from_iterator(scan: &mut BTreeSeqScan,
+									   tupleCsn: &mut CommitSeqNo,
+									   hint: &mut BTreeLocationHint)
 {
 	OTuple		result;
 
@@ -1882,11 +1882,11 @@ btree_seq_scan_get_tuple_from_iterator(BTreeSeqScan *scan,
 }
 
 static bool
-adjust_location_with_next_key(BTreeSeqScan *scan,
-							  Page p, BTreePageItemLocator *loc)
+adjust_location_with_next_key(scan: &mut BTreeSeqScan,
+							  Page p, loc: &mut BTreePageItemLocator)
 {
-	BTreeDescr *desc = scan->desc;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	desc: &mut BTreeDescr = scan->desc;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	int			cmp;
 	OTuple		key;
 
@@ -1947,10 +1947,10 @@ adjust_location_with_next_key(BTreeSeqScan *scan,
 	return false;
 }
 
-static void
-apply_next_key(BTreeSeqScan *scan)
+fn
+apply_next_key(scan: &mut BTreeSeqScan)
 {
-	BTreeDescr *desc = scan->desc;
+	desc: &mut BTreeDescr = scan->desc;
 
 	Assert(BTREE_PAGE_LOCATOR_IS_VALID(scan->leafImg, &scan->leafLoc) ||
 		   (scan->haveHistImg && BTREE_PAGE_LOCATOR_IS_VALID(scan->histImg, &scan->histLoc)));
@@ -2020,8 +2020,8 @@ apply_next_key(BTreeSeqScan *scan)
 }
 
 static OTuple
-btree_seq_scan_getnext_internal(BTreeSeqScan *scan, MemoryContext mctx,
-								CommitSeqNo *tupleCsn, BTreeLocationHint *hint)
+btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
+								tupleCsn: &mut CommitSeqNo, hint: &mut BTreeLocationHint)
 {
 	OTuple		tuple;
 
@@ -2092,7 +2092,7 @@ btree_seq_scan_getnext_internal(BTreeSeqScan *scan, MemoryContext mctx,
 			}
 			else
 			{
-				BTreeLeafTuphdr *tuphdr;
+				tuphdr: &mut BTreeLeafTuphdr;
 				OTuple		leafTuple;
 				int			cmp;
 
@@ -2240,8 +2240,8 @@ btree_seq_scan_getnext_internal(BTreeSeqScan *scan, MemoryContext mctx,
 }
 
 OTuple
-btree_seq_scan_getnext(BTreeSeqScan *scan, MemoryContext mctx,
-					   CommitSeqNo *tupleCsn, BTreeLocationHint *hint)
+btree_seq_scan_getnext(scan: &mut BTreeSeqScan, MemoryContext mctx,
+					   tupleCsn: &mut CommitSeqNo, hint: &mut BTreeLocationHint)
 {
 	OTuple		tuple;
 
@@ -2264,9 +2264,9 @@ btree_seq_scan_getnext(BTreeSeqScan *scan, MemoryContext mctx,
 }
 
 static OTuple
-btree_seq_scan_get_tuple_from_iterator_raw(BTreeSeqScan *scan,
-										   bool *end,
-										   BTreeLocationHint *hint)
+btree_seq_scan_get_tuple_from_iterator_raw(scan: &mut BTreeSeqScan,
+										   end: &mut bool,
+										   hint: &mut BTreeLocationHint)
 {
 	OTuple		result;
 
@@ -2287,10 +2287,10 @@ btree_seq_scan_get_tuple_from_iterator_raw(BTreeSeqScan *scan,
 }
 
 static OTuple
-btree_seq_scan_getnext_raw_internal(BTreeSeqScan *scan, MemoryContext mctx,
-									BTreeLocationHint *hint)
+btree_seq_scan_getnext_raw_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
+									hint: &mut BTreeLocationHint)
 {
-	BTreeLeafTuphdr *tupHdr;
+	tupHdr: &mut BTreeLeafTuphdr;
 	OTuple		tuple;
 
 	if (scan->iter)
@@ -2352,8 +2352,8 @@ btree_seq_scan_getnext_raw_internal(BTreeSeqScan *scan, MemoryContext mctx,
 }
 
 OTuple
-btree_seq_scan_getnext_raw(BTreeSeqScan *scan, MemoryContext mctx,
-						   bool *end, BTreeLocationHint *hint)
+btree_seq_scan_getnext_raw(scan: &mut BTreeSeqScan, MemoryContext mctx,
+						   end: &mut bool, hint: &mut BTreeLocationHint)
 {
 	OTuple		tuple;
 
@@ -2383,10 +2383,10 @@ btree_seq_scan_getnext_raw(BTreeSeqScan *scan, MemoryContext mctx,
 // and completes deferred meta page free if this was the last scan.  Called
 // from both the normal free path and the resource owner release callback.
 //
-static void
-free_btree_seq_scan_internal(BTreeSeqScan *scan, bool fromResowner)
+fn
+free_btree_seq_scan_internal(scan: &mut BTreeSeqScan, bool fromResowner)
 {
-	BTreeDescr *desc = scan->desc;
+	desc: &mut BTreeDescr = scan->desc;
 
 	START_CRIT_SECTION();
 
@@ -2398,9 +2398,9 @@ free_btree_seq_scan_internal(BTreeSeqScan *scan, bool fromResowner)
 
 	if (scan->checkpointNumberSet && OInMemoryBlknoIsValid(desc->rootInfo.metaPageBlkno))
 	{
-		BTreeMetaPage *metaPage = BTREE_GET_META(scan->desc);
+		metaPage: &mut BTreeMetaPage = BTREE_GET_META(scan->desc);
 
-		(void) pg_atomic_fetch_sub_u32(&metaPage->numSeqScans[scan->checkpointNumber % NUM_SEQ_SCANS_ARRAY_SIZE], 1);
+		() pg_atomic_fetch_sub_u32(&metaPage->numSeqScans[scan->checkpointNumber % NUM_SEQ_SCANS_ARRAY_SIZE], 1);
 
 		// Complete deferred meta page free if this was the last scan.
 		if (metaPage->toBeFreedOnSeqScanRelease && meta_page_get_num_seq_scans(desc->rootInfo.metaPageBlkno) == 0)
@@ -2447,8 +2447,8 @@ free_btree_seq_scan_internal(BTreeSeqScan *scan, bool fromResowner)
 	END_CRIT_SECTION();
 }
 
-void
-free_btree_seq_scan(BTreeSeqScan *scan)
+
+free_btree_seq_scan(scan: &mut BTreeSeqScan)
 {
 	free_btree_seq_scan_internal(scan, false);
 }
@@ -2458,13 +2458,13 @@ free_btree_seq_scan(BTreeSeqScan *scan)
 // aren't cleaned up individually.  Thus, we have to walk through all the scans
 // and revert changes made to the metaPageBlkno->numSeqScans.
 //
-void
-seq_scans_cleanup(void)
+
+seq_scans_cleanup()
 {
 	START_CRIT_SECTION();
 	while (!dlist_is_empty(&listOfScans))
 	{
-		BTreeSeqScan *scan = dlist_head_element(BTreeSeqScan, listNode, &listOfScans);
+		scan: &mut BTreeSeqScan = dlist_head_element(BTreeSeqScan, listNode, &listOfScans);
 
 		free_btree_seq_scan_internal(scan, false);
 	}
@@ -2478,7 +2478,7 @@ seq_scans_cleanup(void)
 int
 meta_page_get_num_seq_scans(OInMemoryBlkno metaPageBlkno)
 {
-	BTreeMetaPage *metaPage = (BTreeMetaPage *) O_GET_IN_MEMORY_PAGE(metaPageBlkno);
+	metaPage: &mut BTreeMetaPage = (BTreeMetaPage *) O_GET_IN_MEMORY_PAGE(metaPageBlkno);
 	int			result = 0;
 	int			i;
 
@@ -2490,21 +2490,21 @@ meta_page_get_num_seq_scans(OInMemoryBlkno metaPageBlkno)
 
 #if PG_VERSION_NUM >= 170000
 
-static void
-ResourceOwnerRememberBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan)
+fn
+ResourceOwnerRememberBTreeSeqScan(ResourceOwner owner, scan: &mut BTreeSeqScan)
 {
 	ResourceOwnerRemember(owner, PointerGetDatum(scan), &btree_seq_scan_resowner_desc);
 }
-static void
-ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan)
+fn
+ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, scan: &mut BTreeSeqScan)
 {
 	ResourceOwnerForget(owner, PointerGetDatum(scan), &btree_seq_scan_resowner_desc);
 }
 
-static void
+fn
 ResOwnerReleaseBTreeSeqScan(Datum res)
 {
-	BTreeSeqScan *scan = (BTreeSeqScan *) DatumGetPointer(res);
+	scan: &mut BTreeSeqScan = (BTreeSeqScan *) DatumGetPointer(res);
 
 	scan->resowner = NULL;
 	free_btree_seq_scan_internal(scan, true);
@@ -2513,7 +2513,7 @@ ResOwnerReleaseBTreeSeqScan(Datum res)
 static char *
 ResOwnerPrintBTreeSeqScan(Datum res)
 {
-	BTreeSeqScan *scan = (BTreeSeqScan *) DatumGetPointer(res);
+	scan: &mut BTreeSeqScan = (BTreeSeqScan *) DatumGetPointer(res);
 	ORelOids	oids = scan->desc->oids;
 
 	return psprintf("OrioleDB BTreeSeqScans (%u, %u, %u)",
@@ -2528,11 +2528,11 @@ ResOwnerPrintBTreeSeqScan(Datum res)
 // ResourceOwner release, so it filters by scan->resowner to only free the
 // scan when its own binding owner is being released.
 //
-static void
+fn
 ResOwnerReleaseBTreeSeqScanCallback(ResourceReleasePhase phase,
-									bool isCommit, bool isTopLevel, void *arg)
+									bool isCommit, bool isTopLevel,  *arg)
 {
-	BTreeSeqScan *scan = (BTreeSeqScan *) arg;
+	scan: &mut BTreeSeqScan = (BTreeSeqScan *) arg;
 
 	if (phase != RESOURCE_RELEASE_BEFORE_LOCKS)
 		return;
@@ -2554,14 +2554,14 @@ ResOwnerReleaseBTreeSeqScanCallback(ResourceReleasePhase phase,
 	free_btree_seq_scan_internal(scan, true);
 }
 
-static void
-ResourceOwnerRememberBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan)
+fn
+ResourceOwnerRememberBTreeSeqScan(ResourceOwner owner, scan: &mut BTreeSeqScan)
 {
 	RegisterResourceReleaseCallback(ResOwnerReleaseBTreeSeqScanCallback, scan);
 }
 
-static void
-ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan)
+fn
+ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, scan: &mut BTreeSeqScan)
 {
 	UnregisterResourceReleaseCallback(ResOwnerReleaseBTreeSeqScanCallback, scan);
 }

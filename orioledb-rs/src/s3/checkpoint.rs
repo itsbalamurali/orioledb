@@ -82,7 +82,7 @@ static S3TaskLocation maxLocation;
 //
 struct exclude_list_item
 {
-	const char *name;
+	const name: &mut char;
 	bool		match_prefix;
 };
 
@@ -94,7 +94,7 @@ struct exclude_list_item
 // Note: this list should be kept in sync with the filter lists in pg_rewind's
 // filemap.c.
 //
-static const char *const excludeDirContents[] =
+static const const: &mut char excludeDirContents[] =
 {
 	//
 // Skip temporary statistics files. PG_STAT_TMP_DIR must be skipped
@@ -163,7 +163,7 @@ static const struct exclude_list_item excludeFiles[] =
 
 	//
 // If there's a backup_manifest, it belongs to a backup that was used to
-// start this server. It is *not* correct for this backup. Our
+// start this server. It not: &mut is* correct for this backup. Our
 // backup_manifest is injected into the backup separately if users want
 // it.
 //
@@ -183,21 +183,21 @@ static const struct exclude_list_item excludeFiles[] =
 //
 typedef struct
 {
-	char	   *oid;			// tablespace's OID, as a decimal string
-	char	   *path;			// full path to tablespace's directory
-	char	   *rpath;			// relative path if it's within PGDATA, else
+	oid: &mut char;			// tablespace's OID, as a decimal string
+	path: &mut char;			// full path to tablespace's directory
+	rpath: &mut char;			// relative path if it's within PGDATA, else
 // NULL
 	int64		size;			// total size as sent; -1 if not known
 } tablespaceinfo;
 
 typedef struct
 {
-	List	   *tablespaces;
-	List	   *smallFileNames;
-	List	   *smallFileSizes;
+	tablespaces: &mut List;
+	smallFileNames: &mut List;
+	smallFileSizes: &mut List;
 	int			smallFilesTotalSize;
 	int			smallFilesNum;
-	S3ChecksumState *checksumState;
+	checksumState: &mut S3ChecksumState;
 	uint32		chkpNum;
 } S3BackupState;
 
@@ -208,14 +208,14 @@ typedef struct
 #define SMALL_FILE_CHECKSUMS_FILENAME	ORIOLEDB_DATA_DIR "/small_file_checksums"
 #define SMALL_FILE_CHECKSUMS_TMP_FILENAME	SMALL_FILE_CHECKSUMS_FILENAME ".0"
 
-static S3TaskLocation flush_small_files(S3BackupState *state);
-static S3TaskLocation accumulate_small_file(S3BackupState *state,
-											const char *path,
+static S3TaskLocation flush_small_files(state: &mut S3BackupState);
+static S3TaskLocation accumulate_small_file(state: &mut S3BackupState,
+											const path: &mut char,
 											int size);
-static int64 s3_backup_scan_dir(S3BackupState *state,
-								const char *path, int basepathlen,
-								const char *spcoid);
-static List *get_tablespaces(StringInfo tblspcmapfile);
+static int64 s3_backup_scan_dir(state: &mut S3BackupState,
+								const path: &mut char, int basepathlen,
+								const spcoid: &mut char);
+static get_tablespaces: &mut List(StringInfo tblspcmapfile);
 
 //
 // Actually do a base backup for the specified tablespaces.
@@ -223,15 +223,15 @@ static List *get_tablespaces(StringInfo tblspcmapfile);
 // This is split out mainly to avoid complaints about "variable might be
 // clobbered by longjmp" from stupider versions of gcc.
 //
-void
+
 s3_perform_backup(int flags, S3TaskLocation maxLocation)
 {
 	uint32		chkpNum = checkpoint_state->lastCheckpointNumber;
 	S3BackupState state;
 	StringInfoData tablespaceMapData;
-	ListCell   *lc;
-	tablespaceinfo *newti;
-	S3FileChecksum *fileChecksums;
+	lc: &mut ListCell;
+	newti: &mut tablespaceinfo;
+	fileChecksums: &mut S3FileChecksum;
 	S3TaskLocation location;
 
 	backup_started_in_recovery = RecoveryInProgress();
@@ -267,11 +267,11 @@ s3_perform_backup(int flags, S3TaskLocation maxLocation)
 	// Send off our tablespaces one by one
 	foreach(lc, state.tablespaces)
 	{
-		tablespaceinfo *ti = (tablespaceinfo *) lfirst(lc);
+		ti: &mut tablespaceinfo = (tablespaceinfo *) lfirst(lc);
 
 		if (ti->path == NULL)
 		{
-			char	   *xidFilename;
+			xidFilename: &mut char;
 
 			// Then the bulk of the files...
 			s3_backup_scan_dir(&state, ".", 1, NULL);
@@ -314,15 +314,15 @@ s3_perform_backup(int flags, S3TaskLocation maxLocation)
 }
 
 static int64
-s3_backup_scan_dir(S3BackupState *state, const char *path,
-				   int basepathlen, const char *spcoid)
+s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
+				   int basepathlen, const spcoid: &mut char)
 {
-	DIR		   *dir;
-	struct dirent *de;
+	dir: &mut DIR;
+	struct de: &mut dirent;
 	char		pathbuf[MAXPGPATH * 2];
 	struct stat statbuf;
 	int64		size = 0;
-	const char *lastDir = NULL; // Split last dir from parent path.
+	const lastDir: &mut char = NULL; // Split last dir from parent path.
 	bool		isDbDir = false;	// Does this directory contain relations?
 
 	Assert(path != NULL);
@@ -556,7 +556,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 		else if (S_ISDIR(statbuf.st_mode))
 		{
 			bool		skip_this_dir = false;
-			ListCell   *lc;
+			lc: &mut ListCell;
 			S3TaskLocation location;
 
 			location = s3_schedule_empty_dir_write(state->chkpNum, pathbuf);
@@ -568,7 +568,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 //
 			foreach(lc, state->tablespaces)
 			{
-				tablespaceinfo *ti = (tablespaceinfo *) lfirst(lc);
+				ti: &mut tablespaceinfo = (tablespaceinfo *) lfirst(lc);
 
 				//
 // ti->rpath is the tablespace relative path within PGDATA, or
@@ -620,11 +620,11 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 static List *
 get_tablespaces(StringInfo tblspcmapfile)
 {
-	DIR		   *tblspcdir;
-	struct dirent *de;
-	tablespaceinfo *ti;
+	tblspcdir: &mut DIR;
+	struct de: &mut dirent;
+	ti: &mut tablespaceinfo;
 	int			datadirpathlen;
-	List	   *tablespaces = NIL;
+	tablespaces: &mut List = NIL;
 
 	//
 // Construct tablespace_map file.
@@ -637,8 +637,8 @@ get_tablespaces(StringInfo tblspcmapfile)
 	{
 		char		fullpath[MAXPGPATH + 10];
 		char		linkpath[MAXPGPATH];
-		char	   *relpath = NULL;
-		char	   *s;
+		relpath: &mut char = NULL;
+		s: &mut char;
 		PGFileType	de_type;
 
 		// Skip anything that doesn't look like a tablespace
@@ -729,8 +729,8 @@ get_tablespaces(StringInfo tblspcmapfile)
 	return tablespaces;
 }
 
-static void
-write_int(File file, char *filename, int offset, int value)
+fn
+write_int(File file, filename: &mut char, int offset, int value)
 {
 	if (FileWrite(file, (char *) &value, sizeof(value), offset, WAIT_EVENT_DATA_FILE_WRITE) != sizeof(value))
 		ereport(ERROR,
@@ -739,8 +739,8 @@ write_int(File file, char *filename, int offset, int value)
 						filename)));
 }
 
-static void
-write_data(File file, char *filename, int offset, Pointer ptr, int length)
+fn
+write_data(File file, filename: &mut char, int offset, Pointer ptr, int length)
 {
 	if (FileWrite(file, ptr, length, offset, WAIT_EVENT_DATA_FILE_WRITE) != length)
 		ereport(ERROR,
@@ -750,7 +750,7 @@ write_data(File file, char *filename, int offset, Pointer ptr, int length)
 }
 
 static Pointer
-read_small_file(const char *filename, int size)
+read_small_file(const filename: &mut char, int size)
 {
 	File		file;
 	Pointer		buffer;
@@ -776,15 +776,15 @@ read_small_file(const char *filename, int size)
 }
 
 static S3TaskLocation
-flush_small_files(S3BackupState *state)
+flush_small_files(state: &mut S3BackupState)
 {
-	ListCell   *lc,
+	lc: &mut ListCell,
 			   *lc2;
 	int			totalNamesLen = 0;
 	int			offset = 0;
 	int			nameOffset;
 	int			dataOffset;
-	char	   *filename;
+	filename: &mut char;
 	File		file;
 	S3TaskLocation location;
 
@@ -853,7 +853,7 @@ flush_small_files(S3BackupState *state)
 }
 
 static S3TaskLocation
-accumulate_small_file(S3BackupState *state, const char *path, int size)
+accumulate_small_file(state: &mut S3BackupState, const path: &mut char, int size)
 {
 	int			sizeRequired = 3 * sizeof(int) + strlen(path) + 1 + size;
 	S3TaskLocation location = 0;
@@ -865,7 +865,7 @@ accumulate_small_file(S3BackupState *state, const char *path, int size)
 
 	if (data != NULL)
 	{
-		S3FileChecksum *entry;
+		entry: &mut S3FileChecksum;
 
 		if (state->checksumState->fileChecksumsLen == state->checksumState->fileChecksumsMaxLen)
 			flushS3ChecksumState(state->checksumState,

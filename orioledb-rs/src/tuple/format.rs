@@ -28,9 +28,9 @@ use pgrx::pg_sys;
 #define VARLENA_ATT_IS_PACKABLE(att) \
 	((att)->attstorage != 'p')
 
-void
-o_tuple_init_reader(OTupleReaderState *state, OTuple tuple, TupleDesc desc,
-					OTupleFixedFormatSpec *spec)
+
+o_tuple_init_reader(state: &mut OTupleReaderState, OTuple tuple, TupleDesc desc,
+					spec: &mut OTupleFixedFormatSpec)
 {
 	Pointer		data = tuple.data;
 	OTupleHeader header = (OTupleHeader) data;
@@ -63,7 +63,7 @@ o_tuple_init_reader(OTupleReaderState *state, OTuple tuple, TupleDesc desc,
 }
 
 uint32
-o_tuple_next_field_offset(OTupleReaderState *state, OTupleAttrCompact * att)
+o_tuple_next_field_offset(state: &mut OTupleReaderState, OTupleAttrCompact * att)
 {
 	uint32		off;
 
@@ -115,9 +115,9 @@ o_tuple_next_field_offset(OTupleReaderState *state, OTupleAttrCompact * att)
 }
 
 Datum
-o_tuple_read_next_field(OTupleReaderState *state, bool *isnull)
+o_tuple_read_next_field(state: &mut OTupleReaderState, isnull: &mut bool)
 {
-	OTupleAttrCompact *att = OTupleDescAttrFast(state->desc, state->attnum);
+	att: &mut OTupleAttrCompact = OTupleDescAttrFast(state->desc, state->attnum);
 	Datum		result;
 	uint32		off;
 
@@ -154,7 +154,7 @@ o_tuple_read_next_field(OTupleReaderState *state, bool *isnull)
 }
 
 static Pointer
-o_tuple_read_next_field_ptr(OTupleReaderState *state)
+o_tuple_read_next_field_ptr(state: &mut OTupleReaderState)
 {
 	uint32		off;
 
@@ -175,13 +175,13 @@ o_tuple_read_next_field_ptr(OTupleReaderState *state)
 }
 
 ItemPointer
-o_tuple_get_last_iptr(TupleDesc desc, OTupleFixedFormatSpec *spec,
-					  OTuple tuple, bool *isnull)
+o_tuple_get_last_iptr(TupleDesc desc, spec: &mut OTupleFixedFormatSpec,
+					  OTuple tuple, isnull: &mut bool)
 {
 	if (!(tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT))
 	{
 		OTupleHeader header = (OTupleHeader) tuple.data;
-		uint8	   *bp = (uint8 *) (tuple.data + SizeOfOTupleHeader);
+		bp: &mut uint8 = (uint8 *) (tuple.data + SizeOfOTupleHeader);
 
 		if ((header->hasnulls) && att_isnull(desc->natts - 1, bp))
 		{
@@ -214,10 +214,10 @@ Pointer
 o_toast_nocachegetattr_ptr(OTuple tuple,
 						   int attnum,
 						   TupleDesc tupleDesc,
-						   OTupleFixedFormatSpec *spec)
+						   spec: &mut OTupleFixedFormatSpec)
 {
 	OTupleHeader tup = (OTupleHeader) tuple.data;
-	char	   *tp;				// ptr to data part of tuple
+	tp: &mut char;				// ptr to data part of tuple
 	bool		slow = false;	// do we have to walk attrs?
 	int			i;
 	OTupleReaderState reader;
@@ -247,7 +247,7 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 //
 		int			byte = attnum >> 3;
 		int			finalbit = attnum & 0x07;
-		bits8	   *bp = (bits8 *) (tuple.data + SizeOfOTupleHeader);
+		bp: &mut bits8 = (bits8 *) (tuple.data + SizeOfOTupleHeader);
 
 		// check for nulls "before" final bit of last byte
 		if ((~bp[byte]) & ((1 << finalbit) - 1))
@@ -273,7 +273,7 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 
 	if (!slow)
 	{
-		OTupleAttrCompact *att = OTupleDescAttrFast(tupleDesc, attnum);
+		att: &mut OTupleAttrCompact = OTupleDescAttrFast(tupleDesc, attnum);
 
 		//
 // If we get here, there are no nulls up to and including the target
@@ -299,11 +299,11 @@ Datum
 o_toast_nocachegetattr(OTuple tuple,
 					   int attnum,
 					   TupleDesc tupleDesc,
-					   OTupleFixedFormatSpec *spec,
-					   bool *is_null)
+					   spec: &mut OTupleFixedFormatSpec,
+					   is_null: &mut bool)
 {
 	OTupleHeader tup = (OTupleHeader) tuple.data;
-	char	   *tp;				// ptr to data part of tuple
+	tp: &mut char;				// ptr to data part of tuple
 	bool		slow = false;	// do we have to walk attrs?
 	int			i;
 	OTupleReaderState reader;
@@ -335,7 +335,7 @@ o_toast_nocachegetattr(OTuple tuple,
 //
 		int			byte = attnum >> 3;
 		int			finalbit = attnum & 0x07;
-		bits8	   *bp = (bits8 *) (tuple.data + SizeOfOTupleHeader);
+		bp: &mut bits8 = (bits8 *) (tuple.data + SizeOfOTupleHeader);
 
 		// check for nulls "before" final bit of last byte
 		if ((~bp[byte]) & ((1 << finalbit) - 1))
@@ -361,7 +361,7 @@ o_toast_nocachegetattr(OTuple tuple,
 
 	if (!slow)
 	{
-		OTupleAttrCompact *att;
+		att: &mut OTupleAttrCompact;
 
 		//
 // If we get here, there are no nulls up to and including the target
@@ -393,7 +393,7 @@ o_toast_nocachegetattr(OTuple tuple,
 
 // No existing callers
 Pointer
-o_tuple_get_data(OTuple tuple, int *size, OTupleFixedFormatSpec *spec)
+o_tuple_get_data(OTuple tuple, size: &mut int, spec: &mut OTupleFixedFormatSpec)
 {
 	if (!(tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT))
 	{
@@ -419,8 +419,8 @@ o_tuple_get_data(OTuple tuple, int *size, OTupleFixedFormatSpec *spec)
 // Determine size of the data area of a tuple to be constructed
 //
 static Size
-o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, BridgeData *bridge_data,
-						  Datum *values, bool *isnull, char *to_toast,
+o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, bridge_data: &mut BridgeData,
+						  values: &mut Datum, isnull: &mut bool, to_toast: &mut char,
 						  int natts)
 {
 	Size		data_length = 0;
@@ -493,9 +493,9 @@ o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, BridgeData *bri
 }
 
 Size
-o_new_tuple_size(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
-				 ItemPointer iptr, BridgeData *bridge_data, uint32 version,
-				 Datum *values, bool *isnull, char *to_toast)
+o_new_tuple_size(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
+				 ItemPointer iptr, bridge_data: &mut BridgeData, uint32 version,
+				 values: &mut Datum, isnull: &mut bool, to_toast: &mut char)
 {
 	bool		hasnull = false;
 	bool		fixedFormat = (version == 0);
@@ -550,14 +550,14 @@ o_new_tuple_size(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 //
 // Memory is expected to be already zeroed!
 //
-void
-o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
-			 OTuple *tuple, Size tuple_size,
-			 ItemPointer iptr, BridgeData *bridge_data, uint32 version,
-			 Datum *values, bool *isnull, char *to_toast)
+
+o_tuple_fill(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
+			 tuple: &mut OTuple, Size tuple_size,
+			 ItemPointer iptr, bridge_data: &mut BridgeData, uint32 version,
+			 values: &mut Datum, isnull: &mut bool, to_toast: &mut char)
 {
 	OTupleHeader tup = (OTupleHeader) tuple->data;
-	bits8	   *bitP;
+	bitP: &mut bits8;
 	bits8		bitmask;
 	int			i;
 	int			natts = tupleDesc->natts;
@@ -733,7 +733,7 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 // we want to flatten the expanded value so that the
 // constructed tuple doesn't depend on it
 //
-					ExpandedObjectHeader *eoh = DatumGetEOHP(value);
+					eoh: &mut ExpandedObjectHeader = DatumGetEOHP(value);
 
 					data = (char *) att_align_nominal(data,
 													  att->attalign);
@@ -793,9 +793,9 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 }
 
 OTuple
-o_form_tuple(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
-			 uint32 version, Datum *values, bool *isnull,
-			 BridgeData *bridge_data)
+o_form_tuple(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
+			 uint32 version, values: &mut Datum, isnull: &mut bool,
+			 bridge_data: &mut BridgeData)
 {
 	OTuple		result;
 	int			len;
@@ -815,8 +815,8 @@ o_tuple_get_version(OTuple tuple)
 		return ((OTupleHeader) tuple.data)->version;
 }
 
-void
-o_tuple_set_version(OTupleFixedFormatSpec *spec, OTuple *tuple,
+
+o_tuple_set_version(spec: &mut OTupleFixedFormatSpec, tuple: &mut OTuple,
 					uint32 version)
 {
 	OTupleHeader header = (OTupleHeader) tuple->data;
@@ -849,7 +849,7 @@ o_tuple_set_version(OTupleFixedFormatSpec *spec, OTuple *tuple,
 	header->version = version;
 }
 
-void
+
 o_tuple_set_ctid(OTuple tuple, ItemPointer iptr)
 {
 	Pointer		data = tuple.data;

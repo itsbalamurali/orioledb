@@ -50,8 +50,8 @@ PG_FUNCTION_INFO_V1(orioledb_encode_selftest);
 // out.  For signed values the caller flips the sign bit first, so that the
 // unsigned byte ordering matches signed ordering.
 //
-static void
-enc_be(uint64 u, int nbytes, uint8 *out)
+fn
+enc_be(uint64 u, int nbytes, out: &mut uint8)
 {
 	int			i;
 
@@ -73,10 +73,10 @@ typedef struct
 } EncTuple;
 
 static int
-enc_tuple_cmp(const void *x, const void *y)
+enc_tuple_cmp(x: &mut const, y: &mut const)
 {
-	const EncTuple *p = x;
-	const EncTuple *q = y;
+	const p: &mut EncTuple = x;
+	const q: &mut EncTuple = y;
 
 	if (p->a != q->a)
 		return p->a < q->a ? -1 : 1;
@@ -91,8 +91,8 @@ enc_tuple_cmp(const void *x, const void *y)
 // Encode (a,b,c) order-preservingly, right-aligned into a fixed ENC_MAX-byte
 // buffer with a zero high-pad, matching the composite-PK keybitmap scheme.
 //
-static void
-enc_tuple(const EncTuple *t, uint8 *out)
+fn
+enc_tuple(const t: &mut EncTuple, out: &mut uint8)
 {
 	int			off;
 
@@ -110,11 +110,11 @@ orioledb_encode_selftest(PG_FUNCTION_ARGS)
 	MemoryContext cxt = AllocSetContextCreate(CurrentMemoryContext,
 											  "enc", ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(cxt);
-	EncTuple   *tuples = palloc(sizeof(EncTuple) * nkeys);
-	uint8	   *encs;
+	tuples: &mut EncTuple = palloc(sizeof(EncTuple) * nkeys);
+	encs: &mut uint8;
 	uint64		rng = UINT64CONST(0xdeadbeefcafef00d);
 	int			i;
-	char	   *err = NULL;
+	err: &mut char = NULL;
 
 	for (i = 0; i < nkeys; i++)
 	{
@@ -158,7 +158,7 @@ orioledb_encode_selftest(PG_FUNCTION_ARGS)
 }
 
 static int
-rtst_memcmp(const void *a, const void *b, void *arg)
+rtst_memcmp(a: &mut const, b: &mut const,  *arg)
 {
 	size_t		n = *((size_t *) arg);
 
@@ -169,8 +169,8 @@ rtst_memcmp(const void *a, const void *b, void *arg)
 // Generate `count` pseudo-random keys of `n` bytes into `buf` using a
 // deterministic LCG seeded from `seed`, so runs are reproducible.
 //
-static void
-rtst_gen(unsigned char *buf, int count, int n, uint64 seed)
+fn
+rtst_gen(unsigned buf: &mut char, int count, int n, uint64 seed)
 {
 	uint64		rng = seed;
 	int			i,
@@ -199,22 +199,22 @@ PREFIX##_run(int nkeys, uint64 seed)										\
 	MemoryContext cxt = AllocSetContextCreate(CurrentMemoryContext,			\
 											  "rtst", ALLOCSET_DEFAULT_SIZES); \
 	MemoryContext old = MemoryContextSwitchTo(cxt);							\
-	PREFIX##_radix_tree *tree = PREFIX##_create(cxt);						\
+	PREFIX##tree: &mut _radix_tree = PREFIX##_create(cxt);						\
 	size_t		nsz = (N);												\
-	unsigned char *keys = palloc((Size) nkeys * (N));					\
-	unsigned char *sorted = palloc((Size) nkeys * (N));					\
+	unsigned keys: &mut char = palloc((Size) nkeys * (N));					\
+	unsigned sorted: &mut char = palloc((Size) nkeys * (N));					\
 	unsigned char prev[(N)];											\
 	int			i;														\
 	int			ndistinct;												\
 	int			cnt;													\
-	char	   *err = NULL;											\
-	PREFIX##_iter *it;													\
+	err: &mut char = NULL;											\
+	PREFIX##it: &mut _iter;													\
 	PREFIX##_key ik;													\
-	RtstVal    *pv;														\
+	pv: &mut RtstVal;														\
 																			\
 	// silence unused-function for API entry points this test doesn't call \
-	(void) PREFIX##_free;												\
-	(void) PREFIX##_memory_usage;										\
+	() PREFIX##_free;												\
+	() PREFIX##_memory_usage;										\
 	rtst_gen(keys, nkeys, (N), seed);									\
 	for (i = 0; i < nkeys; i++)											\
 	{																	\
@@ -222,7 +222,7 @@ PREFIX##_run(int nkeys, uint64 seed)										\
 		RtstVal		v;											\
 		memcpy(k.data, keys + (size_t) i * (N), (N));				\
 		v.id = i;													\
-		(void) PREFIX##_set(tree, k, &v);							\
+		() PREFIX##_set(tree, k, &v);							\
 	}																	\
 	// find roundtrip												\
 	for (i = 0; i < nkeys; i++)											\
@@ -261,7 +261,7 @@ PREFIX##_run(int nkeys, uint64 seed)										\
 	{																	\
 		PREFIX##_key k;												\
 		memcpy(k.data, keys + (size_t) i * (N), (N));				\
-		(void) PREFIX##_delete(tree, k);							\
+		() PREFIX##_delete(tree, k);							\
 	}																	\
 done:																	\
 	if (err)															\
@@ -278,7 +278,7 @@ Datum
 orioledb_radixtree_selftest(PG_FUNCTION_ARGS)
 {
 	int			nkeys = PG_GETARG_INT32(0);
-	char	   *err;
+	err: &mut char;
 
 	err = rtst12_run(nkeys, UINT64CONST(0x9e3779b97f4a7c15));
 	if (err)
@@ -293,14 +293,14 @@ orioledb_radixtree_selftest(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(orioledb_keybitmap_selftest);
 
 static int
-fkey_cmp(const void *a, const void *b, void *arg)
+fkey_cmp(a: &mut const, b: &mut const,  *arg)
 {
 	return memcmp(a, b, OKBM_FIXED_BYTES);
 }
 
 // big-endian increment of an OKBM_FIXED_BYTES key; returns false on overflow
 static bool
-fkey_inc(uint8 *key)
+fkey_inc(key: &mut uint8)
 {
 	int			i;
 
@@ -319,18 +319,18 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 	MemoryContext cxt = AllocSetContextCreate(CurrentMemoryContext,
 											  "kbm", ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(cxt);
-	uint8	   *keys = palloc((Size) nkeys * OKBM_FIXED_BYTES);
-	uint8	   *sorted;
+	keys: &mut uint8 = palloc((Size) nkeys * OKBM_FIXED_BYTES);
+	sorted: &mut uint8;
 	uint64		rng = UINT64CONST(0x51ed270b);
-	OKeyBitmap *bm = o_keybitmap_create_fixed();
-	OKeyBitmap *bm2 = o_keybitmap_create_fixed();
+	bm: &mut OKeyBitmap = o_keybitmap_create_fixed();
+	bm2: &mut OKeyBitmap = o_keybitmap_create_fixed();
 	size_t		nsz = OKBM_FIXED_BYTES;
 	int			i,
 				ndistinct,
 				cnt;
 	uint8		cur[OKBM_FIXED_BYTES];
 	uint8		out[OKBM_FIXED_BYTES];
-	char	   *err = NULL;
+	err: &mut char = NULL;
 
 	// random keys, using only the low 12 bytes so collisions/order both occur
 	for (i = 0; i < nkeys; i++)

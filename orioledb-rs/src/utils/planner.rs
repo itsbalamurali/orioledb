@@ -44,33 +44,33 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	char	   *proname;
-	char	   *prosrc;
+	proname: &mut char;
+	prosrc: &mut char;
 } validate_error_callback_arg;
 
 typedef struct
 {
-	char	   *hint_msg;
-	char	   *proname;
+	hint_msg: &mut char;
+	proname: &mut char;
 } validate_function_arg;
 
-typedef bool (*WalkerFunc) (Node *node, void *context);
+typedef bool (*WalkerFunc) (node: &mut Node,  *context);
 
-static bool validate_function(Node *node, void *context);
-static Node *o_wrap_top_funcexpr(Node *node);
-static void o_collect_function_walker(Oid functionId, Oid inputcollid,
-									  List *args, void *context);
-static bool plan_tree_walker(Plan *plan, WalkerFunc walker, void *context);
+static bool validate_function(node: &mut Node,  *context);
+static o_wrap_top_funcexpr: &mut Node(node: &mut Node);
+fn o_collect_function_walker(Oid functionId, Oid inputcollid,
+									  args: &mut List,  *context);
+static bool plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context);
 
 #define pg_analyze_and_rewrite_params pg_analyze_and_rewrite_withcb
 
  //
 // error context callback to let us supply a call-stack traceback
 //
-static void
-sql_validate_error_callback(void *arg)
+fn
+sql_validate_error_callback( *arg)
 {
-	validate_error_callback_arg *callback_arg;
+	callback_arg: &mut validate_error_callback_arg;
 	int			syntaxerrposition;
 
 	callback_arg = (validate_error_callback_arg *) arg;
@@ -88,10 +88,10 @@ sql_validate_error_callback(void *arg)
 			   callback_arg->proname);
 }
 
-static void
+fn
 o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
-					   void *context, Oid functionId, Oid inputcollid,
-					   List *args)
+					    *context, Oid functionId, Oid inputcollid,
+					   args: &mut List)
 {
 	Form_pg_proc procedureStruct;
 	MemoryContext mycxt,
@@ -101,7 +101,7 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 	Datum		proc_body;
 	bool		isNull;
 	bool		haspolyarg;
-	List	   *querytree_list;
+	querytree_list: &mut List;
 	int			i;
 
 	procedureStruct = (Form_pg_proc) GETSTRUCT(procedureTuple);
@@ -139,7 +139,7 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 	callback_arg.prosrc = TextDatumGetCString(proc_body);
 
 	sqlerrcontext.callback = sql_validate_error_callback;
-	sqlerrcontext.arg = (void *) &callback_arg;
+	sqlerrcontext.arg = ( *) &callback_arg;
 	sqlerrcontext.previous = error_context_stack;
 	error_context_stack = &sqlerrcontext;
 
@@ -148,9 +148,9 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 								Anum_pg_proc_prosqlbody, &isNull);
 	if (!isNull)
 	{
-		ListCell   *lc;
-		Node	   *n;
-		List	   *stored_query_list;
+		lc: &mut ListCell;
+		n: &mut Node;
+		stored_query_list: &mut List;
 
 		n = stringToNode(TextDatumGetCString(proc_body));
 		if (IsA(n, List))
@@ -161,8 +161,8 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 		querytree_list = NIL;
 		foreach(lc, stored_query_list)
 		{
-			Query	   *parsetree = lfirst_node(Query, lc);
-			List	   *querytree_sublist;
+			parsetree: &mut Query = lfirst_node(Query, lc);
+			querytree_sublist: &mut List;
 
 			AcquireRewriteLocks(parsetree, true, false);
 			querytree_sublist = pg_rewrite_query(parsetree);
@@ -171,22 +171,22 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 	}
 	else
 	{
-		List	   *raw_parsetree_list;
+		raw_parsetree_list: &mut List;
 
 		raw_parsetree_list = pg_parse_query(callback_arg.prosrc);
 		querytree_list = NIL;
 
 		if (!haspolyarg)
 		{
-			ListCell   *lc;
+			lc: &mut ListCell;
 			SQLFunctionParseInfoPtr pinfo;
 
 			pinfo = prepare_sql_fn_parse_info(procedureTuple, NULL,
 											  InvalidOid);
 			foreach(lc, raw_parsetree_list)
 			{
-				RawStmt    *parsetree = lfirst_node(RawStmt, lc);
-				List	   *querytree_sublist;
+				parsetree: &mut RawStmt = lfirst_node(RawStmt, lc);
+				querytree_sublist: &mut List;
 
 				querytree_sublist = pg_analyze_and_rewrite_params(parsetree,
 																  callback_arg.prosrc,
@@ -211,23 +211,23 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 	{
 		Oid			rettype;
 		TupleDesc	rettupdesc;
-		ListCell   *lc;
+		lc: &mut ListCell;
 #if PG_VERSION_NUM < 180000
-		List	   *resulttlist;
+		resulttlist: &mut List;
 #endif
 
 		foreach(lc, querytree_list)
 		{
-			List	   *sublist = lfirst_node(List, lc);
-			ListCell   *lc2;
+			sublist: &mut List = lfirst_node(List, lc);
+			lc2: &mut ListCell;
 
 			foreach(lc2, sublist)
 			{
-				Query	   *query = lfirst_node(Query, lc2);
-				Query	   *new_query;
-				List	   *colnames;
-				RangeTblEntry *rte;
-				ListCell   *lc3;
+				query: &mut Query = lfirst_node(Query, lc2);
+				new_query: &mut Query;
+				colnames: &mut List;
+				rte: &mut RangeTblEntry;
+				lc3: &mut ListCell;
 
 				MemoryContextSwitchTo(oldcxt);
 				new_query = makeNode(Query);
@@ -241,7 +241,7 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 				colnames = NIL;
 				foreach(lc3, query->targetList)
 				{
-					TargetEntry *tle = (TargetEntry *) lfirst(lc3);
+					tle: &mut TargetEntry = (TargetEntry *) lfirst(lc3);
 
 					if (tle->resjunk)
 						continue;
@@ -265,17 +265,17 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 
 		check_sql_fn_statements(querytree_list);
 
-		(void) get_func_result_type(procedureStruct->oid, &rettype,
+		() get_func_result_type(procedureStruct->oid, &rettype,
 									&rettupdesc);
 
 #if PG_VERSION_NUM >= 180000
-		(void) check_sql_fn_retval(querytree_list, rettype, rettupdesc,
+		() check_sql_fn_retval(querytree_list, rettype, rettupdesc,
 								   procedureStruct->prokind, false);
 #elif PG_VERSION_NUM >= 170000
-		(void) check_sql_fn_retval(querytree_list, rettype, rettupdesc, procedureStruct->prokind, false,
+		() check_sql_fn_retval(querytree_list, rettype, rettupdesc, procedureStruct->prokind, false,
 								   &resulttlist);
 #else
-		(void) check_sql_fn_retval(querytree_list, rettype, rettupdesc, false,
+		() check_sql_fn_retval(querytree_list, rettype, rettupdesc, false,
 								   &resulttlist);
 #endif
 	}
@@ -286,7 +286,7 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 }
 
 static Node *
-o_wrap_top_funcexpr(Node *node)
+o_wrap_top_funcexpr(node: &mut Node)
 {
 	static NamedArgExpr named_arg = {.xpr = {.type = T_NamedArgExpr}};
 
@@ -313,23 +313,23 @@ o_wrap_top_funcexpr(Node *node)
 // However, they can invoke SQL-visible functions, so callers should take
 // thought about how to treat them.
 //
-static void
-o_process_functions_in_node(Node *node,
-							void (*func_walker) (Oid functionId,
+fn
+o_process_functions_in_node(node: &mut Node,
+							 (*func_walker) (Oid functionId,
 												 Oid inputcollid,
-												 List *args,
-												 void *context),
-							void *context)
+												 args: &mut List,
+												  *context),
+							 *context)
 {
 	Oid			functionId = InvalidOid;
 	Oid			inputcollid;
-	List	   *args;
+	args: &mut List;
 
 	switch (nodeTag(node))
 	{
 		case T_Aggref:
 			{
-				Aggref	   *expr = (Aggref *) node;
+				expr: &mut Aggref = (Aggref *) node;
 
 				functionId = expr->aggfnoid;
 				inputcollid = expr->inputcollid;
@@ -340,7 +340,7 @@ o_process_functions_in_node(Node *node,
 			break;
 		case T_WindowFunc:
 			{
-				WindowFunc *expr = (WindowFunc *) node;
+				expr: &mut WindowFunc = (WindowFunc *) node;
 
 				functionId = expr->winfnoid;
 				inputcollid = expr->inputcollid;
@@ -351,7 +351,7 @@ o_process_functions_in_node(Node *node,
 			break;
 		case T_FuncExpr:
 			{
-				FuncExpr   *expr = (FuncExpr *) node;
+				expr: &mut FuncExpr = (FuncExpr *) node;
 
 				functionId = expr->funcid;
 				inputcollid = expr->inputcollid;
@@ -364,7 +364,7 @@ o_process_functions_in_node(Node *node,
 		case T_DistinctExpr:	// struct-equivalent to OpExpr
 		case T_NullIfExpr:		// struct-equivalent to OpExpr
 			{
-				OpExpr	   *expr = (OpExpr *) node;
+				expr: &mut OpExpr = (OpExpr *) node;
 
 				// Set opfuncid if it wasn't set already
 				set_opfuncid(expr);
@@ -378,7 +378,7 @@ o_process_functions_in_node(Node *node,
 			break;
 		case T_ScalarArrayOpExpr:
 			{
-				ScalarArrayOpExpr *expr = (ScalarArrayOpExpr *) node;
+				expr: &mut ScalarArrayOpExpr = (ScalarArrayOpExpr *) node;
 
 				set_sa_opfuncid(expr);
 				functionId = expr->opfuncid;
@@ -390,7 +390,7 @@ o_process_functions_in_node(Node *node,
 			break;
 		case T_CoerceViaIO:
 			{
-				CoerceViaIO *expr = (CoerceViaIO *) node;
+				expr: &mut CoerceViaIO = (CoerceViaIO *) node;
 				Oid			iofunc;
 				Oid			typioparam;
 				bool		typisvarlena;
@@ -418,11 +418,11 @@ o_process_functions_in_node(Node *node,
 			break;
 		case T_RowCompareExpr:
 			{
-				RowCompareExpr *rcexpr = (RowCompareExpr *) node;
-				ListCell   *opid;
-				ListCell   *collid;
-				ListCell   *larg;
-				ListCell   *rarg;
+				rcexpr: &mut RowCompareExpr = (RowCompareExpr *) node;
+				opid: &mut ListCell;
+				collid: &mut ListCell;
+				larg: &mut ListCell;
+				rarg: &mut ListCell;
 
 				forfour(opid, rcexpr->opnos,
 						collid, rcexpr->inputcollids,
@@ -444,13 +444,13 @@ o_process_functions_in_node(Node *node,
 	}
 }
 
-static void
-validate_function_walker(Oid functionId, Oid inputcollid, List *args,
-						 void *context)
+fn
+validate_function_walker(Oid functionId, Oid inputcollid, args: &mut List,
+						  *context)
 {
 	HeapTuple	procedureTuple;
 	Form_pg_proc procedureStruct;
-	validate_function_arg *arg = (validate_function_arg *) context;
+	arg: &mut validate_function_arg = (validate_function_arg *) context;
 
 	procedureTuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(functionId));
 	if (!HeapTupleIsValid(procedureTuple))
@@ -484,9 +484,9 @@ validate_function_walker(Oid functionId, Oid inputcollid, List *args,
 }
 
 static bool
-validate_function(Node *node, void *context)
+validate_function(node: &mut Node,  *context)
 {
-	validate_function_arg *arg = (validate_function_arg *) context;
+	arg: &mut validate_function_arg = (validate_function_arg *) context;
 
 	if (node == NULL)
 		return false;
@@ -505,12 +505,12 @@ validate_function(Node *node, void *context)
 	// Recurse to check arguments
 	if (IsA(node, Query))
 	{
-		Query	   *query = (Query *) node;
-		ListCell   *rtable;
+		query: &mut Query = (Query *) node;
+		rtable: &mut ListCell;
 
 		foreach(rtable, query->rtable)
 		{
-			RangeTblEntry *rte = lfirst(rtable);
+			rte: &mut RangeTblEntry = lfirst(rtable);
 
 			if (rte->rtekind == RTE_RELATION)
 			{
@@ -523,16 +523,16 @@ validate_function(Node *node, void *context)
 
 			}
 		}
-		(void) query_tree_walker(query, validate_function, context, 0);
+		() query_tree_walker(query, validate_function, context, 0);
 	}
 	else
-		(void) expression_tree_walker(node, validate_function,
-									  (void *) context);
+		() expression_tree_walker(node, validate_function,
+									  ( *) context);
 	return false;
 }
 
-void
-o_validate_funcexpr(Node *node, char *hint_msg)
+
+o_validate_funcexpr(node: &mut Node, hint_msg: &mut char)
 {
 	validate_function_arg arg = {.hint_msg = hint_msg};
 
@@ -546,10 +546,10 @@ o_validate_funcexpr(Node *node, char *hint_msg)
 		pfree(arg.proname);
 }
 
-void
-o_validate_function_by_oid(Oid procoid, char *hint_msg)
+
+o_validate_function_by_oid(Oid procoid, hint_msg: &mut char)
 {
-	FuncExpr   *fexpr;
+	fexpr: &mut FuncExpr;
 	HeapTuple	procedureTuple;
 	Form_pg_proc procedureStruct;
 
@@ -575,13 +575,13 @@ o_validate_function_by_oid(Oid procoid, char *hint_msg)
 }
 
 static inline bool
-is_a_plan(Node *node)
+is_a_plan(node: &mut Node)
 {
 	return (nodeTag(node) >= T_Result) && (nodeTag(node) <= T_Limit);
 }
 
 static bool
-o_collect_function(Node *node, void *context)
+o_collect_function(node: &mut Node,  *context)
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
@@ -619,7 +619,7 @@ o_collect_function(Node *node, void *context)
 		case T_DistinctExpr:
 		case T_NullIfExpr:
 			{
-				OpExpr	   *opexpr = (OpExpr *) node;
+				opexpr: &mut OpExpr = (OpExpr *) node;
 
 				o_class_cache_add_if_needed(datoid, OperatorRelationId, cur_lsn,
 											NULL);
@@ -631,8 +631,8 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_Aggref:
 			{
-				Aggref	   *aggref = (Aggref *) node;
-				ListCell   *lc;
+				aggref: &mut Aggref = (Aggref *) node;
+				lc: &mut ListCell;
 				HeapTuple	aggtup;
 				Form_pg_aggregate aggform;
 
@@ -667,13 +667,13 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_Agg:
 			{
-				Agg		   *agg = (Agg *) node;
+				agg: &mut Agg = (Agg *) node;
 				int			i;
 
 				for (i = 0; i < agg->numCols; i++)
 				{
 					Oid			eq_opr = agg->grpOperators[i];
-					CatCList   *catlist;
+					catlist: &mut CatCList;
 					int			j;
 
 					o_class_cache_add_if_needed(datoid, OperatorRelationId,
@@ -755,7 +755,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_WindowFunc:
 			{
-				WindowFunc *window_func = (WindowFunc *) node;
+				window_func: &mut WindowFunc = (WindowFunc *) node;
 
 				o_class_cache_add_if_needed(datoid, AggregateRelationId, cur_lsn,
 											NULL);
@@ -769,7 +769,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_FuncExpr:
 			{
-				FuncExpr   *func_expr = (FuncExpr *) node;
+				func_expr: &mut FuncExpr = (FuncExpr *) node;
 
 				o_cache_type_safe(datoid, func_expr->funcresulttype,
 								  InvalidOid, cur_lsn, processed);
@@ -777,7 +777,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_MinMaxExpr:
 			{
-				MinMaxExpr *minmaxexpr = (MinMaxExpr *) node;
+				minmaxexpr: &mut MinMaxExpr = (MinMaxExpr *) node;
 
 				o_cache_type_safe(datoid, minmaxexpr->minmaxtype,
 								  InvalidOid, cur_lsn, processed);
@@ -785,7 +785,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_CoerceViaIO:
 			{
-				CoerceViaIO *iocoerce = (CoerceViaIO *) node;
+				iocoerce: &mut CoerceViaIO = (CoerceViaIO *) node;
 
 				o_cache_type_safe(datoid, exprType((Node *) iocoerce->arg),
 								  InvalidOid, cur_lsn, processed);
@@ -795,7 +795,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_RowExpr:
 			{
-				RowExpr    *row_expr = (RowExpr *) node;
+				row_expr: &mut RowExpr = (RowExpr *) node;
 
 				o_cache_type_safe(datoid, row_expr->row_typeid, InvalidOid,
 								  cur_lsn, processed);
@@ -803,7 +803,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_FieldSelect:
 			{
-				FieldSelect *field_select = (FieldSelect *) node;
+				field_select: &mut FieldSelect = (FieldSelect *) node;
 
 				o_cache_type_safe(datoid, field_select->resulttype, InvalidOid,
 								  cur_lsn, processed);
@@ -811,7 +811,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_Var:
 			{
-				Var		   *var = (Var *) node;
+				var: &mut Var = (Var *) node;
 
 				o_cache_type_safe(datoid, var->vartype, InvalidOid, cur_lsn,
 								  processed);
@@ -819,7 +819,7 @@ o_collect_function(Node *node, void *context)
 			break;
 		case T_RelabelType:
 			{
-				RelabelType *relabel = (RelabelType *) node;
+				relabel: &mut RelabelType = (RelabelType *) node;
 
 				o_cache_type_safe(datoid, relabel->resulttype,
 								  InvalidOid, cur_lsn, processed);
@@ -831,19 +831,19 @@ o_collect_function(Node *node, void *context)
 
 	// Recurse to check arguments
 	if (IsA(node, Query))
-		(void) query_tree_walker((Query *) node, o_collect_function,
+		() query_tree_walker((Query *) node, o_collect_function,
 								 context, 0);
 	else if (is_a_plan(node))
-		(void) plan_tree_walker((Plan *) node, o_collect_function, context);
+		() plan_tree_walker((Plan *) node, o_collect_function, context);
 	else
-		(void) expression_tree_walker(node, o_collect_function, context);
+		() expression_tree_walker(node, o_collect_function, context);
 	return false;
 }
 
-void
-o_collect_funcexpr(Node *node)
+
+o_collect_funcexpr(node: &mut Node)
 {
-	List	   *processed = NIL;
+	processed: &mut List = NIL;
 
 	if (!node)
 		return;
@@ -853,9 +853,9 @@ o_collect_funcexpr(Node *node)
 	list_free_deep(processed);
 }
 
-static void
-o_collect_function_walker(Oid functionId, Oid inputcollid, List *args,
-						  void *context)
+fn
+o_collect_function_walker(Oid functionId, Oid inputcollid, args: &mut List,
+						   *context)
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
@@ -886,10 +886,10 @@ o_collect_function_walker(Oid functionId, Oid inputcollid, List *args,
 	ReleaseSysCache(procedureTuple);
 }
 
-void
+
 o_collect_function_by_oid(Oid procoid, Oid inputcollid, List **processed)
 {
-	FuncExpr   *fexpr;
+	fexpr: &mut FuncExpr;
 	HeapTuple	procedureTuple;
 	Form_pg_proc procedureStruct;
 
@@ -915,13 +915,13 @@ o_collect_function_by_oid(Oid procoid, Oid inputcollid, List **processed)
 	ReleaseSysCache(procedureTuple);
 }
 
-void
+
 o_collect_op_by_oid(Oid opoid)
 {
-	OpExpr	   *op_expr;
+	op_expr: &mut OpExpr;
 	HeapTuple	opTuple;
 	Form_pg_operator opStruct;
-	List	   *processed = NIL;
+	processed: &mut List = NIL;
 
 	opTuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(opoid));
 	if (!HeapTupleIsValid(opTuple))
@@ -945,9 +945,9 @@ o_collect_op_by_oid(Oid opoid)
 }
 
 static bool
-plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
+plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 {
-	ListCell   *lc;
+	lc: &mut ListCell;
 
 	if (plan == NULL)
 		return NULL;
@@ -983,7 +983,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 //
 		case T_Result:
 			{
-				Result	   *result = (Result *) plan;
+				result: &mut Result = (Result *) plan;
 
 				if (expression_tree_walker((Node *) result->resconstantqual,
 										   walker, context))
@@ -993,7 +993,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_ModifyTable:
 			{
-				ModifyTable *modify_table = (ModifyTable *) plan;
+				modify_table: &mut ModifyTable = (ModifyTable *) plan;
 
 				if (expression_tree_walker((Node *) modify_table->withCheckOptionLists,
 										   walker, context))
@@ -1015,7 +1015,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_Append:
 			{
-				Append	   *append = (Append *) plan;
+				append: &mut Append = (Append *) plan;
 
 				foreach(lc, append->appendplans)
 				{
@@ -1028,7 +1028,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_MergeAppend:
 			{
-				MergeAppend *merge_append = (MergeAppend *) plan;
+				merge_append: &mut MergeAppend = (MergeAppend *) plan;
 
 				foreach(lc, merge_append->mergeplans)
 				{
@@ -1041,7 +1041,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_BitmapAnd:
 			{
-				BitmapAnd  *bitmap_and = (BitmapAnd *) plan;
+				bitmap_and: &mut BitmapAnd = (BitmapAnd *) plan;
 
 				foreach(lc, bitmap_and->bitmapplans)
 				{
@@ -1054,7 +1054,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_BitmapOr:
 			{
-				BitmapOr   *bitmap_or = (BitmapOr *) plan;
+				bitmap_or: &mut BitmapOr = (BitmapOr *) plan;
 
 				foreach(lc, bitmap_or->bitmapplans)
 				{
@@ -1067,7 +1067,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_SampleScan:
 			{
-				SampleScan *sample_scan = (SampleScan *) plan;
+				sample_scan: &mut SampleScan = (SampleScan *) plan;
 
 				if (expression_tree_walker((Node *) sample_scan->tablesample,
 										   walker, context))
@@ -1077,7 +1077,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_IndexScan:
 			{
-				IndexScan  *index_scan = (IndexScan *) plan;
+				index_scan: &mut IndexScan = (IndexScan *) plan;
 
 				if (expression_tree_walker((Node *) index_scan->indexqual,
 										   walker, context))
@@ -1096,7 +1096,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_IndexOnlyScan:
 			{
-				IndexOnlyScan *index_only_scan = (IndexOnlyScan *) plan;
+				index_only_scan: &mut IndexOnlyScan = (IndexOnlyScan *) plan;
 
 				if (expression_tree_walker((Node *) index_only_scan->recheckqual,
 										   walker, context))
@@ -1115,7 +1115,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_BitmapIndexScan:
 			{
-				BitmapIndexScan *bitmap_index_scan = (BitmapIndexScan *) plan;
+				bitmap_index_scan: &mut BitmapIndexScan = (BitmapIndexScan *) plan;
 
 				if (expression_tree_walker((Node *) bitmap_index_scan->indexqual,
 										   walker, context))
@@ -1128,7 +1128,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_BitmapHeapScan:
 			{
-				BitmapHeapScan *bitmap_heap_scan = (BitmapHeapScan *) plan;
+				bitmap_heap_scan: &mut BitmapHeapScan = (BitmapHeapScan *) plan;
 
 				if (expression_tree_walker((Node *) bitmap_heap_scan->bitmapqualorig,
 										   walker, context))
@@ -1138,7 +1138,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_TidScan:
 			{
-				TidScan    *tid_scan = (TidScan *) plan;
+				tid_scan: &mut TidScan = (TidScan *) plan;
 
 				if (expression_tree_walker((Node *) tid_scan->tidquals,
 										   walker, context))
@@ -1148,7 +1148,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_TidRangeScan:
 			{
-				TidRangeScan *tid_range_scan = (TidRangeScan *) plan;
+				tid_range_scan: &mut TidRangeScan = (TidRangeScan *) plan;
 
 				if (expression_tree_walker((Node *) tid_range_scan->tidrangequals,
 										   walker, context))
@@ -1158,7 +1158,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_SubqueryScan:
 			{
-				SubqueryScan *subquery_scan = (SubqueryScan *) plan;
+				subquery_scan: &mut SubqueryScan = (SubqueryScan *) plan;
 
 				if (plan_tree_walker((Plan *) subquery_scan->subplan,
 									 walker, context))
@@ -1168,7 +1168,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_FunctionScan:
 			{
-				FunctionScan *function_scan = (FunctionScan *) plan;
+				function_scan: &mut FunctionScan = (FunctionScan *) plan;
 
 				if (expression_tree_walker((Node *) function_scan->functions,
 										   walker, context))
@@ -1178,7 +1178,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_TableFuncScan:
 			{
-				TableFuncScan *table_func_scan = (TableFuncScan *) plan;
+				table_func_scan: &mut TableFuncScan = (TableFuncScan *) plan;
 
 				if (expression_tree_walker((Node *) table_func_scan->tablefunc,
 										   walker, context))
@@ -1188,7 +1188,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_ValuesScan:
 			{
-				ValuesScan *values_scan = (ValuesScan *) plan;
+				values_scan: &mut ValuesScan = (ValuesScan *) plan;
 
 				if (expression_tree_walker((Node *) values_scan->values_lists,
 										   walker, context))
@@ -1198,7 +1198,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_ForeignScan:
 			{
-				ForeignScan *foreign_scan = (ForeignScan *) plan;
+				foreign_scan: &mut ForeignScan = (ForeignScan *) plan;
 
 				if (expression_tree_walker((Node *) foreign_scan->fdw_exprs,
 										   walker, context))
@@ -1214,7 +1214,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_CustomScan:
 			{
-				CustomScan *custom_scan = (CustomScan *) plan;
+				custom_scan: &mut CustomScan = (CustomScan *) plan;
 
 				if (expression_tree_walker((Node *) custom_scan->custom_scan_tlist,
 										   walker, context))
@@ -1238,7 +1238,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 		case T_MergeJoin:
 		case T_HashJoin:
 			{
-				Join	   *join = (Join *) plan;
+				join: &mut Join = (Join *) plan;
 
 				if (expression_tree_walker((Node *) join->joinqual,
 										   walker, context))
@@ -1246,11 +1246,11 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 				if (IsA(join, NestLoop))
 				{
-					NestLoop   *nl = (NestLoop *) join;
+					nl: &mut NestLoop = (NestLoop *) join;
 
 					foreach(lc, nl->nestParams)
 					{
-						NestLoopParam *nlp = (NestLoopParam *) lfirst(lc);
+						nlp: &mut NestLoopParam = (NestLoopParam *) lfirst(lc);
 
 						if (expression_tree_walker((Node *) nlp->paramval,
 												   walker, context))
@@ -1259,7 +1259,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 				}
 				else if (IsA(join, MergeJoin))
 				{
-					MergeJoin  *mj = (MergeJoin *) join;
+					mj: &mut MergeJoin = (MergeJoin *) join;
 
 					if (expression_tree_walker((Node *) mj->mergeclauses,
 											   walker, context))
@@ -1267,7 +1267,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 				}
 				else if (IsA(join, HashJoin))
 				{
-					HashJoin   *hj = (HashJoin *) join;
+					hj: &mut HashJoin = (HashJoin *) join;
 
 					if (expression_tree_walker((Node *) hj->hashclauses,
 											   walker, context))
@@ -1281,7 +1281,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_Memoize:
 			{
-				Memoize    *memoize = (Memoize *) plan;
+				memoize: &mut Memoize = (Memoize *) plan;
 
 				if (expression_tree_walker((Node *) memoize->param_exprs,
 										   walker, context))
@@ -1291,7 +1291,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_WindowAgg:
 			{
-				WindowAgg  *window_agg = (WindowAgg *) plan;
+				window_agg: &mut WindowAgg = (WindowAgg *) plan;
 
 				if (expression_tree_walker((Node *) window_agg->startOffset,
 										   walker, context))
@@ -1304,7 +1304,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_Hash:
 			{
-				Hash	   *hash = (Hash *) plan;
+				hash: &mut Hash = (Hash *) plan;
 
 				if (expression_tree_walker((Node *) hash->hashkeys,
 										   walker, context))
@@ -1314,7 +1314,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 		case T_Limit:
 			{
-				Limit	   *limit = (Limit *) plan;
+				limit: &mut Limit = (Limit *) plan;
 
 				if (expression_tree_walker((Node *) limit->limitOffset,
 										   walker, context))
@@ -1359,13 +1359,13 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 }
 
 static bool
-plannedstatement_tree_walker(PlannedStmt *pstmt,
+plannedstatement_tree_walker(pstmt: &mut PlannedStmt,
 							 WalkerFunc walker,
-							 void *context)
+							  *context)
 {
-	Plan	   *plan = pstmt->planTree;
-	ListCell   *lc;
-	ProjectSet *project_set;
+	plan: &mut Plan = pstmt->planTree;
+	lc: &mut ListCell;
+	project_set: &mut ProjectSet;
 
 	// Guard against stack overflow due to overly complex plan trees
 	check_stack_depth();
@@ -1378,7 +1378,7 @@ plannedstatement_tree_walker(PlannedStmt *pstmt,
 	// subPlan-s
 	foreach(lc, pstmt->subplans)
 	{
-		Plan	   *sp = (Plan *) lfirst(lc);
+		sp: &mut Plan = (Plan *) lfirst(lc);
 
 		if (sp && plan_tree_walker(sp, walker, context))
 			return true;
@@ -1387,8 +1387,8 @@ plannedstatement_tree_walker(PlannedStmt *pstmt,
 	return false;
 }
 
-void
-o_collect_functions_pstmt(PlannedStmt *pstmt, List **processed)
+
+o_collect_functions_pstmt(pstmt: &mut PlannedStmt, List **processed)
 {
 	plannedstatement_tree_walker(pstmt, o_collect_function, processed);
 }

@@ -38,7 +38,7 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 			   *s3_control;
 	bool		control_res;
 	StringInfoData buf;
-	char	   *objectname;
+	objectname: &mut char;
 	bool		res = false;
 
 	control_res = get_checkpoint_control_data(&control);
@@ -135,12 +135,12 @@ cleanup:
 //
 // Try to put a lock file into S3 bucket using conditional write.
 //
-void
-s3_put_lock_file(void)
+
+s3_put_lock_file()
 {
 	int			lock_file;
 	uint64		lock_identifier = 0;
-	char	   *objectname;
+	objectname: &mut char;
 	long		res;
 	int			retry_put_count = 0;
 
@@ -275,10 +275,10 @@ retry_put:
 //
 // Delete a lock file from an S3 bucket.
 //
-void
-s3_delete_lock_file(void)
+
+s3_delete_lock_file()
 {
-	char	   *objectname;
+	objectname: &mut char;
 
 	objectname = psprintf("data/%s", LOCK_FILENAME);
 

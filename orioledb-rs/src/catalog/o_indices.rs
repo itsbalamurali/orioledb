@@ -43,24 +43,24 @@ PG_FUNCTION_INFO_V1(orioledb_index_rows);
 
 static uint32 increment_or_reset_o_index_version(uint32 version, OIndexVersionMode ixVerMode);
 
-static OIndex *make_ctid_o_index(OTable *table, OIndexVersionMode ixVerMode);
+static make_ctid_o_index: &mut OIndex(table: &mut OTable, OIndexVersionMode ixVerMode);
 
 static BTreeDescr *
-oIndicesGetBTreeDesc(void *arg)
+oIndicesGetBTreeDesc( *arg)
 {
-	BTreeDescr *desc = (BTreeDescr *) arg;
+	desc: &mut BTreeDescr = (BTreeDescr *) arg;
 
 	return desc;
 }
 
 static uint32
-oIndicesGetKeySize(void *arg)
+oIndicesGetKeySize( *arg)
 {
 	return sizeof(OIndexChunkKey);
 }
 
 static uint32
-oIndicesGetMaxChunkSize(void *key, void *arg)
+oIndicesGetMaxChunkSize( *key,  *arg)
 {
 	uint32		max_chunk_size;
 
@@ -69,18 +69,18 @@ oIndicesGetMaxChunkSize(void *key, void *arg)
 	return max_chunk_size;
 }
 
-static void
-oIndicesUpdateKey(void *key, uint32 chunknum, void *arg)
+fn
+oIndicesUpdateKey( *key, uint32 chunknum,  *arg)
 {
-	OIndexChunkKey *ckey = (OIndexChunkKey *) key;
+	ckey: &mut OIndexChunkKey = (OIndexChunkKey *) key;
 
 	ckey->chunknum = chunknum;
 }
 
-static void *
-oIndicesGetNextKey(void *key, void *arg)
+fn *
+oIndicesGetNextKey( *key,  *arg)
 {
-	OIndexChunkKey *ckey = (OIndexChunkKey *) key;
+	ckey: &mut OIndexChunkKey = (OIndexChunkKey *) key;
 	static OIndexChunkKey nextKey;
 
 	nextKey = *ckey;
@@ -91,11 +91,11 @@ oIndicesGetNextKey(void *key, void *arg)
 }
 
 static OTuple
-oIndicesCreateTuple(void *key, Pointer data, uint32 offset, uint32 chunknum,
-					int length, void *arg)
+oIndicesCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum,
+					int length,  *arg)
 {
-	OIndexChunkKey *ckey = (OIndexChunkKey *) key;
-	OIndexChunk *chunk;
+	ckey: &mut OIndexChunkKey = (OIndexChunkKey *) key;
+	chunk: &mut OIndexChunk;
 	OTuple		result;
 
 	ckey->chunknum = chunknum;
@@ -111,10 +111,10 @@ oIndicesCreateTuple(void *key, Pointer data, uint32 offset, uint32 chunknum,
 }
 
 static OTuple
-oIndicesCreateKey(void *key, uint32 chunknum, void *arg)
+oIndicesCreateKey( *key, uint32 chunknum,  *arg)
 {
-	OIndexChunkKey *ckey = (OIndexChunkKey *) key;
-	OIndexChunkKey *ckeyCopy;
+	ckey: &mut OIndexChunkKey = (OIndexChunkKey *) key;
+	ckeyCopy: &mut OIndexChunkKey;
 	OTuple		result;
 
 	ckeyCopy = (OIndexChunkKey *) palloc(sizeof(OIndexChunkKey));
@@ -127,35 +127,35 @@ oIndicesCreateKey(void *key, uint32 chunknum, void *arg)
 }
 
 static Pointer
-oIndicesGetTupleData(OTuple tuple, void *arg)
+oIndicesGetTupleData(OTuple tuple,  *arg)
 {
-	OIndexChunk *chunk = (OIndexChunk *) tuple.data;
+	chunk: &mut OIndexChunk = (OIndexChunk *) tuple.data;
 
 	return chunk->data;
 }
 
 static uint32
-oIndicesGetTupleChunknum(OTuple tuple, void *arg)
+oIndicesGetTupleChunknum(OTuple tuple,  *arg)
 {
-	OIndexChunk *chunk = (OIndexChunk *) tuple.data;
+	chunk: &mut OIndexChunk = (OIndexChunk *) tuple.data;
 
 	return chunk->key.chunknum;
 }
 
 static uint32
-oIndicesGetTupleDataSize(OTuple tuple, void *arg)
+oIndicesGetTupleDataSize(OTuple tuple,  *arg)
 {
-	OIndexChunk *chunk = (OIndexChunk *) tuple.data;
+	chunk: &mut OIndexChunk = (OIndexChunk *) tuple.data;
 
 	return chunk->dataLength;
 }
 
 static TupleFetchCallbackResult
-oIndicesFetchCallback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
-					  void *arg, bool oxidIsFinished)
+oIndicesFetchCallback(OTuple tuple, OXid tupOxid, oSnapshot: &mut OSnapshot,
+					   *arg, bool oxidIsFinished)
 {
-	OIndexChunkKey *tupleKey = (OIndexChunkKey *) tuple.data;
-	OIndexChunkBoundKey *boundKey = (OIndexChunkBoundKey *) arg;
+	tupleKey: &mut OIndexChunkKey = (OIndexChunkKey *) tuple.data;
+	boundKey: &mut OIndexChunkBoundKey = (OIndexChunkBoundKey *) arg;
 
 	// Ignore reloid because it may changes
 	if (tupleKey->oids.datoid == boundKey->key.oids.datoid &&
@@ -220,9 +220,9 @@ static ToastAPI oIndicesToastAPI = {
 	.fetchCallback = oIndicesFetchCallback
 };
 
-static void
-make_builtin_field(OTableField *leafField, OTableIndexField *internalField,
-				   Oid type, const char *name, int attnum, Oid opclass,
+fn
+make_builtin_field(leafField: &mut OTableField, internalField: &mut OTableIndexField,
+				   Oid type, const name: &mut char, int attnum, Oid opclass,
 				   Oid hash_fn_oid)
 {
 	if (leafField)
@@ -265,9 +265,9 @@ increment_or_reset_o_index_version(uint32 version, OIndexVersionMode ixVerMode)
 }
 
 static OIndex *
-make_ctid_o_index(OTable *table, OIndexVersionMode ixVerMode)
+make_ctid_o_index(table: &mut OTable, OIndexVersionMode ixVerMode)
 {
-	OIndex	   *result = (OIndex *) palloc0(sizeof(OIndex));
+	result: &mut OIndex = (OIndex *) palloc0(sizeof(OIndex));
 	int			i;
 	int			nadded = 0;
 	uint32		new_version;
@@ -328,7 +328,7 @@ make_ctid_o_index(OTable *table, OIndexVersionMode ixVerMode)
 }
 
 static int
-find_existing_field(OIndex *index, int maxIndex, OTableIndexField *field)
+find_existing_field(index: &mut OIndex, int maxIndex, field: &mut OTableIndexField)
 {
 	int			i;
 
@@ -345,10 +345,10 @@ find_existing_field(OIndex *index, int maxIndex, OTableIndexField *field)
 }
 
 static OIndex *
-make_primary_o_index(OTable *table, OIndexVersionMode ixVerMode)
+make_primary_o_index(table: &mut OTable, OIndexVersionMode ixVerMode)
 {
-	OTableIndex *tableIndex;
-	OIndex	   *result = (OIndex *) palloc0(sizeof(OIndex));
+	tableIndex: &mut OTableIndex;
+	result: &mut OIndex = (OIndex *) palloc0(sizeof(OIndex));
 	int			i;
 	int			saved_nLeafFields;
 	int			nadded = 0;
@@ -426,7 +426,7 @@ make_primary_o_index(OTable *table, OIndexVersionMode ixVerMode)
 		found_attnum = find_existing_field(result, nadded, &tableIndex->fields[i]);
 		if (found_attnum >= 0)
 		{
-			List	   *duplicate;
+			duplicate: &mut List;
 
 			if (i < result->nKeyFields)
 				result->nKeyFields--;
@@ -450,8 +450,8 @@ make_primary_o_index(OTable *table, OIndexVersionMode ixVerMode)
 	return result;
 }
 
-static void
-add_index_fields(OIndex *index, OTable *table, OTableIndex *tableIndex, int *nadded, bool fillPrimary)
+fn
+add_index_fields(index: &mut OIndex, table: &mut OTable, tableIndex: &mut OTableIndex, nadded: &mut int, bool fillPrimary)
 {
 	int			i;
 	int			expr_field = 0;
@@ -473,7 +473,7 @@ add_index_fields(OIndex *index, OTable *table, OTableIndex *tableIndex, int *nad
 					index->primaryFieldsAttnums[index->nPrimaryFields++] = found_attnum + 1;
 				else
 				{
-					List	   *duplicate;
+					duplicate: &mut List;
 
 					if (i < init_nKeyFields)
 						index->nKeyFields--;
@@ -514,10 +514,10 @@ add_index_fields(OIndex *index, OTable *table, OTableIndex *tableIndex, int *nad
 }
 
 static OIndex *
-make_secondary_o_index(OTable *table, OTableIndex *tableIndex, OIndexVersionMode ixVerMode)
+make_secondary_o_index(table: &mut OTable, tableIndex: &mut OTableIndex, OIndexVersionMode ixVerMode)
 {
-	OTableIndex *primary = NULL;
-	OIndex	   *result = (OIndex *) palloc0(sizeof(OIndex));
+	primary: &mut OTableIndex = NULL;
+	result: &mut OIndex = (OIndex *) palloc0(sizeof(OIndex));
 	uint32		new_version;
 	int			nadded;
 	MemoryContext mcxt;
@@ -594,10 +594,10 @@ make_secondary_o_index(OTable *table, OTableIndex *tableIndex, OIndexVersionMode
 }
 
 static OIndex *
-make_toast_o_index(OTable *table, OIndexVersionMode ixVerMode)
+make_toast_o_index(table: &mut OTable, OIndexVersionMode ixVerMode)
 {
-	OTableIndex *primary = NULL;
-	OIndex	   *result = (OIndex *) palloc0(sizeof(OIndex));
+	primary: &mut OTableIndex = NULL;
+	result: &mut OIndex = (OIndex *) palloc0(sizeof(OIndex));
 	uint32		new_version;
 	int			nadded;
 
@@ -673,10 +673,10 @@ make_toast_o_index(OTable *table, OIndexVersionMode ixVerMode)
 }
 
 static OIndex *
-make_bridge_o_index(OTable *table, OIndexVersionMode ixVerMode)
+make_bridge_o_index(table: &mut OTable, OIndexVersionMode ixVerMode)
 {
-	OTableIndex *primary = NULL;
-	OIndex	   *result = (OIndex *) palloc0(sizeof(OIndex));
+	primary: &mut OTableIndex = NULL;
+	result: &mut OIndex = (OIndex *) palloc0(sizeof(OIndex));
 	uint32		new_version;
 	int			nadded;
 
@@ -728,8 +728,8 @@ make_bridge_o_index(OTable *table, OIndexVersionMode ixVerMode)
 	return result;
 }
 
-void
-free_o_index(OIndex *o_index)
+
+free_o_index(o_index: &mut OIndex)
 {
 	Assert(o_index != NULL);
 
@@ -742,8 +742,8 @@ free_o_index(OIndex *o_index)
 	pfree(o_index);
 }
 
-void
-o_serialize_string(char *serialized, StringInfo str)
+
+o_serialize_string(serialized: &mut char, StringInfo str)
 {
 	size_t		str_len = serialized ? strlen(serialized) + 1 : 0;
 
@@ -753,9 +753,9 @@ o_serialize_string(char *serialized, StringInfo str)
 }
 
 char *
-o_deserialize_string(Pointer *ptr)
+o_deserialize_string(ptr: &mut Pointer)
 {
-	char	   *result = NULL;
+	result: &mut char = NULL;
 	size_t		str_len;
 	int			len;
 
@@ -776,10 +776,10 @@ o_deserialize_string(Pointer *ptr)
 
 //
 // Bounds-checking variant of o_deserialize_string().  Returns false if the
-// remaining data is too short, leaving *ptr and *out unchanged.
+// remaining data is too short, ptr: &mut leaving out: &mut and unchanged.
 //
 bool
-o_deserialize_string_safe(Pointer *ptr, Pointer data, Size length, char **out)
+o_deserialize_string_safe(ptr: &mut Pointer, Pointer data, Size length, char **out)
 {
 	size_t		str_len;
 
@@ -796,16 +796,15 @@ o_deserialize_string_safe(Pointer *ptr, Pointer data, Size length, char **out)
 		memcpy(*out, *ptr, str_len);
 		*ptr += str_len;
 	}
-	else
-		*out = NULL;
+	out: &mut else = NULL;
 
 	return true;
 }
 
-void
-o_serialize_node(Node *node, StringInfo str)
+
+o_serialize_node(node: &mut Node, StringInfo str)
 {
-	char	   *node_str;
+	node_str: &mut char;
 	size_t		node_str_len;
 
 	node_str = nodeToString(node);
@@ -816,9 +815,9 @@ o_serialize_node(Node *node, StringInfo str)
 }
 
 Node *
-o_deserialize_node(Pointer *ptr)
+o_deserialize_node(ptr: &mut Pointer)
 {
-	Node	   *result;
+	result: &mut Node;
 	size_t		node_str_len;
 	int			len;
 
@@ -834,10 +833,10 @@ o_deserialize_node(Pointer *ptr)
 
 //
 // Bounds-checking variant of o_deserialize_node().  Returns false if the
-// remaining data is too short, leaving *ptr and *out unchanged.
+// remaining data is too short, ptr: &mut leaving out: &mut and unchanged.
 //
 bool
-o_deserialize_node_safe(Pointer *ptr, Pointer data, Size length, Node **out)
+o_deserialize_node_safe(ptr: &mut Pointer, Pointer data, Size length, Node **out)
 {
 	size_t		node_str_len;
 
@@ -854,7 +853,7 @@ o_deserialize_node_safe(Pointer *ptr, Pointer data, Size length, Node **out)
 }
 
 static Pointer
-serialize_o_index(OIndex *o_index, int *size)
+serialize_o_index(o_index: &mut OIndex, size: &mut int)
 {
 	StringInfoData str;
 
@@ -891,10 +890,10 @@ serialize_o_index(OIndex *o_index, int *size)
 // (e.g. due to missing toast chunks from a concurrent write race condition).
 //
 static OIndex *
-deserialize_o_index(OIndexChunkKey *key, Pointer data, Size length)
+deserialize_o_index(key: &mut OIndexChunkKey, Pointer data, Size length)
 {
 	Pointer		ptr = data;
-	OIndex	   *oIndex;
+	oIndex: &mut OIndex;
 	int			len;
 	MemoryContext mcxt,
 				old_mcxt;
@@ -1005,10 +1004,10 @@ truncated:
 // OIndexVersionReset should be passed.
 //
 OIndex *
-make_o_index(OTable *table, OIndexNumber ixNum, OIndexVersionMode ixVerMode)
+make_o_index(table: &mut OTable, OIndexNumber ixNum, OIndexVersionMode ixVerMode)
 {
 	bool		primaryIsCtid = table->nindices == 0 || table->indices[0].type != oIndexPrimary;
-	OIndex	   *index;
+	index: &mut OIndex;
 
 	if (ixNum == PrimaryIndexNumber)
 	{
@@ -1027,7 +1026,7 @@ make_o_index(OTable *table, OIndexNumber ixNum, OIndexVersionMode ixVerMode)
 	}
 	else
 	{
-		OTableIndex *tableIndex;
+		tableIndex: &mut OTableIndex;
 		int			ctid_idx_off = 0;
 
 		if (primaryIsCtid)
@@ -1043,9 +1042,9 @@ make_o_index(OTable *table, OIndexNumber ixNum, OIndexVersionMode ixVerMode)
 	return index;
 }
 
-static void
-fillFixedFormatSpec(TupleDesc tupdesc, OTupleFixedFormatSpec *spec,
-					bool mayHaveToast, uint16 *primary_init_nfields)
+fn
+fillFixedFormatSpec(TupleDesc tupdesc, spec: &mut OTupleFixedFormatSpec,
+					bool mayHaveToast, primary_init_nfields: &mut uint16)
 {
 	int			i,
 				len = 0;
@@ -1070,7 +1069,7 @@ fillFixedFormatSpec(TupleDesc tupdesc, OTupleFixedFormatSpec *spec,
 }
 
 static int
-attrnumber_cmp(const void *p1, const void *p2)
+attrnumber_cmp(p1: &mut const, p2: &mut const)
 {
 	AttrNumberMap n1 = *(const AttrNumberMap *) p1;
 	AttrNumberMap n2 = *(const AttrNumberMap *) p2;
@@ -1080,11 +1079,11 @@ attrnumber_cmp(const void *p1, const void *p2)
 	return 0;
 }
 
-static void
-cache_scan_tupdesc_and_slot(OIndexDescr *index_descr, OIndex *oIndex)
+fn
+cache_scan_tupdesc_and_slot(index_descr: &mut OIndexDescr, oIndex: &mut OIndex)
 {
-	ListCell   *lc = NULL;
-	List	   *duplicate = NIL;
+	lc: &mut ListCell = NULL;
+	duplicate: &mut List = NIL;
 	int			nfields;
 	int			pk_nfields;
 	int			i;
@@ -1150,7 +1149,7 @@ cache_scan_tupdesc_and_slot(OIndexDescr *index_descr, OIndex *oIndex)
 //
 // o_index_fill_descr()
 //
-// Initialize *descr from the catalog OIndex entry.
+// descr: &mut Initialize from the catalog OIndex entry.
 //
 // The function resets the descriptor, copies identity fields (OIDs/name/version),
 // builds leaf/non-leaf tuple descriptors, fills per-field metadata (collation,
@@ -1169,13 +1168,13 @@ cache_scan_tupdesc_and_slot(OIndexDescr *index_descr, OIndex *oIndex)
 // Requirements:
 // - oIndex != NULL, descr points to writable memory.
 //
-void
-o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTableSource source)
+
+o_index_fill_descr(descr: &mut OIndexDescr, oIndex: &mut OIndex,  *o_table_source, OTableSource source)
 {
 	int			i;
 	int			maxTableAttnum = 0;
-	uint16	   *primary_init_nfields = NULL;
-	ListCell   *lc;
+	primary_init_nfields: &mut uint16 = NULL;
+	lc: &mut ListCell;
 	MemoryContext mcxt,
 				old_mcxt;
 	bool		was_saving;
@@ -1203,7 +1202,7 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 	if (oIndex->indexType == oIndexPrimary)
 	{
 		bool		free_oTable = false;
-		OTable	   *oTable = NULL;
+		oTable: &mut OTable = NULL;
 
 		Assert(o_table_source);
 
@@ -1297,7 +1296,7 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 	descr->nIncludedFields = oIndex->nIncludedFields;
 	for (i = 0; i < oIndex->nLeafFields; i++)
 	{
-		OTableIndexField *iField = &oIndex->leafFields[i];
+		iField: &mut OTableIndexField = &oIndex->leafFields[i];
 		int			attnum = iField->attnum;
 
 		if (attnum == SelfItemPointerAttributeNumber)
@@ -1321,8 +1320,8 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 
 	for (i = 0; i < oIndex->nNonLeafFields; i++)
 	{
-		OIndexField *field = &descr->fields[i];
-		OTableIndexField *iField = &oIndex->leafFields[i];
+		field: &mut OIndexField = &descr->fields[i];
+		iField: &mut OTableIndexField = &oIndex->leafFields[i];
 		bool		add_opclass = false;
 		bool		needs_exclop = false;
 
@@ -1355,7 +1354,7 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 	{
 		OIndexField temp_field = {0};
 		AttrNumber	attnum = oIndex->primaryFieldsAttnums[i] - 1;
-		OTableIndexField *iField = &oIndex->leafFields[attnum];
+		iField: &mut OTableIndexField = &oIndex->leafFields[attnum];
 
 		temp_field.collation = TupleDescAttr(descr->leafTupdesc, i)->attcollation;
 		if (OidIsValid(iField->collation))
@@ -1388,8 +1387,8 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 	descr->expressions_state = NIL;
 	foreach(lc, descr->expressions)
 	{
-		Expr	   *node = (Expr *) lfirst(lc);
-		ExprState  *expr_state;
+		node: &mut Expr = (Expr *) lfirst(lc);
+		expr_state: &mut ExprState;
 
 		expr_state = ExecInitExpr(node, NULL);
 
@@ -1436,14 +1435,14 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 }
 
 bool
-o_indices_add(OTable *table, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
+o_indices_add(table: &mut OTable, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
 {
 	OIndexChunkKey key;
 	bool		result;
-	OIndex	   *oIndex;
+	oIndex: &mut OIndex;
 	Pointer		data;
 	int			len;
-	BTreeDescr *sys_tree;
+	sys_tree: &mut BTreeDescr;
 
 	oIndex = make_o_index(table, ixNum, OIndexVersionReset);
 
@@ -1472,12 +1471,12 @@ o_indices_add(OTable *table, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
 }
 
 bool
-o_indices_del(OTable *table, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
+o_indices_del(table: &mut OTable, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
 {
 	OIndexChunkKey key;
 	bool		result;
-	OIndex	   *oIndex;
-	BTreeDescr *sys_tree;
+	oIndex: &mut OIndex;
+	sys_tree: &mut BTreeDescr;
 
 	oIndex = make_o_index(table, ixNum, OIndexVersionPass);
 	key.oids = oIndex->indexOids;
@@ -1531,10 +1530,10 @@ o_indices_get_extended(ORelOids oids, OIndexType type, OTableFetchContext ctx)
 	for (retry = 0;; retry++)
 	{
 		OIndexChunkBoundKey boundKey;
-		OIndexChunkBoundKey *found_key = NULL;
+		found_key: &mut OIndexChunkBoundKey = NULL;
 		Size		dataLength;
 		Pointer		result;
-		OIndex	   *oIndex;
+		oIndex: &mut OIndex;
 
 		boundKey.key = key;
 		boundKey.oxid = InvalidOXid;
@@ -1574,15 +1573,15 @@ o_indices_get_extended(ORelOids oids, OIndexType type, OTableFetchContext ctx)
 }
 
 bool
-o_indices_update(OTable *table, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
+o_indices_update(table: &mut OTable, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
 {
-	OIndex	   *oIndex;
-	OIndex	   *oIndexOld;
+	oIndex: &mut OIndex;
+	oIndexOld: &mut OIndex;
 	OIndexChunkKey key;
 	bool		result;
 	Pointer		data;
 	int			len;
-	BTreeDescr *sys_tree;
+	sys_tree: &mut BTreeDescr;
 
 	oIndex = make_o_index(table, ixNum, OIndexVersionPass);
 	oIndexOld = o_indices_get_extended(oIndex->indexOids, oIndex->indexType, default_table_fetch_context);
@@ -1621,7 +1620,7 @@ o_indices_update(OTable *table, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
 //
 bool
 o_indices_find_table_oids(ORelOids indexOids, OIndexType type,
-						  OSnapshot *oSnapshot, ORelOids *tableOids)
+						  oSnapshot: &mut OSnapshot, tableOids: &mut ORelOids)
 {
 	OIndexChunkKey key;
 	Pointer		data;
@@ -1643,16 +1642,16 @@ o_indices_find_table_oids(ORelOids indexOids, OIndexType type,
 	return false;
 }
 
-void
-o_indices_foreach_oids(OIndexOidsCallback callback, void *arg)
+
+o_indices_foreach_oids(OIndexOidsCallback callback,  *arg)
 {
 	OIndexChunkKey chunkKey;
 	ORelOids	oids = {0, 0, 0},
 				old_oids PG_USED_FOR_ASSERTS_ONLY;
 	OIndexType	type = oIndexInvalid;
-	BTreeIterator *it;
+	it: &mut BTreeIterator;
 	OTuple		tuple;
-	BTreeDescr *desc = get_sys_tree(SYS_TREES_O_INDICES);
+	desc: &mut BTreeDescr = get_sys_tree(SYS_TREES_O_INDICES);
 
 	chunkKey.type = type;
 	chunkKey.oids = oids;
@@ -1672,7 +1671,7 @@ o_indices_foreach_oids(OIndexOidsCallback callback, void *arg)
 	old_oids = oids;
 	while (!O_TUPLE_IS_NULL(tuple))
 	{
-		OIndexChunk *chunk = (OIndexChunk *) tuple.data;
+		chunk: &mut OIndexChunk = (OIndexChunk *) tuple.data;
 		ORelOids	tableOids;
 		bool		temp_table;
 		Oid			tablespace;
@@ -1729,7 +1728,7 @@ index_type_to_str(OIndexType type)
 }
 
 static OIndexType
-index_type_from_str(const char *s, int len)
+index_type_from_str(const s: &mut char, int len)
 {
 	if (!strncmp(s, "toast", len))
 		return oIndexToast;
@@ -1747,11 +1746,11 @@ index_type_from_str(const char *s, int len)
 		return oIndexInvalid;
 }
 
-static void
+fn
 o_index_oids_array_callback(OIndexType type, ORelOids treeOids,
-							ORelOids tableOids, Oid tablespace, void *arg)
+							ORelOids tableOids, Oid tablespace,  *arg)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) arg;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) arg;
 	Datum		values[6];
 	bool		nulls[6] = {false};
 
@@ -1768,9 +1767,9 @@ o_index_oids_array_callback(OIndexType type, ORelOids treeOids,
 Datum
 orioledb_index_oids(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 
@@ -1796,11 +1795,11 @@ orioledb_index_oids(PG_FUNCTION_ARGS)
 static HeapTuple
 describe_index(TupleDesc tupdesc, ORelOids oids, OIndexType type)
 {
-	OIndex	   *index;
+	index: &mut OIndex;
 	StringInfoData buf,
 				format,
 				title;
-	char	   *column_str = "Column",
+	column_str: &mut char = "Column",
 			   *type_str = "Type",
 			   *collation_str = "Collation";
 	int			i,
@@ -1820,9 +1819,9 @@ describe_index(TupleDesc tupdesc, ORelOids oids, OIndexType type)
 	max_collation_str = strlen(collation_str);
 	for (i = 0; i < index->nLeafFields; i++)
 	{
-		OTableField *field = &index->leafTableFields[i];
-		char	   *typename = o_get_type_name(field->typid, field->typmod);
-		char	   *colname = get_collation_name(field->collation);
+		field: &mut OTableField = &index->leafTableFields[i];
+		typename: &mut char = o_get_type_name(field->typid, field->typmod);
+		colname: &mut char = get_collation_name(field->collation);
 
 		if (max_column_str < strlen(NameStr(field->name)))
 			max_column_str = strlen(NameStr(field->name));
@@ -1850,9 +1849,9 @@ describe_index(TupleDesc tupdesc, ORelOids oids, OIndexType type)
 
 	for (i = 0; i < index->nLeafFields; i++)
 	{
-		OTableField *field = &index->leafTableFields[i];
-		char	   *typename = o_get_type_name(field->typid, field->typmod);
-		char	   *colname = get_collation_name(field->collation);
+		field: &mut OTableField = &index->leafTableFields[i];
+		typename: &mut char = o_get_type_name(field->typid, field->typmod);
+		colname: &mut char = get_collation_name(field->collation);
 
 		appendStringInfo(&buf, format.data,
 						 NameStr(field->name),
@@ -1865,8 +1864,8 @@ describe_index(TupleDesc tupdesc, ORelOids oids, OIndexType type)
 	appendStringInfo(&buf, "\nKey fields: (");
 	for (i = 0; i < index->nNonLeafFields; i++)
 	{
-		OTableIndexField *nonLeafField = &index->leafFields[i];
-		OTableField *leafField;
+		nonLeafField: &mut OTableIndexField = &index->leafFields[i];
+		leafField: &mut OTableField;
 
 		if (type == oIndexPrimary)
 		{
@@ -1902,7 +1901,7 @@ Datum
 orioledb_index_description(PG_FUNCTION_ARGS)
 {
 	ORelOids	oids;
-	text	   *indexTypeText = PG_GETARG_TEXT_PP(3);
+	indexTypeText: &mut text = PG_GETARG_TEXT_PP(3);
 	OIndexType	indexType;
 	TupleDesc	tupdesc;
 
@@ -1927,12 +1926,12 @@ orioledb_index_rows(PG_FUNCTION_ARGS)
 	Oid			ix_reloid = PG_GETARG_OID(0);
 	Relation	idx,
 				tbl;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OIndexNumber ix_num;
 	int64		total = 0,
 				dead = 0;
-	BTreeIterator *it;
-	BTreeDescr *td;
+	it: &mut BTreeIterator;
+	td: &mut BTreeDescr;
 	HeapTuple	tuple;
 	TupleDesc	tupleDesc;
 	Datum		values[2];

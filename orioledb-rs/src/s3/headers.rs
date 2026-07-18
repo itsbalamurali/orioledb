@@ -84,8 +84,8 @@ typedef struct
 int			s3_headers_buffers_size;
 static int	buffersCount = 0;
 static int	groupsCount = 0;
-static S3HeadersMeta *meta;
-static S3HeadersBuffersGroup *groups;
+static meta: &mut S3HeadersMeta;
+static groups: &mut S3HeadersBuffersGroup;
 
 #define S3_HEADER_MAX_CHANGE_COUNT (0x7FFFFFFF)
 
@@ -120,11 +120,11 @@ static S3HeadersBuffersGroup *groups;
 #define S3_PART_GET_USAGE_COUNT(p) (((p) & S3_PART_USAGE_COUNT_MASK) >> S3_PART_USAGE_COUNT_SHIFT)
 #define S3_PART_SET_USAGE_COUNT(p, u) (((p) & (~S3_PART_USAGE_COUNT_MASK)) | ((uint64) (u) << S3_PART_USAGE_COUNT_SHIFT))
 
-static void initial_parts_conting(void);
-static void sync_buffer(S3HeaderBuffer *buffer);
+fn initial_parts_conting();
+fn sync_buffer(buffer: &mut S3HeaderBuffer);
 
 Size
-s3_headers_shmem_needs(void)
+s3_headers_shmem_needs()
 {
 	buffersCount = (int) (((uint64) s3_headers_buffers_size * BLCKSZ) / ORIOLEDB_BLCKSZ);
 	groupsCount = (buffersCount + S3_HEADER_BUFFERS_PER_GROUP - 1) / S3_HEADER_BUFFERS_PER_GROUP;
@@ -133,7 +133,7 @@ s3_headers_shmem_needs(void)
 					CACHELINEALIGN(mul_size(sizeof(S3HeadersBuffersGroup), groupsCount)));
 }
 
-void
+
 s3_headers_shmem_init(Pointer buf, bool found)
 {
 	Pointer		ptr = buf;
@@ -154,13 +154,13 @@ s3_headers_shmem_init(Pointer buf, bool found)
 
 		for (i = 0; i < groupsCount; i++)
 		{
-			S3HeadersBuffersGroup *group = &groups[i];
+			group: &mut S3HeadersBuffersGroup = &groups[i];
 
 			LWLockInitialize(&group->groupCtlLock,
 							 meta->groupCtlTrancheId);
 			for (j = 0; j < S3_HEADER_BUFFERS_PER_GROUP; j++)
 			{
-				S3HeaderBuffer *buffer = &group->buffers[j];
+				buffer: &mut S3HeaderBuffer = &group->buffers[j];
 
 				LWLockInitialize(&buffer->bufferCtlLock,
 								 meta->bufferCtlTrancheId);
@@ -182,7 +182,7 @@ s3_headers_shmem_init(Pointer buf, bool found)
 		initial_parts_conting();
 }
 
-void
+
 s3_headers_increase_loaded_parts(uint64 inc)
 {
 	uint64		result;
@@ -192,11 +192,11 @@ s3_headers_increase_loaded_parts(uint64 inc)
 		 (unsigned long long) result, (unsigned long long) inc);
 }
 
-static void
+fn
 read_from_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES],
-			   bool *dirty)
+			   dirty: &mut bool)
 {
-	char	   *filename;
+	filename: &mut char;
 	int			fd;
 	int			headerSize = sizeof(uint32) * S3_HEADER_NUM_VALUES,
 				rc;
@@ -238,10 +238,10 @@ read_from_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES],
 	close(fd);
 }
 
-static void
+fn
 write_to_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES])
 {
-	char	   *filename;
+	filename: &mut char;
 	int			fd;
 	int			headerSize = sizeof(uint32) * S3_HEADER_NUM_VALUES;
 
@@ -265,8 +265,8 @@ write_to_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES])
 	close(fd);
 }
 
-static void
-change_buffer(S3HeadersBuffersGroup *group, int index, S3HeaderTag tag)
+fn
+change_buffer(group: &mut S3HeadersBuffersGroup, int index, S3HeaderTag tag)
 {
 	S3HeaderTag prevTag;
 	uint32		oldValues[S3_HEADER_NUM_VALUES];
@@ -274,7 +274,7 @@ change_buffer(S3HeadersBuffersGroup *group, int index, S3HeaderTag tag)
 	bool		dirty = false,
 				newDirty = false;
 	uint32		prevChangeCount PG_USED_FOR_ASSERTS_ONLY;
-	S3HeaderBuffer *buffer = NULL;
+	buffer: &mut S3HeaderBuffer = NULL;
 	int			i;
 	int			minLoaded = -1;
 	bool		haveLoadedPart = false;
@@ -337,7 +337,7 @@ change_buffer(S3HeadersBuffersGroup *group, int index, S3HeaderTag tag)
 
 	if (checkUnlink && !haveLoadedPart)
 	{
-		char	   *filename;
+		filename: &mut char;
 		int			fd;
 
 		filename = btree_filename(prevTag.key, prevTag.segNum,
@@ -356,7 +356,7 @@ change_buffer(S3HeadersBuffersGroup *group, int index, S3HeaderTag tag)
 
 	if (checkUnlink && !haveLoadedPart)
 	{
-		char	   *filename;
+		filename: &mut char;
 
 		filename = btree_filename(prevTag.key, prevTag.segNum,
 								  prevTag.checkpointNum);
@@ -378,11 +378,11 @@ change_buffer(S3HeadersBuffersGroup *group, int index, S3HeaderTag tag)
 	LWLockRelease(&buffer->bufferCtlLock);
 }
 
-static void
+fn
 load_header_buffer(S3HeaderTag tag)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	S3HeadersBuffersGroup *group = &groups[hash % groupsCount];
+	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
 	int			i,
 				victim = 0;
 	uint32		victimUsageCount = 0;
@@ -395,7 +395,7 @@ load_header_buffer(S3HeaderTag tag)
 	victimUsageCount = group->buffers[0].usageCount;
 	for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 	{
-		S3HeaderBuffer *buffer = &group->buffers[i];
+		buffer: &mut S3HeaderBuffer = &group->buffers[i];
 
 		if (S3HeaderTagsIsEqual(buffer->tag, tag))
 		{
@@ -428,11 +428,11 @@ load_header_buffer(S3HeaderTag tag)
 
 }
 
-static void
+fn
 check_unlink_file(S3HeaderTag tag)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	S3HeadersBuffersGroup *group = &groups[hash % groupsCount];
+	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
 	int			victim = 0;
 	S3HeaderTag newTag;
 
@@ -444,7 +444,7 @@ check_unlink_file(S3HeaderTag tag)
 		LWLockAcquire(&group->groupCtlLock, LW_EXCLUSIVE);
 		for (victim = 0; victim < S3_HEADER_BUFFERS_PER_GROUP; victim++)
 		{
-			S3HeaderBuffer *buffer = &group->buffers[victim];
+			buffer: &mut S3HeaderBuffer = &group->buffers[victim];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
@@ -475,7 +475,7 @@ static uint32
 s3_header_read_value(S3HeaderTag tag, int index)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	S3HeadersBuffersGroup *group = &groups[hash % groupsCount];
+	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
 	int			i;
 
 	while (true)
@@ -484,7 +484,7 @@ s3_header_read_value(S3HeaderTag tag, int index)
 
 		for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 		{
-			S3HeaderBuffer *buffer = &group->buffers[i];
+			buffer: &mut S3HeaderBuffer = &group->buffers[i];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
@@ -530,14 +530,14 @@ uint32
 s3_header_get_load_id(S3HeaderTag tag)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	S3HeadersBuffersGroup *group = &groups[hash % groupsCount];
+	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
 	int			i;
 
 	while (true)
 	{
 		for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 		{
-			S3HeaderBuffer *buffer = &group->buffers[i];
+			buffer: &mut S3HeaderBuffer = &group->buffers[i];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
@@ -564,11 +564,11 @@ s3_header_get_load_id(S3HeaderTag tag)
 
 static bool
 s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
-									uint32 *oldValue, uint32 newValue,
-									uint32 *bufferLoadId)
+									oldValue: &mut uint32, uint32 newValue,
+									bufferLoadId: &mut uint32)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	S3HeadersBuffersGroup *group = &groups[hash % groupsCount];
+	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
 	int			i;
 
 	while (true)
@@ -577,7 +577,7 @@ s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
 
 		for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 		{
-			S3HeaderBuffer *buffer = &group->buffers[i];
+			buffer: &mut S3HeaderBuffer = &group->buffers[i];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
@@ -644,7 +644,7 @@ s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
 
 static bool
 s3_header_compare_and_swap(S3HeaderTag tag, int index,
-						   uint32 *oldValue, uint32 newValue)
+						   oldValue: &mut uint32, uint32 newValue)
 {
 	return s3_header_compare_and_swap_extended(tag, index, oldValue,
 											   newValue, NULL);
@@ -662,7 +662,7 @@ static int	curLockedIndex = 0;
 // evict the same file part.
 //
 bool
-s3_header_lock_part(S3HeaderTag tag, int index, uint32 *loadId)
+s3_header_lock_part(S3HeaderTag tag, int index, loadId: &mut uint32)
 {
 	uint32		value;
 
@@ -763,7 +763,7 @@ s3_header_mark_part_loading(S3HeaderTag tag, int index)
 	}
 }
 
-void
+
 s3_header_mark_part_loaded(S3HeaderTag tag, int index)
 {
 	uint32		value;
@@ -786,7 +786,7 @@ s3_header_mark_part_loaded(S3HeaderTag tag, int index)
 	}
 }
 
-void
+
 s3_header_unlock_part(S3HeaderTag tag, int index, bool setDirty)
 {
 	uint32		value;
@@ -842,7 +842,7 @@ s3_header_mark_part_scheduled_for_write(S3HeaderTag tag, int index)
 	}
 }
 
-void
+
 s3_header_mark_part_writing(S3HeaderTag tag, int index)
 {
 	uint32		value;
@@ -866,7 +866,7 @@ s3_header_mark_part_writing(S3HeaderTag tag, int index)
 	}
 }
 
-static void
+fn
 s3_header_mark_not_loaded(S3HeaderTag tag, int index)
 {
 	uint32		value;
@@ -888,7 +888,7 @@ s3_header_mark_not_loaded(S3HeaderTag tag, int index)
 	}
 }
 
-void
+
 s3_header_mark_part_written(S3HeaderTag tag, int index)
 {
 	uint32		value;
@@ -911,7 +911,7 @@ s3_header_mark_part_written(S3HeaderTag tag, int index)
 //
 // Called on write failure
 //
-void
+
 s3_header_mark_part_not_written(S3HeaderTag tag, int index)
 {
 	uint32		value;
@@ -932,8 +932,8 @@ s3_header_mark_part_not_written(S3HeaderTag tag, int index)
 	}
 }
 
-static void
-sync_buffer(S3HeaderBuffer *buffer)
+fn
+sync_buffer(buffer: &mut S3HeaderBuffer)
 {
 	S3HeaderTag tag;
 	uint32		oldValues[S3_HEADER_NUM_VALUES];
@@ -959,8 +959,8 @@ sync_buffer(S3HeaderBuffer *buffer)
 	LWLockRelease(&buffer->bufferCtlLock);
 }
 
-void
-s3_headers_sync(void)
+
+s3_headers_sync()
 {
 	int			i,
 				j;
@@ -972,8 +972,8 @@ s3_headers_sync(void)
 	}
 }
 
-void
-s3_headers_error_cleanup(void)
+
+s3_headers_error_cleanup()
 {
 	if (!OidIsValid(curLockedTag.key.oids.datoid) ||
 		!OidIsValid(curLockedTag.key.oids.relnode))
@@ -982,14 +982,14 @@ s3_headers_error_cleanup(void)
 	s3_header_unlock_part(curLockedTag, curLockedIndex, false);
 }
 
-typedef void (*IterateFilesCallback) (S3HeaderTag tag);
+typedef  (*IterateFilesCallback) (S3HeaderTag tag);
 
-static void
-iterate_tablespace_files(Oid tablespace, char *path, IterateFilesCallback callback)
+fn
+iterate_tablespace_files(Oid tablespace, path: &mut char, IterateFilesCallback callback)
 {
-	DIR		   *dir,
+	dir: &mut DIR,
 			   *dbDir;
-	struct dirent *file,
+	struct file: &mut dirent,
 			   *dbFile;
 
 	dir = opendir(path);
@@ -1001,7 +1001,7 @@ iterate_tablespace_files(Oid tablespace, char *path, IterateFilesCallback callba
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
 		Oid			dbOid;
-		char	   *dbDirName;
+		dbDirName: &mut char;
 
 		if (sscanf(file->d_name, "%u", &dbOid) != 1)
 			continue;
@@ -1051,13 +1051,13 @@ iterate_tablespace_files(Oid tablespace, char *path, IterateFilesCallback callba
 
 }
 
-static void
+fn
 iterate_files(IterateFilesCallback callback)
 {
-	DIR		   *dir;
+	dir: &mut DIR;
 	char		path[MAXPGPATH];
 	char		targetpath[MAXPGPATH];
-	struct dirent *file;
+	struct file: &mut dirent;
 
 #define PG_TBLSPC "pg_tblspc"
 
@@ -1129,7 +1129,7 @@ static off_t totalFilesSize;
 static off_t totalOccupiedSize;
 static uint64 totalFilesCount;
 
-static void
+fn
 initial_parts_counting_callback(S3HeaderTag tag)
 {
 	uint32		values[S3_HEADER_NUM_VALUES];
@@ -1137,7 +1137,7 @@ initial_parts_counting_callback(S3HeaderTag tag)
 	off_t		fileSize;
 	int			i;
 	int			fd;
-	char	   *filename;
+	filename: &mut char;
 
 	read_from_file(tag, values, &dirty);
 
@@ -1195,8 +1195,8 @@ initial_parts_counting_callback(S3HeaderTag tag)
 	write_to_file(tag, values);
 }
 
-static void
-initial_parts_conting(void)
+fn
+initial_parts_conting()
 {
 	totalFilesSize = 0;
 	totalOccupiedSize = 0;
@@ -1210,11 +1210,11 @@ initial_parts_conting(void)
 
 }
 
-static void
+fn
 eviction_callback(S3HeaderTag tag)
 {
 	int			fd;
-	char	   *filename;
+	filename: &mut char;
 	off_t		fileSize;
 	int			i;
 	int			numParts;
@@ -1302,8 +1302,8 @@ eviction_callback(S3HeaderTag tag)
 	close(fd);
 }
 
-void
-s3_headers_try_eviction_cycle(void)
+
+s3_headers_try_eviction_cycle()
 {
 	uint64		desiredNumParts = (uint64) s3_desired_size * (uint64) (1024 * 1024) / (uint64) ORIOLEDB_S3_PART_SIZE;
 

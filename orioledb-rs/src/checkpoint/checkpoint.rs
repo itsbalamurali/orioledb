@@ -58,7 +58,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void before_writing_xids_file(int chkpnum);
+fn before_writing_xids_file(int chkpnum);
 
 //
 // Single action in B-tree checkpoint loop.
@@ -109,7 +109,7 @@ typedef struct CheckpointWriteBack
 	int			extentsNumber;
 	int			extentsAllocated;
 	int			checkpointFlags;
-	FileExtent *extents;
+	extents: &mut FileExtent;
 } CheckpointWriteBack;
 
 typedef struct
@@ -126,13 +126,13 @@ typedef struct
 
 typedef struct
 {
-	List	   *postProcessList;
+	postProcessList: &mut List;
 	int			flags;
 } CheckpointTablesArg;
 
 typedef struct
 {
-	FileExtent *extents;
+	extents: &mut FileExtent;
 	int			size;
 	int			allocated;
 } FileExtentsArray;
@@ -153,62 +153,62 @@ typedef struct
 	bool		lock;			// true for lock, false for unlock
 } SysTreesLockUndoStackItem;
 
-CheckpointState *checkpoint_state = NULL;
+checkpoint_state: &mut CheckpointState = NULL;
 static MemoryContext chkp_main_context = NULL;
 static MemoryContext chkp_tree_context = NULL;
 
-static char *xidFilename = NULL;
+static xidFilename: &mut char = NULL;
 static uint32 xidFileCheckpointnum = 0;
 static File xidFile = -1;
 static S3TaskLocation maxLocation = 0;
 
-static void init_writeback(CheckpointWriteBack *writeback, int flags, bool isCompressed);
-static void writeback_put_extent(CheckpointWriteBack *writeback, FileExtent *extent);
-static void perform_writeback(BTreeDescr *desc, CheckpointWriteBack *writeback);
-static void free_writeback(CheckpointWriteBack *writeback);
+fn init_writeback(writeback: &mut CheckpointWriteBack, int flags, bool isCompressed);
+fn writeback_put_extent(writeback: &mut CheckpointWriteBack, extent: &mut FileExtent);
+fn perform_writeback(desc: &mut BTreeDescr, writeback: &mut CheckpointWriteBack);
+fn free_writeback(writeback: &mut CheckpointWriteBack);
 
-static uint64 append_file_contents(File target, char *source_filename, uint64 offset);
+static uint64 append_file_contents(File target, source_filename: &mut char, uint64 offset);
 static uint64 finalize_chkp_map(File chkp_file, uint64 len,
-								char *input_filename, uint64 input_offset,
+								input_filename: &mut char, uint64 input_offset,
 								uint32 input_num);
-static int	uint32_offsets_cmp(const void *a, const void *b);
-static int	file_extents_len_off_cmp(const void *a, const void *b);
-static int	file_extents_off_len_cmp(const void *a, const void *b);
-static int	file_extents_writeback_cmp(const void *a, const void *b);
+static int	uint32_offsets_cmp(a: &mut const, b: &mut const);
+static int	file_extents_len_off_cmp(a: &mut const, b: &mut const);
+static int	file_extents_off_len_cmp(a: &mut const, b: &mut const);
+static int	file_extents_writeback_cmp(a: &mut const, b: &mut const);
 
-static void sort_checkpoint_map_file(BTreeDescr *descr, int cur_chkp_index);
-static void sort_checkpoint_tmp_file(BTreeDescr *descr, int cur_chkp_index);
-static inline void checkpoint_ix_init_state(CheckpointState *state, BTreeDescr *descr);
-static void checkpoint_init_new_seq_bufs(BTreeDescr *descr, int chkpNum);
-static bool checkpoint_temporary_tree(int flags, BTreeDescr *descr);
-static bool checkpoint_ix(int flags, BTreeDescr *descr);
-static uint64 checkpoint_btree(BTreeDescr **descrPtr, CheckpointState *state,
-							   CheckpointWriteBack *writeback);
-static Jsonb *prepare_checkpoint_step_params(BTreeDescr *descr,
-											 CheckpointState *chkpState,
-											 WalkMessage *message,
+fn sort_checkpoint_map_file(descr: &mut BTreeDescr, int cur_chkp_index);
+fn sort_checkpoint_tmp_file(descr: &mut BTreeDescr, int cur_chkp_index);
+static inline  checkpoint_ix_init_state(state: &mut CheckpointState, descr: &mut BTreeDescr);
+fn checkpoint_init_new_seq_bufs(descr: &mut BTreeDescr, int chkpNum);
+static bool checkpoint_temporary_tree(int flags, descr: &mut BTreeDescr);
+static bool checkpoint_ix(int flags, descr: &mut BTreeDescr);
+static uint64 checkpoint_btree(BTreeDescr **descrPtr, state: &mut CheckpointState,
+							   writeback: &mut CheckpointWriteBack);
+static prepare_checkpoint_step_params: &mut Jsonb(descr: &mut BTreeDescr,
+											 chkpState: &mut CheckpointState,
+											 message: &mut WalkMessage,
 											 int level);
-static uint64 checkpoint_btree_loop(BTreeDescr **descrPtr, CheckpointState *state,
-									CheckpointWriteBack *writeback,
+static uint64 checkpoint_btree_loop(BTreeDescr **descrPtr, state: &mut CheckpointState,
+									writeback: &mut CheckpointWriteBack,
 									MemoryContext tmp_context);
-static void checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
-									 CheckpointWriteBack *writeback,
-									 int level, WalkMessage *message);
-static void prepare_leaf_page(BTreeDescr *descr, CheckpointState *state);
-static void checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
-								 OInMemoryBlkno *blkno, uint32 page_chage_count,
+fn checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
+									 writeback: &mut CheckpointWriteBack,
+									 int level, message: &mut WalkMessage);
+fn prepare_leaf_page(descr: &mut BTreeDescr, state: &mut CheckpointState);
+fn checkpoint_lock_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
+								 blkno: &mut OInMemoryBlkno, uint32 page_chage_count,
 								 int level);
-static void checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
-									   ORelOids tableOids, Oid tablespace, void *arg);
-static inline void init_seq_buf_pages(BTreeDescr *desc, SeqBufDescShared *shared);
-static inline void free_seq_buf_pages(BTreeDescr *desc, SeqBufDescShared *shared);
-static FileExtentsArray *file_extents_array_init(void);
-static void file_extents_array_free(FileExtentsArray *array);
-static void file_extents_array_append(FileExtentsArray *array, FileExtent *extent);
-static void foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg);
+fn checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
+									   ORelOids tableOids, Oid tablespace,  *arg);
+static inline  init_seq_buf_pages(desc: &mut BTreeDescr, shared: &mut SeqBufDescShared);
+static inline  free_seq_buf_pages(desc: &mut BTreeDescr, shared: &mut SeqBufDescShared);
+static file_extents_array_init: &mut FileExtentsArray();
+fn file_extents_array_free(array: &mut FileExtentsArray);
+fn file_extents_array_append(array: &mut FileExtentsArray, extent: &mut FileExtent);
+fn foreach_extent_append(desc: &mut BTreeDescr, FileExtent extent,  *arg);
 
-static inline void
-checkpoint_reset_stack(CheckpointState *state)
+static inline 
+checkpoint_reset_stack(state: &mut CheckpointState)
 {
 	OffsetNumber i;
 
@@ -233,7 +233,7 @@ checkpoint_reset_stack(CheckpointState *state)
 }
 
 Size
-checkpoint_shmem_size(void)
+checkpoint_shmem_size()
 {
 	Size		size;
 
@@ -243,7 +243,7 @@ checkpoint_shmem_size(void)
 	return CACHELINEALIGN(size);
 }
 
-void
+
 checkpoint_shmem_init(Pointer ptr, bool found)
 {
 	checkpoint_state = (CheckpointState *) ptr;
@@ -261,7 +261,7 @@ checkpoint_shmem_init(Pointer ptr, bool found)
 
 		for (i = 0; i < (int) UndoLogsCount; i++)
 		{
-			UndoMeta   *undo_meta = get_undo_meta_by_type((UndoLogType) i);
+			undo_meta: &mut UndoMeta = get_undo_meta_by_type((UndoLogType) i);
 
 			pg_atomic_init_u64(&undo_meta->lastUsedLocation, 0);
 			pg_atomic_init_u64(&undo_meta->advanceReservedLocation, 0);
@@ -333,8 +333,8 @@ checkpoint_shmem_init(Pointer ptr, bool found)
 		for (i = 0; i < NUM_CHECKPOINTABLE_UNDO_LOGS; i++)
 		{
 			UndoLogType undoType = GetCheckpointableUndoLog(i);
-			UndoMeta   *undo_meta = get_undo_meta_by_type(undoType);
-			CheckpointUndoInfo *undo_info = &control.undoInfo[i];
+			undo_meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
+			undo_info: &mut CheckpointUndoInfo = &control.undoInfo[i];
 
 			pg_atomic_write_u64(&undo_meta->lastUsedLocation, undo_info->lastUndoLocation);
 			pg_atomic_write_u64(&undo_meta->advanceReservedLocation, undo_info->lastUndoLocation);
@@ -409,8 +409,8 @@ checkpoint_shmem_init(Pointer ptr, bool found)
 						  "OSharedRootInfoInsertTranche");
 }
 
-static void
-init_writeback(CheckpointWriteBack *writeback, int flags, bool isCompressed)
+fn
+init_writeback(writeback: &mut CheckpointWriteBack, int flags, bool isCompressed)
 {
 	writeback->isCompressed = isCompressed;
 	writeback->checkpointFlags = flags;
@@ -420,8 +420,8 @@ init_writeback(CheckpointWriteBack *writeback, int flags, bool isCompressed)
 											   writeback->extentsAllocated);
 }
 
-static void
-writeback_put_extent(CheckpointWriteBack *writeback, FileExtent *extent)
+fn
+writeback_put_extent(writeback: &mut CheckpointWriteBack, extent: &mut FileExtent)
 {
 	Assert(extent != NULL);
 
@@ -439,8 +439,8 @@ writeback_put_extent(CheckpointWriteBack *writeback, FileExtent *extent)
 	writeback->extentsNumber++;
 }
 
-static void
-perform_writeback(BTreeDescr *desc, CheckpointWriteBack *writeback)
+fn
+perform_writeback(desc: &mut BTreeDescr, writeback: &mut CheckpointWriteBack)
 {
 	int			i,
 				len = 0;
@@ -527,8 +527,8 @@ perform_writeback(BTreeDescr *desc, CheckpointWriteBack *writeback)
 // Must only be used by the checkpointer; AbsorbSyncRequests() is a no-op
 // elsewhere, so the loop would spin without making progress.
 //
-static void
-acquire_chkp_lock_drain(LWLock *lock)
+fn
+acquire_chkp_lock_drain(lock: &mut LWLock)
 {
 	Assert(AmCheckpointerProcess());
 
@@ -558,15 +558,15 @@ acquire_chkp_lock_drain(LWLock *lock)
 // For system trees, no lock management is done — only writeback is performed.
 //
 static BTreeDescr *
-perform_writeback_and_relock(BTreeDescr *desc,
-							 CheckpointWriteBack *writeback,
-							 CheckpointState *state,
-							 WalkMessage *message,
+perform_writeback_and_relock(desc: &mut BTreeDescr,
+							 writeback: &mut CheckpointWriteBack,
+							 state: &mut CheckpointState,
+							 message: &mut WalkMessage,
 							 int level)
 {
 	ORelOids	treeOids = desc->oids;
 	OIndexType	type = desc->type;
-	OIndexDescr *indexDescr;
+	indexDescr: &mut OIndexDescr;
 
 	if (!IS_SYS_TREE_OIDS(treeOids))
 	{
@@ -575,7 +575,7 @@ perform_writeback_and_relock(BTreeDescr *desc,
 
 		if (STOPEVENTS_ENABLED())
 		{
-			Jsonb	   *params = prepare_checkpoint_step_params(desc, state,
+			params: &mut Jsonb = prepare_checkpoint_step_params(desc, state,
 																message, level);
 
 			STOPEVENT(STOPEVENT_CHECKPOINT_WRITEBACK, params);
@@ -608,16 +608,16 @@ perform_writeback_and_relock(BTreeDescr *desc,
 	return desc;
 }
 
-static void
-free_writeback(CheckpointWriteBack *writeback)
+fn
+free_writeback(writeback: &mut CheckpointWriteBack)
 {
 	pfree(writeback->extents);
 }
 
 static inline List *
-add_index_id_item(List *list, BTreeDescr *desc)
+add_index_id_item(list: &mut List, desc: &mut BTreeDescr)
 {
-	IndexIdItem *item;
+	item: &mut IndexIdItem;
 	MemoryContext old_context;
 
 	Assert(!orioledb_s3_mode);
@@ -666,7 +666,7 @@ add_index_id_item(List *list, BTreeDescr *desc)
 // Ensures every transaction, which WAL record is written before redo_pos,
 // passed to write_to_xids_queue(),
 //
-static inline void
+static inline 
 wait_finish_active_commits(XLogRecPtr redo_pos)
 {
 	int			i;
@@ -678,10 +678,10 @@ wait_finish_active_commits(XLogRecPtr redo_pos)
 	}
 }
 
-static void
+fn
 unlink_xids_file(uint32 checkpointnum)
 {
-	char	   *xip_filename = psprintf(XID_FILENAME_FORMAT, checkpointnum);
+	xip_filename: &mut char = psprintf(XID_FILENAME_FORMAT, checkpointnum);
 
 	unlink(xip_filename);
 	pfree(xip_filename);
@@ -690,8 +690,8 @@ unlink_xids_file(uint32 checkpointnum)
 //
 // Open xids file corresponding to the current checkpoint.
 //
-static void
-open_xids_file(void)
+fn
+open_xids_file()
 {
 	uint32		checkpointnum = checkpoint_state->xidQueueCheckpointNum;
 
@@ -714,8 +714,8 @@ open_xids_file(void)
 	}
 }
 
-static void
-flush_xids_queue(void)
+fn
+flush_xids_queue()
 {
 	uint64		startPos,
 				location,
@@ -778,8 +778,8 @@ flush_xids_queue(void)
 	pg_atomic_write_u64(&checkpoint_state->xidRecFlushPos, endPos);
 }
 
-static void
-try_flush_xids_queue(void)
+fn
+try_flush_xids_queue()
 {
 	if (LWLockAcquireOrWait(&checkpoint_state->oXidQueueFlushLock, LW_EXCLUSIVE))
 	{
@@ -791,11 +791,11 @@ try_flush_xids_queue(void)
 //
 // Write single xid record to queue.
 //
-void
-write_to_xids_queue(XidFileRec *rec)
+
+write_to_xids_queue(rec: &mut XidFileRec)
 {
 	uint64		location = pg_atomic_fetch_add_u64(&checkpoint_state->xidRecLastPos, 1);
-	XidFileRec *target = &checkpoint_state->xidRecQueue[location % XID_RECS_QUEUE_SIZE];
+	target: &mut XidFileRec = &checkpoint_state->xidRecQueue[location % XID_RECS_QUEUE_SIZE];
 
 	Assert(OXidIsValid(rec->oxid));
 
@@ -819,7 +819,7 @@ write_to_xids_queue(XidFileRec *rec)
 //
 // Prepare xids queue for writes.
 //
-static void
+fn
 before_writing_xids_file(int chkpnum)
 {
 	int			i;
@@ -840,8 +840,8 @@ before_writing_xids_file(int chkpnum)
 //
 // Flush xids queue, fsync and close xids file.
 //
-static void
-close_xids_file(void)
+fn
+close_xids_file()
 {
 	uint32		count;
 
@@ -875,7 +875,7 @@ close_xids_file(void)
 // committed/aborted transactions will be written by backends to the xids
 // queue.
 //
-static void
+fn
 start_write_xids(uint32 chkpnum)
 {
 	int			i;
@@ -892,7 +892,7 @@ start_write_xids(uint32 chkpnum)
 //
 // Write information about undo locations of in-progress transactions.
 //
-static void
+fn
 finish_write_xids(uint32 chkpnum, bool shutdown)
 {
 	XidFileRec	xidRec;
@@ -900,7 +900,7 @@ finish_write_xids(uint32 chkpnum, bool shutdown)
 				j,
 				k;
 	int			total_recovery_workers = recovery_pool_size_guc + recovery_idx_pool_size_guc;
-	bool	   *temp_file_loaded;
+	temp_file_loaded: &mut bool;
 
 	memset(&xidRec, 0, sizeof(xidRec));
 	ASAN_UNPOISON_MEMORY_REGION(&xidRec, sizeof(xidRec));
@@ -995,8 +995,8 @@ finish_write_xids(uint32 chkpnum, bool shutdown)
 // checkpoint_state->toastConsistentPtr is set so that the snapshot
 // captured here reflects the WAL state up to that boundary.
 //
-static void
-checkpoint_write_pending_sk_fixups(void)
+fn
+checkpoint_write_pending_sk_fixups()
 {
 	XidFileRec	xidRec;
 	int			i;
@@ -1067,8 +1067,8 @@ checkpoint_write_pending_sk_fixups(void)
 	}
 }
 
-void
-checkpoint_write_rewind_item(RewindItem *rewindItem)
+
+checkpoint_write_rewind_item(rewindItem: &mut RewindItem)
 {
 	XidFileRec	xidRec;
 	int			i;
@@ -1098,15 +1098,15 @@ checkpoint_write_rewind_item(RewindItem *rewindItem)
 	}
 }
 
-static void
+fn
 checkpoint_sys_trees(int flags, uint32 cur_chkp_num,
-					 CheckpointTablesArg *chkp_tbl_arg)
+					 chkp_tbl_arg: &mut CheckpointTablesArg)
 {
 	int			sys_tree_num;
 
 	for (sys_tree_num = 1; sys_tree_num <= SYS_TREES_NUM; sys_tree_num++)
 	{
-		BTreeDescr *desc;
+		desc: &mut BTreeDescr;
 		bool		success PG_USED_FOR_ASSERTS_ONLY;
 
 		if (sys_tree_get_storage_type(sys_tree_num) == BTreeStorageInMemory ||
@@ -1142,11 +1142,11 @@ checkpoint_sys_trees(int flags, uint32 cur_chkp_num,
 	}
 }
 
-static void
+fn
 checkpoint_chkp_nums(int flags, uint32 cur_chkp_num,
-					 CheckpointTablesArg *chkp_tbl_arg)
+					 chkp_tbl_arg: &mut CheckpointTablesArg)
 {
-	BTreeDescr *desc;
+	desc: &mut BTreeDescr;
 	bool		success PG_USED_FOR_ASSERTS_ONLY;
 
 	desc = get_sys_tree(SYS_TREES_CHKP_NUM);
@@ -1169,13 +1169,13 @@ checkpoint_chkp_nums(int flags, uint32 cur_chkp_num,
 
 uint32
 o_get_latest_chkp_num(Oid datoid, Oid relnode, uint32 max_chkp_num,
-					  bool *found)
+					  found: &mut bool)
 {
 	OTuple		key_tuple,
 				result_tuple;
 	SharedRootInfoKey key;
 	uint32		chkp_num;
-	ChkpNumTuple *result;
+	result: &mut ChkpNumTuple;
 
 	if (datoid == SYS_TREES_DATOID)
 	{
@@ -1215,7 +1215,7 @@ o_get_latest_chkp_num(Oid datoid, Oid relnode, uint32 max_chkp_num,
 	return chkp_num;
 }
 
-void
+
 o_update_latest_chkp_num(Oid datoid, Oid relnode, uint32 chkp_num)
 {
 	OTuple		key_tuple,
@@ -1231,7 +1231,7 @@ o_update_latest_chkp_num(Oid datoid, Oid relnode, uint32 chkp_num)
 		.needsUndoForSelfCreated = false,
 		.arg = NULL
 	};
-	BTreeDescr *desc = get_sys_tree(SYS_TREES_CHKP_NUM);
+	desc: &mut BTreeDescr = get_sys_tree(SYS_TREES_CHKP_NUM);
 	OBTreeModifyResult result PG_USED_FOR_ASSERTS_ONLY;
 
 	elog(DEBUG1, "o_update_latest_chkp_num: (%u, %u) chkp_num=%u",
@@ -1280,7 +1280,7 @@ o_update_latest_chkp_num(Oid datoid, Oid relnode, uint32 chkp_num)
 		   result == OBTreeModifyResultUpdated);
 }
 
-void
+
 o_delete_chkp_num(Oid datoid, Oid relnode)
 {
 	OTuple		key_tuple;
@@ -1299,7 +1299,7 @@ o_delete_chkp_num(Oid datoid, Oid relnode)
 	key_tuple.data = (Pointer) &key;
 	key_tuple.formatFlags = 0;
 
-	(void) o_btree_modify(get_sys_tree(SYS_TREES_CHKP_NUM),
+	() o_btree_modify(get_sys_tree(SYS_TREES_CHKP_NUM),
 						  BTreeOperationDelete,
 						  key_tuple, BTreeKeyNonLeafKey,
 						  (Pointer) NULL, BTreeKeyNone,
@@ -1314,7 +1314,7 @@ o_delete_chkp_num(Oid datoid, Oid relnode)
 // Get appropriate xlog position to use in checkpoint control file.
 //
 static XLogRecPtr
-get_checkpoint_xlog_ptr(void)
+get_checkpoint_xlog_ptr()
 {
 	if (is_recovery_in_progress())
 	{
@@ -1325,7 +1325,7 @@ get_checkpoint_xlog_ptr(void)
 		return GetXLogInsertRecPtr();
 }
 
-void
+
 o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 {
 	CheckpointTablesArg chkp_tbl_arg;
@@ -1334,7 +1334,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	uint32		cur_chkp_num = checkpoint_state->lastCheckpointNumber + 1,
 				prev_chkp_num = checkpoint_state->lastCheckpointNumber;
 	MemoryContext prev_context;
-	ODBProcData *my_proc_info = GET_CUR_PROCDATA();
+	my_proc_info: &mut ODBProcData = GET_CUR_PROCDATA();
 	UndoLocation checkpoint_start_loc[NUM_CHECKPOINTABLE_UNDO_LOGS],
 				checkpoint_end_loc[NUM_CHECKPOINTABLE_UNDO_LOGS];
 	OXid		checkpoint_xmin,
@@ -1360,7 +1360,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	prev_context = MemoryContextSwitchTo(chkp_main_context);
 
 	for (i = 1; i <= SYS_TREES_NUM; i++)
-		(void) get_sys_tree(i);
+		() get_sys_tree(i);
 
 	maxLocation = 0;
 
@@ -1400,7 +1400,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	for (i = 0; i < NUM_CHECKPOINTABLE_UNDO_LOGS; i++)
 	{
 		UndoLogType undoType = GetCheckpointableUndoLog(i);
-		UndoMeta   *undo_meta = get_undo_meta_by_type(undoType);
+		undo_meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 		checkpoint_start_loc[i] = pg_atomic_read_u64(&undo_meta->minProcTransactionRetainLocation);
 		pg_atomic_write_u64(&my_proc_info->undoRetainLocations[undoType].snapshotRetainUndoLocation,
@@ -1459,7 +1459,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	for (i = 0; i < NUM_CHECKPOINTABLE_UNDO_LOGS; i++)
 	{
 		UndoLogType undoType = GetCheckpointableUndoLog(i);
-		UndoMeta   *undo_meta = get_undo_meta_by_type(undoType);
+		undo_meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 		checkpoint_end_loc[i] = pg_atomic_read_u64(&undo_meta->lastUsedLocation);
 	}
@@ -1524,8 +1524,8 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	for (i = 0; i < NUM_CHECKPOINTABLE_UNDO_LOGS; i++)
 	{
 		UndoLogType undoType = GetCheckpointableUndoLog(i);
-		UndoMeta   *undo_meta = get_undo_meta_by_type(undoType);
-		CheckpointUndoInfo *undo_info = &control.undoInfo[i];
+		undo_meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
+		undo_info: &mut CheckpointUndoInfo = &control.undoInfo[i];
 
 		undo_info->lastUndoLocation = pg_atomic_read_u64(&undo_meta->lastUsedLocation);
 		undo_info->checkpointRetainStartLocation = checkpoint_start_loc[i];
@@ -1568,7 +1568,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	for (i = 0; i < NUM_CHECKPOINTABLE_UNDO_LOGS; i++)
 	{
 		UndoLogType undoType = GetCheckpointableUndoLog(i);
-		UndoMeta   *undo_meta = get_undo_meta_by_type(undoType);
+		undo_meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 		SpinLockAcquire(&undo_meta->minUndoLocationsMutex);
 		pg_atomic_write_u64(&undo_meta->checkpointRetainStartLocation,
@@ -1603,9 +1603,9 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	if ((!(flags & CHECKPOINT_IS_SHUTDOWN) || remove_old_checkpoint_files) &&
 		chkp_tbl_arg.postProcessList != NIL)
 	{
-		IndexIdItem *item;
-		ListCell   *lc;
-		OIndexDescr *descr;
+		item: &mut IndexIdItem;
+		lc: &mut ListCell;
+		descr: &mut OIndexDescr;
 
 		foreach(lc, chkp_tbl_arg.postProcessList)
 		{
@@ -1639,7 +1639,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 			if (item->punchHoles)
 			{
-				BTreeDescr *desc;
+				desc: &mut BTreeDescr;
 
 				if (IS_SYS_TREE_OIDS(item->oids))
 				{
@@ -1647,7 +1647,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 				}
 				else
 				{
-					OIndexDescr *id;
+					id: &mut OIndexDescr;
 
 					id = o_fetch_index_descr(item->oids, item->type,
 											 true, NULL);
@@ -1688,10 +1688,10 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 		next_CheckPoint_hook(redo_pos, flags);
 }
 
-static void
-checkpoint_init_new_seq_bufs(BTreeDescr *descr, int chkpNum)
+fn
+checkpoint_init_new_seq_bufs(descr: &mut BTreeDescr, int chkpNum)
 {
-	BTreeMetaPage *meta_page = BTREE_GET_META(descr);
+	meta_page: &mut BTreeMetaPage = BTREE_GET_META(descr);
 	int			next_chkp_index = (chkpNum + 1) % 2;
 	SeqBufTag	next_chkp_tag = {0},
 				next_tmp_tag = {0};
@@ -1752,9 +1752,9 @@ checkpoint_init_new_seq_bufs(BTreeDescr *descr, int chkpNum)
 // perform_writeback_and_relock() inside checkpoint_btree().
 //
 static bool
-checkpoint_temporary_tree(int flags, BTreeDescr *descr)
+checkpoint_temporary_tree(int flags, descr: &mut BTreeDescr)
 {
-	BTreeMetaPage *meta_page;
+	meta_page: &mut BTreeMetaPage;
 	uint32		chkp_num = checkpoint_state->lastCheckpointNumber + 1;
 	int			cur_chkp_index = chkp_num % 2;
 	CheckpointWriteBack writeback;
@@ -1819,7 +1819,7 @@ checkpoint_temporary_tree(int flags, BTreeDescr *descr)
 // Same as XLogArchiveCheckDone(), but without notifying archiver.
 //
 static bool
-check_archive_done(const char *xlog)
+check_archive_done(const xlog: &mut char)
 {
 	char		archiveStatusPath[MAXPGPATH];
 	struct stat stat_buf;
@@ -1851,10 +1851,10 @@ check_archive_done(const char *xlog)
 }
 
 static S3TaskLocation
-after_checkpoint_sync_wal(void)
+after_checkpoint_sync_wal()
 {
-	DIR		   *xldir;
-	struct dirent *xlde;
+	xldir: &mut DIR;
+	struct xlde: &mut dirent;
 	S3TaskLocation maxLocation = 0;
 	S3TaskLocation location;
 
@@ -1878,15 +1878,14 @@ after_checkpoint_sync_wal(void)
 	return maxLocation;
 }
 
-void
+
 o_after_checkpoint_cleanup_hook(XLogRecPtr checkPointRedo, int flags)
 {
 	S3TaskLocation maxLocation = 0;
 	S3TaskLocation location;
 	uint32		chkpNum = checkpoint_state->lastCheckpointNumber;
 
-	// called at the end of StartupXLOG
-	*was_in_recovery = flags == 0;
+	// called at the end of was_in_recovery: &mut StartupXLOG = flags == 0;
 
 	//
 // Right after end-of-recovery, XLog inserts have just been enabled. Flush
@@ -1942,7 +1941,7 @@ o_after_checkpoint_cleanup_hook(XLogRecPtr checkPointRedo, int flags)
 }
 
 static uint64
-append_file_contents(File target, char *source_filename, uint64 offset)
+append_file_contents(File target, source_filename: &mut char, uint64 offset)
 {
 	char		buf[ORIOLEDB_BLCKSZ];
 	File		source;
@@ -1974,7 +1973,7 @@ append_file_contents(File target, char *source_filename, uint64 offset)
 }
 
 static uint64
-finalize_chkp_map(File chkp_file, uint64 len, char *input_filename,
+finalize_chkp_map(File chkp_file, uint64 len, input_filename: &mut char,
 				  uint64 input_offset, uint32 input_num)
 {
 	SeqBufTag	tmp_tag;
@@ -1990,7 +1989,7 @@ finalize_chkp_map(File chkp_file, uint64 len, char *input_filename,
 	input_num++;
 	while (input_num <= checkpoint_state->lastCheckpointNumber)
 	{
-		char	   *tmp_filename;
+		tmp_filename: &mut char;
 
 		tmp_tag.key.oids.datoid = checkpoint_state->datoid;
 		tmp_tag.key.oids.relnode = checkpoint_state->relnode;
@@ -2013,7 +2012,7 @@ finalize_chkp_map(File chkp_file, uint64 len, char *input_filename,
 // Comparator for sort ascending.
 //
 static int
-uint32_offsets_cmp(const void *a, const void *b)
+uint32_offsets_cmp(a: &mut const, b: &mut const)
 {
 	uint32		val1 = *(uint32 *) a;
 	uint32		val2 = *(uint32 *) b;
@@ -2027,10 +2026,10 @@ uint32_offsets_cmp(const void *a, const void *b)
 // Comparator for FileExtent.len sort descending.
 //
 static int
-file_extents_len_off_cmp(const void *a, const void *b)
+file_extents_len_off_cmp(a: &mut const, b: &mut const)
 {
-	FileExtent *val1 = (FileExtent *) a;
-	FileExtent *val2 = (FileExtent *) b;
+	val1: &mut FileExtent = (FileExtent *) a;
+	val2: &mut FileExtent = (FileExtent *) b;
 
 	if (val1->len != val2->len)
 		return val1->len > val2->len ? -1 : 1;
@@ -2044,10 +2043,10 @@ file_extents_len_off_cmp(const void *a, const void *b)
 // Comparator for FileExtent.off sort ascending.
 //
 static int
-file_extents_off_len_cmp(const void *a, const void *b)
+file_extents_off_len_cmp(a: &mut const, b: &mut const)
 {
-	FileExtent *val1 = (FileExtent *) a;
-	FileExtent *val2 = (FileExtent *) b;
+	val1: &mut FileExtent = (FileExtent *) a;
+	val2: &mut FileExtent = (FileExtent *) b;
 
 	if (val1->off != val2->off)
 		return val1->off > val2->off ? 1 : -1;
@@ -2061,10 +2060,10 @@ file_extents_off_len_cmp(const void *a, const void *b)
 // Comparator for FileExtent.off sort ascending.
 //
 static int
-file_extents_writeback_cmp(const void *a, const void *b)
+file_extents_writeback_cmp(a: &mut const, b: &mut const)
 {
-	FileExtent *val1 = (FileExtent *) a;
-	FileExtent *val2 = (FileExtent *) b;
+	val1: &mut FileExtent = (FileExtent *) a;
+	val2: &mut FileExtent = (FileExtent *) b;
 
 	if (val1->off != val2->off)
 		return val1->off > val2->off ? 1 : -1;
@@ -2082,13 +2081,13 @@ file_extents_writeback_cmp(const void *a, const void *b)
 //
 // Sort lists of free blocks in .map file to optimize disk access.
 //
-static void
-sort_checkpoint_map_file(BTreeDescr *descr, int cur_chkp_index)
+fn
+sort_checkpoint_map_file(descr: &mut BTreeDescr, int cur_chkp_index)
 {
 	Pointer		free_blocks;
 	uint64		free_blocks_size;
 	File		file;
-	char	   *filename;
+	filename: &mut char;
 	CheckpointFileHeader header = {0};
 	bool		ferror = false,
 				is_compressed = OCompressIsValid(descr->compress);
@@ -2159,13 +2158,13 @@ sort_checkpoint_map_file(BTreeDescr *descr, int cur_chkp_index)
 //
 // Sort lists of free blocks in .map file to optimize disk access.
 //
-static void
-sort_checkpoint_tmp_file(BTreeDescr *descr, int cur_chkp_index)
+fn
+sort_checkpoint_tmp_file(descr: &mut BTreeDescr, int cur_chkp_index)
 {
 	Pointer		free_blocks;
 	uint64		free_blocks_size;
 	File		file;
-	char	   *filename;
+	filename: &mut char;
 	bool		is_compressed = OCompressIsValid(descr->compress);
 	int			read_size;
 
@@ -2221,8 +2220,8 @@ sort_checkpoint_tmp_file(BTreeDescr *descr, int cur_chkp_index)
 	pfree(free_blocks);
 }
 
-static inline void
-checkpoint_ix_init_state(CheckpointState *state, BTreeDescr *descr)
+static inline 
+checkpoint_ix_init_state(state: &mut CheckpointState, descr: &mut BTreeDescr)
 {
 	chkp_inc_changecount_before(checkpoint_state);
 	checkpoint_state->treeType = descr->type;
@@ -2240,10 +2239,10 @@ checkpoint_ix_init_state(CheckpointState *state, BTreeDescr *descr)
 //
 // It adds the offset to *.map and *.tmp files.
 //
-void
-free_extent_for_checkpoint(BTreeDescr *desc, FileExtent *extent, uint32 chkp_num)
+
+free_extent_for_checkpoint(desc: &mut BTreeDescr, extent: &mut FileExtent, uint32 chkp_num)
 {
-	SeqBufDescPrivate *bufs[2] = {&desc->nextChkp[chkp_num % 2], &desc->tmpBuf[chkp_num % 2]};
+	bufs: &mut SeqBufDescPrivate[2] = {&desc->nextChkp[chkp_num % 2], &desc->tmpBuf[chkp_num % 2]};
 	int			i;
 	bool		success;
 
@@ -2302,7 +2301,7 @@ free_extent_for_checkpoint(BTreeDescr *desc, FileExtent *extent, uint32 chkp_num
 // checkpointing.
 //
 bool
-page_is_under_checkpoint(BTreeDescr *desc, OInMemoryBlkno blkno,
+page_is_under_checkpoint(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 						 bool includingHikeyBlkno)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -2376,7 +2375,7 @@ page_is_under_checkpoint(BTreeDescr *desc, OInMemoryBlkno blkno,
 // Returns true if btree is under in-progress checkpointing.
 //
 bool
-tree_is_under_checkpoint(BTreeDescr *desc)
+tree_is_under_checkpoint(desc: &mut BTreeDescr)
 {
 	Oid			datoid,
 				relnode;
@@ -2435,7 +2434,7 @@ tree_is_under_checkpoint(BTreeDescr *desc)
 // we will have the offset both free and busy for the current checkpoint.
 //
 static inline int
-side_of_checkpoint_bound(BTreeDescr *descr, Page page,
+side_of_checkpoint_bound(descr: &mut BTreeDescr, Page page,
 						 OTuple cur_key, CurKeyType cur_key_type,
 						 OTuple lvl_hikey, CheckpointBound bound)
 {
@@ -2536,8 +2535,8 @@ chkp_ordering_cmp(OIndexType type1, Oid datoid1, Oid relnode1,
 // Determine which checkpoint `blkno` should be written to.
 //
 bool
-get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
-					  uint32 *checkpoint_number, bool *copy_blkno)
+get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
+					  checkpoint_number: &mut uint32, copy_blkno: &mut bool)
 {
 	CheckpointBound bound;
 	CurKeyType	cur_key_type;
@@ -2584,14 +2583,12 @@ get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 			// easy case: BTree is not under checkpoint
 			if (cmp < 0)
 			{
-				// Already passed checkpoint
-				*checkpoint_number = last_checkpoint_number + 2;
+				// Already passed checkpoint_number: &mut checkpoint = last_checkpoint_number + 2;
 				*copy_blkno = false;
 			}
 			else
 			{
-				// Not yet passed by checkpoint
-				*checkpoint_number = last_checkpoint_number + 1;
+				// Not yet passed by checkpoint_number: &mut checkpoint = last_checkpoint_number + 1;
 				*copy_blkno = false;
 			}
 
@@ -2631,8 +2628,7 @@ get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 		{
 			if (cur_key_type == CurKeyLeast)
 				*checkpoint_number = last_checkpoint_number + 1;
-			else
-				*checkpoint_number = last_checkpoint_number + 2;
+			checkpoint_number: &mut else = last_checkpoint_number + 2;
 			*copy_blkno = false;
 
 			chkp_save_changecount_after(checkpoint_state, after_changecount);
@@ -2679,8 +2675,8 @@ get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 //
 // Sets the autonomous level by backend. It should not be called for leafs.
 //
-void
-backend_set_autonomous_level(CheckpointState *state, uint32 level)
+
+backend_set_autonomous_level(state: &mut CheckpointState, uint32 level)
 {
 	uint32		cur_level = ORIOLEDB_MAX_DEPTH;
 
@@ -2709,12 +2705,12 @@ backend_set_autonomous_level(CheckpointState *state, uint32 level)
 // perform_writeback_and_relock() inside checkpoint_btree().
 //
 static bool
-checkpoint_ix(int flags, BTreeDescr *descr)
+checkpoint_ix(int flags, descr: &mut BTreeDescr)
 {
-	FileExtentsArray *free_extents = NULL;
-	char	   *filename,
+	free_extents: &mut FileExtentsArray = NULL;
+	filename: &mut char,
 			   *finalize_filename;
-	BTreeMetaPage *meta_page;
+	meta_page: &mut BTreeMetaPage;
 	uint64		map_len = 0,
 				offset = 0,
 				root_downlink;
@@ -2773,7 +2769,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 	if (is_compressed)
 	{
 		free_extents = file_extents_array_init();
-		foreach_free_extent(descr, foreach_extent_append, (void *) free_extents);
+		foreach_free_extent(descr, foreach_extent_append, ( *) free_extents);
 	}
 
 	STOPEVENT(STOPEVENT_BEFORE_BLKNO_LOCK, NULL);
@@ -2845,7 +2841,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 // We need to combine a *.map file content and the free_extents array
 // and remove all intersections
 //
-		FileExtent *map_extents = NULL;
+		map_extents: &mut FileExtent = NULL;
 		off_t		map_extents_size,
 					write_offset = sizeof(CheckpointFileHeader);
 
@@ -2903,7 +2899,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 		else
 		{
 			// create a new combined *.map file
-			FileExtent *cur = NULL;
+			cur: &mut FileExtent = NULL;
 			char		write_buf[ORIOLEDB_BLCKSZ];
 			int			f_i = 0,
 						m_i = 0,
@@ -3044,8 +3040,8 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 // Checkpointer walk over particular B-tree. Returns rootPageBlkno page offset.
 //
 static uint64
-checkpoint_btree(BTreeDescr **descrPtr, CheckpointState *state,
-				 CheckpointWriteBack *writeback)
+checkpoint_btree(BTreeDescr **descrPtr, state: &mut CheckpointState,
+				 writeback: &mut CheckpointWriteBack)
 {
 	uint64		root_downlink;
 	MemoryContext tmp_context,
@@ -3076,7 +3072,7 @@ checkpoint_btree(BTreeDescr **descrPtr, CheckpointState *state,
 // Resets autonomous level to default value and returns previous value.
 //
 static inline uint32
-checkpointer_reset_autonomous_level(CheckpointState *state)
+checkpointer_reset_autonomous_level(state: &mut CheckpointState)
 {
 	uint32		cur_level = ORIOLEDB_MAX_DEPTH;
 
@@ -3097,8 +3093,8 @@ checkpointer_reset_autonomous_level(CheckpointState *state)
 //
 // min_level used only for assertion.
 //
-static inline void
-checkpointer_update_autonomous(BTreeDescr *desc, CheckpointState *state)
+static inline 
+checkpointer_update_autonomous(desc: &mut BTreeDescr, state: &mut CheckpointState)
 {
 	int			i,
 				cur_chkp_num = state->lastCheckpointNumber + 1,
@@ -3128,8 +3124,8 @@ checkpointer_update_autonomous(BTreeDescr *desc, CheckpointState *state)
 	// go upwards for the stack and setup autonomous flag if needed
 	for (i = autonomous_level; OInMemoryBlknoIsValid(state->stack[i].blkno); i++)
 	{
-		OrioleDBPageDesc *page_desc;
-		BTreePageHeader *header;
+		page_desc: &mut OrioleDBPageDesc;
+		header: &mut BTreePageHeader;
 
 		if (!state->stack[i].autonomous)
 		{
@@ -3156,9 +3152,9 @@ checkpointer_update_autonomous(BTreeDescr *desc, CheckpointState *state)
 //
 // Locks page, updates autonomous flags and stack after rootPageBlkno split.
 //
-static void
-checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
-					 OInMemoryBlkno *blkno, uint32 page_chage_count, int level)
+fn
+checkpoint_lock_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
+					 blkno: &mut OInMemoryBlkno, uint32 page_chage_count, int level)
 {
 	Page		page,
 				img;
@@ -3203,7 +3199,7 @@ checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 		BTreePageItemLocator pageLoc,
 					imageLoc;
 		LocationIndex itemsize;
-		BTreeNonLeafTuphdr *tuphdr;
+		tuphdr: &mut BTreeNonLeafTuphdr;
 		uint64		downlink;
 
 		BTREE_PAGE_LOCATOR_FIRST(page, &pageLoc);
@@ -3282,7 +3278,7 @@ checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 
 }
 
-static void
+fn
 checkpoint_reserve_undo(UndoLogType undoType, bool release)
 {
 	UndoLogType pageUndoType = GET_PAGE_LEVEL_UNDO_TYPE(undoType);
@@ -3315,7 +3311,7 @@ checkpoint_reserve_undo(UndoLogType undoType, bool release)
 }
 
 static bool
-checkpoint_try_merge_page(BTreeDescr *descr, CheckpointState *state,
+checkpoint_try_merge_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 						  OInMemoryBlkno blkno, int level)
 {
 	OInMemoryBlkno parentBlkno = state->stack[level + 1].blkno,
@@ -3324,8 +3320,8 @@ checkpoint_try_merge_page(BTreeDescr *descr, CheckpointState *state,
 				rightPage,
 				page = O_GET_IN_MEMORY_PAGE(blkno);
 	BTreePageItemLocator loc;
-	BTreeNonLeafTuphdr *tuphdr = NULL;
-	OrioleDBPageDesc *rpage_desc = NULL;
+	tuphdr: &mut BTreeNonLeafTuphdr = NULL;
+	rpage_desc: &mut OrioleDBPageDesc = NULL;
 	OTuple		key PG_USED_FOR_ASSERTS_ONLY;
 	bool		mergeParent = false;
 
@@ -3413,9 +3409,9 @@ checkpoint_try_merge_page(BTreeDescr *descr, CheckpointState *state,
 //
 // Locks a given page for safely processing by the checkpointer.
 //
-static void
-checkpoint_fix_split_and_lock_page(BTreeDescr *descr, CheckpointState *state,
-								   OInMemoryBlkno *blkno, uint32 page_chage_count, int level)
+fn
+checkpoint_fix_split_and_lock_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
+								   blkno: &mut OInMemoryBlkno, uint32 page_chage_count, int level)
 {
 	OInMemoryBlkno old_blkno;
 
@@ -3474,8 +3470,8 @@ checkpoint_fix_split_and_lock_page(BTreeDescr *descr, CheckpointState *state,
 	}
 }
 
-static void
-next_key_to_jsonb(JsonbParseState **state, BTreeDescr *descr,
+fn
+next_key_to_jsonb(JsonbParseState **state, descr: &mut BTreeDescr,
 				  NextKeyType keyType, OTuple keyValue)
 {
 	pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
@@ -3493,13 +3489,13 @@ next_key_to_jsonb(JsonbParseState **state, BTreeDescr *descr,
 }
 
 static Jsonb *
-prepare_checkpoint_step_params(BTreeDescr *descr,
-							   CheckpointState *chkpState,
-							   WalkMessage *message,
+prepare_checkpoint_step_params(descr: &mut BTreeDescr,
+							   chkpState: &mut CheckpointState,
+							   message: &mut WalkMessage,
 							   int level)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -3544,7 +3540,7 @@ prepare_checkpoint_step_params(BTreeDescr *descr,
 	}
 	else if (message->action == WalkContinue)
 	{
-		CheckpointPageInfo *pageInfo = &chkpState->stack[level];
+		pageInfo: &mut CheckpointPageInfo = &chkpState->stack[level];
 
 		jsonb_push_string_key(&state, "action", "walkContinue");
 		jsonb_push_bool_key(&state, "autonomous", pageInfo->autonomous);
@@ -3565,8 +3561,8 @@ prepare_checkpoint_step_params(BTreeDescr *descr,
 static Jsonb *
 prepare_checkpoint_table_start_params(ORelOids tableOids, ORelOids treeOids)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -3590,10 +3586,10 @@ prepare_checkpoint_table_start_params(ORelOids tableOids, ORelOids treeOids)
 }
 
 static Jsonb *
-prepare_checkpoint_tree_start_params(BTreeDescr *desc)
+prepare_checkpoint_tree_start_params(desc: &mut BTreeDescr)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -3607,8 +3603,8 @@ prepare_checkpoint_tree_start_params(BTreeDescr *desc)
 
 static uint64
 checkpoint_btree_loop(BTreeDescr **descrPtr,
-					  CheckpointState *state,
-					  CheckpointWriteBack *writeback,
+					  state: &mut CheckpointState,
+					  writeback: &mut CheckpointWriteBack,
 					  MemoryContext tmp_context)
 {
 	WalkMessage message;
@@ -3616,7 +3612,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 	uint64		downlink;
 	int			level,
 				i;
-	BTreeDescr *descr = *descrPtr;
+	descr: &mut BTreeDescr = *descrPtr;
 	OInMemoryBlkno blkno = descr->rootInfo.rootPageBlkno;
 	uint32		page_chage_count = InvalidOPageChangeCount;
 	uint		blcksz = OCompressIsValid(descr->compress) ? ORIOLEDB_COMP_BLCKSZ : ORIOLEDB_BLCKSZ;
@@ -3655,7 +3651,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 
 		if (STOPEVENTS_ENABLED())
 		{
-			Jsonb	   *params = prepare_checkpoint_step_params(descr, state,
+			params: &mut Jsonb = prepare_checkpoint_step_params(descr, state,
 																&message, level);
 
 			STOPEVENT(STOPEVENT_CHECKPOINT_STEP, params);
@@ -3677,7 +3673,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 			bool		was_dirty,
 						parent_dirty;
 			Page		img;
-			OrioleDBPageDesc *page_desc = NULL;
+			page_desc: &mut OrioleDBPageDesc = NULL;
 
 			Assert(level > 0);
 			level--;
@@ -3731,7 +3727,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 // Downwards to autonomous node, we must free file offset if
 // it exist.
 //
-				BTreePageHeader *header = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
+				header: &mut BTreePageHeader = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
 
 				page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 
@@ -3873,7 +3869,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 		}
 		else if (message.action == WalkUpwards)
 		{
-			BTreeNonLeafTuphdr *tuphdr;
+			tuphdr: &mut BTreeNonLeafTuphdr;
 			Page		img;
 			bool		save_item,
 						valid_doff;
@@ -3969,7 +3965,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 // only for autonomous images.
 //
 static inline bool
-checkpoint_image_add_item(CheckpointPageInfo *page_info,
+checkpoint_image_add_item(page_info: &mut CheckpointPageInfo,
 						  StackImageAddType type,
 						  OTuple key,
 						  uint key_size)
@@ -4034,7 +4030,7 @@ checkpoint_image_add_item(CheckpointPageInfo *page_info,
 // 2. BTreeNonLeafTuphdr will be returned.
 //
 static BTreeNonLeafTuphdr
-autonomous_image_split(BTreeDescr *descr, CheckpointPageInfo *page_info)
+autonomous_image_split(descr: &mut BTreeDescr, page_info: &mut CheckpointPageInfo)
 {
 	BTreeNonLeafTuphdr result;
 	OFixedKey	saved_key;
@@ -4073,11 +4069,11 @@ autonomous_image_split(BTreeDescr *descr, CheckpointPageInfo *page_info)
 // Writes the autonomous image of given stack level to disk.
 //
 static uint64
-autonomous_image_write(BTreeDescr *descr, CheckpointState *state,
-					   CheckpointWriteBack *writeback, int level, uint32 flags)
+autonomous_image_write(descr: &mut BTreeDescr, state: &mut CheckpointState,
+					   writeback: &mut CheckpointWriteBack, int level, uint32 flags)
 {
 	Page		img = state->stack[level].image;
-	BTreePageHeader *img_header;
+	img_header: &mut BTreePageHeader;
 	uint64		downlink;
 	uint32		chkpNum = state->lastCheckpointNumber + 1;
 	FileExtent	extent;
@@ -4117,11 +4113,11 @@ autonomous_image_write(BTreeDescr *descr, CheckpointState *state,
 //
 // Updates lowest level hikeys and reset autonomous flag if needed.
 //
-static inline void
-update_lowest_level_hikey(BTreeDescr *descr, CheckpointState *state, int to_level,
+static inline 
+update_lowest_level_hikey(descr: &mut BTreeDescr, state: &mut CheckpointState, int to_level,
 						  OTuple hikey)
 {
-	CheckpointPageInfo *page_info;
+	page_info: &mut CheckpointPageInfo;
 	bool		autonomous;
 	int			i;
 
@@ -4165,14 +4161,14 @@ update_lowest_level_hikey(BTreeDescr *descr, CheckpointState *state, int to_leve
 // split until not found image in which downlink to child image
 // will be successfully inserted.
 //
-static void
-checkpoint_stack_image_split_flush(BTreeDescr *descr, CheckpointState *state,
-								   CheckpointWriteBack *writeback, int level)
+fn
+checkpoint_stack_image_split_flush(descr: &mut BTreeDescr, state: &mut CheckpointState,
+								   writeback: &mut CheckpointWriteBack, int level)
 {
 	uint64		downlink = 0;
 	int			cur_level;
 	bool		inserted = false;
-	BTreeNonLeafTuphdr *header,
+	header: &mut BTreeNonLeafTuphdr,
 				savedHeader;
 	OFixedKey	hikey[2];
 	LocationIndex hikeySize[2];
@@ -4188,7 +4184,7 @@ checkpoint_stack_image_split_flush(BTreeDescr *descr, CheckpointState *state,
 	while (true)
 	{
 		BTreePageItemLocator curLoc;
-		CheckpointPageInfo *curItem = &state->stack[cur_level];
+		curItem: &mut CheckpointPageInfo = &state->stack[cur_level];
 		uint32		flags = curItem->autonomousLeftmost ? O_BTREE_FLAG_LEFTMOST : 0;
 
 		//
@@ -4267,9 +4263,9 @@ checkpoint_stack_image_split_flush(BTreeDescr *descr, CheckpointState *state,
 //
 // For autonomous pages it can modify stack if on the page is not enough space.
 //
-static void
-checkpoint_stack_image_add_item(BTreeDescr *descr, CheckpointState *state,
-								CheckpointWriteBack *writeback, int level,
+fn
+checkpoint_stack_image_add_item(descr: &mut BTreeDescr, state: &mut CheckpointState,
+								writeback: &mut CheckpointWriteBack, int level,
 								StackImageAddType type, OTuple item, int item_size)
 {
 	bool		inserted PG_USED_FOR_ASSERTS_ONLY;
@@ -4290,9 +4286,9 @@ checkpoint_stack_image_add_item(BTreeDescr *descr, CheckpointState *state,
 // Flushes autonomous stack to the disk with the hikey to a given level
 // as upper stack limit.
 //
-static void
-autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
-							   CheckpointWriteBack *writeback,
+fn
+autonomous_stack_flush_to_disk(descr: &mut BTreeDescr, state: &mut CheckpointState,
+							   writeback: &mut CheckpointWriteBack,
 							   int to_level, OTuple hikey, int hikey_size)
 {
 	uint64		downlink;
@@ -4316,7 +4312,7 @@ autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
 //
 	for (; cur_level < to_level; cur_level++)
 	{
-		BTreeNonLeafTuphdr *tuphdr;
+		tuphdr: &mut BTreeNonLeafTuphdr;
 		Page		parent_img = state->stack[cur_level + 1].image;
 		int			flags;
 		BTreePageItemLocator loc;
@@ -4346,12 +4342,12 @@ autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
 	}
 }
 
-static void
-checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
-						 CheckpointWriteBack *writeback,
-						 int level, WalkMessage *message)
+fn
+checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
+						 writeback: &mut CheckpointWriteBack,
+						 int level, message: &mut WalkMessage)
 {
-	OrioleDBPageDesc *page_desc = NULL;
+	page_desc: &mut OrioleDBPageDesc = NULL;
 	OTuple		write_hikey;
 	Page		page,
 				img;
@@ -4387,7 +4383,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 	tuple_processed = false;
 	while (BTREE_PAGE_LOCATOR_IS_VALID(page, &loc))
 	{
-		BTreeNonLeafTuphdr *tuphdr;
+		tuphdr: &mut BTreeNonLeafTuphdr;
 		OTuple		key;
 
 		BTREE_PAGE_READ_INTERNAL_ITEM(tuphdr, key, page, &loc);
@@ -4592,7 +4588,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 					clear_fixed_key(&message->content.downwards.lokey);
 				else
 				{
-					OFixedKey  *lokey = &message->content.downwards.lokey;
+					lokey: &mut OFixedKey = &message->content.downwards.lokey;
 
 					copy_from_fixed_shmem_key(lokey, &state->stack[level].lokey);
 				}
@@ -4870,7 +4866,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 	}
 	else
 	{
-		BTreePageHeader *img_header,
+		img_header: &mut BTreePageHeader,
 				   *page_header;
 		uint64		written_downlink;
 		bool		parent_dirty;
@@ -4976,8 +4972,8 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 //
 // Unlocks page.
 //
-static void
-prepare_leaf_page(BTreeDescr *descr, CheckpointState *state)
+fn
+prepare_leaf_page(descr: &mut BTreeDescr, state: &mut CheckpointState)
 {
 	Page		page;
 	OInMemoryBlkno blkno = state->stack[0].blkno;
@@ -5073,12 +5069,12 @@ check_tree_needs_checkpointing(OIndexType type, ORelOids treeOids, Oid tablespac
 	return true;
 }
 
-static void
+fn
 checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
-						   ORelOids tableOids, Oid tablespace, void *arg)
+						   ORelOids tableOids, Oid tablespace,  *arg)
 {
-	CheckpointTablesArg *tbl_arg = (CheckpointTablesArg *) arg;
-	OIndexDescr *descr;
+	tbl_arg: &mut CheckpointTablesArg = (CheckpointTablesArg *) arg;
+	descr: &mut OIndexDescr;
 	uint32		chkpNum = (checkpoint_state->lastCheckpointNumber + 1);
 	int			cur_chkp_index = chkpNum % 2;
 	MemoryContext prev_context;
@@ -5095,7 +5091,7 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 
 	if (STOPEVENTS_ENABLED())
 	{
-		Jsonb	   *params = prepare_checkpoint_table_start_params(tableOids, treeOids);
+		params: &mut Jsonb = prepare_checkpoint_table_start_params(tableOids, treeOids);
 
 		STOPEVENT(STOPEVENT_CHECKPOINT_TABLE_START, params);
 	}
@@ -5118,8 +5114,8 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 	}
 	if (loaded)
 	{
-		BTreeDescr *td = &descr->desc;
-		BTreeMetaPage *meta = BTREE_GET_META(td);
+		td: &mut BTreeDescr = &descr->desc;
+		meta: &mut BTreeMetaPage = BTREE_GET_META(td);
 		bool		success;
 		bool		skip = false;
 
@@ -5147,7 +5143,7 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 
 		if (STOPEVENTS_ENABLED())
 		{
-			Jsonb	   *params = prepare_checkpoint_tree_start_params(td);
+			params: &mut Jsonb = prepare_checkpoint_tree_start_params(td);
 
 			STOPEVENT(STOPEVENT_CHECKPOINT_INDEX_START, params);
 		}
@@ -5227,8 +5223,8 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 // Returns actual lastCheckpointNumber for current tree.
 //
 uint32
-get_cur_checkpoint_number(ORelOids *oids, OIndexType type,
-						  bool *checkpoint_concurrent)
+get_cur_checkpoint_number(oids: &mut ORelOids, OIndexType type,
+						  checkpoint_concurrent: &mut bool)
 {
 	OIndexType	chkp_tree_type = oIndexInvalid;
 	Oid			datoid = InvalidOid,
@@ -5289,9 +5285,9 @@ get_cur_checkpoint_number(ORelOids *oids, OIndexType type,
 // Check if we can already re-use space freed in given checkpoint.
 //
 bool
-can_use_checkpoint_extents(BTreeDescr *desc, uint32 chkp_num)
+can_use_checkpoint_extents(desc: &mut BTreeDescr, uint32 chkp_num)
 {
-	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 
 	if (chkp_num > checkpoint_state->lastCheckpointNumber)
 		return false;
@@ -5307,8 +5303,8 @@ can_use_checkpoint_extents(BTreeDescr *desc, uint32 chkp_num)
 	return true;
 }
 
-static inline void
-init_seq_buf_pages(BTreeDescr *desc, SeqBufDescShared *shared)
+static inline 
+init_seq_buf_pages(desc: &mut BTreeDescr, shared: &mut SeqBufDescShared)
 {
 	Assert(!OInMemoryBlknoIsValid(shared->pages[0]));
 	Assert(!OInMemoryBlknoIsValid(shared->pages[1]));
@@ -5320,26 +5316,26 @@ init_seq_buf_pages(BTreeDescr *desc, SeqBufDescShared *shared)
 	Assert(OInMemoryBlknoIsValid(shared->pages[1]));
 }
 
-static inline void
-free_seq_buf_pages(BTreeDescr *desc, SeqBufDescShared *shared)
+static inline 
+free_seq_buf_pages(desc: &mut BTreeDescr, shared: &mut SeqBufDescShared)
 {
 	FREE_PAGE_IF_VALID(desc->ppool, shared->pages[0]);
 	FREE_PAGE_IF_VALID(desc->ppool, shared->pages[1]);
 }
 
 static bool
-checkpointable_tree_fill_seq_buffers(BTreeDescr *td, bool init,
-									 EvictedTreeData *evicted_tree_data,
+checkpointable_tree_fill_seq_buffers(td: &mut BTreeDescr, bool init,
+									 evicted_tree_data: &mut EvictedTreeData,
 									 uint32 chkp_num, uint32 map_chkp_num,
 									 bool map_file_exists)
 {
-	EvictedSeqBufData *evicted_free,
+	evicted_free: &mut EvictedSeqBufData,
 			   *evicted_next,
 			   *evicted_tmp;
 	SeqBufTag	prev_chkp_tag,
 				cur_chkp_tag,
 				tmp_tag;
-	BTreeMetaPage *meta_page = BTREE_GET_META(td);
+	meta_page: &mut BTreeMetaPage = BTREE_GET_META(td);
 	int			chkp_index = (chkp_num + 1) % 2;
 	bool		is_compressed = OCompressIsValid(td->compress);
 
@@ -5379,7 +5375,7 @@ checkpointable_tree_fill_seq_buffers(BTreeDescr *td, bool init,
 
 	if (init)
 	{
-		SeqBufDescShared *shareds[3] = {&meta_page->nextChkp[chkp_index],
+		shareds: &mut SeqBufDescShared[3] = {&meta_page->nextChkp[chkp_index],
 			&meta_page->tmpBuf[chkp_index],
 		&meta_page->freeBuf};
 		int			i;
@@ -5437,11 +5433,11 @@ checkpointable_tree_fill_seq_buffers(BTreeDescr *td, bool init,
 // Returns true if map file existed.
 //
 static bool
-evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
-						 uint32 *map_chkp_num, bool clear_tree)
+evictable_tree_init_meta(desc: &mut BTreeDescr, EvictedTreeData **evicted_data,
+						 map_chkp_num: &mut uint32, bool clear_tree)
 {
 	CheckpointFileHeader file_header = {0};
-	BTreeMetaPage *meta_page;
+	meta_page: &mut BTreeMetaPage;
 	uint32		chkp_num = *map_chkp_num;
 	bool		result = false;
 
@@ -5467,7 +5463,7 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 	}
 	else
 	{
-		char	   *prev_chkp_fname;
+		prev_chkp_fname: &mut char;
 		File		prev_chkp_file;
 		SeqBufTag	prev_chkp_tag;
 		bool		prev_chkp_file_exist,
@@ -5599,7 +5595,7 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 
 	if (DiskDownlinkIsValid(file_header.rootDownlink))
 	{
-		OrioleDBPageDesc *root_desc;
+		root_desc: &mut OrioleDBPageDesc;
 		char		buf[ORIOLEDB_BLCKSZ];
 		bool		rerror;
 
@@ -5636,14 +5632,14 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 
 // TODO: move this method ?
 bool
-tbl_data_exists(ORelOids *oids, Oid tablespace)
+tbl_data_exists(oids: &mut ORelOids, Oid tablespace)
 {
-	char	   *filename;
+	filename: &mut char;
 	File		file;
 	SharedRootInfoKey key;
 	OTuple		keyTuple;
 	OTuple		resultTuple;
-	char	   *db_prefix;
+	db_prefix: &mut char;
 	OIndexKey	ix_key = {.oids = *oids,.tablespace = tablespace};
 
 	key.datoid = oids->datoid;
@@ -5682,16 +5678,16 @@ tbl_data_exists(ORelOids *oids, Oid tablespace)
 //
 // Initializes B-tree with a page eviction support, but without checkpoint support.
 //
-void
-evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
+
+evictable_tree_init(desc: &mut BTreeDescr, bool init_shmem, was_evicted: &mut bool)
 {
 	uint32		chkp_num,
 				map_chkp_num;
 	int			chkp_index;
 	SeqBufTag	tmp_tag = {0};
 	bool		checkpoint_concurrent;
-	BTreeMetaPage *meta_page;
-	EvictedTreeData *evicted_tree_data = NULL;
+	meta_page: &mut BTreeMetaPage;
+	evicted_tree_data: &mut EvictedTreeData = NULL;
 	bool		is_compressed = OCompressIsValid(desc->compress);
 
 	btree_open_smgr(desc);
@@ -5700,7 +5696,7 @@ evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 										 &checkpoint_concurrent);
 	map_chkp_num = chkp_num;
 	if (init_shmem)
-		(void) evictable_tree_init_meta(desc, &evicted_tree_data,
+		() evictable_tree_init_meta(desc, &evicted_tree_data,
 										&map_chkp_num, true);
 
 	chkp_index = (chkp_num + 1) % 2;
@@ -5712,7 +5708,7 @@ evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 
 	if (init_shmem)
 	{
-		SeqBufDescShared *shareds[3] = {&meta_page->nextChkp[chkp_index],
+		shareds: &mut SeqBufDescShared[3] = {&meta_page->nextChkp[chkp_index],
 			&meta_page->tmpBuf[chkp_index],
 		&meta_page->freeBuf};
 		int			i = 0;
@@ -5776,13 +5772,13 @@ evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 //
 // Initializes B-tree with checkpoint support.
 //
-void
-checkpointable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
+
+checkpointable_tree_init(desc: &mut BTreeDescr, bool init_shmem, was_evicted: &mut bool)
 {
 	bool		checkpoint_concurrent;
 	uint32		chkp_num;
 	uint32		map_chkp_num;
-	EvictedTreeData *evicted_tree_data = NULL;
+	evicted_tree_data: &mut EvictedTreeData = NULL;
 	bool		map_file_exists = false;
 
 	chkp_num = get_cur_checkpoint_number(&desc->oids, desc->type,
@@ -5823,8 +5819,8 @@ checkpointable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 		pfree(evicted_tree_data);
 }
 
-void
-checkpointable_tree_free(BTreeDescr *desc)
+
+checkpointable_tree_free(desc: &mut BTreeDescr)
 {
 	btree_close_smgr(desc);
 	seq_buf_close_file(&desc->freeBuf);
@@ -5841,21 +5837,21 @@ checkpointable_tree_free(BTreeDescr *desc)
 static FileExtentsArray *
 file_extents_array_init()
 {
-	FileExtentsArray *result = palloc0(sizeof(FileExtentsArray));
+	result: &mut FileExtentsArray = palloc0(sizeof(FileExtentsArray));
 
 	return result;
 }
 
-static void
-file_extents_array_free(FileExtentsArray *array)
+fn
+file_extents_array_free(array: &mut FileExtentsArray)
 {
 	if (array->extents != NULL)
 		pfree(array->extents);
 	pfree(array);
 }
 
-static void
-file_extents_array_append(FileExtentsArray *array, FileExtent *extent)
+fn
+file_extents_array_append(array: &mut FileExtentsArray, extent: &mut FileExtent)
 {
 	Assert(array != NULL);
 
@@ -5878,11 +5874,11 @@ file_extents_array_append(FileExtentsArray *array, FileExtent *extent)
 	array->extents[array->size++] = *extent;
 }
 
-static void
-foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
+fn
+foreach_extent_append(desc: &mut BTreeDescr, FileExtent extent,  *arg)
 {
-	FileExtentsArray *array = (FileExtentsArray *) arg;
-	FileExtent *prev = array->size > 0 ? &array->extents[array->size - 1] : NULL;
+	array: &mut FileExtentsArray = (FileExtentsArray *) arg;
+	prev: &mut FileExtent = array->size > 0 ? &array->extents[array->size - 1] : NULL;
 	bool		append;
 
 	if (prev != NULL && prev->off + prev->len > extent.off)
@@ -5909,12 +5905,12 @@ foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
 	}
 }
 
-void
+
 systrees_lock_callback(UndoLogType undoType, UndoLocation location,
-					   UndoStackItem *baseItem, OXid oxid,
+					   baseItem: &mut UndoStackItem, OXid oxid,
 					   OUndoCallbackStage stage, bool changeCountsValid)
 {
-	SysTreesLockUndoStackItem *lockItem = (SysTreesLockUndoStackItem *) baseItem;
+	lockItem: &mut SysTreesLockUndoStackItem = (SysTreesLockUndoStackItem *) baseItem;
 
 	Assert(stage == OUndoCallbackStageAbort);
 
@@ -5929,11 +5925,11 @@ systrees_lock_callback(UndoLogType undoType, UndoLocation location,
 	}
 }
 
-static void
+fn
 add_systrees_lock_undo(bool lock)
 {
 	UndoLocation location;
-	SysTreesLockUndoStackItem *item;
+	item: &mut SysTreesLockUndoStackItem;
 	LocationIndex size = sizeof(SysTreesLockUndoStackItem);
 
 	item = (SysTreesLockUndoStackItem *) get_undo_record_unreserved(UndoLogSystem,
@@ -5955,18 +5951,18 @@ add_systrees_lock_undo(bool lock)
 //
 // oSysTreesLock is held during undo replay.
 //
-void
-systrees_modify_start(void)
+
+systrees_modify_start()
 {
 	LWLockAcquire(&checkpoint_state->oSysTreesLock, LW_EXCLUSIVE);
 	add_systrees_lock_undo(false);
 }
 
-void
+
 systrees_modify_end(bool any_wal)
 {
 	if (any_wal)
-		(void) flush_local_wal(false, false);
+		() flush_local_wal(false, false);
 	LWLockRelease(&checkpoint_state->oSysTreesLock);
 	add_systrees_lock_undo(true);
 }

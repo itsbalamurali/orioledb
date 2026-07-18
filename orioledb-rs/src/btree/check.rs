@@ -37,7 +37,7 @@ use pgrx::pg_sys;
 typedef struct
 {
 	// array of extents
-	FileExtent *extents;
+	extents: &mut FileExtent;
 	// number of allocated extents
 	uint64		allocated;
 	// number of valid extents in the array
@@ -49,36 +49,36 @@ typedef struct
 typedef struct
 {
 	ExtentsArray busy;
-	BTreeDescr *desc;
+	desc: &mut BTreeDescr;
 	bool		hasError;
 	bool		emit_transient_notices;
 	OBTreeFindPageContext context;
 } BTreeCheckStatus;
 
-static int	file_extent_cmp(const void *p1, const void *p2);
-static void check_walk_btree(BTreeCheckStatus *status, OInMemoryBlkno blkno,
+static int	file_extent_cmp(p1: &mut const, p2: &mut const);
+fn check_walk_btree(status: &mut BTreeCheckStatus, OInMemoryBlkno blkno,
 							 OInMemoryBlkno parentPagenum);
-static void add_extent(ExtentsArray *arr, FileExtent extent);
-static bool check_extents(ExtentsArray *busy, ExtentsArray *free);
-static void get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
+fn add_extent(arr: &mut ExtentsArray, FileExtent extent);
+static bool check_extents(busy: &mut ExtentsArray, free: &mut ExtentsArray);
+fn get_free_extents(desc: &mut BTreeDescr, free_extents: &mut ExtentsArray,
 							 bool force_file_check, uint32 chkp_num);
-static void get_free_extents_from_file(SeqBufTag *tag, off_t offset,
-									   ExtentsArray *free_extents,
+fn get_free_extents_from_file(tag: &mut SeqBufTag, off_t offset,
+									   free_extents: &mut ExtentsArray,
 									   bool compressed, bool should_exists);
-static void get_free_extents_from_seqbuf_pending(SeqBufDescPrivate *seqBuf,
-												 SeqBufTag *expected_tag,
-												 ExtentsArray *free_extents,
+fn get_free_extents_from_seqbuf_pending(seqBuf: &mut SeqBufDescPrivate,
+												 expected_tag: &mut SeqBufTag,
+												 free_extents: &mut ExtentsArray,
 												 bool compressed);
-static void decode_free_extent_buf(const char *buf, Size len,
-								   ExtentsArray *free_extents, bool compressed);
-static bool is_sorted_by_off(ExtentsArray *array);
-static bool is_sorted_by_len_off(ExtentsArray *array);
+fn decode_free_extent_buf(const buf: &mut char, Size len,
+								   free_extents: &mut ExtentsArray, bool compressed);
+static bool is_sorted_by_off(array: &mut ExtentsArray);
+static bool is_sorted_by_len_off(array: &mut ExtentsArray);
 
 bool
-check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
+check_btree(desc: &mut BTreeDescr, bool force_file_check, bool wait_for_checkpoint)
 {
 	bool		is_sys_tree = IS_SYS_TREE_OIDS(desc->oids);
-	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	BTreeCheckStatus status;
 	ExtentsArray free_extents;
 	uint64		data_file_len = pg_atomic_read_u64(&metaPageBlkno->datafileLength[0]);	// Fix for S3 mode
@@ -124,7 +124,7 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 			LWLockRelease(&checkpoint_state->oSysTreesLock);
 		else
 			o_tables_rel_unlock_extended(&desc->oids, AccessExclusiveLock, true);
-		(void) WaitLatch(MyLatch,
+		() WaitLatch(MyLatch,
 						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 						 10L, WAIT_EVENT_PG_SLEEP);
 		ResetLatch(MyLatch);
@@ -257,10 +257,10 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 //
 // Appends extent into the extents array.
 //
-static void
-foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
+fn
+foreach_extent_append(desc: &mut BTreeDescr, FileExtent extent,  *arg)
 {
-	ExtentsArray *arr = (ExtentsArray *) arg;
+	arr: &mut ExtentsArray = (ExtentsArray *) arg;
 
 	add_extent(arr, extent);
 }
@@ -268,8 +268,8 @@ foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
 //
 // Gets free file extents for an index.
 //
-static void
-get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
+fn
+get_free_extents(desc: &mut BTreeDescr, free_extents: &mut ExtentsArray,
 				 bool force_file_check, uint32 chkp_num)
 {
 	SeqBufTag	chkp_tag;
@@ -341,11 +341,11 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 // contain extents from consumed .tmp files.  We also need to read any
 // unconsumed .tmp files.
 //
-		BTreeMetaPage *metaPage = BTREE_GET_META(desc);
+		metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
 		uint32		num;
 		uint32		consumed_num = metaPage->freeBuf.tag.num;
 
-		foreach_free_extent(desc, foreach_extent_append, (void *) free_extents);
+		foreach_free_extent(desc, foreach_extent_append, ( *) free_extents);
 		for (num = consumed_num + 1; num <= chkp_num + 1; num++)
 		{
 			chkp_tag.num = num;
@@ -364,8 +364,8 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 // `len` is the number of bytes in `buf` to decode and must be a multiple of
 // the on-disk record size for this index.
 //
-static void
-decode_free_extent_buf(const char *buf, Size len, ExtentsArray *free_extents,
+fn
+decode_free_extent_buf(const buf: &mut char, Size len, free_extents: &mut ExtentsArray,
 					   bool compressed)
 {
 	FileExtent	extent;
@@ -393,9 +393,9 @@ decode_free_extent_buf(const char *buf, Size len, ExtentsArray *free_extents,
 //
 // Appends file extents from file to the free extents array.
 //
-static void
-get_free_extents_from_file(SeqBufTag *tag, off_t offset,
-						   ExtentsArray *free_extents, bool compressed,
+fn
+get_free_extents_from_file(tag: &mut SeqBufTag, off_t offset,
+						   free_extents: &mut ExtentsArray, bool compressed,
 						   bool should_exists)
 {
 	char		buf[ORIOLEDB_BLCKSZ],
@@ -432,13 +432,13 @@ get_free_extents_from_file(SeqBufTag *tag, off_t offset,
 // get_free_extents_from_file() to cover both halves of the stream when the
 // caller wants a snapshot that includes mid-checkpoint writes.
 //
-static void
-get_free_extents_from_seqbuf_pending(SeqBufDescPrivate *seqBuf,
-									 SeqBufTag *expected_tag,
-									 ExtentsArray *free_extents,
+fn
+get_free_extents_from_seqbuf_pending(seqBuf: &mut SeqBufDescPrivate,
+									 expected_tag: &mut SeqBufTag,
+									 free_extents: &mut ExtentsArray,
 									 bool compressed)
 {
-	char	   *buf;
+	buf: &mut char;
 	Size		len;
 
 	if (!SEQ_BUF_SHARED_EXIST(seqBuf->shared))
@@ -458,7 +458,7 @@ get_free_extents_from_seqbuf_pending(SeqBufDescPrivate *seqBuf,
 // holes.
 //
 static bool
-check_extents(ExtentsArray *busy, ExtentsArray *free)
+check_extents(busy: &mut ExtentsArray, free: &mut ExtentsArray)
 {
 	FileExtent	cur;
 	uint64		b,
@@ -529,7 +529,7 @@ check_extents(ExtentsArray *busy, ExtentsArray *free)
 // (off, len) sort comparator
 //
 static int
-file_extent_cmp(const void *p1, const void *p2)
+file_extent_cmp(p1: &mut const, p2: &mut const)
 {
 	FileExtent	v1 = *((const FileExtent *) p1);
 	FileExtent	v2 = *((const FileExtent *) p2);
@@ -545,7 +545,7 @@ file_extent_cmp(const void *p1, const void *p2)
 // Returns false if the array is sorted by off order.
 //
 static bool
-is_sorted_by_off(ExtentsArray *array)
+is_sorted_by_off(array: &mut ExtentsArray)
 {
 	uint64		i;
 	bool		sorted = true;
@@ -575,7 +575,7 @@ is_sorted_by_off(ExtentsArray *array)
 // Returns true if the array is sorted by (reverse len, off) order.
 //
 static bool
-is_sorted_by_len_off(ExtentsArray *array)
+is_sorted_by_len_off(array: &mut ExtentsArray)
 {
 	uint64		i;
 	bool		sorted = true;
@@ -607,8 +607,8 @@ is_sorted_by_len_off(ExtentsArray *array)
 //
 // Appends the extent to the array.
 //
-static void
-add_extent(ExtentsArray *arr, FileExtent extent)
+fn
+add_extent(arr: &mut ExtentsArray, FileExtent extent)
 {
 	if (arr->size >= arr->allocated)
 	{
@@ -628,14 +628,14 @@ add_extent(ExtentsArray *arr, FileExtent extent)
 	arr->blocksCount += extent.len;
 }
 
-static void
-check_walk_btree(BTreeCheckStatus *status, OInMemoryBlkno blkno,
+fn
+check_walk_btree(status: &mut BTreeCheckStatus, OInMemoryBlkno blkno,
 				 OInMemoryBlkno parentPagenum)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	OBTreeFindPageContext *context = &status->context;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	context: &mut OBTreeFindPageContext = &status->context;
 	FileExtent	extent;
 	uint64		rightLink;
 
@@ -669,7 +669,7 @@ check_walk_btree(BTreeCheckStatus *status, OInMemoryBlkno blkno,
 		while (BTREE_PAGE_LOCATOR_IS_VALID(p, &loc))
 		{
 			Pointer		ptr = BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) ptr;
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) ptr;
 
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 			{
@@ -703,9 +703,9 @@ check_walk_btree(BTreeCheckStatus *status, OInMemoryBlkno blkno,
 	context->index--;
 }
 
-static void
-btree_check_compression_recursive(BTreeDescr *desc, BTreeCompressStats *stats, OCompress lvl,
-								  OBTreeFindPageContext *context, OInMemoryBlkno blkno)
+fn
+btree_check_compression_recursive(desc: &mut BTreeDescr, stats: &mut BTreeCompressStats, OCompress lvl,
+								  context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno)
 {
 	char		buf[ORIOLEDB_BLCKSZ];
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -725,7 +725,7 @@ btree_check_compression_recursive(BTreeDescr *desc, BTreeCompressStats *stats, O
 		while (BTREE_PAGE_LOCATOR_IS_VALID(p, &loc))
 		{
 			Pointer		ptr = BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) ptr;
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) ptr;
 
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 			{
@@ -790,8 +790,8 @@ btree_check_compression_recursive(BTreeDescr *desc, BTreeCompressStats *stats, O
 	context->index--;
 }
 
-void
-check_btree_compression(BTreeDescr *desc, BTreeCompressStats *stats, OCompress lvl)
+
+check_btree_compression(desc: &mut BTreeDescr, stats: &mut BTreeCompressStats, OCompress lvl)
 {
 	OBTreeFindPageContext context;
 	bool		recovery = is_recovery_in_progress();

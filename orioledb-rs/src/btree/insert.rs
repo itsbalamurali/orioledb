@@ -33,9 +33,9 @@ use pgrx::pg_sys;
 typedef struct BTreeInsertStackItem
 {
 	// next item in the find context. next == NULL if it's last item.
-	struct BTreeInsertStackItem *next;
+	struct next: &mut BTreeInsertStackItem;
 	// current find context
-	OBTreeFindPageContext *context;
+	context: &mut OBTreeFindPageContext;
 	// if level == 0, tuple is BTreeTuple else it is BTreeKey
 	OTuple		tuple;
 
@@ -57,7 +57,7 @@ typedef struct BTreeInsertStackItem
 } BTreeInsertStackItem;
 
 // Fills BTreeInsertStackItem as a downlink of current incomplete split.
-static void o_btree_split_fill_downlink_item(BTreeInsertStackItem *insert_item,
+fn o_btree_split_fill_downlink_item(insert_item: &mut BTreeInsertStackItem,
 											 OInMemoryBlkno left_blkno,
 											 bool lock);
 
@@ -65,17 +65,17 @@ static void o_btree_split_fill_downlink_item(BTreeInsertStackItem *insert_item,
 // Finishes split of the rootPageBlkno page.
 // insert_item can be filled by o_btree_split_fill_downlink_item call.
 //
-static OInMemoryBlkno o_btree_finish_root_split_internal(BTreeDescr *desc,
+static OInMemoryBlkno o_btree_finish_root_split_internal(desc: &mut BTreeDescr,
 														 OInMemoryBlkno left_blkno,
-														 BTreeInsertStackItem *insert_item);
+														 insert_item: &mut BTreeInsertStackItem);
 
 //
 // Adds a new fix split item to insert context. It modifies an insert_item.
 //
-static BTreeInsertStackItem *o_btree_insert_stack_push_split_item(BTreeInsertStackItem *insert_item,
+static o_btree_insert_stack_push_split_item: &mut BTreeInsertStackItem(insert_item: &mut BTreeInsertStackItem,
 																  OInMemoryBlkno left_blkno);
 
-static void o_btree_insert_item(BTreeInsertStackItem *insert_item,
+fn o_btree_insert_item(insert_item: &mut BTreeInsertStackItem,
 								int reserve_kind);
 
 //
@@ -84,10 +84,10 @@ static void o_btree_insert_item(BTreeInsertStackItem *insert_item,
 //
 bool
 o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
-							bool *relocked)
+							relocked: &mut bool)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(left_blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	uint64		rightLink = header->rightLink;
 
 	if (RightLinkIsValid(rightLink))
@@ -124,15 +124,15 @@ o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 	return false;
 }
 
-static void
-o_btree_split_fill_downlink_item_with_key(BTreeInsertStackItem *insert_item,
+fn
+o_btree_split_fill_downlink_item_with_key(insert_item: &mut BTreeInsertStackItem,
 										  OInMemoryBlkno left_blkno,
 										  bool lock,
 										  OTuple key,
 										  LocationIndex keylen,
-										  BTreeNonLeafTuphdr *internal_header)
+										  internal_header: &mut BTreeNonLeafTuphdr)
 {
-	BTreePageHeader *header;
+	header: &mut BTreePageHeader;
 	OInMemoryBlkno right_blkno;
 	Page		left_page = O_GET_IN_MEMORY_PAGE(left_blkno),
 				right_page;
@@ -160,8 +160,8 @@ o_btree_split_fill_downlink_item_with_key(BTreeInsertStackItem *insert_item,
 	insert_item->tupheader = (Pointer) internal_header;
 }
 
-static void
-o_btree_split_fill_downlink_item(BTreeInsertStackItem *insert_item,
+fn
+o_btree_split_fill_downlink_item(insert_item: &mut BTreeInsertStackItem,
 								 OInMemoryBlkno left_blkno,
 								 bool lock)
 {
@@ -169,7 +169,7 @@ o_btree_split_fill_downlink_item(BTreeInsertStackItem *insert_item,
 	OTuple		hikey;
 	OTuple		key;
 	LocationIndex keylen;
-	BTreeNonLeafTuphdr *internal_header = palloc(sizeof(BTreeNonLeafTuphdr));
+	internal_header: &mut BTreeNonLeafTuphdr = palloc(sizeof(BTreeNonLeafTuphdr));
 
 	keylen = BTREE_PAGE_GET_HIKEY_SIZE(left_page);
 	BTREE_PAGE_GET_HIKEY(hikey, left_page);
@@ -182,13 +182,13 @@ o_btree_split_fill_downlink_item(BTreeInsertStackItem *insert_item,
 }
 
 static OInMemoryBlkno
-o_btree_finish_root_split_internal(BTreeDescr *desc,
+o_btree_finish_root_split_internal(desc: &mut BTreeDescr,
 								   OInMemoryBlkno left_blkno,
-								   BTreeInsertStackItem *insert_item)
+								   insert_item: &mut BTreeInsertStackItem)
 {
 	BTreeNonLeafTuphdr internal_header;
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(desc->rootInfo.rootPageBlkno);
-	BTreePageHeader *left_header,
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(desc->rootInfo.rootPageBlkno);
+	left_header: &mut BTreePageHeader,
 			   *root_header;
 	Pointer		ptr;
 	Page		p = O_GET_IN_MEMORY_PAGE(desc->rootInfo.rootPageBlkno),
@@ -263,14 +263,14 @@ o_btree_finish_root_split_internal(BTreeDescr *desc,
 // Fixes incomplete split of a non-rootPageBlkno page.
 // Left page must be locked.  Unlocks left page and all pages used internally.
 //
-static void
-o_btree_fix_page_split(BTreeDescr *desc, OInMemoryBlkno left_blkno)
+fn
+o_btree_fix_page_split(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno)
 {
 	BTreeInsertStackItem iitem;
 	OBTreeFindPageContext context;
 	Page		p = O_GET_IN_MEMORY_PAGE(left_blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
-	BTreePageHeader *rightHeader = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
+	rightHeader: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OFixedKey	key;
 	OInMemoryBlkno rightBlkno;
 	int			level = PAGE_GET_LEVEL(p);
@@ -315,8 +315,8 @@ o_btree_fix_page_split(BTreeDescr *desc, OInMemoryBlkno left_blkno)
 // Fixes incomplete split of a page.
 // Left page must be locked. Unlocks left page and all pages used internally.
 //
-void
-o_btree_split_fix_and_unlock(BTreeDescr *descr, OInMemoryBlkno left_blkno)
+
+o_btree_split_fix_and_unlock(descr: &mut BTreeDescr, OInMemoryBlkno left_blkno)
 {
 	MemoryContext prev_context;
 	bool		nested_call;
@@ -346,12 +346,12 @@ o_btree_split_fix_and_unlock(BTreeDescr *descr, OInMemoryBlkno left_blkno)
 // Fixes incomplete split of a page.
 // Left page must be locked. Unlocks left page and all pages used internally.
 //
-void
-o_btree_split_fix_for_right_page_and_unlock(BTreeDescr *desc, OInMemoryBlkno rightBlkno)
+
+o_btree_split_fix_for_right_page_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno rightBlkno)
 {
-	OrioleDBPageDesc *rightPageDesc = O_GET_IN_MEMORY_PAGEDESC(rightBlkno);
+	rightPageDesc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(rightBlkno);
 	OInMemoryBlkno leftBlkno;
-	BTreePageHeader *leftHeader;
+	leftHeader: &mut BTreePageHeader;
 	uint64		rightLink;
 	uint32		rightChangeCount;
 
@@ -377,13 +377,13 @@ o_btree_split_fix_for_right_page_and_unlock(BTreeDescr *desc, OInMemoryBlkno rig
 }
 
 static BTreeInsertStackItem *
-o_btree_insert_stack_push_split_item(BTreeInsertStackItem *insert_item,
+o_btree_insert_stack_push_split_item(insert_item: &mut BTreeInsertStackItem,
 									 OInMemoryBlkno left_blkno)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(left_blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
-	BTreePageHeader *rightHeader;
-	BTreeInsertStackItem *new_item = palloc(sizeof(BTreeInsertStackItem));
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
+	rightHeader: &mut BTreePageHeader;
+	new_item: &mut BTreeInsertStackItem = palloc(sizeof(BTreeInsertStackItem));
 	OInMemoryBlkno right_blkno;
 
 	// Should not be here.
@@ -435,7 +435,7 @@ typedef struct
 // Returns total size to be occupied by new tuples.
 //
 static int
-get_tuple_waiter_infos(BTreeDescr *desc,
+get_tuple_waiter_infos(desc: &mut BTreeDescr,
 					   int tupleWaiterProcnums[BTREE_PAGE_MAX_SPLIT_ITEMS],
 					   TupleWaiterInfo tupleWaiterInfos[BTREE_PAGE_MAX_SPLIT_ITEMS],
 					   int tupleWaitersCount)
@@ -445,8 +445,8 @@ get_tuple_waiter_infos(BTreeDescr *desc,
 
 	for (i = 0; i < tupleWaitersCount; i++)
 	{
-		OPageWaiterShmemState *lockerState = &lockerStates[tupleWaiterProcnums[i]];
-		TupleWaiterInfo *tupleWaiterInfo = &tupleWaiterInfos[i];
+		lockerState: &mut OPageWaiterShmemState = &lockerStates[tupleWaiterProcnums[i]];
+		tupleWaiterInfo: &mut TupleWaiterInfo = &tupleWaiterInfos[i];
 		OTuple		tuple;
 
 		tuple.formatFlags = lockerState->tupleFlags;
@@ -468,13 +468,13 @@ get_tuple_waiter_infos(BTreeDescr *desc,
 }
 
 static int
-waiter_info_cmp(const void *a, const void *b, void *arg)
+waiter_info_cmp(a: &mut const, b: &mut const,  *arg)
 {
-	TupleWaiterInfo *wa = (TupleWaiterInfo *) a;
-	TupleWaiterInfo *wb = (TupleWaiterInfo *) b;
+	wa: &mut TupleWaiterInfo = (TupleWaiterInfo *) a;
+	wb: &mut TupleWaiterInfo = (TupleWaiterInfo *) b;
 	OTuple		ta;
 	OTuple		tb;
-	BTreeDescr *desc = (BTreeDescr *) arg;
+	desc: &mut BTreeDescr = (BTreeDescr *) arg;
 
 	ta.formatFlags = wa->item.flags;
 	ta.data = wa->item.data + BTreeLeafTuphdrSize;
@@ -509,8 +509,8 @@ waiter_info_cmp(const void *a, const void *b, void *arg)
 // required), false otherwise.
 //
 static bool
-merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
-					BTreeSplitItems *inputItems,
+merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitItems,
+					inputItems: &mut BTreeSplitItems,
 					TupleWaiterInfo tupleWaiterInfos[BTREE_PAGE_MAX_SPLIT_ITEMS],
 					int tupleWaitersCount)
 {
@@ -741,8 +741,8 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 	}
 }
 
-static void
-o_btree_insert_mark_split_finished_if_needed(BTreeInsertStackItem *insert_item)
+fn
+o_btree_insert_mark_split_finished_if_needed(insert_item: &mut BTreeInsertStackItem)
 {
 	if (insert_item->rightBlkno != OInvalidInMemoryBlkno)
 	{
@@ -753,18 +753,18 @@ o_btree_insert_mark_split_finished_if_needed(BTreeInsertStackItem *insert_item)
 }
 
 static bool
-o_btree_insert_split(BTreeInsertStackItem *insert_item,
-					 BTreeSplitItems *items,
+o_btree_insert_split(insert_item: &mut BTreeInsertStackItem,
+					 items: &mut BTreeSplitItems,
 					 OffsetNumber offset,
 					 CommitSeqNo csn,
 					 bool needsUndo,
 					 int reserve_kind,
-					 int *waitersWakeupProcnums,
+					 waitersWakeupProcnums: &mut int,
 					 int waitersWakeupCount)
 {
 	OffsetNumber left_count;
-	OBTreeFindPageContext *curContext = insert_item->context;
-	BTreeDescr *desc = curContext->desc;
+	curContext: &mut OBTreeFindPageContext = insert_item->context;
+	desc: &mut BTreeDescr = curContext->desc;
 	OInMemoryBlkno blkno,
 				right_blkno = OInvalidInMemoryBlkno,
 				root_split_left_blkno = OInvalidInMemoryBlkno;
@@ -772,9 +772,9 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 	OTuple		split_key;
 	LocationIndex split_key_len;
 	UndoLocation undoLocation;
-	BTreeNonLeafTuphdr *internal_header;
+	internal_header: &mut BTreeNonLeafTuphdr;
 	bool		next;
-	Jsonb	   *params = NULL;
+	params: &mut Jsonb = NULL;
 
 	blkno = curContext->items[curContext->index].blkno;
 	p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -814,8 +814,8 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 //
 	if (needsUndo)
 	{
-		BTreePageHeader *php = (BTreePageHeader *) p;
-		UndoMeta   *undoMeta = get_undo_meta_by_type(GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType));
+		php: &mut BTreePageHeader = (BTreePageHeader *) p;
+		undoMeta: &mut UndoMeta = get_undo_meta_by_type(GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType));
 		UndoLocation retainLoc = pg_atomic_read_u64(enable_rewind ?
 													&undoMeta->minRewindRetainLocation :
 													&undoMeta->minProcRetainLocation);
@@ -914,10 +914,10 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 	return next;
 }
 
-static void
-tuple_waiters_check_hikey(BTreeDescr *desc, Page p,
+fn
+tuple_waiters_check_hikey(desc: &mut BTreeDescr, Page p,
 						  TupleWaiterInfo tupleWaiterInfos[BTREE_PAGE_MAX_SPLIT_ITEMS],
-						  int *tupleWaitersCount)
+						  tupleWaitersCount: &mut int)
 {
 	OTuple		hikey;
 	int			count = (*tupleWaitersCount);
@@ -945,7 +945,7 @@ tuple_waiters_check_hikey(BTreeDescr *desc, Page p,
 }
 
 static bool
-o_btree_insert_needs_page_undo(BTreeDescr *desc, Page p)
+o_btree_insert_needs_page_undo(desc: &mut BTreeDescr, Page p)
 {
 	bool		needsUndo = O_PAGE_IS(p, LEAF) && desc->undoType != UndoLogNone;
 
@@ -959,7 +959,7 @@ o_btree_insert_needs_page_undo(BTreeDescr *desc, Page p)
 //
 // Per-item pre-check shared by o_btree_insert_item_with_waiters()
 // branch and o_btree_multi_insert_item(): hikey gate, btree_page_search,
-// raw fit check, duplicate-at-locator probe.  Positions *loc on success
+// raw fit check, duplicate-at-locator probe.  loc: &mut Positions on success
 // and on Duplicate (so the caller can read the conflicting tuple if it
 // wants); leaves it indeterminate on HikeyCrossed (no search was done)
 // and may leave it positioned-but-unfit on NoFit.
@@ -969,11 +969,11 @@ o_btree_insert_needs_page_undo(BTreeDescr *desc, Page p)
 // passes the precomputed OBTreeKeyBound with BTreeKeyBound.
 //
 static BTreeLeafProbeResult
-btree_leaf_probe_insert_slot(BTreeDescr *desc, Page p, bool rightmost,
-							 OTuple *hikey,
+btree_leaf_probe_insert_slot(desc: &mut BTreeDescr, Page p, bool rightmost,
+							 hikey: &mut OTuple,
 							 Pointer key, BTreeKeyType keyType,
 							 LocationIndex newItemSize,
-							 BTreePageItemLocator *loc)
+							 loc: &mut BTreePageItemLocator)
 {
 	if (!rightmost &&
 		o_btree_cmp(desc, hikey, BTreeKeyNonLeafKey, key, keyType) <= 0)
@@ -998,19 +998,19 @@ btree_leaf_probe_insert_slot(BTreeDescr *desc, Page p, bool rightmost,
 }
 
 //
-// Write one new leaf item at *loc.  Shared page-write body for
+// Write one new leaf item loc: &mut at.  Shared page-write body for
 // o_btree_insert_item_with_waiters() and o_btree_multi_insert_item().
 // Caller has positioned loc, made any undo record, decided that the
 // item fits, and entered the critical section.  Caller follows
 // with optional page_split_chunk_if_needed() + MARK_DIRTY.
 //
-static inline void
-btree_leaf_write_new_item(BTreeDescr *desc, Page p,
-						  BTreePageItemLocator *loc,
-						  const BTreeLeafTuphdr *tuphdr,
+static inline 
+btree_leaf_write_new_item(desc: &mut BTreeDescr, Page p,
+						  loc: &mut BTreePageItemLocator,
+						  const tuphdr: &mut BTreeLeafTuphdr,
 						  OTuple tuple, LocationIndex tuplen)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	LocationIndex newItemSize = MAXALIGN(tuplen) + BTreeLeafTuphdrSize;
 	LocationIndex keyLen;
 	Pointer		ptr;
@@ -1050,16 +1050,16 @@ btree_leaf_write_new_item(BTreeDescr *desc, Page p,
 // so no eviction happens with the leaf locked
 //
 int
-o_btree_multi_insert_item(OBTreeFindPageContext *ctx,
-						  OTuple *tuples, LocationIndex *tuplens,
-						  Pointer *keys, BTreeKeyType keyType,
+o_btree_multi_insert_item(ctx: &mut OBTreeFindPageContext,
+						  tuples: &mut OTuple, tuplens: &mut LocationIndex,
+						  keys: &mut Pointer, BTreeKeyType keyType,
 						  int nitems,
 						  OXid opOxid, RowLockMode lockMode,
-						  BTreeModifyCallbackInfo *cb,
-						  void **cb_args,
-						  BTreeLeafProbeResult *result)
+						  cb: &mut BTreeModifyCallbackInfo,
+						   **cb_args,
+						  result: &mut BTreeLeafProbeResult)
 {
-	BTreeDescr *desc = ctx->desc;
+	desc: &mut BTreeDescr = ctx->desc;
 	OInMemoryBlkno blkno;
 	Page		p;
 	BTreePageItemLocator loc;
@@ -1162,13 +1162,13 @@ o_btree_multi_insert_item(OBTreeFindPageContext *ctx,
 }
 
 static bool
-o_btree_insert_item_with_waiters(BTreeInsertStackItem *insert_item,
+o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 								 int reserve_kind,
 								 int tupleWaiterProcnums[BTREE_PAGE_MAX_SPLIT_ITEMS],
 								 int tupleWaitersCount)
 {
-	BTreeDescr *desc = insert_item->context->desc;
-	OBTreeFindPageContext *curContext = insert_item->context;
+	desc: &mut BTreeDescr = insert_item->context->desc;
+	curContext: &mut OBTreeFindPageContext = insert_item->context;
 	BTreeSplitItems items;
 	BTreeSplitItems newItems;
 	int			i,
@@ -1221,8 +1221,8 @@ o_btree_insert_item_with_waiters(BTreeInsertStackItem *insert_item,
 			}
 			else
 			{
-				TupleWaiterInfo *waiterInfo = &tupleWaiterInfos[i - 1];
-				OPageWaiterShmemState *lockerState = &lockerStates[waiterInfo->pgprocno];
+				waiterInfo: &mut TupleWaiterInfo = &tupleWaiterInfos[i - 1];
+				lockerState: &mut OPageWaiterShmemState = &lockerStates[waiterInfo->pgprocno];
 				BTreeLeafProbeResult result;
 
 				tuple.formatFlags = waiterInfo->item.flags;
@@ -1304,13 +1304,13 @@ o_btree_insert_item_with_waiters(BTreeInsertStackItem *insert_item,
 	{
 		if (tupleWaiterInfos[i].inserted)
 		{
-			OPageWaiterShmemState *lockerState = &lockerStates[tupleWaiterInfos[i].pgprocno];
+			lockerState: &mut OPageWaiterShmemState = &lockerStates[tupleWaiterInfos[i].pgprocno];
 
 			tupleWaiterProcnums[waitersWakeupCount++] = tupleWaiterInfos[i].pgprocno;
 
 			if (desc->undoType != UndoLogNone)
 			{
-				BTreeLeafTuphdr *tuphdr;
+				tuphdr: &mut BTreeLeafTuphdr;
 
 				steal_reserved_undo_size(desc->undoType,
 										 lockerState->reservedUndoSize);
@@ -1350,18 +1350,18 @@ o_btree_insert_item_with_waiters(BTreeInsertStackItem *insert_item,
 }
 
 static bool
-o_btree_insert_item_no_waiters(BTreeInsertStackItem *insert_item,
+o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 							   int reserve_kind)
 {
-	BTreeDescr *desc = insert_item->context->desc;
-	OBTreeFindPageContext *curContext = insert_item->context;
+	desc: &mut BTreeDescr = insert_item->context->desc;
+	curContext: &mut OBTreeFindPageContext = insert_item->context;
 	OInMemoryBlkno blkno;
 	LocationIndex tupheaderlen;
 	LocationIndex newItemSize;
 	BTreePageItemLocator loc;
 	Page		p;
 	BTreeItemPageFitType fit;
-	BTreePageHeader *header;
+	header: &mut BTreePageHeader;
 
 	blkno = curContext->items[curContext->index].blkno;
 	loc = curContext->items[curContext->index].locator;
@@ -1531,11 +1531,11 @@ o_btree_insert_item_no_waiters(BTreeInsertStackItem *insert_item,
 	}
 }
 
-static void
-o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
+fn
+o_btree_insert_item(insert_item: &mut BTreeInsertStackItem, int reserve_kind)
 {
 	BTreeKeyType kind;
-	BTreeDescr *desc = insert_item->context->desc;
+	desc: &mut BTreeDescr = insert_item->context->desc;
 	OInMemoryBlkno blkno = OInvalidInMemoryBlkno;
 
 	Assert(insert_item != NULL);
@@ -1557,7 +1557,7 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 
 	while (insert_item != NULL)
 	{
-		OBTreeFindPageContext *curContext = insert_item->context;
+		curContext: &mut OBTreeFindPageContext = insert_item->context;
 		bool		next = false;
 		int			tupleWaiterProcnums[BTREE_PAGE_MAX_SPLIT_ITEMS];
 		int			tupleWaitersCount;
@@ -1654,7 +1654,7 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 			if (STOPEVENTS_ENABLED())
 			{
 				Page		page = O_GET_IN_MEMORY_PAGE(blkno);
-				Jsonb	   *params;
+				params: &mut Jsonb;
 
 				params = btree_page_stopevent_params(desc, page);
 				STOPEVENT(STOPEVENT_BEFORE_GET_WAITERS_WITH_TUPLES, params);
@@ -1683,10 +1683,10 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 	ppool_release_reserved(desc->ppool, PPOOL_KIND_GET_MASK(reserve_kind));
 }
 
-void
-o_btree_insert_tuple_to_leaf(OBTreeFindPageContext *context,
+
+o_btree_insert_tuple_to_leaf(context: &mut OBTreeFindPageContext,
 							 OTuple tuple, LocationIndex tuplen,
-							 BTreeLeafTuphdr *tuphdr, bool replace,
+							 tuphdr: &mut BTreeLeafTuphdr, bool replace,
 							 int reserve_kind)
 {
 	BTreeInsertStackItem insert_item;

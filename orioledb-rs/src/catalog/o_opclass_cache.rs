@@ -37,10 +37,10 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *opclass_cache = NULL;
+static opclass_cache: &mut OSysCache = NULL;
 
-static void o_opclass_cache_free_entry(Pointer entry);
-static void o_opclass_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_opclass_cache_free_entry(Pointer entry);
+fn o_opclass_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									   Pointer arg);
 
 O_SYS_CACHE_FUNCS(opclass_cache, OOpclass, 1);
@@ -97,7 +97,7 @@ o_opclass_cache_search_htup(TupleDesc tupdesc, Oid opclassoid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_opclass] = {0};
 	bool		nulls[Natts_pg_opclass] = {0};
-	OOpclass   *o_opclass;
+	o_opclass: &mut OOpclass;
 	NameData	oname;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
@@ -118,12 +118,12 @@ o_opclass_cache_search_htup(TupleDesc tupdesc, Oid opclassoid)
 	return result;
 }
 
-static void
-o_opclass_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_opclass_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	opclasstuple;
 	Form_pg_opclass opclassform;
-	OOpclass   *o_opclass = (OOpclass *) *entry_ptr;
+	o_opclass: &mut OOpclass = (OOpclass *) *entry_ptr;
 	Oid			opclassoid = DatumGetObjectId(key->keys[0]);
 	Oid			inputtype;
 
@@ -156,7 +156,7 @@ o_opclass_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(opclasstuple);
 }
 
-static void
+fn
 o_opclass_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
@@ -165,11 +165,11 @@ o_opclass_cache_free_entry(Pointer entry)
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_opclass_cache_tup_print(BTreeDescr *desc, StringInfo buf,
+
+o_opclass_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 						  OTuple tup, Pointer arg)
 {
-	OOpclass   *o_opclass = (OOpclass *) tup.data;
+	o_opclass: &mut OOpclass = (OOpclass *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);

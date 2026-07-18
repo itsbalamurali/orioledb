@@ -44,11 +44,11 @@ typedef struct
 #define	LENGTH_ERASED_FLAG	(0x80000000)
 
 static Size s3_queue_size = 0;
-static S3TaskQueueMeta *s3_queue_meta = NULL;
+static s3_queue_meta: &mut S3TaskQueueMeta = NULL;
 static Pointer s3_queue_buffer = NULL;
 
 Size
-s3_queue_shmem_needs(void)
+s3_queue_shmem_needs()
 {
 	Size		size = 0;
 
@@ -61,7 +61,7 @@ s3_queue_shmem_needs(void)
 	return size;
 }
 
-void
+
 s3_queue_init_shmem(Pointer ptr, bool found)
 {
 	if (!orioledb_s3_mode)
@@ -88,7 +88,7 @@ s3_queue_init_shmem(Pointer ptr, bool found)
 }
 
 S3TaskLocation
-s3_queue_get_insert_location(void)
+s3_queue_get_insert_location()
 {
 	return pg_atomic_read_u64(&s3_queue_meta->insertLocation);
 }
@@ -161,7 +161,7 @@ s3_queue_put_task(Pointer data, uint32 len)
 // and InvalidS3TaskLocation on failure.
 //
 S3TaskLocation
-s3_queue_try_pick_task(void)
+s3_queue_try_pick_task()
 {
 	while (true)
 	{
@@ -260,7 +260,7 @@ s3_queue_get_task(S3TaskLocation taskLocation)
 //
 // Erase the processed task from the circular buffer.
 //
-void
+
 s3_queue_erase_task(S3TaskLocation taskLocation)
 {
 	uint32		taskLen;
@@ -329,7 +329,7 @@ s3_queue_erase_task(S3TaskLocation taskLocation)
 //
 // Wait till the task with given location is processed by worker.
 //
-void
+
 s3_queue_wait_for_location(S3TaskLocation location)
 {
 	bool		slept = false;

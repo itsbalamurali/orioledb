@@ -24,11 +24,11 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *amproc_cache = NULL;
+static amproc_cache: &mut OSysCache = NULL;
 
-static void o_amproc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_amproc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									  Pointer arg);
-static void o_amproc_cache_free_entry(Pointer entry);
+fn o_amproc_cache_free_entry(Pointer entry);
 
 O_SYS_CACHE_FUNCS(amproc_cache, OAmProc, 4);
 
@@ -51,12 +51,12 @@ O_SYS_CACHE_INIT_FUNC(amproc_cache)
 									  &amproc_cache_funcs);
 }
 
-static void
-o_amproc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_amproc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	amproctup;
 	Form_pg_amproc amprocform;
-	OAmProc    *o_amproc = (OAmProc *) *entry_ptr;
+	o_amproc: &mut OAmProc = (OAmProc *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			amprocfamily;
 	Oid			amproclefttype;
@@ -92,7 +92,7 @@ o_amproc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(amproctup);
 }
 
-static void
+fn
 o_amproc_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
@@ -108,7 +108,7 @@ o_amproc_cache_search_htup(TupleDesc tupdesc, Oid amprocfamily,
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_amproc] = {0};
 	bool		nulls[Natts_pg_amproc] = {0};
-	OAmProc    *o_amproc;
+	o_amproc: &mut OAmProc;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_amproc = o_amproc_cache_search(datoid, amprocfamily, amproclefttype,
@@ -126,11 +126,11 @@ o_amproc_cache_search_htup(TupleDesc tupdesc, Oid amprocfamily,
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_amproc_cache_tup_print(BTreeDescr *desc, StringInfo buf,
+
+o_amproc_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 						 OTuple tup, Pointer arg)
 {
-	OAmProc    *o_amproc = (OAmProc *) tup.data;
+	o_amproc: &mut OAmProc = (OAmProc *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);

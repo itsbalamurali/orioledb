@@ -31,22 +31,22 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static uint32 o_idx_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind);
-static uint32 o_toast_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind);
-static uint32 o_idx_unique_hash(BTreeDescr *desc, OTuple tuple);
-static int	o_idx_len(BTreeDescr *desc, OTuple tuple, OLengthType type);
-static JsonbValue *o_key_to_jsonb(BTreeDescr *desc, OTuple key,
+static uint32 o_idx_hash(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType kind);
+static uint32 o_toast_hash(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType kind);
+static uint32 o_idx_unique_hash(desc: &mut BTreeDescr, OTuple tuple);
+static int	o_idx_len(desc: &mut BTreeDescr, OTuple tuple, OLengthType type);
+static o_key_to_jsonb: &mut JsonbValue(desc: &mut BTreeDescr, OTuple key,
 								  JsonbParseState **state);
-static OTuple o_sidx_tuple_make_key(BTreeDescr *desc, OTuple tupl,
+static OTuple o_sidx_tuple_make_key(desc: &mut BTreeDescr, OTuple tupl,
 									Pointer data, bool keep_version,
-									bool *allocated);
-static OTuple o_tuple_make_key(BTreeDescr *desc, OTuple tuple,
+									allocated: &mut bool);
+static OTuple o_tuple_make_key(desc: &mut BTreeDescr, OTuple tuple,
 							   Pointer data, bool keep_version,
-							   bool *allocated);
-static OTuple o_create_key_tuple(BTreeDescr *desc, OTuple tuple,
+							   allocated: &mut bool);
+static OTuple o_create_key_tuple(desc: &mut BTreeDescr, OTuple tuple,
 								 Pointer data, OIndexType type,
 								 bool keep_version);
-static bool pk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
+static bool pk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 						  OTuple oldTuple, OTupleXactInfo oldXactInfo,
 						  bool oldDeleted, OTuple newTuple, OXid newOxid);
 
@@ -80,10 +80,10 @@ static BTreeOps primaryOps = {
 	.unique_hash = NULL
 };
 
-void
-index_btree_desc_init(BTreeDescr *desc, OCompress compress, int fillfactor,
+
+index_btree_desc_init(desc: &mut BTreeDescr, OCompress compress, int fillfactor,
 					  ORelOids oids, OIndexType type, char persistence,
-					  Oid tablespace, OXid createOxid, void *arg)
+					  Oid tablespace, OXid createOxid,  *arg)
 {
 	if (type == oIndexPrimary)
 		desc->ops = &primaryOps;
@@ -126,15 +126,15 @@ index_btree_desc_init(BTreeDescr *desc, OCompress compress, int fillfactor,
 }
 
 static inline OIndexDescr *
-o_get_tree_def(BTreeDescr *desc)
+o_get_tree_def(desc: &mut BTreeDescr)
 {
 	return desc->arg;
 }
 
 static int
-o_get_key_len(BTreeDescr *desc, OTuple tuple, OIndexType type, bool keepVersion)
+o_get_key_len(desc: &mut BTreeDescr, OTuple tuple, OIndexType type, bool keepVersion)
 {
-	OIndexDescr *id = o_get_tree_def(desc);
+	id: &mut OIndexDescr = o_get_tree_def(desc);
 	Datum		values[INDEX_MAX_KEYS];
 	bool		isnull[INDEX_MAX_KEYS] = {false};
 	int			i,
@@ -160,9 +160,9 @@ o_get_key_len(BTreeDescr *desc, OTuple tuple, OIndexType type, bool keepVersion)
 }
 
 static int
-o_idx_len(BTreeDescr *desc, OTuple tuple, OLengthType type)
+o_idx_len(desc: &mut BTreeDescr, OTuple tuple, OLengthType type)
 {
-	OIndexDescr *id = (OIndexDescr *) desc->arg;
+	id: &mut OIndexDescr = (OIndexDescr *) desc->arg;
 
 	if (type == OTupleLength)
 	{
@@ -182,10 +182,10 @@ o_idx_len(BTreeDescr *desc, OTuple tuple, OLengthType type)
 
 // creates index tuple from current index tuple
 static OTuple
-o_create_key_tuple(BTreeDescr *desc, OTuple tuple, Pointer data,
+o_create_key_tuple(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
 				   OIndexType type, bool keep_version)
 {
-	OIndexDescr *id = o_get_tree_def(desc);
+	id: &mut OIndexDescr = o_get_tree_def(desc);
 	Datum		key[INDEX_MAX_KEYS];
 	bool		isnull[INDEX_MAX_KEYS] = {false};
 	int			i,
@@ -231,7 +231,7 @@ o_create_key_tuple(BTreeDescr *desc, OTuple tuple, Pointer data,
 // http://burtleburtle.net/bob/hash/doobs.html
 //
 static inline uint32
-hash_combine_mix(char *key, uint32 len, uint32 hash)
+hash_combine_mix(key: &mut char, uint32 len, uint32 hash)
 {
 	int			i;
 
@@ -273,8 +273,8 @@ hash_final(uint32 hash)
 // Checked with gcc -O2
 //
 static inline uint32
-hash_combine_mix_field(OIndexDescr *idx, TupleDesc tupdesc,
-					   OTupleFixedFormatSpec *spec,
+hash_combine_mix_field(idx: &mut OIndexDescr, TupleDesc tupdesc,
+					   spec: &mut OTupleFixedFormatSpec,
 					   OTuple tup, int attnum, int field_num, uint32 hash)
 {
 	Datum		val;
@@ -295,7 +295,7 @@ hash_combine_mix_field(OIndexDescr *idx, TupleDesc tupdesc,
 }
 
 uint32
-o_hash_iptr(OIndexDescr *idx, ItemPointer iptr)
+o_hash_iptr(idx: &mut OIndexDescr, ItemPointer iptr)
 {
 	register uint32 hash = HASH_INITIAL;
 
@@ -307,13 +307,13 @@ o_hash_iptr(OIndexDescr *idx, ItemPointer iptr)
 }
 
 static uint32
-o_hash_key(OIndexDescr *idx, OTuple key)
+o_hash_key(idx: &mut OIndexDescr, OTuple key)
 {
 	register uint32 hash = HASH_INITIAL;
 	int			i;
 	int			natts;
 	TupleDesc	tupdesc = idx->nonLeafTupdesc;
-	OTupleFixedFormatSpec *spec = &idx->nonLeafSpec;
+	spec: &mut OTupleFixedFormatSpec = &idx->nonLeafSpec;
 
 	if (idx->desc.type == oIndexPrimary)
 		natts = idx->nUniqueFields;
@@ -328,11 +328,11 @@ o_hash_key(OIndexDescr *idx, OTuple key)
 }
 
 static uint32
-o_hash_key_from_tuple(OIndexDescr *idx, OTuple tuple)
+o_hash_key_from_tuple(idx: &mut OIndexDescr, OTuple tuple)
 {
 	register uint32 hash = HASH_INITIAL;
 	TupleDesc	tupdesc = idx->leafTupdesc;
-	OTupleFixedFormatSpec *spec = &idx->leafSpec;
+	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
 	int			i = 0;
 	int			ctid_off = 0;
 	int			natts;
@@ -364,11 +364,11 @@ o_hash_key_from_tuple(OIndexDescr *idx, OTuple tuple)
 }
 
 static uint32
-o_hash_key_from_toast_tuple(OIndexDescr *toast, OTuple tuple)
+o_hash_key_from_toast_tuple(toast: &mut OIndexDescr, OTuple tuple)
 {
 	register uint32 hash = HASH_INITIAL;
 	TupleDesc	tupdesc = toast->leafTupdesc;
-	OTupleFixedFormatSpec *spec = &toast->leafSpec;
+	spec: &mut OTupleFixedFormatSpec = &toast->leafSpec;
 	int			attnum,
 				natts;
 
@@ -383,11 +383,11 @@ o_hash_key_from_toast_tuple(OIndexDescr *toast, OTuple tuple)
 }
 
 static uint32
-o_hash_key_from_toast_key(OIndexDescr *toast, OTuple key)
+o_hash_key_from_toast_key(toast: &mut OIndexDescr, OTuple key)
 {
 	register uint32 hash = HASH_INITIAL;
 	TupleDesc	tupdesc = toast->nonLeafTupdesc;
-	OTupleFixedFormatSpec *spec = &toast->nonLeafSpec;
+	spec: &mut OTupleFixedFormatSpec = &toast->nonLeafSpec;
 	int			attnum,
 				natts;
 
@@ -402,7 +402,7 @@ o_hash_key_from_toast_key(OIndexDescr *toast, OTuple key)
 }
 
 static uint32
-o_idx_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
+o_idx_hash(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType kind)
 {
 	Assert(kind == BTreeKeyLeafTuple || kind == BTreeKeyNonLeafKey);
 
@@ -415,7 +415,7 @@ o_idx_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
 }
 
 static uint32
-o_toast_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
+o_toast_hash(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType kind)
 {
 	Assert(kind == BTreeKeyLeafTuple || kind == BTreeKeyNonLeafKey);
 
@@ -432,12 +432,12 @@ o_toast_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
 // fields.
 //
 static uint32
-o_idx_unique_hash(BTreeDescr *desc, OTuple tuple)
+o_idx_unique_hash(desc: &mut BTreeDescr, OTuple tuple)
 {
-	OIndexDescr *idx = o_get_tree_def(desc);
+	idx: &mut OIndexDescr = o_get_tree_def(desc);
 	register uint32 hash = HASH_INITIAL;
 	TupleDesc	tupdesc = idx->leafTupdesc;
-	OTupleFixedFormatSpec *spec = &idx->leafSpec;
+	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
 	int			i = 0,
 				attnum;
 
@@ -456,28 +456,28 @@ o_idx_unique_hash(BTreeDescr *desc, OTuple tuple)
 
 // creates index tuple from table tuple for primary index
 static OTuple
-o_tuple_make_key(BTreeDescr *desc, OTuple tuple, Pointer data,
-				 bool keep_version, bool *allocated)
+o_tuple_make_key(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
+				 bool keep_version, allocated: &mut bool)
 {
 	*allocated = (data == NULL);
 	return o_create_key_tuple(desc, tuple, data, oIndexPrimary, keep_version);
 }
 
 static OTuple
-o_sidx_tuple_make_key(BTreeDescr *desc, OTuple tuple, Pointer data,
-					  bool keep_version, bool *allocated)
+o_sidx_tuple_make_key(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
+					  bool keep_version, allocated: &mut bool)
 {
 	*allocated = (data == NULL);
 	return o_create_key_tuple(desc, tuple, data, oIndexRegular, keep_version);
 }
 
 // fills key bound from tuple or index tuple that belongs to current BTree
-void
-o_fill_key_bound(OIndexDescr *id, OTuple tuple,
-				 BTreeKeyType keyType, OBTreeKeyBound *bound)
+
+o_fill_key_bound(id: &mut OIndexDescr, OTuple tuple,
+				 BTreeKeyType keyType, bound: &mut OBTreeKeyBound)
 {
 	TupleDesc	tupdesc;
-	OTupleFixedFormatSpec *spec;
+	spec: &mut OTupleFixedFormatSpec;
 	int			i,
 				attnum;
 	bool		isnull;
@@ -516,10 +516,10 @@ o_fill_key_bound(OIndexDescr *id, OTuple tuple,
 //
 // No existing callers.
 //
-void
-o_fill_bridge_index_key_bound(BTreeDescr *secondary, OTuple tuple, OBTreeKeyBound *bound)
+
+o_fill_bridge_index_key_bound(secondary: &mut BTreeDescr, OTuple tuple, bound: &mut OBTreeKeyBound)
 {
-	OIndexDescr *td = o_get_tree_def(secondary);
+	td: &mut OIndexDescr = o_get_tree_def(secondary);
 	bool		isnull;
 
 	bound->nkeys = 1;
@@ -534,12 +534,12 @@ o_fill_bridge_index_key_bound(BTreeDescr *secondary, OTuple tuple, OBTreeKeyBoun
 }
 
 // fills primary index key bound from tuple that belongs secondary index
-void
-o_fill_pindex_tuple_key_bound(BTreeDescr *desc,
+
+o_fill_pindex_tuple_key_bound(desc: &mut BTreeDescr,
 							  OTuple tup,
-							  OBTreeKeyBound *bound)
+							  bound: &mut OBTreeKeyBound)
 {
-	OIndexDescr *id = o_get_tree_def(desc);
+	id: &mut OIndexDescr = o_get_tree_def(desc);
 	int			i;
 	int			pk_from;
 	bool		isnull;
@@ -585,7 +585,7 @@ cmp_inclusive2(uint8 f1, uint8 f2)
 }
 
 int
-o_idx_cmp_range_key_to_value(OBTreeValueBound *bound1, OIndexField *field,
+o_idx_cmp_range_key_to_value(bound1: &mut OBTreeValueBound, field: &mut OIndexField,
 							 Datum value, bool isnull)
 {
 	int			cmp;
@@ -629,13 +629,13 @@ o_idx_cmp_range_key_to_value(OBTreeValueBound *bound1, OIndexField *field,
 }
 
 static int
-o_idx_cmp_tuples(OIndexDescr *id,
-				 OTuple *tuple1, BTreeKeyType keyType1,
-				 OTuple *tuple2, BTreeKeyType keyType2)
+o_idx_cmp_tuples(id: &mut OIndexDescr,
+				 tuple1: &mut OTuple, BTreeKeyType keyType1,
+				 tuple2: &mut OTuple, BTreeKeyType keyType2)
 {
 	TupleDesc	tupdesc1,
 				tupdesc2;
-	OTupleFixedFormatSpec *spec1,
+	spec1: &mut OTupleFixedFormatSpec,
 			   *spec2;
 	int			i,
 				n,
@@ -679,7 +679,7 @@ o_idx_cmp_tuples(OIndexDescr *id,
 	{
 		if (!OIgnoreColumn(id, i))
 		{
-			OIndexField *field = &id->fields[i];
+			field: &mut OIndexField = &id->fields[i];
 			int			cmp = 0;
 
 			attnum1 = OIndexKeyAttnumToTupleAttnum(keyType1, id, i + 1);
@@ -708,12 +708,12 @@ o_idx_cmp_tuples(OIndexDescr *id,
 }
 
 static int
-o_idx_cmp_key_bound_to_tuple(OIndexDescr *id,
-							 OBTreeKeyBound *key1, BTreeKeyType keyType1,
-							 OTuple *tuple2, BTreeKeyType keyType2)
+o_idx_cmp_key_bound_to_tuple(id: &mut OIndexDescr,
+							 key1: &mut OBTreeKeyBound, BTreeKeyType keyType1,
+							 tuple2: &mut OTuple, BTreeKeyType keyType2)
 {
 	TupleDesc	tupdesc;
-	OTupleFixedFormatSpec *spec;
+	spec: &mut OTupleFixedFormatSpec;
 	int			i,
 				n,
 				attnum;
@@ -772,10 +772,10 @@ o_idx_cmp_key_bound_to_tuple(OIndexDescr *id,
 }
 
 int
-o_idx_cmp_value_bounds(OBTreeValueBound *bound1,
-					   OBTreeValueBound *bound2,
-					   OIndexField *field,
-					   bool *equal)
+o_idx_cmp_value_bounds(bound1: &mut OBTreeValueBound,
+					   bound2: &mut OBTreeValueBound,
+					   field: &mut OIndexField,
+					   equal: &mut bool)
 {
 	// Keep clang analyzer quiet
 #ifndef __clang_analyzer__
@@ -873,14 +873,14 @@ o_idx_cmp_value_bounds(OBTreeValueBound *bound1,
 }
 
 int
-o_idx_cmp(BTreeDescr *desc,
-		  void *p1, BTreeKeyType keyType1,
-		  void *p2, BTreeKeyType keyType2)
+o_idx_cmp(desc: &mut BTreeDescr,
+		   *p1, BTreeKeyType keyType1,
+		   *p2, BTreeKeyType keyType2)
 {
 	// Keep clang analyzer quiet
 #ifndef __clang_analyzer__
-	OIndexDescr *id = o_get_tree_def(desc);
-	OBTreeKeyBound *key1,
+	id: &mut OIndexDescr = o_get_tree_def(desc);
+	key1: &mut OBTreeKeyBound,
 			   *key2;
 	int			i,
 				n;
@@ -946,7 +946,7 @@ o_idx_cmp(BTreeDescr *desc,
 }
 
 static bool
-pk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
+pk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 			  OTuple oldTuple, OTupleXactInfo oldXactInfo, bool oldDeleted,
 			  OTuple newTuple, OXid newOxid)
 {
@@ -966,8 +966,8 @@ pk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
 	return true;
 }
 
-static void
-o_key_to_jsonb_internal(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
+fn
+o_key_to_jsonb_internal(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 						int natts, OTuple key, JsonbParseState **state)
 {
 	int			i;
@@ -988,7 +988,7 @@ o_key_to_jsonb_internal(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 		if (isnull)
 		{
 			jval.type = jbvNull;
-			(void) pushJsonbValue(state, WJB_VALUE, &jval);
+			() pushJsonbValue(state, WJB_VALUE, &jval);
 			continue;
 		}
 
@@ -998,7 +998,7 @@ o_key_to_jsonb_internal(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 				jval.type = jbvString;
 				jval.val.string.len = VARSIZE_ANY_EXHDR(value);
 				jval.val.string.val = VARDATA_ANY(value);
-				(void) pushJsonbValue(state, WJB_VALUE, &jval);
+				() pushJsonbValue(state, WJB_VALUE, &jval);
 				break;
 
 			case TIDOID:
@@ -1007,58 +1007,58 @@ o_key_to_jsonb_internal(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 				offset = ItemPointerGetOffsetNumberNoCheck(iptr);
 
 				jval.type = jbvNumeric;
-				(void) pushJsonbValue(state, WJB_BEGIN_ARRAY, NULL);
+				() pushJsonbValue(state, WJB_BEGIN_ARRAY, NULL);
 				jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(int8_numeric, Int64GetDatum((int64) blkno)));
-				(void) pushJsonbValue(state, WJB_ELEM, &jval);
+				() pushJsonbValue(state, WJB_ELEM, &jval);
 				jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(int8_numeric, Int32GetDatum((int32) offset)));
-				(void) pushJsonbValue(state, WJB_ELEM, &jval);
-				(void) pushJsonbValue(state, WJB_END_ARRAY, NULL);
+				() pushJsonbValue(state, WJB_ELEM, &jval);
+				() pushJsonbValue(state, WJB_END_ARRAY, NULL);
 				break;
 
 			case INT2OID:
 				jval.type = jbvNumeric;
 				jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(int2_numeric, value));
-				(void) pushJsonbValue(state, WJB_VALUE, &jval);
+				() pushJsonbValue(state, WJB_VALUE, &jval);
 				break;
 
 			case INT4OID:
 				jval.type = jbvNumeric;
 				jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(int4_numeric, value));
-				(void) pushJsonbValue(state, WJB_VALUE, &jval);
+				() pushJsonbValue(state, WJB_VALUE, &jval);
 				break;
 
 			case INT8OID:
 				jval.type = jbvNumeric;
 				jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(int8_numeric, value));
-				(void) pushJsonbValue(state, WJB_VALUE, &jval);
+				() pushJsonbValue(state, WJB_VALUE, &jval);
 				break;
 
 			case FLOAT4OID:
 				jval.type = jbvNumeric;
 				jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(float4_numeric, value));
-				(void) pushJsonbValue(state, WJB_VALUE, &jval);
+				() pushJsonbValue(state, WJB_VALUE, &jval);
 				break;
 
 			case FLOAT8OID:
 				jval.type = jbvNumeric;
 				jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(float8_numeric, value));
-				(void) pushJsonbValue(state, WJB_VALUE, &jval);
+				() pushJsonbValue(state, WJB_VALUE, &jval);
 				break;
 
 			default:
 				jval.type = jbvNull;
-				(void) pushJsonbValue(state, WJB_VALUE, &jval);
+				() pushJsonbValue(state, WJB_VALUE, &jval);
 				break;
 		}
 	}
 }
 
 static JsonbValue *
-o_key_to_jsonb(BTreeDescr *desc, OTuple key, JsonbParseState **state)
+o_key_to_jsonb(desc: &mut BTreeDescr, OTuple key, JsonbParseState **state)
 {
-	OIndexDescr *id = o_get_tree_def(desc);
+	id: &mut OIndexDescr = o_get_tree_def(desc);
 
-	(void) pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
+	() pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
 	o_key_to_jsonb_internal(id->nonLeafTupdesc,
 							&id->nonLeafSpec,
 							id->nonLeafTupdesc->natts,

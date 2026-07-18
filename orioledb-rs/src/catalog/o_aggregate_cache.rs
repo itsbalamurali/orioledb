@@ -25,7 +25,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *aggregate_cache = NULL;
+static aggregate_cache: &mut OSysCache = NULL;
 
 struct OAggregate
 {
@@ -48,14 +48,14 @@ struct OAggregate
 	bool		has_initval;
 	bool		has_minitval;
 
-	char	   *agginitval;
-	char	   *aggminitval;
+	agginitval: &mut char;
+	aggminitval: &mut char;
 };
 
-static void o_aggregate_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_aggregate_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 										 Pointer arg);
-static void o_aggregate_cache_free_entry(Pointer entry);
-static Pointer o_aggregate_cache_serialize_entry(Pointer entry, int *len);
+fn o_aggregate_cache_free_entry(Pointer entry);
+static Pointer o_aggregate_cache_serialize_entry(Pointer entry, len: &mut int);
 static Pointer o_aggregate_cache_deserialize_entry(MemoryContext mcxt,
 												   Pointer data, Size length);
 
@@ -82,13 +82,13 @@ O_SYS_CACHE_INIT_FUNC(aggregate_cache)
 										 &aggregate_cache_funcs);
 }
 
-static void
-o_aggregate_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn
+o_aggregate_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							 Pointer arg)
 {
 	HeapTuple	aggtup;
 	Form_pg_aggregate aggform;
-	OAggregate *o_agg = (OAggregate *) *entry_ptr;
+	o_agg: &mut OAggregate = (OAggregate *) *entry_ptr;
 	MemoryContext prev_context;
 	Datum		textInitVal;
 	bool		initValueIsNull;
@@ -148,10 +148,10 @@ o_aggregate_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	ReleaseSysCache(aggtup);
 }
 
-static void
+fn
 o_aggregate_cache_free_entry(Pointer entry)
 {
-	OAggregate *o_agg = (OAggregate *) entry;
+	o_agg: &mut OAggregate = (OAggregate *) entry;
 
 	if (o_agg->has_initval)
 		pfree(o_agg->agginitval);
@@ -161,10 +161,10 @@ o_aggregate_cache_free_entry(Pointer entry)
 }
 
 static Pointer
-o_aggregate_cache_serialize_entry(Pointer entry, int *len)
+o_aggregate_cache_serialize_entry(Pointer entry, len: &mut int)
 {
 	StringInfoData str;
-	OAggregate *o_agg = (OAggregate *) entry;
+	o_agg: &mut OAggregate = (OAggregate *) entry;
 
 	if (o_agg->data_version != ORIOLEDB_SYS_TREE_VERSION)
 		elog(FATAL,
@@ -188,7 +188,7 @@ o_aggregate_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 									Size length)
 {
 	Pointer		ptr = data;
-	OAggregate *o_agg;
+	o_agg: &mut OAggregate;
 	int			len;
 
 	o_agg = (OAggregate *) palloc(sizeof(OAggregate));
@@ -217,7 +217,7 @@ o_aggregate_cache_search_htup(TupleDesc tupdesc, Oid aggfnoid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_aggregate] = {0};
 	bool		nulls[Natts_pg_aggregate] = {0};
-	OAggregate *o_agg;
+	o_agg: &mut OAggregate;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_agg = o_aggregate_cache_search(datoid, aggfnoid, cur_lsn,

@@ -46,7 +46,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void o_invalidate_comparator_cache(Oid opfamily, Oid lefttype,
+fn o_invalidate_comparator_cache(Oid opfamily, Oid lefttype,
 										  Oid righttype);
 
 typedef struct
@@ -57,25 +57,25 @@ typedef struct
 	Oid			righttype;
 } InvalidateComparatorUndoStackItem;
 
-static OIndexDescr *get_index_descr(ORelOids ixOids, OIndexType ixType,
-									bool miss_ok, OTableFetchContext ctx, void *o_table_source, OTableSource source);
-static bool o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapshot);
-static void init_shared_root_info(PagePool *pool,
-								  SharedRootInfo *sharedRootInfo);
-static void o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode);
-static bool o_tree_init_free_extents(BTreeDescr *desc);
-static OComparator *o_find_opclass_comparator(OOpclass *opclass, Oid collation,
+static get_index_descr: &mut OIndexDescr(ORelOids ixOids, OIndexType ixType,
+									bool miss_ok, OTableFetchContext ctx,  *o_table_source, OTableSource source);
+static bool o_table_descr_fill_indices(descr: &mut OTableDescr, table: &mut OTable, snapshot: &mut OSnapshot);
+fn init_shared_root_info(pool: &mut PagePool,
+								  sharedRootInfo: &mut SharedRootInfo);
+fn o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode);
+static bool o_tree_init_free_extents(desc: &mut BTreeDescr);
+static o_find_opclass_comparator: &mut OComparator(opclass: &mut OOpclass, Oid collation,
 											  Oid exacttype);
-static inline OComparator *o_find_cached_comparator(OComparatorKey *key);
-static inline OComparator *o_add_comparator_to_cache(OComparator *comparator);
-static bool recreate_table_descr(OTableDescr *descr);
-static void recreate_index_descr(OIndexDescr *descr);
-static OExclusionFn *o_find_exclusion_op_fn(Oid exclusion_op);
-static inline OExclusionFn *o_find_cached_exclusion_fn(Oid exclusion_op);
-static inline OExclusionFn *o_add_exclusion_fn_to_cache(OExclusionFn *exclusion_fn);
-static OHashFn *o_find_hash_fn(Oid hash_fn_oid, Oid datoid);
-static inline OHashFn *o_find_cached_hash_fn(OHashFnKey *key);
-static inline OHashFn *o_add_hash_fn_to_cache(OHashFn *hash_fn);
+static inline o_find_cached_comparator: &mut OComparator(key: &mut OComparatorKey);
+static inline o_add_comparator_to_cache: &mut OComparator(comparator: &mut OComparator);
+static bool recreate_table_descr(descr: &mut OTableDescr);
+fn recreate_index_descr(descr: &mut OIndexDescr);
+static o_find_exclusion_op_fn: &mut OExclusionFn(Oid exclusion_op);
+static inline o_find_cached_exclusion_fn: &mut OExclusionFn(Oid exclusion_op);
+static inline o_add_exclusion_fn_to_cache: &mut OExclusionFn(exclusion_fn: &mut OExclusionFn);
+static o_find_hash_fn: &mut OHashFn(Oid hash_fn_oid, Oid datoid);
+static inline o_find_cached_hash_fn: &mut OHashFn(key: &mut OHashFnKey);
+static inline o_add_hash_fn_to_cache: &mut OHashFn(hash_fn: &mut OHashFn);
 
 PG_FUNCTION_INFO_V1(orioledb_get_table_descrs);
 PG_FUNCTION_INFO_V1(orioledb_get_index_descrs);
@@ -98,7 +98,7 @@ typedef struct DeferredDescrInvalidation
 // the caller holds page locks), so we save them and replay later.
 //
 static bool saving_inval_messages = false;
-static List *saved_descr_invals = NIL;
+static saved_descr_invals: &mut List = NIL;
 
 struct OComparatorKey
 {
@@ -119,32 +119,32 @@ struct OComparator
 
 	// Filled when haveSortSupport == true
 	MemoryContext ssup_cxt;
-	void	   *ssup_extra;
+		   *ssup_extra;
 	int			(*ssup_comparator) (Datum x, Datum y, SortSupport ssup);
 };
 
-static HTAB *oTableDescrHash;
-static HTAB *oIndexDescrHash;
-static HTAB *comparatorCache;
-static HTAB *exclusionFnCache;
-static HTAB *hashFnCache;
+static oTableDescrHash: &mut HTAB;
+static oIndexDescrHash: &mut HTAB;
+static comparatorCache: &mut HTAB;
+static exclusionFnCache: &mut HTAB;
+static hashFnCache: &mut HTAB;
 
 //
 // Backend-local hash of SharedRootInfo for trees backed by LocalPagePool
 // (temp tables).  Their pages carry BLKNO_LOCAL_BIT and are meaningless to
 // other backends, so they must not reach SYS_TREES_SHARED_ROOT_INFO.
 //
-static HTAB *localSharedRootInfoHash = NULL;
+static localSharedRootInfoHash: &mut HTAB = NULL;
 static OComparatorKey lastkey = {0};
-static OComparator *lastcmp = NULL;
+static lastcmp: &mut OComparator = NULL;
 static MemoryContext descrCxt = NULL;
 static Oid	last_exclusion_op = InvalidOid;
-static OExclusionFn *last_exclusion_fn = NULL;
+static last_exclusion_fn: &mut OExclusionFn = NULL;
 static OHashFnKey last_hash_fn_key = {0};
-static OHashFn *last_hash_fn = NULL;
+static last_hash_fn: &mut OHashFn = NULL;
 OHashFn		o_default_hash_fn = {.key = {.hash_fn_oid = O_DEFAULT_HASH_FN_OID}};
 
-static void o_find_toastable_attrs(OTableDescr *tableDescr);
+fn o_find_toastable_attrs(tableDescr: &mut OTableDescr);
 
 //
 // Default context for fetching table/index descriptors from system trees.
@@ -160,9 +160,9 @@ OTableFetchContext default_table_fetch_context = {.snapshot = &o_non_deleted_sna
 // table_descr_init_tree function.
 //
 static SharedRootInfo *
-create_shared_root_info(PagePool *pool, SharedRootInfoKey *key)
+create_shared_root_info(pool: &mut PagePool, key: &mut SharedRootInfoKey)
 {
-	SharedRootInfo *sharedRootInfo;
+	sharedRootInfo: &mut SharedRootInfo;
 
 	sharedRootInfo = palloc0(sizeof(SharedRootInfo));
 	sharedRootInfo->key = *key;
@@ -171,7 +171,7 @@ create_shared_root_info(PagePool *pool, SharedRootInfoKey *key)
 }
 
 static HTAB *
-get_local_shared_root_info_hash(void)
+get_local_shared_root_info_hash()
 {
 	if (localSharedRootInfoHash == NULL)
 	{
@@ -189,10 +189,10 @@ get_local_shared_root_info_hash(void)
 }
 
 static SharedRootInfo *
-find_local_shared_root_info(SharedRootInfoKey *key)
+find_local_shared_root_info(key: &mut SharedRootInfoKey)
 {
-	SharedRootInfo *entry;
-	SharedRootInfo *copy;
+	entry: &mut SharedRootInfo;
+	copy: &mut SharedRootInfo;
 	bool		found;
 
 	if (localSharedRootInfoHash == NULL)
@@ -208,11 +208,11 @@ find_local_shared_root_info(SharedRootInfoKey *key)
 	return copy;
 }
 
-static void
-insert_local_shared_root_info(SharedRootInfo *info)
+fn
+insert_local_shared_root_info(info: &mut SharedRootInfo)
 {
-	HTAB	   *hash = get_local_shared_root_info_hash();
-	SharedRootInfo *entry;
+	hash: &mut HTAB = get_local_shared_root_info_hash();
+	entry: &mut SharedRootInfo;
 	bool		found;
 
 	entry = (SharedRootInfo *) hash_search(hash, &info->key, HASH_ENTER, &found);
@@ -221,14 +221,14 @@ insert_local_shared_root_info(SharedRootInfo *info)
 }
 
 static bool
-drop_local_shared_root_info(SharedRootInfoKey *key)
+drop_local_shared_root_info(key: &mut SharedRootInfoKey)
 {
 	bool		found = false;
 
 	if (localSharedRootInfoHash == NULL)
 		return false;
 
-	(void) hash_search(localSharedRootInfoHash, key, HASH_REMOVE, &found);
+	() hash_search(localSharedRootInfoHash, key, HASH_REMOVE, &found);
 	return found;
 }
 
@@ -271,8 +271,8 @@ read_evicted_data(Oid datoid, Oid relnode, bool delete)
 	return (EvictedTreeData *) result.data;
 }
 
-void
-insert_evicted_data(EvictedTreeData *data)
+
+insert_evicted_data(data: &mut EvictedTreeData)
 {
 	OTuple		tuple;
 	bool		success PG_USED_FOR_ASSERTS_ONLY;
@@ -288,12 +288,12 @@ insert_evicted_data(EvictedTreeData *data)
 Datum
 orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
-	BTreeIterator *it;
+	it: &mut BTreeIterator;
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -319,7 +319,7 @@ orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 		CommitSeqNo tupleCsn;
 		Datum		values[4];
 		bool		nulls[4] = {false};
-		EvictedTreeData *data;
+		data: &mut EvictedTreeData;
 
 		tuple = o_btree_iterator_fetch(it, &tupleCsn, NULL,
 									   BTreeKeyNone, false, NULL);
@@ -354,10 +354,10 @@ orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 // under AccessShareLock (See o_tables.h/o_tables_rel_lock()).
 //
 static bool
-o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
+o_btree_load_shmem_internal(desc: &mut BTreeDescr, bool checkpoint)
 {
 	SharedRootInfoKey key;
-	SharedRootInfo *sharedRootInfo = NULL;
+	sharedRootInfo: &mut SharedRootInfo = NULL;
 	bool		was_evicted,
 				is_compressed,
 				init_extents,
@@ -384,7 +384,7 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 // evictable_tree_init() needs that.  Initialized it before we get one of
 // checkpoint_state->oSharedRootInfoInsertLocks.
 //
-	(void) get_sys_tree(SYS_TREES_CHKP_NUM);
+	() get_sys_tree(SYS_TREES_CHKP_NUM);
 
 	sharedRootInfo = o_find_shared_root_info(&key);
 	if (sharedRootInfo == NULL)
@@ -529,8 +529,8 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 	return true;
 }
 
-void
-o_btree_load_shmem(BTreeDescr *desc)
+
+o_btree_load_shmem(desc: &mut BTreeDescr)
 {
 	bool		result PG_USED_FOR_ASSERTS_ONLY;
 
@@ -539,7 +539,7 @@ o_btree_load_shmem(BTreeDescr *desc)
 }
 
 bool
-o_btree_load_shmem_checkpoint(BTreeDescr *desc)
+o_btree_load_shmem_checkpoint(desc: &mut BTreeDescr)
 {
 	return o_btree_load_shmem_internal(desc, true);
 }
@@ -551,14 +551,14 @@ o_btree_load_shmem_checkpoint(BTreeDescr *desc)
 // memory. Must be called under relation locks too.
 //
 bool
-o_btree_try_use_shmem(BTreeDescr *desc)
+o_btree_try_use_shmem(desc: &mut BTreeDescr)
 {
 	Assert(ORelOidsIsValid(desc->oids));
 
 	if (!ORootPageIsValid(desc) || !OMetaPageIsValid(desc))
 	{
 		SharedRootInfoKey key;
-		SharedRootInfo *shared = NULL;
+		shared: &mut SharedRootInfo = NULL;
 
 		key.datoid = desc->oids.datoid;
 		key.relnode = desc->oids.relnode;
@@ -592,12 +592,12 @@ o_btree_try_use_shmem(BTreeDescr *desc)
 // Appends extents from free blocks file to the free extents list.
 //
 static bool
-o_tree_init_free_extents(BTreeDescr *desc)
+o_tree_init_free_extents(desc: &mut BTreeDescr)
 {
-	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	uint64		num_free_blocks = pg_atomic_read_u64(&metaPageBlkno->numFreeBlocks);
 	File		file;
-	char	   *filename;
+	filename: &mut char;
 
 	Assert(OCompressIsValid(desc->compress));
 
@@ -610,7 +610,7 @@ o_tree_init_free_extents(BTreeDescr *desc)
 
 	if (file >= 0)
 	{
-		FileExtent *extent;
+		extent: &mut FileExtent;
 		off_t		offset = sizeof(CheckpointFileHeader),
 					bytes_read,
 					i;
@@ -642,8 +642,8 @@ o_tree_init_free_extents(BTreeDescr *desc)
 	return false;
 }
 
-static void
-index_descr_free(OIndexDescr *tree)
+fn
+index_descr_free(tree: &mut OIndexDescr)
 {
 	if (tree->old_leaf_slot)
 	{
@@ -688,8 +688,8 @@ index_descr_free(OIndexDescr *tree)
 	checkpointable_tree_free(&tree->desc);
 }
 
-static void
-index_descr_delete_from_hash(OIndexDescr *tree)
+fn
+index_descr_delete_from_hash(tree: &mut OIndexDescr)
 {
 	bool		found;
 
@@ -700,13 +700,13 @@ index_descr_delete_from_hash(OIndexDescr *tree)
 		 tree->oids.reloid,
 		 tree->oids.relnode);
 
-	(void) hash_search(oIndexDescrHash, &tree->oids,
+	() hash_search(oIndexDescrHash, &tree->oids,
 					   HASH_REMOVE, &found);
 	Assert(found);
 }
 
-static void
-table_descr_free(OTableDescr *descr)
+fn
+table_descr_free(descr: &mut OTableDescr)
 {
 	int			i;
 
@@ -742,8 +742,8 @@ table_descr_free(OTableDescr *descr)
 		FreeTupleDesc(descr->tupdesc);
 }
 
-void
-o_free_tmp_table_descr(OTableDescr *descr)
+
+o_free_tmp_table_descr(descr: &mut OTableDescr)
 {
 	int			i;
 
@@ -771,19 +771,19 @@ o_free_tmp_table_descr(OTableDescr *descr)
 		FreeTupleDesc(descr->tupdesc);
 }
 
-static void
-table_descr_delete_from_hash(OTableDescr *descr)
+fn
+table_descr_delete_from_hash(descr: &mut OTableDescr)
 {
 	bool		found;
 
 	table_descr_free(descr);
-	(void) hash_search(oTableDescrHash, &descr->oids,
+	() hash_search(oTableDescrHash, &descr->oids,
 					   HASH_REMOVE, &found);
 	Assert(found);
 }
 
-static void
-fill_table_descr_common_fields(OTableDescr *descr, OTable *o_table)
+fn
+fill_table_descr_common_fields(descr: &mut OTableDescr, o_table: &mut OTable)
 {
 	MemoryContext old_context;
 	int			refcnt;
@@ -805,7 +805,7 @@ fill_table_descr_common_fields(OTableDescr *descr, OTable *o_table)
 }
 
 static bool
-fill_table_descr(OTableDescr *descr, OTable *o_table, OSnapshot *snapshot)
+fill_table_descr(descr: &mut OTableDescr, o_table: &mut OTable, snapshot: &mut OSnapshot)
 {
 	MemoryContext old_context;
 	bool		was_saving;
@@ -831,13 +831,13 @@ fill_table_descr(OTableDescr *descr, OTable *o_table, OSnapshot *snapshot)
 	return success;
 }
 
-void
-o_fill_tmp_table_descr(OTableDescr *descr, OTable *o_table)
+
+o_fill_tmp_table_descr(descr: &mut OTableDescr, o_table: &mut OTable)
 {
 	MemoryContext old_context;
 	OIndexNumber cur_ix;
-	OIndex	   *index;
-	OIndexDescr *indexDescr;
+	index: &mut OIndex;
+	indexDescr: &mut OIndexDescr;
 
 	descr->refcnt = 0;
 	fill_table_descr_common_fields(descr, o_table);
@@ -894,9 +894,9 @@ o_fill_tmp_table_descr(OTableDescr *descr, OTable *o_table)
 static OTableDescr *
 create_table_descr(ORelOids oids, OTableFetchContext ctx)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	bool		found;
-	OTable	   *o_table;
+	o_table: &mut OTable;
 	bool		old_enable_stopevents;
 
 	old_enable_stopevents = enable_stopevents;
@@ -922,7 +922,7 @@ create_table_descr(ORelOids oids, OTableFetchContext ctx)
 	if (!fill_table_descr(descr, o_table, ctx.snapshot))
 	{
 		table_descr_free(descr);
-		(void) hash_search(oTableDescrHash, &oids,
+		() hash_search(oTableDescrHash, &oids,
 						   HASH_REMOVE, &found);
 		enable_stopevents = old_enable_stopevents;
 		return NULL;
@@ -936,7 +936,7 @@ create_table_descr(ORelOids oids, OTableFetchContext ctx)
 // Finds tree with given oids in private table descriptor.
 //
 OIndexNumber
-find_tree_in_descr(OTableDescr *descr, ORelOids oids)
+find_tree_in_descr(descr: &mut OTableDescr, ORelOids oids)
 {
 	int			i;
 
@@ -999,7 +999,7 @@ o_fetch_table_descr(ORelOids oids)
 OTableDescr *
 o_fetch_table_descr_extended(ORelOids oids, OTableFetchContext ctx)
 {
-	OTableDescr *table_descr = NULL;
+	table_descr: &mut OTableDescr = NULL;
 	bool		found = false;
 	int			refcnt = 0;
 
@@ -1027,7 +1027,7 @@ o_fetch_table_descr_extended(ORelOids oids, OTableFetchContext ctx)
 // creates a new one.
 //
 OIndexDescr *
-o_fetch_index_descr(ORelOids oids, OIndexType type, bool lock, bool *nested)
+o_fetch_index_descr(ORelOids oids, OIndexType type, bool lock, nested: &mut bool)
 {
 	return o_fetch_index_descr_extended(oids, type, lock,
 										default_table_fetch_context,
@@ -1069,7 +1069,7 @@ OIndexDescr *
 o_fetch_index_descr_extended(ORelOids oids, OIndexType type, bool lock,
 							 OTableFetchContext ctx, OTableFetchContext base_ctx)
 {
-	OIndexDescr *index_descr = NULL;
+	index_descr: &mut OIndexDescr = NULL;
 
 	if (lock)
 		o_tables_rel_lock_extended(&oids, AccessShareLock, true);
@@ -1084,11 +1084,11 @@ o_fetch_index_descr_extended(ORelOids oids, OIndexType type, bool lock,
 	return index_descr;
 }
 
-static void
-init_shared_root_info(PagePool *pool, SharedRootInfo *sharedRootInfo)
+fn
+init_shared_root_info(pool: &mut PagePool, sharedRootInfo: &mut SharedRootInfo)
 {
-	BTreeMetaPage *meta_page;
-	BTreeRootInfo *rootInfo = &sharedRootInfo->rootInfo;
+	meta_page: &mut BTreeMetaPage;
+	rootInfo: &mut BTreeRootInfo = &sharedRootInfo->rootInfo;
 	int			blkno,
 				bufnum;
 
@@ -1117,7 +1117,7 @@ init_shared_root_info(PagePool *pool, SharedRootInfo *sharedRootInfo)
 // Returns the previous saving state so it can be restored by the caller.
 //
 bool
-o_start_saving_inval_messages(void)
+o_start_saving_inval_messages()
 {
 	bool		was_saving = saving_inval_messages;
 
@@ -1128,7 +1128,7 @@ o_start_saving_inval_messages(void)
 //
 // Stop saving invalidation messages, restoring the previous state.
 //
-void
+
 o_stop_saving_inval_messages(bool was_saving)
 {
 	saving_inval_messages = was_saving;
@@ -1141,8 +1141,8 @@ o_stop_saving_inval_messages(bool was_saving)
 // ppool_reserve_pages().  Called from AcceptInvalidationMessagesHook
 // when we are outside a saving section, so it is safe to process them.
 //
-void
-o_replay_saved_inval_messages(void)
+
+o_replay_saved_inval_messages()
 {
 #ifdef ALWAYS_DISCARD_CACHES
 	if (saving_inval_messages)
@@ -1158,14 +1158,14 @@ o_replay_saved_inval_messages(void)
 
 	while (saved_descr_invals != NIL)
 	{
-		List	   *invals = saved_descr_invals;
-		ListCell   *lc;
+		invals: &mut List = saved_descr_invals;
+		lc: &mut ListCell;
 
 		saved_descr_invals = NIL;
 
 		foreach(lc, invals)
 		{
-			DeferredDescrInvalidation *pending_inval;
+			pending_inval: &mut DeferredDescrInvalidation;
 
 			pending_inval = (DeferredDescrInvalidation *) lfirst(lc);
 			o_invalidate_descrs(pending_inval->datoid,
@@ -1179,12 +1179,12 @@ o_replay_saved_inval_messages(void)
 #endif
 }
 
-static void
+fn
 o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode)
 {
 	HASH_SEQ_STATUS scan_status;
-	OTableDescr *tableDescr;
-	OIndexDescr *indexDescr;
+	tableDescr: &mut OTableDescr;
+	indexDescr: &mut OIndexDescr;
 
 	Assert(!have_locked_pages());
 
@@ -1244,10 +1244,10 @@ o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode)
 	}
 }
 
-void
+
 o_invalidate_descrs(Oid datoid, Oid reloid, Oid relfilenode)
 {
-	DeferredDescrInvalidation *deferred;
+	deferred: &mut DeferredDescrInvalidation;
 	MemoryContext oldcontext;
 	bool		was_saving;
 
@@ -1277,11 +1277,11 @@ o_invalidate_descrs(Oid datoid, Oid reloid, Oid relfilenode)
 }
 
 SharedRootInfo *
-o_find_shared_root_info(SharedRootInfoKey *key)
+o_find_shared_root_info(key: &mut SharedRootInfoKey)
 {
 	OTuple		key_tuple,
 				result_tuple;
-	SharedRootInfo *local;
+	local: &mut SharedRootInfo;
 
 	local = find_local_shared_root_info(key);
 	if (local != NULL)
@@ -1298,7 +1298,7 @@ o_find_shared_root_info(SharedRootInfoKey *key)
 	return (SharedRootInfo *) result_tuple.data;
 }
 
-void
+
 o_insert_shared_root_placeholder(Oid datoid, Oid relnode)
 {
 	OTuple		sharedRootInfoTuple;
@@ -1321,11 +1321,11 @@ o_insert_shared_root_placeholder(Oid datoid, Oid relnode)
 	Assert(inserted);
 }
 
-void
+
 cleanup_btree(OIndexKey ix_key, bool files, bool fsync)
 {
 	SharedRootInfoKey key;
-	SharedRootInfo *shared = NULL;
+	shared: &mut SharedRootInfo = NULL;
 
 	key.datoid = ix_key.oids.datoid;
 	key.relnode = ix_key.oids.relnode;
@@ -1369,10 +1369,10 @@ o_drop_shared_root_info(Oid datoid, Oid relnode)
 
 static OIndexDescr *
 get_index_descr(ORelOids ixOids, OIndexType ixType,
-				bool miss_ok, OTableFetchContext ctx, void *o_table_source, OTableSource source)
+				bool miss_ok, OTableFetchContext ctx,  *o_table_source, OTableSource source)
 {
-	OIndexDescr *result;
-	OIndex	   *oIndex;
+	result: &mut OIndexDescr;
+	oIndex: &mut OIndex;
 	MemoryContext mcxt;
 	bool		found = false;
 
@@ -1388,7 +1388,7 @@ get_index_descr(ORelOids ixOids, OIndexType ixType,
 	Assert(oIndex || miss_ok);
 	if (!oIndex && miss_ok)
 	{
-		(void) hash_search(oIndexDescrHash, &ixOids, HASH_REMOVE, &found);
+		() hash_search(oIndexDescrHash, &ixOids, HASH_REMOVE, &found);
 		Assert(found);
 		return NULL;
 	}
@@ -1404,10 +1404,10 @@ get_index_descr(ORelOids ixOids, OIndexType ixType,
 	return result;
 }
 
-static void
-recreate_index_descr(OIndexDescr *descr)
+fn
+recreate_index_descr(descr: &mut OIndexDescr)
 {
-	OIndex	   *oIndex;
+	oIndex: &mut OIndex;
 	int			refcnt;
 	MemoryContext mcxt;
 
@@ -1428,7 +1428,7 @@ recreate_index_descr(OIndexDescr *descr)
 						  oIndex->createOxid, descr);
 	descr->refcnt = refcnt;
 	free_o_index(oIndex);
-	(void) o_btree_try_use_shmem(&descr->desc);
+	() o_btree_try_use_shmem(&descr->desc);
 }
 
 //
@@ -1447,7 +1447,7 @@ recreate_index_descr(OIndexDescr *descr)
 // recovery and logical decoding.
 //
 static bool
-o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapshot)
+o_table_descr_fill_indices(descr: &mut OTableDescr, table: &mut OTable, snapshot: &mut OSnapshot)
 {
 	OIndexNumber cur_ix,
 				ctid_idx_off = 0;
@@ -1468,7 +1468,7 @@ o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapsho
 		OTableFetchContext ctx;
 
 		//
-// NOTE: version here is *not* the Postgres relcache/catversion. It's
+// NOTE: version here not: &mut is* the Postgres relcache/catversion. It's
 // an OrioleDB per-index incarnation number used in sys-tree keys.
 //
 
@@ -1545,9 +1545,9 @@ o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapsho
 }
 
 static bool
-is_pk_attnum(OTableDescr *tableDescr, AttrNumber attnum)
+is_pk_attnum(tableDescr: &mut OTableDescr, AttrNumber attnum)
 {
-	OIndexDescr *pk = GET_PRIMARY(tableDescr);
+	pk: &mut OIndexDescr = GET_PRIMARY(tableDescr);
 	int			i;
 
 	for (i = 0; i < pk->nFields; i++)
@@ -1558,13 +1558,13 @@ is_pk_attnum(OTableDescr *tableDescr, AttrNumber attnum)
 	return false;
 }
 
-static void
-o_find_toastable_attrs(OTableDescr *tableDescr)
+fn
+o_find_toastable_attrs(tableDescr: &mut OTableDescr)
 {
-	OIndexDescr *pk = GET_PRIMARY(tableDescr);
+	pk: &mut OIndexDescr = GET_PRIMARY(tableDescr);
 	TupleDesc	tupdesc = pk->leafTupdesc;
-	List	   *toastable = NIL;
-	ListCell   *lc;
+	toastable: &mut List = NIL;
+	lc: &mut ListCell;
 	int			i,
 				ctid_off = pk->primaryIsCtid ? 1 : 0;
 
@@ -1610,11 +1610,11 @@ o_find_toastable_attrs(OTableDescr *tableDescr)
 // index/table metadata (datoid argument), not implicitly from the current
 // backend database.
 //
-void
-oFillFieldOpClassAndComparator(OIndexField *field, Oid datoid, Oid opclassoid,
+
+oFillFieldOpClassAndComparator(field: &mut OIndexField, Oid datoid, Oid opclassoid,
 							   Oid exacttype, Oid exclusion_op, Oid hash_fn_oid)
 {
-	OOpclass   *opclass;
+	opclass: &mut OOpclass;
 
 	Assert(OidIsValid(datoid));
 	Assert(OidIsValid(opclassoid));
@@ -1655,7 +1655,7 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 		.exacttype = lefttype == righttype ? lefttype : InvalidOid,
 		.collation = collation
 	};
-	OComparator *result;
+	result: &mut OComparator;
 	OComparator comparator;
 	Oid			procOid;
 
@@ -1745,10 +1745,10 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 // cache lookup when descriptor build is triggered from global eviction path.
 //
 static OComparator *
-o_find_opclass_comparator(OOpclass *opclass, Oid collation, Oid exacttype)
+o_find_opclass_comparator(opclass: &mut OOpclass, Oid collation, Oid exacttype)
 {
 	OComparatorKey key;
-	OComparator *result;
+	result: &mut OComparator;
 	OComparator comparator;
 
 	Assert(opclass != NULL);
@@ -1820,9 +1820,9 @@ o_find_opclass_comparator(OOpclass *opclass, Oid collation, Oid exacttype)
 // Tries to find a comparator in the cache.
 //
 static inline OComparator *
-o_find_cached_comparator(OComparatorKey *key)
+o_find_cached_comparator(key: &mut OComparatorKey)
 {
-	OComparator *result;
+	result: &mut OComparator;
 	bool		found;
 
 	// compares with previous search
@@ -1845,9 +1845,9 @@ o_find_cached_comparator(OComparatorKey *key)
 // Adds the comparator to the cache.
 //
 static inline OComparator *
-o_add_comparator_to_cache(OComparator *comparator)
+o_add_comparator_to_cache(comparator: &mut OComparator)
 {
-	OComparator *cached;
+	cached: &mut OComparator;
 
 	cached = hash_search(comparatorCache, &comparator->key, HASH_ENTER, NULL);
 	memcpy(cached, comparator, sizeof(OComparator));
@@ -1858,10 +1858,10 @@ o_add_comparator_to_cache(OComparator *comparator)
 	return cached;
 }
 
-static void
+fn
 o_invalidate_comparator_cache(Oid opfamily, Oid lefttype, Oid righttype)
 {
-	OComparator *comparator;
+	comparator: &mut OComparator;
 	HASH_SEQ_STATUS scan_status;
 	OComparatorKey key = {
 		.opfamily = opfamily,
@@ -1887,18 +1887,18 @@ o_invalidate_comparator_cache(Oid opfamily, Oid lefttype, Oid righttype)
 				pfree(comparator->ssup_extra);
 			key.exacttype = comparator->key.exacttype;
 			key.collation = collation;
-			(void) hash_search(comparatorCache, &key, HASH_REMOVE, NULL);
+			() hash_search(comparatorCache, &key, HASH_REMOVE, NULL);
 		}
 	}
 }
 
-void
+
 o_invalidate_comparator_callback(UndoLogType undoType, UndoLocation location,
-								 UndoStackItem *baseItem,
+								 baseItem: &mut UndoStackItem,
 								 OXid oxid, OUndoCallbackStage stage,
 								 bool changeCountsValid)
 {
-	InvalidateComparatorUndoStackItem *invalidateItem = (InvalidateComparatorUndoStackItem *) baseItem;
+	invalidateItem: &mut InvalidateComparatorUndoStackItem = (InvalidateComparatorUndoStackItem *) baseItem;
 
 	if (stage == OUndoCallbackStagePreCommit)
 		return;
@@ -1908,11 +1908,11 @@ o_invalidate_comparator_callback(UndoLogType undoType, UndoLocation location,
 								  invalidateItem->righttype);
 }
 
-void
+
 o_add_invalidate_comparator_undo_item(Oid opfamily, Oid lefttype, Oid righttype)
 {
 	UndoLocation location;
-	InvalidateComparatorUndoStackItem *item;
+	item: &mut InvalidateComparatorUndoStackItem;
 	LocationIndex size;
 
 	size = sizeof(InvalidateComparatorUndoStackItem);
@@ -1931,7 +1931,7 @@ o_add_invalidate_comparator_undo_item(Oid opfamily, Oid lefttype, Oid righttype)
 }
 
 int
-o_call_comparator(OComparator *comparator, Datum left, Datum right)
+o_call_comparator(comparator: &mut OComparator, Datum left, Datum right)
 {
 	int			ret;
 	bool		was_saving;
@@ -1997,7 +1997,7 @@ typedef struct
 static int
 comparison_shim(Datum x, Datum y, SortSupport ssup)
 {
-	SortShimExtra *extra = (SortShimExtra *) ssup->ssup_extra;
+	extra: &mut SortShimExtra = (SortShimExtra *) ssup->ssup_extra;
 	Datum		result;
 
 	extra->fcinfo.args[0].value = x;
@@ -2015,8 +2015,8 @@ comparison_shim(Datum x, Datum y, SortSupport ssup)
 	return result;
 }
 
-void
-o_finish_sort_support_function(OComparator *comparator, SortSupport ssup)
+
+o_finish_sort_support_function(comparator: &mut OComparator, SortSupport ssup)
 {
 	Assert(comparator);
 	if (comparator->haveSortSupport)
@@ -2026,7 +2026,7 @@ o_finish_sort_support_function(OComparator *comparator, SortSupport ssup)
 	}
 	else
 	{
-		SortShimExtra *extra;
+		extra: &mut SortShimExtra;
 
 		extra = (SortShimExtra *) MemoryContextAlloc(ssup->ssup_cxt,
 													 SizeForSortShimExtra(2));
@@ -2044,8 +2044,8 @@ o_finish_sort_support_function(OComparator *comparator, SortSupport ssup)
 	}
 }
 
-void
-o_tableam_descr_init(void)
+
+o_tableam_descr_init()
 {
 	HASHCTL		ctl;
 
@@ -2095,11 +2095,11 @@ o_tableam_descr_init(void)
 }
 
 static bool
-recreate_table_descr(OTableDescr *descr)
+recreate_table_descr(descr: &mut OTableDescr)
 {
-	OTable	   *o_table;
+	o_table: &mut OTable;
 	bool		old_enable_stopevents;
-	OEACallsCounters *saved_ea_counters;
+	saved_ea_counters: &mut OEACallsCounters;
 
 	old_enable_stopevents = enable_stopevents;
 	enable_stopevents = false;
@@ -2123,17 +2123,17 @@ recreate_table_descr(OTableDescr *descr)
 	return true;
 }
 
-void
+
 recreate_table_descr_by_oids(ORelOids oids)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	bool		found;
 
 	descr = hash_search(oTableDescrHash, &oids, HASH_FIND, &found);
 
 	if (found)
 	{
-		OIndexDescr *indexDescr;
+		indexDescr: &mut OIndexDescr;
 
 		indexDescr = hash_search(oIndexDescrHash, &oids, HASH_FIND, &found);
 		if (found)
@@ -2141,17 +2141,17 @@ recreate_table_descr_by_oids(ORelOids oids)
 		recreate_table_descr(descr);
 	}
 	else
-		(void) create_table_descr(oids, default_table_fetch_context);
+		() create_table_descr(oids, default_table_fetch_context);
 }
 
-void
-table_descr_inc_refcnt(OTableDescr *descr)
+
+table_descr_inc_refcnt(descr: &mut OTableDescr)
 {
 	descr->refcnt++;
 }
 
-void
-table_descr_dec_refcnt(OTableDescr *descr)
+
+table_descr_dec_refcnt(descr: &mut OTableDescr)
 {
 	Assert(descr->refcnt > 0);
 	descr->refcnt--;
@@ -2160,13 +2160,13 @@ table_descr_dec_refcnt(OTableDescr *descr)
 Datum
 orioledb_get_table_descrs(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 	HASH_SEQ_STATUS scan_status;
-	OTableDescr *tableDescr;
+	tableDescr: &mut OTableDescr;
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -2201,13 +2201,13 @@ orioledb_get_table_descrs(PG_FUNCTION_ARGS)
 Datum
 orioledb_get_index_descrs(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 	HASH_SEQ_STATUS scan_status;
-	OIndexDescr *indexDescr;
+	indexDescr: &mut OIndexDescr;
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -2239,13 +2239,13 @@ orioledb_get_index_descrs(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
-void
+
 o_invalidate_undo_item_callback(UndoLogType undoType, UndoLocation location,
-								UndoStackItem *baseItem,
+								baseItem: &mut UndoStackItem,
 								OXid oxid, OUndoCallbackStage stage,
 								bool changeCountsValid)
 {
-	InvalidateUndoStackItem *invalidateItem = (InvalidateUndoStackItem *) baseItem;
+	invalidateItem: &mut InvalidateUndoStackItem = (InvalidateUndoStackItem *) baseItem;
 
 	if (stage == OUndoCallbackStagePreCommit)
 		return;
@@ -2261,11 +2261,11 @@ o_invalidate_undo_item_callback(UndoLogType undoType, UndoLocation location,
 	o_invalidate_oids(invalidateItem->oids);
 }
 
-void
+
 o_add_invalidate_undo_item(ORelOids oids, uint32 flags)
 {
 	UndoLocation location;
-	InvalidateUndoStackItem *item;
+	item: &mut InvalidateUndoStackItem;
 	LocationIndex size;
 
 	size = sizeof(InvalidateUndoStackItem);
@@ -2288,7 +2288,7 @@ o_add_invalidate_undo_item(ORelOids oids, uint32 flags)
 static OExclusionFn *
 o_find_exclusion_op_fn(Oid exclusion_op)
 {
-	OExclusionFn *result;
+	result: &mut OExclusionFn;
 	OExclusionFn exclusion_fn;
 	Oid			oprcode;
 	MemoryContext oldcontext;
@@ -2318,7 +2318,7 @@ o_find_exclusion_op_fn(Oid exclusion_op)
 static inline OExclusionFn *
 o_find_cached_exclusion_fn(Oid exclusion_op)
 {
-	OExclusionFn *result;
+	result: &mut OExclusionFn;
 	bool		found;
 
 	// compares with previous search
@@ -2341,9 +2341,9 @@ o_find_cached_exclusion_fn(Oid exclusion_op)
 // Adds the exclusion function to the cache.
 //
 static inline OExclusionFn *
-o_add_exclusion_fn_to_cache(OExclusionFn *exclusion_fn)
+o_add_exclusion_fn_to_cache(exclusion_fn: &mut OExclusionFn)
 {
-	OExclusionFn *cached;
+	cached: &mut OExclusionFn;
 
 	cached = hash_search(exclusionFnCache, &exclusion_fn->operator, HASH_ENTER, NULL);
 	memcpy(cached, exclusion_fn, sizeof(OExclusionFn));
@@ -2355,7 +2355,7 @@ o_add_exclusion_fn_to_cache(OExclusionFn *exclusion_fn)
 }
 
 int
-o_call_exclusion_fn(OExclusionFn *exclusion_fn, Datum left, Datum right, Oid collation)
+o_call_exclusion_fn(exclusion_fn: &mut OExclusionFn, Datum left, Datum right, Oid collation)
 {
 	int			cmp;
 	Datum		ret;
@@ -2369,8 +2369,8 @@ o_call_exclusion_fn(OExclusionFn *exclusion_fn, Datum left, Datum right, Oid col
 	return cmp;
 }
 
-void
-reset_saving_inval_messages(void)
+
+reset_saving_inval_messages()
 {
 	saving_inval_messages = false;
 }
@@ -2385,7 +2385,7 @@ o_find_hash_fn(Oid hash_fn_oid, Oid datoid)
 		.datoid = datoid,
 		.hash_fn_oid = hash_fn_oid
 	};
-	OHashFn    *result;
+	result: &mut OHashFn;
 	OHashFn		hash_fn;
 	MemoryContext oldcontext;
 
@@ -2411,9 +2411,9 @@ o_find_hash_fn(Oid hash_fn_oid, Oid datoid)
 // Tries to find an hash function in the cache.
 //
 static inline OHashFn *
-o_find_cached_hash_fn(OHashFnKey *key)
+o_find_cached_hash_fn(key: &mut OHashFnKey)
 {
-	OHashFn    *result;
+	result: &mut OHashFn;
 	bool		found;
 
 	// compares with previous search
@@ -2436,9 +2436,9 @@ o_find_cached_hash_fn(OHashFnKey *key)
 // Adds the hash function to the cache.
 //
 static inline OHashFn *
-o_add_hash_fn_to_cache(OHashFn *hash_fn)
+o_add_hash_fn_to_cache(hash_fn: &mut OHashFn)
 {
-	OHashFn    *cached;
+	cached: &mut OHashFn;
 
 	cached = hash_search(hashFnCache, &hash_fn->key, HASH_ENTER, NULL);
 	memcpy(cached, hash_fn, sizeof(OHashFn));
@@ -2450,7 +2450,7 @@ o_add_hash_fn_to_cache(OHashFn *hash_fn)
 }
 
 uint32
-o_call_hash_fn(OHashFn *hash_fn, Oid collation, Datum val)
+o_call_hash_fn(hash_fn: &mut OHashFn, Oid collation, Datum val)
 {
 	uint32		result;
 	Datum		ret;
@@ -2471,8 +2471,8 @@ o_call_hash_fn(OHashFn *hash_fn, Oid collation, Datum val)
 
 #if PG_VERSION_NUM >= 170000
 
-static void ResOwnerReleaseOTableDescr(Datum res);
-static char *ResOwnerPrintOTableDescr(Datum res);
+fn ResOwnerReleaseOTableDescr(Datum res);
+static ResOwnerPrintOTableDescr: &mut char(Datum res);
 
 static const ResourceOwnerDesc o_table_descr_resowner_desc =
 {
@@ -2483,25 +2483,25 @@ static const ResourceOwnerDesc o_table_descr_resowner_desc =
 	.DebugPrint = ResOwnerPrintOTableDescr
 };
 
-void
-ResourceOwnerRememberOTableDescr(ResourceOwner owner, OTableDescr *descr)
+
+ResourceOwnerRememberOTableDescr(ResourceOwner owner, descr: &mut OTableDescr)
 {
 	ResourceOwnerEnlarge(owner);
 	descr->refcnt++;
 	ResourceOwnerRemember(owner, PointerGetDatum(descr), &o_table_descr_resowner_desc);
 }
 
-void
-ResourceOwnerForgetOTableDescr(ResourceOwner owner, OTableDescr *descr)
+
+ResourceOwnerForgetOTableDescr(ResourceOwner owner, descr: &mut OTableDescr)
 {
 	ResourceOwnerForget(owner, PointerGetDatum(descr), &o_table_descr_resowner_desc);
 	descr->refcnt--;
 }
 
-static void
+fn
 ResOwnerReleaseOTableDescr(Datum res)
 {
-	OTableDescr *descr = (OTableDescr *) DatumGetPointer(res);
+	descr: &mut OTableDescr = (OTableDescr *) DatumGetPointer(res);
 
 	descr->refcnt--;
 }
@@ -2509,7 +2509,7 @@ ResOwnerReleaseOTableDescr(Datum res)
 static char *
 ResOwnerPrintOTableDescr(Datum res)
 {
-	OTableDescr *descr = (OTableDescr *) DatumGetPointer(res);
+	descr: &mut OTableDescr = (OTableDescr *) DatumGetPointer(res);
 
 	return psprintf("OrioleDB OTableDescr (%u, %u, %u)",
 					descr->oids.datoid, descr->oids.reloid, descr->oids.relnode);
@@ -2527,20 +2527,20 @@ ResOwnerPrintOTableDescr(Datum res)
 //
 typedef struct OTableDescrResOwnerItem
 {
-	struct OTableDescrResOwnerItem *next;
+	struct next: &mut OTableDescrResOwnerItem;
 	ResourceOwner owner;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 }			OTableDescrResOwnerItem;
 
 static OTableDescrResOwnerItem * otable_descr_resowner_items = NULL;
 static bool otable_descr_resowner_registered = false;
 
-static void
+fn
 ResOwnerReleaseOTableDescrCallback(ResourceReleasePhase phase,
-								   bool isCommit, bool isTopLevel, void *arg)
+								   bool isCommit, bool isTopLevel,  *arg)
 {
 	OTableDescrResOwnerItem **prev;
-	OTableDescrResOwnerItem *item;
+	item: &mut OTableDescrResOwnerItem;
 
 	if (phase != RESOURCE_RELEASE_BEFORE_LOCKS)
 		return;
@@ -2564,10 +2564,10 @@ ResOwnerReleaseOTableDescrCallback(ResourceReleasePhase phase,
 	}
 }
 
-void
-ResourceOwnerRememberOTableDescr(ResourceOwner owner, OTableDescr *descr)
+
+ResourceOwnerRememberOTableDescr(ResourceOwner owner, descr: &mut OTableDescr)
 {
-	OTableDescrResOwnerItem *item;
+	item: &mut OTableDescrResOwnerItem;
 
 	if (!otable_descr_resowner_registered)
 	{
@@ -2583,11 +2583,11 @@ ResourceOwnerRememberOTableDescr(ResourceOwner owner, OTableDescr *descr)
 	descr->refcnt++;
 }
 
-void
-ResourceOwnerForgetOTableDescr(ResourceOwner owner, OTableDescr *descr)
+
+ResourceOwnerForgetOTableDescr(ResourceOwner owner, descr: &mut OTableDescr)
 {
 	OTableDescrResOwnerItem **prev = &otable_descr_resowner_items;
-	OTableDescrResOwnerItem *item = *prev;
+	item: &mut OTableDescrResOwnerItem = *prev;
 
 	while (item)
 	{
@@ -2608,8 +2608,8 @@ ResourceOwnerForgetOTableDescr(ResourceOwner owner, OTableDescr *descr)
 
 #if PG_VERSION_NUM >= 170000
 
-static void ResOwnerReleaseOIndexDescr(Datum res);
-static char *ResOwnerPrintOIndexDescr(Datum res);
+fn ResOwnerReleaseOIndexDescr(Datum res);
+static ResOwnerPrintOIndexDescr: &mut char(Datum res);
 
 static const ResourceOwnerDesc o_index_descr_resowner_desc =
 {
@@ -2620,25 +2620,25 @@ static const ResourceOwnerDesc o_index_descr_resowner_desc =
 	.DebugPrint = ResOwnerPrintOIndexDescr
 };
 
-void
-ResourceOwnerRememberOIndexDescr(ResourceOwner owner, OIndexDescr *descr)
+
+ResourceOwnerRememberOIndexDescr(ResourceOwner owner, descr: &mut OIndexDescr)
 {
 	ResourceOwnerEnlarge(owner);
 	descr->refcnt++;
 	ResourceOwnerRemember(owner, PointerGetDatum(descr), &o_index_descr_resowner_desc);
 }
 
-void
-ResourceOwnerForgetOIndexDescr(ResourceOwner owner, OIndexDescr *descr)
+
+ResourceOwnerForgetOIndexDescr(ResourceOwner owner, descr: &mut OIndexDescr)
 {
 	ResourceOwnerForget(owner, PointerGetDatum(descr), &o_index_descr_resowner_desc);
 	descr->refcnt--;
 }
 
-static void
+fn
 ResOwnerReleaseOIndexDescr(Datum res)
 {
-	OIndexDescr *descr = (OIndexDescr *) DatumGetPointer(res);
+	descr: &mut OIndexDescr = (OIndexDescr *) DatumGetPointer(res);
 
 	descr->refcnt--;
 }
@@ -2646,7 +2646,7 @@ ResOwnerReleaseOIndexDescr(Datum res)
 static char *
 ResOwnerPrintOIndexDescr(Datum res)
 {
-	OIndexDescr *descr = (OIndexDescr *) DatumGetPointer(res);
+	descr: &mut OIndexDescr = (OIndexDescr *) DatumGetPointer(res);
 
 	return psprintf("OrioleDB OIndexDescr (%u, %u, %u)",
 					descr->oids.datoid, descr->oids.reloid, descr->oids.relnode);
@@ -2657,20 +2657,20 @@ ResOwnerPrintOIndexDescr(Datum res)
 // See comment on OTableDescr's PG16 implementation above.
 typedef struct OIndexDescrResOwnerItem
 {
-	struct OIndexDescrResOwnerItem *next;
+	struct next: &mut OIndexDescrResOwnerItem;
 	ResourceOwner owner;
-	OIndexDescr *descr;
+	descr: &mut OIndexDescr;
 }			OIndexDescrResOwnerItem;
 
 static OIndexDescrResOwnerItem * oindex_descr_resowner_items = NULL;
 static bool oindex_descr_resowner_registered = false;
 
-static void
+fn
 ResOwnerReleaseOIndexDescrCallback(ResourceReleasePhase phase,
-								   bool isCommit, bool isTopLevel, void *arg)
+								   bool isCommit, bool isTopLevel,  *arg)
 {
 	OIndexDescrResOwnerItem **prev;
-	OIndexDescrResOwnerItem *item;
+	item: &mut OIndexDescrResOwnerItem;
 
 	if (phase != RESOURCE_RELEASE_BEFORE_LOCKS)
 		return;
@@ -2694,10 +2694,10 @@ ResOwnerReleaseOIndexDescrCallback(ResourceReleasePhase phase,
 	}
 }
 
-void
-ResourceOwnerRememberOIndexDescr(ResourceOwner owner, OIndexDescr *descr)
+
+ResourceOwnerRememberOIndexDescr(ResourceOwner owner, descr: &mut OIndexDescr)
 {
-	OIndexDescrResOwnerItem *item;
+	item: &mut OIndexDescrResOwnerItem;
 
 	if (!oindex_descr_resowner_registered)
 	{
@@ -2713,11 +2713,11 @@ ResourceOwnerRememberOIndexDescr(ResourceOwner owner, OIndexDescr *descr)
 	descr->refcnt++;
 }
 
-void
-ResourceOwnerForgetOIndexDescr(ResourceOwner owner, OIndexDescr *descr)
+
+ResourceOwnerForgetOIndexDescr(ResourceOwner owner, descr: &mut OIndexDescr)
 {
 	OIndexDescrResOwnerItem **prev = &oindex_descr_resowner_items;
-	OIndexDescrResOwnerItem *item = *prev;
+	item: &mut OIndexDescrResOwnerItem = *prev;
 
 	while (item)
 	{

@@ -25,11 +25,11 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *operator_cache = NULL;
+static operator_cache: &mut OSysCache = NULL;
 
-static void o_operator_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_operator_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 										Pointer arg);
-static void o_operator_cache_free_entry(Pointer entry);
+fn o_operator_cache_free_entry(Pointer entry);
 
 O_SYS_CACHE_FUNCS(operator_cache, OOperator, 1);
 
@@ -52,12 +52,12 @@ O_SYS_CACHE_INIT_FUNC(operator_cache)
 										&operator_cache_funcs);
 }
 
-static void
-o_operator_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_operator_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	opertup;
 	Form_pg_operator operform;
-	OOperator  *o_operator = (OOperator *) *entry_ptr;
+	o_operator: &mut OOperator = (OOperator *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			operoid = DatumGetObjectId(key->keys[0]);
 
@@ -83,7 +83,7 @@ o_operator_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(opertup);
 }
 
-static void
+fn
 o_operator_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
@@ -97,7 +97,7 @@ o_operator_cache_search_htup(TupleDesc tupdesc, Oid operoid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_operator] = {0};
 	bool		nulls[Natts_pg_operator] = {0};
-	OOperator  *o_operator;
+	o_operator: &mut OOperator;
 	NameData	oname;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
@@ -121,7 +121,7 @@ o_operator_cache_get_oprcode(Oid operoid)
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
-	OOperator  *o_operator;
+	o_operator: &mut OOperator;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_operator = o_operator_cache_search(datoid, operoid, cur_lsn,
@@ -133,11 +133,11 @@ o_operator_cache_get_oprcode(Oid operoid)
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_operator_cache_tup_print(BTreeDescr *desc, StringInfo buf,
+
+o_operator_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 						   OTuple tup, Pointer arg)
 {
-	OOperator  *o_operator = (OOperator *) tup.data;
+	o_operator: &mut OOperator = (OOperator *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);

@@ -66,36 +66,36 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static pg_atomic_uint64 *recovery_main_retain_ptr;
-static pg_atomic_uint64 *recovery_index_next_pos;
-static OBTreeModifyCallbackAction recovery_delete_primary_callback(BTreeDescr *descr,
-																   OTuple tup, OTuple *newtup,
+static recovery_main_retain_ptr: &mut pg_atomic_uint64;
+static recovery_index_next_pos: &mut pg_atomic_uint64;
+static OBTreeModifyCallbackAction recovery_delete_primary_callback(descr: &mut BTreeDescr,
+																   OTuple tup, newtup: &mut OTuple,
 																   OXid oxid, OTupleXactInfo xactInfo,
-																   UndoLocation location, RowLockMode *lock_mode,
-																   BTreeLocationHint *hint,
-																   void *arg);
-static OBTreeModifyCallbackAction recovery_delete_deleted_primary_callback(BTreeDescr *descr,
-																		   OTuple tup, OTuple *newtup,
+																   UndoLocation location, lock_mode: &mut RowLockMode,
+																   hint: &mut BTreeLocationHint,
+																    *arg);
+static OBTreeModifyCallbackAction recovery_delete_deleted_primary_callback(descr: &mut BTreeDescr,
+																		   OTuple tup, newtup: &mut OTuple,
 																		   OXid oxid, OTupleXactInfo xactInfo,
 																		   BTreeLeafTupleDeletedStatus deleted,
-																		   UndoLocation location, RowLockMode *lock_mode,
-																		   BTreeLocationHint *hint,
-																		   void *arg);
-static OBTreeModifyCallbackAction recovery_delete_deleted_overwrite_callback(BTreeDescr *descr,
-																			 OTuple tup, OTuple *newtup,
+																		   UndoLocation location, lock_mode: &mut RowLockMode,
+																		   hint: &mut BTreeLocationHint,
+																		    *arg);
+static OBTreeModifyCallbackAction recovery_delete_deleted_overwrite_callback(descr: &mut BTreeDescr,
+																			 OTuple tup, newtup: &mut OTuple,
 																			 OXid oxid, OTupleXactInfo xactInfo,
 																			 BTreeLeafTupleDeletedStatus deleted,
-																			 UndoLocation location, RowLockMode *lock_mode,
-																			 BTreeLocationHint *hint,
-																			 void *arg);
-static void worker_send_msg(int worker_id, Pointer msg, uint64 msg_size);
-static void worker_queue_flush(int worker_id);
-static void recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
+																			 UndoLocation location, lock_mode: &mut RowLockMode,
+																			 hint: &mut BTreeLocationHint,
+																			  *arg);
+fn worker_send_msg(int worker_id, Pointer msg, uint64 msg_size);
+fn worker_queue_flush(int worker_id);
+fn recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 									  uint32 o_table_version,
 									  ORelOids old_oids, uint32 old_o_table_version,
 									  bool isrebuild);
-static void workers_send_finish(bool send_to_idx_pool);
-static XLogRecPtr recovery_get_current_ptr(void);
+fn workers_send_finish(bool send_to_idx_pool);
+static XLogRecPtr recovery_get_current_ptr();
 
 //
 // Recovery worker state in pool.
@@ -103,7 +103,7 @@ static XLogRecPtr recovery_get_current_ptr(void);
 typedef struct
 {
 	// Pointer to the worker queue
-	shm_mq_handle *queue;
+	queue: &mut shm_mq_handle;
 	char		queue_buf[RECOVERY_QUEUE_BUF_SIZE];
 	int			queue_buf_len;
 	// Current oids
@@ -113,10 +113,10 @@ typedef struct
 	// Current index type
 	OIndexType	type;
 	// Handle for the worker
-	BackgroundWorkerHandle *handle;
+	handle: &mut BackgroundWorkerHandle;
 } RecoveryWorkerState;
 
-static RecoveryWorkerState *workers_pool;
+static workers_pool: &mut RecoveryWorkerState;
 
 typedef struct
 {
@@ -162,7 +162,7 @@ typedef struct
 	// is started from wal stream
 	bool		wal_xid;
 	// usage map
-	bool	   *used_by;
+	used_by: &mut bool;
 } RecoveryXidState;
 
 #define RetainUndoNodeGetRecoveryXidState(node, undoType) \
@@ -209,13 +209,13 @@ PG_FUNCTION_INFO_V1(orioledb_recovery_synchronized);
 // See pairingheap.c/pairingheap_comparator description.
 //
 static int
-retain_undo_pairingheap_cmp(const pairingheap_node *a,
-							const pairingheap_node *b,
-							void *arg)
+retain_undo_pairingheap_cmp(const a: &mut pairingheap_node,
+							const b: &mut pairingheap_node,
+							 *arg)
 {
 	int			num = *((int *) arg);
-	const RecoveryXidState *l = RetainUndoNodeGetRecoveryXidState(a, num);
-	const RecoveryXidState *r = RetainUndoNodeGetRecoveryXidState(b, num);
+	const l: &mut RecoveryXidState = RetainUndoNodeGetRecoveryXidState(a, num);
+	const r: &mut RecoveryXidState = RetainUndoNodeGetRecoveryXidState(b, num);
 
 	if (l->retain_locs[num] < r->retain_locs[num])
 		return 1;
@@ -231,12 +231,12 @@ retain_undo_pairingheap_cmp(const pairingheap_node *a,
 // See pairingheap.c/pairingheap_comparator description.
 //
 static int
-xmin_pairingheap_cmp(const pairingheap_node *a,
-					 const pairingheap_node *b,
-					 void *arg)
+xmin_pairingheap_cmp(const a: &mut pairingheap_node,
+					 const b: &mut pairingheap_node,
+					  *arg)
 {
-	const RecoveryXidState *l = pairingheap_const_container(RecoveryXidState, xmin_ph_node, a);
-	const RecoveryXidState *r = pairingheap_const_container(RecoveryXidState, xmin_ph_node, b);
+	const l: &mut RecoveryXidState = pairingheap_const_container(RecoveryXidState, xmin_ph_node, a);
+	const r: &mut RecoveryXidState = pairingheap_const_container(RecoveryXidState, xmin_ph_node, b);
 
 	if (l->oxid < r->oxid)
 		return 1;
@@ -247,22 +247,22 @@ xmin_pairingheap_cmp(const pairingheap_node *a,
 }
 
 // Current recovery transaction state.
-static RecoveryXidState *cur_recovery_xid_state = NULL;
+static cur_recovery_xid_state: &mut RecoveryXidState = NULL;
 
 // Recovery transaction hash for the current process.
-static HTAB *recovery_xid_state_hash = NULL;
+static recovery_xid_state_hash: &mut HTAB = NULL;
 
-static HTAB *idxbuild_oids_hash = NULL;
+static idxbuild_oids_hash: &mut HTAB = NULL;
 
 // Queues of undo retain locations
-static pairingheap *retain_undo_queues[(int) UndoLogsCount] =
+static retain_undo_queues: &mut pairingheap[(int) UndoLogsCount] =
 {
 	NULL
 };
 static int	retain_undo_queue_numbers[(int) UndoLogsCount];
 
 // Queue of xmin's
-static pairingheap *xmin_queue = NULL;
+static xmin_queue: &mut pairingheap = NULL;
 
 //
 // List of locally finished transaction, which aren't yet knows as finished
@@ -299,7 +299,7 @@ typedef struct
 	TransactionId xid;
 } RecoveryFinishAbortedOxid;
 
-static RecoveryFinishAbortedOxid *recovery_finish_aborted_oxids = NULL;
+static recovery_finish_aborted_oxids: &mut RecoveryFinishAbortedOxid = NULL;
 static int	recovery_finish_aborted_count = 0;
 static int	recovery_finish_aborted_capacity = 0;
 
@@ -345,15 +345,15 @@ typedef struct PendingSkFixup
 {
 	OXid		oxid;
 	UndoLocation undoLocation;
-	struct PendingSkFixup *next;
+	struct next: &mut PendingSkFixup;
 } PendingSkFixup;
 
-static PendingSkFixup *pending_sk_fixups_head = NULL;
+static pending_sk_fixups_head: &mut PendingSkFixup = NULL;
 
-static void
+fn
 record_pending_sk_fixup(OXid oxid, UndoLocation undoLocation)
 {
-	PendingSkFixup *entry;
+	entry: &mut PendingSkFixup;
 
 	entry = (PendingSkFixup *) MemoryContextAlloc(TopMemoryContext,
 												  sizeof(*entry));
@@ -370,15 +370,15 @@ record_pending_sk_fixup(OXid oxid, UndoLocation undoLocation)
 // DELETE old / INSERT new pair through the recovery_workers' modify
 // path.  Mirrors apply_tbl_update()'s per-SK logic.
 //
-static void
-apply_one_pending_sk_fixup(PendingSkFixup *entry)
+fn
+apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 {
 	UndoLocation tuphdrLoc = entry->undoLocation;
 	UndoLocation itemLoc;
 	BTreeModifyUndoStackItem item = {0};
 	LocationIndex oldTupleSize;
-	OTableDescr *descr;
-	OIndexDescr *primary;
+	descr: &mut OTableDescr;
+	primary: &mut OIndexDescr;
 	OBTreeKeyBound pkKey;
 	OTuple		oldTuple;
 	OTuple		newTuple;
@@ -388,8 +388,8 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 	Page		pkPage;
 	OTuple		pkOnPage;
 	LocationIndex newTupleLen;
-	TupleTableSlot *newSlot;
-	TupleTableSlot *oldSlot;
+	newSlot: &mut TupleTableSlot;
+	oldSlot: &mut TupleTableSlot;
 	int			i;
 
 	if (!UndoLocationIsValid(tuphdrLoc))
@@ -430,7 +430,7 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 // tableOids back-pointer.
 //
 	{
-		OIndexDescr *indexDescr;
+		indexDescr: &mut OIndexDescr;
 
 		indexDescr = o_fetch_index_descr(item.oids, oIndexPrimary,
 										 false, NULL);
@@ -555,7 +555,7 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 //
 	for (i = 1; i < descr->nIndices; i++)
 	{
-		OIndexDescr *sk = descr->indices[i];
+		sk: &mut OIndexDescr = descr->indices[i];
 		OBTreeKeyBound oldSkKey,
 					newSkKey;
 		BTreeModifyCallbackInfo cbInfo = nullCallbackInfo;
@@ -597,7 +597,7 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 			o_is_index_predicate_satisfied(sk, oldSlot, sk->econtext))
 		{
 			cbInfo.modifyCallback = recovery_delete_overwrite_callback;
-			(void) o_btree_modify(&sk->desc, BTreeOperationDelete,
+			() o_btree_modify(&sk->desc, BTreeOperationDelete,
 								  nullTup, BTreeKeyNone,
 								  (Pointer) &oldSkKey, BTreeKeyBound,
 								  entry->oxid, COMMITSEQNO_INPROGRESS,
@@ -615,7 +615,7 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 			{
 				cbInfo.modifyCallback = recovery_insert_overwrite_callback;
 				cbInfo.modifyDeletedCallback = recovery_insert_deleted_overwrite_callback;
-				(void) o_btree_modify(&sk->desc, BTreeOperationInsert,
+				() o_btree_modify(&sk->desc, BTreeOperationInsert,
 									  newSkTup, BTreeKeyLeafTuple,
 									  (Pointer) &newSkKey, BTreeKeyBound,
 									  entry->oxid, COMMITSEQNO_INPROGRESS,
@@ -644,15 +644,15 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 // toast-consistent boundary, so the SK trees catch up to PK before any
 // post-boundary WAL records get applied.
 //
-static void
-apply_pending_sk_fixups(void)
+fn
+apply_pending_sk_fixups()
 {
-	PendingSkFixup *entry = pending_sk_fixups_head;
+	entry: &mut PendingSkFixup = pending_sk_fixups_head;
 	OXid		saved_oxid = recovery_oxid;
 
 	while (entry != NULL)
 	{
-		PendingSkFixup *next = entry->next;
+		next: &mut PendingSkFixup = entry->next;
 
 		recovery_switch_to_oxid(entry->oxid, -1);
 		set_oxid_csn(entry->oxid, COMMITSEQNO_INPROGRESS);
@@ -673,7 +673,7 @@ apply_pending_sk_fixups(void)
 //
 // Checkpoint requests for flushing undo positions and their completion.
 //
-RecoveryUndoLocFlush *recovery_undo_loc_flush;
+recovery_undo_loc_flush: &mut RecoveryUndoLocFlush;
 
 //
 // The last xmin we received from primary.
@@ -683,64 +683,64 @@ static OXid recovery_xmin = InvalidOXid;
 //
 // Number of successfully finished recovery workers.
 //
-pg_atomic_uint32 *worker_finish_count;
-pg_atomic_uint32 *idx_worker_finish_count;
-pg_atomic_uint32 *worker_ptrs_changes;
-RecoveryWorkerPtrs *worker_ptrs;
-pg_atomic_uint64 *recovery_ptr;
-static pg_atomic_uint64 *recovery_main_retain_ptr;
-pg_atomic_uint64 *recovery_finished_list_ptr;
-bool	   *recovery_single_process;
-bool	   *was_in_recovery;
-pg_atomic_uint32 *after_recovery_cleaned;
+worker_finish_count: &mut pg_atomic_uint32;
+idx_worker_finish_count: &mut pg_atomic_uint32;
+worker_ptrs_changes: &mut pg_atomic_uint32;
+worker_ptrs: &mut RecoveryWorkerPtrs;
+recovery_ptr: &mut pg_atomic_uint64;
+static recovery_main_retain_ptr: &mut pg_atomic_uint64;
+recovery_finished_list_ptr: &mut pg_atomic_uint64;
+recovery_single_process: &mut bool;
+was_in_recovery: &mut bool;
+after_recovery_cleaned: &mut pg_atomic_uint32;
 
-static pg_atomic_uint64 *recovery_index_next_pos;
-pg_atomic_uint64 *recovery_index_completed_pos;
-ConditionVariable *recovery_index_cv;
+static recovery_index_next_pos: &mut pg_atomic_uint64;
+recovery_index_completed_pos: &mut pg_atomic_uint64;
+recovery_index_cv: &mut ConditionVariable;
 
 // TransactionId for system trees modification for using in recovery
 TransactionId recoveryHeapTransactionId = InvalidTransactionId;
 
-static void delay_rels_queued_for_idxbuild(ORelOids oids);
-static void delay_if_queued_for_idxbuild(void);
-static void update_run_xmin(void);
-static void free_run_xmin(void);
+fn delay_rels_queued_for_idxbuild(ORelOids oids);
+fn delay_if_queued_for_idxbuild();
+fn update_run_xmin();
+fn free_run_xmin();
 static bool need_flush_undo_pos(int worker_id);
-static void flush_current_undo_stack(void);
-static void o_handle_startup_proc_interrupts_hook(void);
-static void abort_recovery(RecoveryWorkerState *workers_pool, bool send_to_idx_pool);
+fn flush_current_undo_stack();
+fn o_handle_startup_proc_interrupts_hook();
+fn abort_recovery(workers_pool: &mut RecoveryWorkerState, bool send_to_idx_pool);
 
 static bool replay_container(Pointer startPtr, Pointer endPtr,
 							 bool single, XLogRecPtr xlogRecPtr,
 							 XLogRecPtr xlogRecEndPtr);
 
-static void worker_send_modify(int worker_id, BTreeDescr *desc,
+fn worker_send_modify(int worker_id, desc: &mut BTreeDescr,
 							   RecoveryMsgType recType,
 							   OTuple tuple, int tuple_len);
-static void workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback,
+fn workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback,
 									 bool commit);
-static void workers_send_savepoint(SubTransactionId parentSubId);
-static void workers_send_rollback_to_savepoint(XLogRecPtr ptr,
+fn workers_send_savepoint(SubTransactionId parentSubId);
+fn workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 											   SubTransactionId parentSubId);
-static void workers_synchronize(XLogRecPtr ptr, bool send_synchronize);
-static void workers_notify_toast_consistent(void);
-static void worker_wait_shutdown(RecoveryWorkerState *worker);
+fn workers_synchronize(XLogRecPtr ptr, bool send_synchronize);
+fn workers_notify_toast_consistent();
+fn worker_wait_shutdown(worker: &mut RecoveryWorkerState);
 
 static inline bool apply_sys_tree_modify_record(int sys_tree_num, uint16 type,
 												OTuple tup,
 												OXid oxid, CommitSeqNo csn);
-static inline void spread_idx_modify(BTreeDescr *desc,
+static inline  spread_idx_modify(desc: &mut BTreeDescr,
 									 RecoveryMsgType recType,
 									 OTuple rec);
 
 static inline RecoveryMsgType recovery_msg_from_wal_record(WalRecordType rec_type);
-static void recovery_send_init(int worker_num);
+fn recovery_send_init(int worker_num);
 
 //
 // Returns full size of the shared memory needed to recovery.
 //
 Size
-recovery_shmem_needs(void)
+recovery_shmem_needs()
 {
 	Size		size = 0;
 
@@ -769,7 +769,7 @@ recovery_shmem_needs(void)
 // Must be called after checkpoint_shmem_init() because it initializes
 // startupCommitSeqNo.
 //
-void
+
 recovery_shmem_init(Pointer ptr, bool found)
 {
 	recovery_queue_data_size = (Size) recovery_queue_size_guc * 1024;
@@ -852,8 +852,8 @@ recovery_shmem_init(Pointer ptr, bool found)
 	}
 }
 
-static void
-undo_stack_locations_set_invalid(UndoStackLocations *location)
+fn
+undo_stack_locations_set_invalid(location: &mut UndoStackLocations)
 {
 	location->location = InvalidUndoLocation;
 	location->subxactLocation = InvalidUndoLocation;
@@ -864,10 +864,10 @@ undo_stack_locations_set_invalid(UndoStackLocations *location)
 //
 // Read information about undo locations of in-progress transactions.
 //
-static void
+fn
 read_xids(int checkpointnum, bool recovery_single, int worker_id)
 {
-	char	   *xidFilename = psprintf(XID_FILENAME_FORMAT, checkpointnum);
+	xidFilename: &mut char = psprintf(XID_FILENAME_FORMAT, checkpointnum);
 	File		xidFile;
 	off_t		offset = 0;
 	uint32		count = 0,
@@ -887,7 +887,7 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 
 	for (i = 0; i < count; i++)
 	{
-		RecoveryXidState *state;
+		state: &mut RecoveryXidState;
 		XidFileRec	xidRec = {0};
 		bool		found;
 
@@ -938,8 +938,8 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 		}
 		if (worker_id < 0)
 		{
-			ODBProcData *curProcData = GET_CUR_PROCDATA();
-			CheckpointUndoStack *stack;
+			curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
+			stack: &mut CheckpointUndoStack;
 			UndoLocation retainUndoLocation;
 			XidRecKind	kind = xidRec.kind;
 
@@ -970,7 +970,7 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 				retainUndoLocation < state->retain_locs[(UndoLogType) kind])
 			{
 				UndoLogType undoType = (UndoLogType) kind;
-				UndoMeta   *undoMeta = get_undo_meta_by_type(undoType);
+				undoMeta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 				if (state->in_retain_undo_heaps[undoType])
 					pairingheap_remove(retain_undo_queues[undoType], &state->retain_undo_ph_nodes[undoType]);
@@ -1004,10 +1004,10 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 // These records are intended to be already aborted.  But checkpointer could
 // "see" tuples which still reference those records.  This routine is du
 //
-static void
-apply_xids_branches(void)
+fn
+apply_xids_branches()
 {
-	RecoveryXidState *state;
+	state: &mut RecoveryXidState;
 	HASH_SEQ_STATUS hash_seq;
 
 	hash_seq_init(&hash_seq, recovery_xid_state_hash);
@@ -1020,7 +1020,7 @@ apply_xids_branches(void)
 
 		dlist_foreach(iter, &state->checkpoint_undo_stacks)
 		{
-			CheckpointUndoStack *stack = dlist_container(CheckpointUndoStack,
+			stack: &mut CheckpointUndoStack = dlist_container(CheckpointUndoStack,
 														 node,
 														 iter.cur);
 
@@ -1054,8 +1054,8 @@ apply_xids_branches(void)
 	cur_recovery_xid_state = NULL;
 }
 
-void
-idx_workers_shutdown(void)
+
+idx_workers_shutdown()
 {
 	int			i;
 
@@ -1069,10 +1069,10 @@ idx_workers_shutdown(void)
 		elog(ERROR, "orioledb recovery idx worker died.");
 }
 
-void
-o_recovery_start_hook(void)
+
+o_recovery_start_hook()
 {
-	RecoveryWorkerState *state;
+	state: &mut RecoveryWorkerState;
 	int			i;
 	bool		recovery_single;
 
@@ -1150,8 +1150,8 @@ o_recovery_start_hook(void)
 		apply_xids_branches();
 }
 
-void
-orioledb_redo(XLogReaderState *record)
+
+orioledb_redo(record: &mut XLogReaderState)
 {
 	Pointer		msg_start = (Pointer) XLogRecGetData(record);
 	int			msg_len = XLogRecGetDataLen(record);
@@ -1252,10 +1252,10 @@ orioledb_redo(XLogReaderState *record)
 	}
 }
 
-void
+
 o_recovery_finish_hook(bool cleanup)
 {
-	RecoveryWorkerState *state;
+	state: &mut RecoveryWorkerState;
 	int			i,
 				num_workers = recovery_idx_pool_size_guc ? recovery_pool_size_guc + 1 : recovery_pool_size_guc;
 	bool		recovery_single;
@@ -1305,7 +1305,7 @@ o_recovery_finish_hook(bool cleanup)
 }
 
 static XLogRecPtr
-get_workers_commit_ptr(void)
+get_workers_commit_ptr()
 {
 	static CommitSeqNo prev_ptr = InvalidXLogRecPtr;
 	static uint64 prev_changes = UINT64_MAX;
@@ -1349,7 +1349,7 @@ get_workers_commit_ptr(void)
 // Returns minimum ptr which is already reached by all recovery workers.
 //
 static XLogRecPtr
-recovery_get_current_ptr(void)
+recovery_get_current_ptr()
 {
 	Assert(RecoveryInProgress());
 
@@ -1361,7 +1361,7 @@ recovery_get_current_ptr(void)
 }
 
 XLogRecPtr
-recovery_get_effective_replay_ptr(void)
+recovery_get_effective_replay_ptr()
 {
 	XLogRecPtr	ptr,
 				finishedPtr;
@@ -1378,7 +1378,7 @@ recovery_get_effective_replay_ptr(void)
 }
 
 static WalParseResult
-recovery_check_version(const WalReaderState *r)
+recovery_check_version(const r: &mut WalReaderState)
 {
 	Assert(r);
 
@@ -1402,7 +1402,7 @@ recovery_check_version(const WalReaderState *r)
 }
 
 static WalParseResult
-recovery_on_container(WalReaderState *r)
+recovery_on_container(r: &mut WalReaderState)
 {
 	if (r->container.flags & WAL_CONTAINER_HAS_XACT_INFO)
 		return WALPARSE_STOP;
@@ -1411,7 +1411,7 @@ recovery_on_container(WalReaderState *r)
 }
 
 static WalParseResult
-recovery_on_record(WalReaderState *r, WalRecord *rec)
+recovery_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	return WALPARSE_EOF;		// Stop parser
 }
@@ -1423,9 +1423,9 @@ recovery_on_record(WalReaderState *r, WalRecord *rec)
 // Returns true if we are stopping, false otherwise.
 //
 bool
-orioledb_recovery_stops_before_hook(XLogReaderState *record,
-									TransactionId *recordXid,
-									TimestampTz *recordXtime)
+orioledb_recovery_stops_before_hook(record: &mut XLogReaderState,
+									recordXid: &mut TransactionId,
+									recordXtime: &mut TimestampTz)
 {
 	Pointer		startPtr = (Pointer) XLogRecGetData(record);
 	Pointer		endPtr = startPtr + XLogRecGetDataLen(record);
@@ -1470,7 +1470,7 @@ orioledb_recovery_stops_before_hook(XLogReaderState *record,
 }
 
 static XLogRecPtr
-recovery_get_retain_ptr(void)
+recovery_get_retain_ptr()
 {
 	// fast check - single process recovery
 	if (*recovery_single_process)
@@ -1496,15 +1496,15 @@ recovery_get_retain_ptr(void)
 // Returns true if current process is recovery process.
 //
 bool
-is_recovery_process(void)
+is_recovery_process()
 {
 	return iam_recovery;
 }
 
 CommitSeqNo
-recovery_map_oxid_csn(OXid oxid, bool *found)
+recovery_map_oxid_csn(OXid oxid, found: &mut bool)
 {
-	RecoveryXidState *state;
+	state: &mut RecoveryXidState;
 
 	state = hash_search(recovery_xid_state_hash, &oxid, HASH_FIND, found);
 	if (*found)
@@ -1519,11 +1519,11 @@ recovery_map_oxid_csn(OXid oxid, bool *found)
 //
 // Initializes a new recovery process, recovery transaction support.
 //
-void
+
 recovery_init(int worker_id)
 {
 	HASHCTL		ctl;
-	RecoveryWorkerState *state;
+	state: &mut RecoveryWorkerState;
 	int			i;
 
 	MemSet(&ctl, 0, sizeof(ctl));
@@ -1561,7 +1561,7 @@ recovery_init(int worker_id)
 	o_set_syscache_hooks();
 
 	//
-// Seed recovery_xmin with the checkpoint-era floor *before* read_xids()
+// Seed recovery_xmin with the checkpoint-era before: &mut floor* read_xids()
 // runs its first update_run_xmin().  read_xids() pushes runXmin to
 // nextXid when the on-disk xids file is empty -- which it routinely is on
 // a streaming standby whose master had only long-running oxids with
@@ -1642,8 +1642,8 @@ recovery_init(int worker_id)
 	HandleStartupProcInterrupts_hook = o_handle_startup_proc_interrupts_hook;
 }
 
-static void
-walk_checkpoint_stacks(RecoveryXidState *recovery_xid_state, CommitSeqNo csn,
+fn
+walk_checkpoint_stacks(recovery_xid_state: &mut RecoveryXidState, CommitSeqNo csn,
 					   SubTransactionId parentSubid,
 					   bool flushUndoPos)
 {
@@ -1654,7 +1654,7 @@ walk_checkpoint_stacks(RecoveryXidState *recovery_xid_state, CommitSeqNo csn,
 
 	dlist_foreach_modify(miter, &recovery_xid_state->checkpoint_undo_stacks)
 	{
-		CheckpointUndoStack *stack = dlist_container(CheckpointUndoStack,
+		stack: &mut CheckpointUndoStack = dlist_container(CheckpointUndoStack,
 													 node,
 													 miter.cur);
 
@@ -1688,11 +1688,11 @@ walk_checkpoint_stacks(RecoveryXidState *recovery_xid_state, CommitSeqNo csn,
 //
 // Finishes a recovery process, close all recovery transactions.
 //
-void
+
 recovery_finish(int worker_id)
 {
 	bool		flush_undo_pos = need_flush_undo_pos(worker_id);
-	RecoveryXidState *cur_state;
+	cur_state: &mut RecoveryXidState;
 	HASH_SEQ_STATUS hash_seq;
 	int			i;
 
@@ -1844,8 +1844,8 @@ recovery_finish(int worker_id)
 // modify targeting the same row spins in o_btree_modify_handle_conflicts
 // (issue #876).
 //
-void
-o_emit_recovery_finish_rollbacks(void)
+
+o_emit_recovery_finish_rollbacks()
 {
 	int			i;
 
@@ -1879,14 +1879,14 @@ o_emit_recovery_finish_rollbacks(void)
 //
 // Switches recovery process to other orioledb transaction.
 //
-void
+
 recovery_switch_to_oxid(OXid oxid, int worker_id)
 {
 	int			i;
 
 	if (recovery_oxid != oxid)
 	{
-		RecoveryXidState *cur_state = cur_recovery_xid_state;
+		cur_state: &mut RecoveryXidState = cur_recovery_xid_state;
 		bool		found;
 
 		if (cur_state)
@@ -1974,8 +1974,8 @@ recovery_switch_to_oxid(OXid oxid, int worker_id)
 // Delete recovery xid item if it's already deleted from both retain undo
 // location heap and finished list.
 //
-static void
-check_delete_xid_state(RecoveryXidState *state, int worker_id)
+fn
+check_delete_xid_state(state: &mut RecoveryXidState, int worker_id)
 {
 	int			i;
 	bool		in_retain_heaps = false;
@@ -2018,8 +2018,8 @@ need_flush_undo_pos(int worker_id)
 	}
 }
 
-static void
-flush_current_undo_stack(void)
+fn
+flush_current_undo_stack()
 {
 	XidFileRec	rec;
 	int			i;
@@ -2037,7 +2037,7 @@ flush_current_undo_stack(void)
 //
 // Finishes the current recovery transaction for the current recovery process.
 //
-void
+
 recovery_finish_current_oxid(CommitSeqNo csn, XLogRecPtr ptr,
 							 int worker_id, bool sync)
 {
@@ -2143,7 +2143,7 @@ recovery_finish_current_oxid(CommitSeqNo csn, XLogRecPtr ptr,
 	update_proc_retain_undo_location(worker_id);
 }
 
-static void
+fn
 checkpoint_rollback_to_savepoint(SubTransactionId parentSubid)
 {
 	int			i;
@@ -2158,7 +2158,7 @@ checkpoint_rollback_to_savepoint(SubTransactionId parentSubid)
 							   cur_recovery_xid_state->undo_stacks[i]);
 }
 
-void
+
 recovery_savepoint(SubTransactionId parentSubid, int worker_id)
 {
 	if (worker_id == -1)
@@ -2167,7 +2167,7 @@ recovery_savepoint(SubTransactionId parentSubid, int worker_id)
 	add_subxact_undo_item(parentSubid);
 }
 
-void
+
 recovery_rollback_to_savepoint(SubTransactionId parentSubid, int worker_id)
 {
 	int			i;
@@ -2181,11 +2181,11 @@ recovery_rollback_to_savepoint(SubTransactionId parentSubid, int worker_id)
 }
 
 OBTreeModifyCallbackAction
-recovery_insert_primary_callback(BTreeDescr *descr,
-								 OTuple tup, OTuple *newtup, OXid oxid,
+recovery_insert_primary_callback(descr: &mut BTreeDescr,
+								 OTuple tup, newtup: &mut OTuple, OXid oxid,
 								 OTupleXactInfo xactInfo,
-								 UndoLocation location, RowLockMode *lock_mode,
-								 BTreeLocationHint *hint, void *arg)
+								 UndoLocation location, lock_mode: &mut RowLockMode,
+								 hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) >= o_tuple_get_version(*newtup))
@@ -2194,14 +2194,14 @@ recovery_insert_primary_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-recovery_delete_primary_callback(BTreeDescr *descr,
-								 OTuple tup, OTuple *newtup, OXid oxid,
+recovery_delete_primary_callback(descr: &mut BTreeDescr,
+								 OTuple tup, newtup: &mut OTuple, OXid oxid,
 								 OTupleXactInfo xactInfo,
 								 UndoLocation location,
-								 RowLockMode *lock_mode,
-								 BTreeLocationHint *hint, void *arg)
+								 lock_mode: &mut RowLockMode,
+								 hint: &mut BTreeLocationHint,  *arg)
 {
-	OTuple	   *key = (OTuple *) arg;
+	key: &mut OTuple = (OTuple *) arg;
 
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) > o_tuple_get_version(*key))
@@ -2211,12 +2211,12 @@ recovery_delete_primary_callback(BTreeDescr *descr,
 }
 
 OBTreeModifyCallbackAction
-recovery_insert_overwrite_callback(BTreeDescr *descr,
-								   OTuple tup, OTuple *newtup, OXid oxid,
+recovery_insert_overwrite_callback(descr: &mut BTreeDescr,
+								   OTuple tup, newtup: &mut OTuple, OXid oxid,
 								   OTupleXactInfo xactInfo,
 								   UndoLocation location,
-								   RowLockMode *lock_mode,
-								   BTreeLocationHint *hint, void *arg)
+								   lock_mode: &mut RowLockMode,
+								   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
 		return OBTreeCallbackActionUndo;
@@ -2225,12 +2225,12 @@ recovery_insert_overwrite_callback(BTreeDescr *descr,
 }
 
 OBTreeModifyCallbackAction
-recovery_delete_overwrite_callback(BTreeDescr *descr,
-								   OTuple tup, OTuple *newtup, OXid oxid,
+recovery_delete_overwrite_callback(descr: &mut BTreeDescr,
+								   OTuple tup, newtup: &mut OTuple, OXid oxid,
 								   OTupleXactInfo xactInfo,
 								   UndoLocation location,
-								   RowLockMode *lock_mode,
-								   BTreeLocationHint *hint, void *arg)
+								   lock_mode: &mut RowLockMode,
+								   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
 		return OBTreeCallbackActionUndo;
@@ -2239,22 +2239,22 @@ recovery_delete_overwrite_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-recovery_insert_systree_callback(BTreeDescr *descr,
-								 OTuple tup, OTuple *newtup, OXid oxid,
+recovery_insert_systree_callback(descr: &mut BTreeDescr,
+								 OTuple tup, newtup: &mut OTuple, OXid oxid,
 								 OTupleXactInfo xactInfo,
-								 UndoLocation location, RowLockMode *lock_mode,
-								 BTreeLocationHint *hint, void *arg)
+								 UndoLocation location, lock_mode: &mut RowLockMode,
+								 hint: &mut BTreeLocationHint,  *arg)
 {
 	return OBTreeCallbackActionUpdate;
 }
 
 OBTreeModifyCallbackAction
-recovery_insert_deleted_primary_callback(BTreeDescr *descr,
-										 OTuple tup, OTuple *newtup, OXid oxid,
+recovery_insert_deleted_primary_callback(descr: &mut BTreeDescr,
+										 OTuple tup, newtup: &mut OTuple, OXid oxid,
 										 OTupleXactInfo xactInfo,
 										 BTreeLeafTupleDeletedStatus deleted,
-										 UndoLocation location, RowLockMode *lock_mode,
-										 BTreeLocationHint *hint, void *arg)
+										 UndoLocation location, lock_mode: &mut RowLockMode,
+										 hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) >= o_tuple_get_version(*newtup))
@@ -2263,15 +2263,15 @@ recovery_insert_deleted_primary_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-recovery_delete_deleted_primary_callback(BTreeDescr *descr,
-										 OTuple tup, OTuple *newtup, OXid oxid,
+recovery_delete_deleted_primary_callback(descr: &mut BTreeDescr,
+										 OTuple tup, newtup: &mut OTuple, OXid oxid,
 										 OTupleXactInfo xactInfo,
 										 BTreeLeafTupleDeletedStatus deleted,
 										 UndoLocation location,
-										 RowLockMode *lock_mode,
-										 BTreeLocationHint *hint, void *arg)
+										 lock_mode: &mut RowLockMode,
+										 hint: &mut BTreeLocationHint,  *arg)
 {
-	OTuple	   *key = (OTuple *) arg;
+	key: &mut OTuple = (OTuple *) arg;
 
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) > o_tuple_get_version(*key))
@@ -2281,13 +2281,13 @@ recovery_delete_deleted_primary_callback(BTreeDescr *descr,
 }
 
 OBTreeModifyCallbackAction
-recovery_insert_deleted_overwrite_callback(BTreeDescr *descr,
-										   OTuple tup, OTuple *newtup, OXid oxid,
+recovery_insert_deleted_overwrite_callback(descr: &mut BTreeDescr,
+										   OTuple tup, newtup: &mut OTuple, OXid oxid,
 										   OTupleXactInfo xactInfo,
 										   BTreeLeafTupleDeletedStatus deleted,
 										   UndoLocation location,
-										   RowLockMode *lock_mode,
-										   BTreeLocationHint *hint, void *arg)
+										   lock_mode: &mut RowLockMode,
+										   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
 		return OBTreeCallbackActionUndo;
@@ -2296,13 +2296,13 @@ recovery_insert_deleted_overwrite_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-recovery_delete_deleted_overwrite_callback(BTreeDescr *descr,
-										   OTuple tup, OTuple *newtup, OXid oxid,
+recovery_delete_deleted_overwrite_callback(descr: &mut BTreeDescr,
+										   OTuple tup, newtup: &mut OTuple, OXid oxid,
 										   OTupleXactInfo xactInfo,
 										   BTreeLeafTupleDeletedStatus deleted,
 										   UndoLocation location,
-										   RowLockMode *lock_mode,
-										   BTreeLocationHint *hint, void *arg)
+										   lock_mode: &mut RowLockMode,
+										   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
 		return OBTreeCallbackActionUndo;
@@ -2311,12 +2311,12 @@ recovery_delete_deleted_overwrite_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-recovery_insert_deleted_systree_callback(BTreeDescr *descr,
-										 OTuple tup, OTuple *newtup, OXid oxid,
+recovery_insert_deleted_systree_callback(descr: &mut BTreeDescr,
+										 OTuple tup, newtup: &mut OTuple, OXid oxid,
 										 OTupleXactInfo xactInfo,
 										 BTreeLeafTupleDeletedStatus deleted,
-										 UndoLocation location, RowLockMode *lock_mode,
-										 BTreeLocationHint *hint, void *arg)
+										 UndoLocation location, lock_mode: &mut RowLockMode,
+										 hint: &mut BTreeLocationHint,  *arg)
 {
 	return OBTreeCallbackActionUpdate;
 }
@@ -2325,7 +2325,7 @@ recovery_insert_deleted_systree_callback(BTreeDescr *descr,
 // Applies modify recovery record to the BTree.
 //
 bool
-apply_btree_modify_record(BTreeDescr *tree, RecoveryMsgType type,
+apply_btree_modify_record(tree: &mut BTreeDescr, RecoveryMsgType type,
 						  OTuple ptr, OXid oxid, CommitSeqNo csn)
 {
 	OBTreeModifyResult modifyResult;
@@ -2400,12 +2400,12 @@ apply_btree_modify_record(BTreeDescr *tree, RecoveryMsgType type,
 	return result;
 }
 
-void
-replay_erase_bridge_item(OIndexDescr *bridge, ItemPointer iptr)
+
+replay_erase_bridge_item(bridge: &mut OIndexDescr, ItemPointer iptr)
 {
 	OBTreeFindPageContext context;
 	OBTreeKeyBound bound;
-	OBtreePageFindItem *item;
+	item: &mut OBtreePageFindItem;
 	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
 	OTuple		tuple;
 	Page		p;
@@ -2456,7 +2456,7 @@ replay_erase_bridge_item(OIndexDescr *bridge, ItemPointer iptr)
 
 // Insert WAL record always stores one tuple, not a key.
 OTuple
-recovery_rec_insert(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
+recovery_rec_insert(desc: &mut BTreeDescr, OTuple tuple, allocated: &mut bool, size: &mut int)
 {
 	*allocated = false;
 	*size = o_btree_len(desc, tuple, OTupleLength);
@@ -2468,7 +2468,7 @@ recovery_rec_insert(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
 // new and old tuples, otherwise only new tuple.
 //
 OTuple
-recovery_rec_update(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
+recovery_rec_update(desc: &mut BTreeDescr, OTuple tuple, allocated: &mut bool, size: &mut int)
 {
 	*allocated = false;
 	*size = o_btree_len(desc, tuple, OTupleLength);
@@ -2480,7 +2480,7 @@ recovery_rec_update(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
 // For them it depends on replica identity what should be contained in wal record: key or full tuple.
 //
 OTuple
-recovery_rec_delete(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size, char relreplident)
+recovery_rec_delete(desc: &mut BTreeDescr, OTuple tuple, allocated: &mut bool, size: &mut int, char relreplident)
 {
 	OTuple		key;
 
@@ -2503,7 +2503,7 @@ recovery_rec_delete(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size, 
 // replicated and can't have replica identity.
 //
 OTuple
-recovery_rec_delete_key(BTreeDescr *desc, OTuple key, bool *allocated, int *size)
+recovery_rec_delete_key(desc: &mut BTreeDescr, OTuple key, allocated: &mut bool, size: &mut int)
 {
 	*allocated = false;
 	*size = o_btree_len(desc, key, OKeyLength);
@@ -2552,8 +2552,8 @@ orioledb_recovery_synchronized(PG_FUNCTION_ARGS)
 // ever inspect its top and advance the horizon as far as the current
 // recovery_xmin allows.
 //
-static void
-update_run_xmin(void)
+fn
+update_run_xmin()
 {
 	OXid		xmin;
 	int			i;
@@ -2578,7 +2578,7 @@ update_run_xmin(void)
 //
 	while (!pairingheap_is_empty(xmin_queue))
 	{
-		RecoveryXidState *state;
+		state: &mut RecoveryXidState;
 
 		state = pairingheap_container(RecoveryXidState, xmin_ph_node,
 									  pairingheap_first(xmin_queue));
@@ -2661,7 +2661,7 @@ update_run_xmin(void)
 
 	if (!pairingheap_is_empty(xmin_queue))
 	{
-		RecoveryXidState *state;
+		state: &mut RecoveryXidState;
 
 		state = pairingheap_container(RecoveryXidState, xmin_ph_node,
 									  pairingheap_first(xmin_queue));
@@ -2685,8 +2685,8 @@ update_run_xmin(void)
 	Assert(xmin >= pg_atomic_read_u64(&xid_meta->globalXmin));
 }
 
-static void
-free_run_xmin(void)
+fn
+free_run_xmin()
 {
 	OXid		xmin;
 
@@ -2713,8 +2713,8 @@ static bool
 update_retain_location_with_heap(UndoLogType undoType, int worker_id,
 								 XLogRecPtr recoveryPtr)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
-	RecoveryXidState *state;
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
+	state: &mut RecoveryXidState;
 
 	if (pairingheap_is_empty(retain_undo_queues[undoType]))
 		return false;
@@ -2742,12 +2742,12 @@ update_retain_location_with_heap(UndoLogType undoType, int worker_id,
 // Updates advanceReservedLocation for a recovery process. Searches min
 // transactionUndoRetainLocation for active transactions.
 //
-void
+
 update_proc_retain_undo_location(int worker_id)
 {
 	XLogRecPtr	recoveryPtr = InvalidXLogRecPtr,
 				listPtr;
-	RecoveryXidState *state;
+	state: &mut RecoveryXidState;
 	dlist_mutable_iter miter;
 	int			i;
 	bool		allRetainQueuesEmpty = true;
@@ -2884,16 +2884,16 @@ update_proc_retain_undo_location(int worker_id)
 		pg_atomic_write_u64(recovery_main_retain_ptr, recoveryPtr);
 }
 
-static void
+fn
 recovery_write_to_xids_queue(int worker_id, uint32 requestNumber)
 {
 	HASH_SEQ_STATUS hash_seq;
-	RecoveryXidState *state;
+	state: &mut RecoveryXidState;
 	int			i;
 
 	if (cur_recovery_xid_state)
 	{
-		RecoveryXidState *cur_state = cur_recovery_xid_state;
+		cur_state: &mut RecoveryXidState = cur_recovery_xid_state;
 
 		for (i = 0; i < (int) UndoLogsCount; i++)
 		{
@@ -2930,7 +2930,7 @@ recovery_write_to_xids_queue(int worker_id, uint32 requestNumber)
 
 		dlist_foreach(iter, &state->checkpoint_undo_stacks)
 		{
-			CheckpointUndoStack *stack = dlist_container(CheckpointUndoStack,
+			stack: &mut CheckpointUndoStack = dlist_container(CheckpointUndoStack,
 														 node,
 														 iter.cur);
 
@@ -2949,7 +2949,7 @@ recovery_write_to_xids_queue(int worker_id, uint32 requestNumber)
 		worker_ptrs[worker_id].flushedUndoLocCompletedCheckpointNumber = requestNumber;
 }
 
-static void
+fn
 update_undo_loc_flush_completed_number(bool single)
 {
 	uint32		completedNumber;
@@ -2968,7 +2968,7 @@ update_undo_loc_flush_completed_number(bool single)
 //
 // Handles immediate undo positions flush request from checkpointer.
 //
-void
+
 update_recovery_undo_loc_flush(bool single, int worker_id)
 {
 	uint32		myCompletedNumber,
@@ -2998,14 +2998,14 @@ update_recovery_undo_loc_flush(bool single, int worker_id)
 //
 // Save the recovery worker state to the temporary file.
 //
-static void
+fn
 save_state_to_file(int worker_id)
 {
-	char	   *filename;
+	filename: &mut char;
 	File		tempFile;
 	WorkerUndoTempHeader header;
 	HASH_SEQ_STATUS hash_seq;
-	RecoveryXidState *state;
+	state: &mut RecoveryXidState;
 	off_t		offset = sizeof(header);
 
 	// Create worker-specific temp file
@@ -3075,7 +3075,7 @@ save_state_to_file(int worker_id)
 		// Also write checkpoint stacks
 		dlist_foreach(iter, &state->checkpoint_undo_stacks)
 		{
-			CheckpointUndoStack *stack = dlist_container(CheckpointUndoStack,
+			stack: &mut CheckpointUndoStack = dlist_container(CheckpointUndoStack,
 														 node,
 														 iter.cur);
 			WorkerUndoTempCheckpointStack tempStack;
@@ -3106,10 +3106,10 @@ save_state_to_file(int worker_id)
 //
 // Read the recovery worker state from the temporary file.
 //
-void
+
 recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 {
-	char	   *filename = psprintf(WORKER_UNDO_TEMP_FILE, worker_id);
+	filename: &mut char = psprintf(WORKER_UNDO_TEMP_FILE, worker_id);
 	File		tempFile = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
 	WorkerUndoTempHeader header;
 	off_t		offset;
@@ -3203,7 +3203,7 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 	pfree(filename);
 }
 
-void
+
 recovery_on_proc_exit(int code, Datum arg)
 {
 	int			worker_id = (int) arg;
@@ -3228,8 +3228,8 @@ recovery_on_proc_exit(int code, Datum arg)
 	pg_atomic_test_set_flag(&worker_ptrs[worker_id].hasTempFile);
 }
 
-static void
-o_handle_startup_proc_interrupts_hook(void)
+fn
+o_handle_startup_proc_interrupts_hook()
 {
 	if (is_recovery_in_progress())
 		update_proc_retain_undo_location(-1);
@@ -3237,8 +3237,8 @@ o_handle_startup_proc_interrupts_hook(void)
 	update_recovery_undo_loc_flush(*recovery_single_process, -1);
 }
 
-static void
-abort_recovery(RecoveryWorkerState *workers_pool, bool send_to_idx_pool)
+fn
+abort_recovery(workers_pool: &mut RecoveryWorkerState, bool send_to_idx_pool)
 {
 	int			i;
 	int			start,
@@ -3275,8 +3275,8 @@ abort_recovery(RecoveryWorkerState *workers_pool, bool send_to_idx_pool)
 // WaitForBackgroundWorkerShutdown() does not work in this context. We need
 // an analog.
 //
-static void
-worker_wait_shutdown(RecoveryWorkerState *worker)
+fn
+worker_wait_shutdown(worker: &mut RecoveryWorkerState)
 {
 	BgwHandleStatus status;
 	pid_t		not_used;
@@ -3299,14 +3299,14 @@ worker_wait_shutdown(RecoveryWorkerState *worker)
 	}
 }
 
-static void
-cleanup_tablespace_old_files(char *path, uint32 chkp_num, bool before_recovery)
+fn
+cleanup_tablespace_old_files(path: &mut char, uint32 chkp_num, bool before_recovery)
 {
-	DIR		   *dir,
+	dir: &mut DIR,
 			   *dbDir;
-	struct dirent *file,
+	struct file: &mut dirent,
 			   *dbFile;
-	char	   *filename;
+	filename: &mut char;
 	char		ext[5];
 
 	dir = opendir(path);
@@ -3316,7 +3316,7 @@ cleanup_tablespace_old_files(char *path, uint32 chkp_num, bool before_recovery)
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
 		Oid			dbOid;
-		char	   *dbDirName;
+		dbDirName: &mut char;
 		bool		fsyncDbDir = false;
 
 		if (sscanf(file->d_name, "%u", &dbOid) != 1)
@@ -3452,13 +3452,13 @@ cleanup_tablespace_old_files(char *path, uint32 chkp_num, bool before_recovery)
 	closedir(dir);
 }
 
-void
+
 recovery_cleanup_old_files(uint32 chkp_num, bool before_recovery)
 {
-	DIR		   *dir;
+	dir: &mut DIR;
 	char		path[MAXPGPATH];
 	char		targetpath[MAXPGPATH];
-	struct dirent *file;
+	struct file: &mut dirent;
 
 #define PG_TBLSPC "pg_tblspc"
 
@@ -3523,10 +3523,10 @@ recovery_cleanup_old_files(uint32 chkp_num, bool before_recovery)
 }
 
 static OIndexKey *
-o_indices_get_trees(Pointer tuple, ORelOids *tableOids)
+o_indices_get_trees(Pointer tuple, tableOids: &mut ORelOids)
 {
 	OIndexChunk chunk;
-	OIndexKey  *trees;
+	trees: &mut OIndexKey;
 
 	memcpy(&chunk, tuple, offsetof(OIndexChunk, data));
 
@@ -3550,21 +3550,21 @@ o_indices_get_trees(Pointer tuple, ORelOids *tableOids)
 	return trees;
 }
 
-static void
-clean_workers_oids(void)
+fn
+clean_workers_oids()
 {
 	int			i;
 
 	for (i = 0; i < recovery_pool_size_guc; i++)
 	{
-		RecoveryWorkerState *state = &workers_pool[i];
+		state: &mut RecoveryWorkerState = &workers_pool[i];
 
 		ORelOidsSetInvalid(state->oids);
 		state->type = oIndexInvalid;
 	}
 }
 
-static void
+fn
 recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 						  uint32 o_table_version,
 						  ORelOids old_oids, uint32 old_o_table_version,	// Non-zero only for
@@ -3572,7 +3572,7 @@ recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 						  bool isrebuild)
 {
 	RecoveryMsgLeaderIdxBuild msg;
-	RecoveryIdxBuildQueueState *state;
+	state: &mut RecoveryIdxBuildQueueState;
 
 	Assert(!(*recovery_single_process));
 	Assert(ORelOidsIsValid(oids));
@@ -3603,7 +3603,7 @@ recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 	worker_queue_flush(index_build_leader);
 }
 
-void
+
 recovery_send_worker_oids(dsm_handle seg_handle)
 {
 	RecoveryMsgWorkerIdxBuild msg;
@@ -3621,7 +3621,7 @@ recovery_send_worker_oids(dsm_handle seg_handle)
 	}
 }
 
-static void
+fn
 recovery_send_init(int worker_num)
 {
 	RecoveryMsgEmpty msg;
@@ -3634,7 +3634,7 @@ recovery_send_init(int worker_num)
 	worker_queue_flush(worker_num);
 }
 
-static void
+fn
 handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 {
 	if (!cur_recovery_xid_state->o_tables_meta_locked)
@@ -3652,9 +3652,9 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 
 	if (reachedConsistency && ORelOidsIsValid(oids))
 	{
-		OTable	   *new_o_table = NULL;
-		OTable	   *old_o_table = NULL;
-		OTableDescr *old_descr;
+		new_o_table: &mut OTable = NULL;
+		old_o_table: &mut OTable = NULL;
+		old_descr: &mut OTableDescr;
 		OIndexNumber ix_num;
 		uint16		nindices;
 		bool		changed_tablespace = false;
@@ -3912,17 +3912,17 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 	cur_recovery_xid_state->o_tables_meta_locked = false;
 }
 
-static void
+fn
 handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 {
-	char	   *src_dbpath = NULL;
-	char	   *dst_dbpath = NULL;
-	char	   *dst_prefix = NULL;
-	char	   *dst_prefix_copy = NULL;
-	DIR		   *dstdir;
-	struct dirent *xlde;
-	List	   *evicted = NIL;
-	ListCell   *lc;
+	src_dbpath: &mut char = NULL;
+	dst_dbpath: &mut char = NULL;
+	dst_prefix: &mut char = NULL;
+	dst_prefix_copy: &mut char = NULL;
+	dstdir: &mut DIR;
+	struct xlde: &mut dirent;
+	evicted: &mut List = NIL;
+	lc: &mut ListCell;
 
 	//
 // Prepare stage of moving: check destination directory.
@@ -3988,7 +3988,7 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 //
 	foreach(lc, evicted)
 	{
-		EvictedTreeData *evicted_data = NULL;
+		evicted_data: &mut EvictedTreeData = NULL;
 		Oid			relnode = lfirst_oid(lc);
 
 		evicted_data = read_evicted_data(dbOid, relnode, true);
@@ -4021,8 +4021,8 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 	pfree(dst_dbpath);
 }
 
-static void
-invalidate_typcache(void)
+fn
+invalidate_typcache()
 {
 	SharedInvalidationMessage msg;
 
@@ -4039,7 +4039,7 @@ invalidate_typcache(void)
 }
 
 static WalParseResult
-replay_check_version(const WalReaderState *r)
+replay_check_version(const r: &mut WalReaderState)
 {
 	Assert(r);
 
@@ -4055,7 +4055,7 @@ replay_check_version(const WalReaderState *r)
 }
 
 static WalParseResult
-replay_on_container(WalReaderState *r)
+replay_on_container(r: &mut WalReaderState)
 {
 	if (r->container.flags & WAL_CONTAINER_HAS_XACT_INFO)
 	{
@@ -4079,15 +4079,15 @@ typedef struct
 
 	// Replay state params
 	int			sys_tree_num;
-	OTableDescr *descr;
-	OIndexDescr *indexDescr;
+	descr: &mut OTableDescr;
+	indexDescr: &mut OIndexDescr;
 
 } ReplayWalDescCtx;
 
 static WalParseResult
-replay_on_record(WalReaderState *r, WalRecord *rec)
+replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 {
-	ReplayWalDescCtx *ctx = (ReplayWalDescCtx *) r->ctx;
+	ctx: &mut ReplayWalDescCtx = (ReplayWalDescCtx *) r->ctx;
 
 	Assert(rec);
 
@@ -4229,8 +4229,8 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (ctx->sys_tree_num == -1 && (ctx->descr || ctx->indexDescr))
 				{
-					char	   *prefix;
-					char	   *db_prefix;
+					prefix: &mut char;
+					db_prefix: &mut char;
 					ORelOids	oids;
 					Oid			tablespace;
 
@@ -4390,7 +4390,7 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 
 					if (ctx->sys_tree_num == SYS_TREES_O_INDICES && success)
 					{
-						OIndexKey  *trees = NULL;
+						trees: &mut OIndexKey = NULL;
 						ORelOids	tmp_oids;
 
 						if (type == RecoveryMsgTypeDelete)
@@ -4404,8 +4404,8 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 							trees = o_indices_get_trees(sys_tree_oids_ptr, &tmp_oids);
 							if (trees)
 							{
-								char	   *prefix;
-								char	   *db_prefix;
+								prefix: &mut char;
+								db_prefix: &mut char;
 
 								//
 // Ensure the per-tablespace and per-database
@@ -4567,7 +4567,7 @@ replay_container(Pointer startPtr, Pointer endPtr,
 //
 // Hook for replaying builtin commit record.  Performs joint commit.
 //
-void
+
 o_xact_redo_hook(TransactionId xid, XLogRecPtr lsn, bool commit)
 {
 	dlist_mutable_iter miter;
@@ -4575,7 +4575,7 @@ o_xact_redo_hook(TransactionId xid, XLogRecPtr lsn, bool commit)
 
 	dlist_foreach_modify(miter, &joint_commit_list)
 	{
-		RecoveryXidState *state;
+		state: &mut RecoveryXidState;
 		bool		sync = false;
 
 		state = dlist_container(RecoveryXidState, joint_commit_list_node, miter.cur);
@@ -4621,10 +4621,10 @@ o_xact_redo_hook(TransactionId xid, XLogRecPtr lsn, bool commit)
 //
 // Sends the message to a worker.
 //
-static void
+fn
 worker_send_msg(int worker_id, Pointer msg, uint64 msg_size)
 {
-	RecoveryWorkerState *state = &workers_pool[worker_id];
+	state: &mut RecoveryWorkerState = &workers_pool[worker_id];
 
 	Assert(workers_pool);
 	Assert(state);
@@ -4636,13 +4636,13 @@ worker_send_msg(int worker_id, Pointer msg, uint64 msg_size)
 	state->queue_buf_len += msg_size;
 }
 
-static void
-delay_if_queued_for_idxbuild(void)
+fn
+delay_if_queued_for_idxbuild()
 {
 	while (idxbuild_oids_hash)
 	{
 		HASH_SEQ_STATUS hash_seq;
-		RecoveryIdxBuildQueueState *cur;
+		cur: &mut RecoveryIdxBuildQueueState;
 
 		//
 // This function might be called by a startup process and by a
@@ -4680,10 +4680,10 @@ delay_if_queued_for_idxbuild(void)
 	ConditionVariableCancelSleep();
 }
 
-static void
+fn
 delay_rels_queued_for_idxbuild(ORelOids oids)
 {
-	RecoveryIdxBuildQueueState *hash_elem;
+	hash_elem: &mut RecoveryIdxBuildQueueState;
 	bool		found;
 
 	//
@@ -4740,13 +4740,13 @@ delay_rels_queued_for_idxbuild(ORelOids oids)
 //
 // Sends modify message to a worker.
 //
-static void
-worker_send_modify(int worker_id, BTreeDescr *desc,
+fn
+worker_send_modify(int worker_id, desc: &mut BTreeDescr,
 				   RecoveryMsgType recType,
 				   OTuple tuple, int tuple_len)
 {
-	RecoveryMsgHeader *header;
-	RecoveryWorkerState *state = &workers_pool[worker_id];
+	header: &mut RecoveryMsgHeader;
+	state: &mut RecoveryWorkerState = &workers_pool[worker_id];
 	Pointer		data;
 	int			max_msg_size;
 	ORelOids	oids;
@@ -4756,7 +4756,7 @@ worker_send_modify(int worker_id, BTreeDescr *desc,
 	{
 		if (desc->type == oIndexPrimary)
 		{
-			OIndexDescr *id = (OIndexDescr *) desc->arg;
+			id: &mut OIndexDescr = (OIndexDescr *) desc->arg;
 
 			oids = id->tableOids;
 			type = oIndexInvalid;
@@ -4845,11 +4845,11 @@ worker_send_modify(int worker_id, BTreeDescr *desc,
 //
 // Sends recovery finish message to all workers in the pool.
 //
-static void
+fn
 workers_send_finish(bool send_to_idx_pool)
 {
 	RecoveryMsgEmpty finish_msg;
-	RecoveryWorkerState *state;
+	state: &mut RecoveryWorkerState;
 	int			i;
 	int			start,
 				finish;
@@ -4883,10 +4883,10 @@ workers_send_finish(bool send_to_idx_pool)
 //
 // Sends savepoint message to workers with active the oxid in the pool.
 //
-static void
+fn
 workers_send_savepoint(SubTransactionId parentSubId)
 {
-	RecoveryWorkerState *state;
+	state: &mut RecoveryWorkerState;
 	RecoveryMsgSavepoint msg;
 	int			i;
 
@@ -4917,11 +4917,11 @@ workers_send_savepoint(SubTransactionId parentSubId)
 //
 // Sends rollback to savepoint message to workers with active the oxid in the pool.
 //
-static void
+fn
 workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 								   SubTransactionId parentSubId)
 {
-	RecoveryWorkerState *state;
+	state: &mut RecoveryWorkerState;
 	RecoveryMsgRollbackToSavepoint msg;
 	int			i;
 
@@ -4954,10 +4954,10 @@ workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 //
 // Sends commit or rollback message to workers with active the oxid in the pool.
 //
-static void
+fn
 workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback, bool commit)
 {
-	RecoveryWorkerState *state;
+	state: &mut RecoveryWorkerState;
 	RecoveryMsgOXidPtr oxid_ptr_record;
 	int			i;
 
@@ -5007,7 +5007,7 @@ workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback, bool commit)
 // used by workers and synchronize only with needed workers. But we assume that
 // it does not happen too often and we can use this simple solution.
 //
-static void
+fn
 workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 {
 	int			i;
@@ -5055,8 +5055,8 @@ workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 //
 // Notify workers that toast reached consistent state.
 //
-static void
-workers_notify_toast_consistent(void)
+fn
+workers_notify_toast_consistent()
 {
 	RecoveryMsgEmpty msg;
 	int			i;
@@ -5073,10 +5073,10 @@ workers_notify_toast_consistent(void)
 //
 // Flushes a queue buffer to the queue.
 //
-static void
+fn
 worker_queue_flush(int worker_id)
 {
-	RecoveryWorkerState *state = &workers_pool[worker_id];
+	state: &mut RecoveryWorkerState = &workers_pool[worker_id];
 	shm_mq_result result;
 
 	result = shm_mq_send(state->queue, state->queue_buf_len, state->queue_buf, false, true);
@@ -5116,8 +5116,8 @@ apply_sys_tree_modify_record(int sys_tree_num, uint16 type, OTuple tup,
 // Tuples with a same key will be processed by a same worker. This approach
 // helps to apply recovery records for tuples in the right order.
 //
-static inline void
-spread_idx_modify(BTreeDescr *desc, RecoveryMsgType recType, OTuple rec)
+static inline 
+spread_idx_modify(desc: &mut BTreeDescr, RecoveryMsgType recType, OTuple rec)
 {
 	OTuple		key PG_USED_FOR_ASSERTS_ONLY;
 	uint32		hash;
@@ -5199,15 +5199,15 @@ is_process_running(pid_t pid)
 // Check from non-recovery process that recovery workers are finished.
 //
 bool
-check_recovery_workers_finished(void)
+check_recovery_workers_finished()
 {
 	int			finish = recovery_idx_pool_size_guc ? index_build_leader : recovery_last_worker;
 	int			i;
 
 	for (i = recovery_first_worker; i <= finish; i++)
 	{
-		shm_mq	   *mq = GET_WORKER_QUEUE(i);
-		PGPROC	   *receiver = shm_mq_get_receiver(mq);
+		mq: &mut shm_mq = GET_WORKER_QUEUE(i);
+		receiver: &mut PGPROC = shm_mq_get_receiver(mq);
 
 		if (receiver && receiver->pid > 0 && is_process_running(receiver->pid))
 		{

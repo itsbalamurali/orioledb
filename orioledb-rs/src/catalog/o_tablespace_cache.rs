@@ -27,14 +27,14 @@ use pgrx::pg_sys;
 #define TABLESPACE_VERSION_DIRECTORY
 #endif
 
-void
+
 o_get_prefixes_for_tablespace(Oid datoid, Oid tablespace,
 							  char **prefix, char **db_prefix)
 {
 	static char pathbuf[MAXPGPATH];
 	Datum		path_datum;
-	text	   *path;
-	char	   *path_str;
+	path: &mut text;
+	path_str: &mut char;
 
 	//
 // Treat InvalidOid as the default tablespace.  System trees and trees

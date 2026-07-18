@@ -20,7 +20,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *collation_cache = NULL;
+static collation_cache: &mut OSysCache = NULL;
 
 typedef struct OCollation
 {
@@ -29,17 +29,17 @@ typedef struct OCollation
 	char		collprovider;
 	bool		collisdeterministic;
 	NameData	collname;
-	char	   *collcollate;
-	char	   *collctype;
-	char	   *colliculocale;
-	char	   *collicurules;
-	char	   *collversion;
+	collcollate: &mut char;
+	collctype: &mut char;
+	colliculocale: &mut char;
+	collicurules: &mut char;
+	collversion: &mut char;
 } OCollation;
 
-static void o_collation_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_collation_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 										 Pointer arg);
-static void o_collation_cache_free_entry(Pointer entry);
-static Pointer o_collation_cache_serialize_entry(Pointer entry, int *len);
+fn o_collation_cache_free_entry(Pointer entry);
+static Pointer o_collation_cache_serialize_entry(Pointer entry, len: &mut int);
 static Pointer o_collation_cache_deserialize_entry(MemoryContext mcxt,
 												   Pointer data, Size length);
 
@@ -66,13 +66,13 @@ O_SYS_CACHE_INIT_FUNC(collation_cache)
 										 &collation_cache_funcs);
 }
 
-static void
-o_collation_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn
+o_collation_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							 Pointer arg)
 {
 	HeapTuple	collationtup;
 	Form_pg_collation collform;
-	OCollation *o_collation = (OCollation *) *entry_ptr;
+	o_collation: &mut OCollation = (OCollation *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			colloid;
 	Datum		datum;
@@ -160,17 +160,17 @@ o_collation_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	ReleaseSysCache(collationtup);
 }
 
-static void
+fn
 o_collation_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
 }
 
 static Pointer
-o_collation_cache_serialize_entry(Pointer entry, int *len)
+o_collation_cache_serialize_entry(Pointer entry, len: &mut int)
 {
 	StringInfoData str;
-	OCollation *o_collation = (OCollation *) entry;
+	o_collation: &mut OCollation = (OCollation *) entry;
 
 	if (o_collation->data_version != ORIOLEDB_SYS_TREE_VERSION)
 		elog(FATAL,
@@ -196,7 +196,7 @@ o_collation_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 									Size length)
 {
 	Pointer		ptr = data;
-	OCollation *o_collation;
+	o_collation: &mut OCollation;
 	int			len;
 
 	o_collation = (OCollation *) palloc0(sizeof(OCollation));
@@ -226,7 +226,7 @@ o_collation_cache_search_htup(TupleDesc tupdesc, Oid colloid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_collation] = {0};
 	bool		nulls[Natts_pg_collation] = {0};
-	OCollation *o_collation;
+	o_collation: &mut OCollation;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_collation = o_collation_cache_search(datoid, colloid, cur_lsn,
@@ -283,7 +283,7 @@ o_collation_cache_search_htup(TupleDesc tupdesc, Oid colloid)
 	return result;
 }
 
-void
+
 orioledb_save_collation(Oid colloid)
 {
 	if (OidIsValid(colloid))

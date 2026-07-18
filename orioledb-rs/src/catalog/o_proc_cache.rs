@@ -46,11 +46,11 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *proc_cache = NULL;
+static proc_cache: &mut OSysCache = NULL;
 
 typedef struct sql_func_data
 {
-	char	   *src;
+	src: &mut char;
 	bool		returnsTuple;	// true if returning whole tuple result
 	bool		readonly_func;	// true to run in "read only" mode
 	bool		lazyEval;		// true if using lazyEval for result query
@@ -59,12 +59,12 @@ typedef struct sql_func_data
 
 	bool		has_argnames;
 
-	List	   *jf_targetList;
-	Oid		   *jf_atts;
+	jf_targetList: &mut List;
+	jf_atts: &mut Oid;
 
 	char	  **argnames;
 
-	int		   *nqtlists;
+	nqtlists: &mut int;
 	Node	 ***qtlists;
 } sql_func_data;
 
@@ -79,11 +79,11 @@ struct OProc
 	Oid			proowner;
 	int16		nargs;
 
-	char	   *proname;
-	char	   *prosrc;
-	char	   *probin;
-	Oid		   *argtypes;
-	sql_func_data *sql_func;
+	proname: &mut char;
+	prosrc: &mut char;
+	probin: &mut char;
+	argtypes: &mut Oid;
+	sql_func: &mut sql_func_data;
 
 	MemoryContext cxt;
 };
@@ -109,8 +109,8 @@ struct OProc
 //
 typedef struct
 {
-	char	   *fname;			// function name (for error msgs)
-	char	   *src;			// function body text (for error msgs)
+	fname: &mut char;			// function name (for error msgs)
+	src: &mut char;			// function body text (for error msgs)
 
 	SQLFunctionParseInfoPtr pinfo;	// data for parser callback hooks
 
@@ -125,9 +125,9 @@ typedef struct
 
 	ParamListInfo paramLI;		// Param list representing current args
 
-	Tuplestorestate *tstore;	// where we accumulate result tuples
+	tstore: &mut Tuplestorestate;	// where we accumulate result tuples
 
-	JunkFilter *junkFilter;		// will be NULL if function returns VOID
+	junkFilter: &mut JunkFilter;		// will be NULL if function returns VOID
 
 	//
 // func_state is a List of execution_state records, each of which is the
@@ -135,7 +135,7 @@ typedef struct
 // to it via the "next" fields.  This sublist structure is needed to keep
 // track of where the original query boundaries are.
 //
-	List	   *func_state;
+	func_state: &mut List;
 
 	MemoryContext fcontext;		// memory context holding this struct and all
 // subsidiary data
@@ -144,18 +144,18 @@ typedef struct
 	SubTransactionId subxid;	// subxid in which cache was made
 } SQLFunctionCache;
 
-typedef SQLFunctionCache *SQLFunctionCachePtr;
+typedef SQLFunctionCachePtr: &mut SQLFunctionCache;
 
-static void init_sql_fcache(FunctionCallInfo fcinfo, Oid collation,
-							bool lazyEvalOK, sql_func_data *out_sql_func,
+fn init_sql_fcache(FunctionCallInfo fcinfo, Oid collation,
+							bool lazyEvalOK, out_sql_func: &mut sql_func_data,
 							MemoryContext out_sql_func_cxt, List **processed);
-static void sql_exec_error_callback(void *arg);
+fn sql_exec_error_callback( *arg);
 
-static Pointer o_proc_cache_serialize_entry(Pointer entry, int *len);
+static Pointer o_proc_cache_serialize_entry(Pointer entry, len: &mut int);
 static Pointer o_proc_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 											  Size length);
-static void o_proc_cache_free_entry(Pointer entry);
-static void o_proc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_proc_cache_free_entry(Pointer entry);
+fn o_proc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									Pointer arg);
 
 O_SYS_CACHE_FUNCS(proc_cache, OProc, 1);
@@ -180,13 +180,13 @@ O_SYS_CACHE_INIT_FUNC(proc_cache)
 									0, fastcache, mcxt, &proc_cache_funcs);
 }
 
-static void
-o_proc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_proc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	proctup;
 	Form_pg_proc procform;
-	OProc	   *o_proc = (OProc *) *entry_ptr;
-	OProcArg   *parg = (OProcArg *) arg;
+	o_proc: &mut OProc = (OProc *) *entry_ptr;
+	parg: &mut OProcArg = (OProcArg *) arg;
 	bool		lazyEvalOK = false;
 	SQLFunctionCachePtr fcache;
 	MemoryContext oldcontext;
@@ -232,7 +232,7 @@ o_proc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 
 	if (o_proc->prolang == SQLlanguageId)
 	{
-		FmgrInfo   *finfo;
+		finfo: &mut FmgrInfo;
 		FunctionCallInfo fcinfo;
 
 		finfo = palloc0(sizeof(FmgrInfo));
@@ -244,7 +244,7 @@ o_proc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 		// Check call context
 		if (fcinfo->flinfo->fn_retset)
 		{
-			ReturnSetInfo *rsi = (ReturnSetInfo *) fcinfo->resultinfo;
+			rsi: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 
 			//
 // For simplicity, we require callers to support both set eval
@@ -277,7 +277,7 @@ o_proc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 
 			for (j = 0; j < o_proc->sql_func->nqtlists[i]; j++)
 			{
-				PlannedStmt *pstmt;
+				pstmt: &mut PlannedStmt;
 
 				pstmt = castNode(PlannedStmt, o_proc->sql_func->qtlists[i][j]);
 
@@ -297,22 +297,22 @@ o_proc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(proctup);
 }
 
-static void
+fn
 o_proc_cache_free_entry(Pointer entry)
 {
-	OProc	   *o_proc = (OProc *) entry;
+	o_proc: &mut OProc = (OProc *) entry;
 
 	MemoryContextDelete(o_proc->cxt);
 	pfree(o_proc);
 }
 
 static Pointer
-o_proc_cache_serialize_entry(Pointer entry, int *len)
+o_proc_cache_serialize_entry(Pointer entry, len: &mut int)
 {
 	int			i,
 				j;
 	StringInfoData str;
-	OProc	   *o_proc = (OProc *) entry;
+	o_proc: &mut OProc = (OProc *) entry;
 
 	if (o_proc->data_version != ORIOLEDB_SYS_TREE_VERSION)
 		elog(FATAL,
@@ -331,7 +331,7 @@ o_proc_cache_serialize_entry(Pointer entry, int *len)
 
 	if (o_proc->prolang == SQLlanguageId)
 	{
-		sql_func_data *sql_func = o_proc->sql_func;
+		sql_func: &mut sql_func_data = o_proc->sql_func;
 
 		o_serialize_string(sql_func->src, &str);
 		appendBinaryStringInfo(&str, ((Pointer) sql_func) +
@@ -368,7 +368,7 @@ static Pointer
 o_proc_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 {
 	Pointer		ptr = data;
-	OProc	   *o_proc;
+	o_proc: &mut OProc;
 	int			len;
 	MemoryContext old_mcxt;
 	int			i,
@@ -400,7 +400,7 @@ o_proc_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 
 	if (o_proc->prolang == SQLlanguageId)
 	{
-		sql_func_data *sql_func;
+		sql_func: &mut sql_func_data;
 
 		sql_func = (sql_func_data *) palloc0(sizeof(sql_func_data));
 		o_proc->sql_func = sql_func;
@@ -460,11 +460,11 @@ o_proc_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 typedef struct
 {
 	DestReceiver pub;			// publicly-known function pointers
-	Tuplestorestate *tstore;	// where to put result tuples
+	tstore: &mut Tuplestorestate;	// where to put result tuples
 #if PG_VERSION_NUM < 180000
 	MemoryContext cxt;			// context containing tstore
 #endif
-	JunkFilter *filter;			// filter to convert tuple type
+	filter: &mut JunkFilter;			// filter to convert tuple type
 } DR_sqlfunction;
 
 //
@@ -483,12 +483,12 @@ typedef enum
 
 typedef struct execution_state
 {
-	struct execution_state *next;
+	struct next: &mut execution_state;
 	ExecStatus	status;
 	bool		setsResult;		// true if this query produces func's result
 	bool		lazyEval;		// true if should fetch one row at a time
-	PlannedStmt *stmt;			// plan for this query
-	QueryDesc  *qd;				// null unless status == RUN
+	stmt: &mut PlannedStmt;			// plan for this query
+	qd: &mut QueryDesc;				// null unless status == RUN
 } execution_state;
 
 //
@@ -498,26 +498,26 @@ typedef struct execution_state
 // querytrees.  The sublist structure denotes the original query boundaries.
 //
 static List *
-init_execution_state(List *queryTree_list,
+init_execution_state(queryTree_list: &mut List,
 					 SQLFunctionCachePtr fcache,
 					 bool lazyEvalOK)
 {
-	List	   *eslist = NIL;
-	execution_state *lasttages = NULL;
-	ListCell   *lc1;
+	eslist: &mut List = NIL;
+	lasttages: &mut execution_state = NULL;
+	lc1: &mut ListCell;
 
 	foreach(lc1, queryTree_list)
 	{
-		List	   *qtlist = lfirst_node(List, lc1);
-		execution_state *firstes = NULL;
-		execution_state *preves = NULL;
-		ListCell   *lc2;
+		qtlist: &mut List = lfirst_node(List, lc1);
+		firstes: &mut execution_state = NULL;
+		preves: &mut execution_state = NULL;
+		lc2: &mut ListCell;
 
 		foreach(lc2, qtlist)
 		{
-			Query	   *queryTree = lfirst_node(Query, lc2);
-			PlannedStmt *stmt;
-			execution_state *newes;
+			queryTree: &mut Query = lfirst_node(Query, lc2);
+			stmt: &mut PlannedStmt;
+			newes: &mut execution_state;
 
 			// Plan the query if needed
 			if (queryTree->commandType == CMD_UTILITY)
@@ -612,10 +612,10 @@ init_execution_state(List *queryTree_list,
 	return eslist;
 }
 
-static void
+fn
 jf_cleanTupType_init_entry(TupleDesc desc,
 						   AttrNumber attributeNumber,
-						   const char *attributeName,
+						   const attributeName: &mut char,
 						   Oid oidtypeid,
 						   int32 typmod,
 						   int attdim,
@@ -688,11 +688,11 @@ jf_cleanTupType_init_entry(TupleDesc desc,
 // polymorphic arguments.
 //
 static SQLFunctionParseInfoPtr
-o_prepare_sql_fn_parse_info(OProc *o_proc, Node *call_expr, Oid inputCollation)
+o_prepare_sql_fn_parse_info(o_proc: &mut OProc, call_expr: &mut Node, Oid inputCollation)
 {
 	SQLFunctionParseInfoPtr pinfo;
 	int			nargs;
-	sql_func_data *sql_func = o_proc->sql_func;
+	sql_func: &mut sql_func_data = o_proc->sql_func;
 
 	pinfo = (SQLFunctionParseInfoPtr) palloc0(sizeof(SQLFunctionParseInfo));
 
@@ -709,7 +709,7 @@ o_prepare_sql_fn_parse_info(OProc *o_proc, Node *call_expr, Oid inputCollation)
 	pinfo->nargs = nargs = o_proc->nargs;
 	if (nargs > 0)
 	{
-		Oid		   *argOidVect;
+		argOidVect: &mut Oid;
 		int			argnum;
 
 		argOidVect = (Oid *) palloc(nargs * sizeof(Oid));
@@ -755,14 +755,14 @@ o_prepare_sql_fn_parse_info(OProc *o_proc, Node *call_expr, Oid inputCollation)
 // This is the copy of get_sql_fn_result_tlist() from PostgreSQL code.
 //
 static List *
-get_sql_fn_result_tlist(List *queryTreeList)
+get_sql_fn_result_tlist(queryTreeList: &mut List)
 {
-	Query	   *parse = NULL;
-	ListCell   *lc;
+	parse: &mut Query = NULL;
+	lc: &mut ListCell;
 
 	foreach(lc, queryTreeList)
 	{
-		Query	   *q = lfirst_node(Query, lc);
+		q: &mut Query = lfirst_node(Query, lc);
 
 		if (q->canSetTag)
 			parse = q;
@@ -785,12 +785,12 @@ get_sql_fn_result_tlist(List *queryTreeList)
 //
 // Initialize the SQLFunctionCache for a SQL function
 //
-static void
+fn
 init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
-				sql_func_data *out_sql_func, MemoryContext out_sql_func_cxt,
+				out_sql_func: &mut sql_func_data, MemoryContext out_sql_func_cxt,
 				List **processed)
 {
-	FmgrInfo   *finfo = fcinfo->flinfo;
+	finfo: &mut FmgrInfo = fcinfo->flinfo;
 	Oid			foid = finfo->fn_oid;
 	MemoryContext fcontext;
 	MemoryContext oldcontext;
@@ -799,14 +799,14 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 	HeapTuple	procedureTuple = NULL;
 	Form_pg_proc procedureStruct;
 	SQLFunctionCachePtr fcache;
-	List	   *queryTree_list = NIL;
-	List	   *resulttlist;
+	queryTree_list: &mut List = NIL;
+	resulttlist: &mut List;
 	Datum		tmp;
 	bool		isNull;
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
-	OProc	   *o_proc;
-	sql_func_data *sql_func = NULL;
+	o_proc: &mut OProc;
+	sql_func: &mut sql_func_data = NULL;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_proc = o_proc_cache_search(datoid, fcinfo->flinfo->fn_oid, cur_lsn,
@@ -831,7 +831,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 //
 	fcache = (SQLFunctionCachePtr) palloc0(sizeof(SQLFunctionCache));
 	fcache->fcontext = fcontext;
-	finfo->fn_extra = (void *) fcache;
+	finfo->fn_extra = ( *) fcache;
 
 	if (o_proc)
 	{
@@ -877,7 +877,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 // Resolve any polymorphism, obtaining the actual result type, and the
 // corresponding tupdesc if it's a rowtype.
 //
-		(void) get_call_result_type(fcinfo, &rettype, &rettupdesc);
+		() get_call_result_type(fcinfo, &rettype, &rettupdesc);
 		fcache->rettype = rettype;
 
 		// Fetch the typlen and byval info for the result type
@@ -928,9 +928,9 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		queryTree_list = NIL;
 		if (!isNull)
 		{
-			Node	   *n;
-			List	   *stored_query_list;
-			ListCell   *lc;
+			n: &mut Node;
+			stored_query_list: &mut List;
+			lc: &mut ListCell;
 
 			n = stringToNode(TextDatumGetCString(tmp));
 			if (IsA(n, List))
@@ -940,8 +940,8 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 
 			foreach(lc, stored_query_list)
 			{
-				Query	   *parsetree = lfirst_node(Query, lc);
-				List	   *queryTree_sublist;
+				parsetree: &mut Query = lfirst_node(Query, lc);
+				queryTree_sublist: &mut List;
 
 				AcquireRewriteLocks(parsetree, true, false);
 				queryTree_sublist = pg_rewrite_query(parsetree);
@@ -950,15 +950,15 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		}
 		else
 		{
-			List	   *raw_parsetree_list;
-			ListCell   *lc;
+			raw_parsetree_list: &mut List;
+			lc: &mut ListCell;
 
 			raw_parsetree_list = pg_parse_query(fcache->src);
 
 			foreach(lc, raw_parsetree_list)
 			{
-				RawStmt    *parsetree = lfirst_node(RawStmt, lc);
-				List	   *queryTree_sublist;
+				parsetree: &mut RawStmt = lfirst_node(RawStmt, lc);
+				queryTree_sublist: &mut List;
 
 				queryTree_sublist = pg_analyze_and_rewrite_params(
 																  parsetree,
@@ -1028,12 +1028,12 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		if (o_proc)
 		{
 			int			cleanLength;
-			AttrNumber *cleanMap;
-			TupleTableSlot *slot;
+			cleanMap: &mut AttrNumber;
+			slot: &mut TupleTableSlot;
 			int			len;
 			TupleDesc	typeInfo;
 			int			cur_resno = 1;
-			ListCell   *l;
+			l: &mut ListCell;
 
 			fcache->junkFilter = makeNode(JunkFilter);
 			fcache->junkFilter->jf_targetList = sql_func->jf_targetList;
@@ -1042,7 +1042,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 			typeInfo = CreateTemplateTupleDesc(len);
 			foreach(l, sql_func->jf_targetList)
 			{
-				TargetEntry *tle = lfirst(l);
+				tle: &mut TargetEntry = lfirst(l);
 
 				if (tle->resjunk)
 					continue;
@@ -1077,13 +1077,13 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 			if (cleanLength > 0)
 			{
 				AttrNumber	cleanResno;
-				ListCell   *t;
+				t: &mut ListCell;
 
 				cleanMap = (AttrNumber *) palloc(cleanLength * sizeof(AttrNumber));
 				cleanResno = 0;
 				foreach(t, sql_func->jf_targetList)
 				{
-					TargetEntry *tle = lfirst(t);
+					tle: &mut TargetEntry = lfirst(t);
 
 					if (!tle->resjunk)
 					{
@@ -1103,7 +1103,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		}
 		else
 		{
-			TupleTableSlot *slot = MakeSingleTupleTableSlot(NULL,
+			slot: &mut TupleTableSlot = MakeSingleTupleTableSlot(NULL,
 															&TTSOpsMinimalTuple);
 
 #if PG_VERSION_NUM >= 180000
@@ -1147,7 +1147,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 
 	if (o_proc)
 	{
-		execution_state *lastes = NULL;
+		lastes: &mut execution_state = NULL;
 		int			i,
 					j;
 
@@ -1155,12 +1155,12 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		fcache->lazyEval = sql_func->lazyEval;
 		for (i = 0; i < sql_func->nnqtlists; i++)
 		{
-			execution_state *firstes = NULL;
-			execution_state *preves = NULL;
+			firstes: &mut execution_state = NULL;
+			preves: &mut execution_state = NULL;
 
 			for (j = 0; j < sql_func->nqtlists[i]; j++)
 			{
-				execution_state *newes;
+				newes: &mut execution_state;
 
 				newes = (execution_state *) palloc0(sizeof(execution_state));
 				if (preves)
@@ -1210,10 +1210,10 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 	{
 		int			i,
 					j;
-		ListCell   *l,
+		l: &mut ListCell,
 				   *lc;
 		int			cur_resno = 1;
-		JunkFilter *jf;
+		jf: &mut JunkFilter;
 
 		oldcontext = MemoryContextSwitchTo(out_sql_func_cxt);
 
@@ -1251,7 +1251,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 											out_sql_func->jf_natts);
 			foreach(l, out_sql_func->jf_targetList)
 			{
-				TargetEntry *tle = lfirst(l);
+				tle: &mut TargetEntry = lfirst(l);
 				Form_pg_attribute att;
 
 				if (tle->resjunk)
@@ -1274,8 +1274,8 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		for (i = 0; i < out_sql_func->nnqtlists; i++)
 		{
 			int			len;
-			execution_state *head;
-			execution_state *cur;
+			head: &mut execution_state;
+			cur: &mut execution_state;
 
 			head = lfirst(lc);
 			cur = head;
@@ -1302,10 +1302,10 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 }
 
 // Start up execution of one execution_state node
-static void
-postquel_start(execution_state *es, SQLFunctionCachePtr fcache)
+fn
+postquel_start(es: &mut execution_state, SQLFunctionCachePtr fcache)
 {
-	DestReceiver *dest;
+	dest: &mut DestReceiver;
 
 	Assert(es->qd == NULL);
 
@@ -1315,7 +1315,7 @@ postquel_start(execution_state *es, SQLFunctionCachePtr fcache)
 //
 	if (es->setsResult)
 	{
-		DR_sqlfunction *myState;
+		myState: &mut DR_sqlfunction;
 
 		dest = CreateDestReceiver(DestSQLFunction);
 		// pass down the needed info to the dest receiver routines
@@ -1364,7 +1364,7 @@ postquel_start(execution_state *es, SQLFunctionCachePtr fcache)
 // Run one execution_state; either to completion or to first result row
 // Returns true if we ran to completion
 static bool
-postquel_getnext(execution_state *es, SQLFunctionCachePtr fcache)
+postquel_getnext(es: &mut execution_state, SQLFunctionCachePtr fcache)
 {
 	bool		result;
 
@@ -1402,8 +1402,8 @@ postquel_getnext(execution_state *es, SQLFunctionCachePtr fcache)
 }
 
 // Shut down execution of one execution_state node
-static void
-postquel_end(execution_state *es)
+fn
+postquel_end(es: &mut execution_state)
 {
 	// mark status done to ensure we don't do ExecutorEnd twice
 	es->status = F_EXEC_DONE;
@@ -1422,7 +1422,7 @@ postquel_end(execution_state *es)
 }
 
 // Build ParamListInfo array representing current arguments
-static void
+fn
 postquel_sub_params(SQLFunctionCachePtr fcache,
 					FunctionCallInfo fcinfo)
 {
@@ -1445,7 +1445,7 @@ postquel_sub_params(SQLFunctionCachePtr fcache,
 
 		for (int i = 0; i < nargs; i++)
 		{
-			ParamExternData *prm = &paramLI->params[i];
+			prm: &mut ParamExternData = &paramLI->params[i];
 
 			prm->value = fcinfo->args[i].value;
 			prm->isnull = fcinfo->args[i].isnull;
@@ -1463,7 +1463,7 @@ postquel_sub_params(SQLFunctionCachePtr fcache,
 // result.
 //
 static Datum
-postquel_get_single_result(TupleTableSlot *slot,
+postquel_get_single_result(slot: &mut TupleTableSlot,
 						   FunctionCallInfo fcinfo,
 						   SQLFunctionCachePtr fcache,
 						   MemoryContext resultcontext)
@@ -1506,12 +1506,12 @@ postquel_get_single_result(TupleTableSlot *slot,
 // callback function in case a function-returning-set needs to be shut down
 // before it has been run to completion
 //
-static void
+fn
 ShutdownSQLFunction(Datum arg)
 {
 	SQLFunctionCachePtr fcache = (SQLFunctionCachePtr) DatumGetPointer(arg);
-	execution_state *es;
-	ListCell   *lc;
+	es: &mut execution_state;
+	lc: &mut ListCell;
 
 	foreach(lc, fcache->func_state)
 	{
@@ -1559,11 +1559,11 @@ o_fmgr_sql(PG_FUNCTION_ARGS)
 	bool		lazyEvalOK;
 	bool		is_first;
 	bool		pushed_snapshot;
-	execution_state *es;
-	TupleTableSlot *slot;
+	es: &mut execution_state;
+	slot: &mut TupleTableSlot;
 	Datum		result;
-	List	   *eslist;
-	ListCell   *eslc;
+	eslist: &mut List;
+	eslc: &mut ListCell;
 
 	//
 // Setup error traceback support for ereport()
@@ -1576,7 +1576,7 @@ o_fmgr_sql(PG_FUNCTION_ARGS)
 	// Check call context
 	if (fcinfo->flinfo->fn_retset)
 	{
-		ReturnSetInfo *rsi = (ReturnSetInfo *) fcinfo->resultinfo;
+		rsi: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 
 		//
 // For simplicity, we require callers to support both set eval modes.
@@ -1776,7 +1776,7 @@ o_fmgr_sql(PG_FUNCTION_ARGS)
 //
 	if (fcache->returnsSet)
 	{
-		ReturnSetInfo *rsi = (ReturnSetInfo *) fcinfo->resultinfo;
+		rsi: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 
 		if (es)
 		{
@@ -1926,10 +1926,10 @@ o_fmgr_sql(PG_FUNCTION_ARGS)
 //
 // error context callback to let us supply a call-stack traceback
 //
-static void
-sql_exec_error_callback(void *arg)
+fn
+sql_exec_error_callback( *arg)
 {
-	FmgrInfo   *flinfo = (FmgrInfo *) arg;
+	flinfo: &mut FmgrInfo = (FmgrInfo *) arg;
 	SQLFunctionCachePtr fcache = (SQLFunctionCachePtr) flinfo->fn_extra;
 	int			syntaxerrposition;
 
@@ -1960,9 +1960,9 @@ sql_exec_error_callback(void *arg)
 //
 	if (fcache->func_state)
 	{
-		execution_state *es;
+		es: &mut execution_state;
 		int			query_num;
-		ListCell   *lc;
+		lc: &mut ListCell;
 
 		es = NULL;
 		query_num = 1;
@@ -2003,9 +2003,9 @@ sql_exec_error_callback(void *arg)
 	}
 }
 
-void
+
 o_proc_cache_validate_add(Oid datoid, Oid procoid, Oid fncollation,
-						  char *func_type, char *used_for, List **processed)
+						  func_type: &mut char, used_for: &mut char, List **processed)
 {
 	StringInfoData str;
 
@@ -2032,12 +2032,12 @@ o_proc_cache_validate_add(Oid datoid, Oid procoid, Oid fncollation,
 // If datoid == InvalidOid, retain legacy behavior and derive context from
 // o_sys_cache_set_datoid_lsn().
 //
-void
-o_proc_cache_fill_finfo(FmgrInfo *finfo, Oid procoid, Oid datoid)
+
+o_proc_cache_fill_finfo(finfo: &mut FmgrInfo, Oid procoid, Oid datoid)
 {
 	XLogRecPtr	cur_lsn;
-	OProc	   *o_proc = NULL;
-	const FmgrBuiltin *fbp;
+	o_proc: &mut OProc = NULL;
+	const fbp: &mut FmgrBuiltin;
 
 	memset(finfo, 0, sizeof(FmgrInfo));
 
@@ -2106,13 +2106,13 @@ o_proc_cache_search_htup(TupleDesc tupdesc, Oid procoid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_proc] = {0};
 	bool		nulls[Natts_pg_proc] = {0};
-	OProc	   *o_proc;
+	o_proc: &mut OProc;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_proc = o_proc_cache_search(datoid, procoid, cur_lsn, proc_cache->nkeys);
 	if (o_proc)
 	{
-		oidvector  *parameterTypes;
+		parameterTypes: &mut oidvector;
 		NameData	procname;
 
 		parameterTypes = buildoidvector(o_proc->argtypes, o_proc->nargs);

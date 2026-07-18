@@ -29,15 +29,15 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void tts_orioledb_init_reader(TupleTableSlot *slot);
-static void tts_orioledb_get_index_values(TupleTableSlot *slot,
-										  OIndexDescr *idx, Datum *values,
-										  bool *isnull, bool leaf);
+fn tts_orioledb_init_reader(slot: &mut TupleTableSlot);
+fn tts_orioledb_get_index_values(slot: &mut TupleTableSlot,
+										  idx: &mut OIndexDescr, values: &mut Datum,
+										  isnull: &mut bool, bool leaf);
 
-static void
-tts_orioledb_init(TupleTableSlot *slot)
+fn
+tts_orioledb_init(slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	oslot->data = NULL;
 	O_TUPLE_SET_NULL(oslot->tuple);
@@ -49,19 +49,19 @@ tts_orioledb_init(TupleTableSlot *slot)
 	oslot->hint.pageChangeCount = 0;
 }
 
-static void
-tts_orioledb_release(TupleTableSlot *slot)
+fn
+tts_orioledb_release(slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	if (oslot->to_toast)
 		pfree(oslot->to_toast);
 }
 
-static void
-tts_orioledb_clear(TupleTableSlot *slot)
+fn
+tts_orioledb_clear(slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	if (unlikely(TTS_SHOULDFREE(slot)))
 	{
@@ -109,9 +109,9 @@ tts_orioledb_clear(TupleTableSlot *slot)
 }
 
 static OTuple
-tts_orioledb_make_key(TupleTableSlot *slot, OTableDescr *descr)
+tts_orioledb_make_key(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 {
-	OIndexDescr *id = GET_PRIMARY(descr);
+	id: &mut OIndexDescr = GET_PRIMARY(descr);
 	Datum		key[INDEX_MAX_KEYS];
 	bool		isnull[INDEX_MAX_KEYS] = {false};
 	int			i,
@@ -154,7 +154,7 @@ tts_orioledb_make_key(TupleTableSlot *slot, OTableDescr *descr)
 }
 
 static OTuple
-make_key_from_secondary_slot(TupleTableSlot *slot, OIndexDescr *idx, OTableDescr *descr)
+make_key_from_secondary_slot(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, descr: &mut OTableDescr)
 {
 	Datum		key[INDEX_MAX_KEYS];
 	bool		isnull[INDEX_MAX_KEYS] = {false};
@@ -186,10 +186,10 @@ make_key_from_secondary_slot(TupleTableSlot *slot, OIndexDescr *idx, OTableDescr
 	return result;
 }
 
-static void
-alloc_to_toast_vfree_detoasted(TupleTableSlot *slot)
+fn
+alloc_to_toast_vfree_detoasted(slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	int			totalNatts = slot->tts_tupleDescriptor->natts;
 
 	Assert(!oslot->to_toast && !oslot->vfree);
@@ -206,30 +206,30 @@ alloc_to_toast_vfree_detoasted(TupleTableSlot *slot)
 // the provided number of attributes (__natts) and updates the slot's values
 // and null flags accordingly.
 //
-static void
-tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
+fn
+tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 {
 	//
 // Cast the generic TupleTableSlot to an OTableSlot for OrioleDB specific
 // operations.
 //
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	// Declaration of variables used throughout the function.
 	int			natts,
 				attnum,
 				ctid_off = 0;
-	OTableDescr *descr = oslot->descr;	// Descriptor for the table.
-	Datum	   *values = slot->tts_values;	// Array to store attribute
+	descr: &mut OTableDescr = oslot->descr;	// Descriptor for the table.
+	values: &mut Datum = slot->tts_values;	// Array to store attribute
 // values.
-	bool	   *isnull = slot->tts_isnull;	// Array to store null flags for
+	isnull: &mut bool = slot->tts_isnull;	// Array to store null flags for
 // attributes.
 	bool		hastoast = false;	// Flag to indicate presence of TOASTed
 // attributes.
-	OIndexDescr *idx;
+	idx: &mut OIndexDescr;
 	bool		index_order;
 	int			cur_tbl_attnum = 0;
-	bool	   *isfilled = NULL;
+	isfilled: &mut bool = NULL;
 
 	//
 // Early return if the requested number of attributes is already valid or
@@ -417,7 +417,7 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 			// Handle dropped attributes by reading and ignoring the value.
 			bool		dropped_null;
 
-			(void) o_tuple_read_next_field(&oslot->state, &dropped_null);
+			() o_tuple_read_next_field(&oslot->state, &dropped_null);
 		}
 	}
 
@@ -494,10 +494,10 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 }
 
 static Datum
-tts_orioledb_getsysattr(TupleTableSlot *slot, int attnum, bool *isnull)
+tts_orioledb_getsysattr(slot: &mut TupleTableSlot, int attnum, isnull: &mut bool)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
-	const FormData_pg_attribute *att;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
+	const att: &mut FormData_pg_attribute;
 
 	ASAN_UNPOISON_MEMORY_REGION(isnull, sizeof(*isnull));
 
@@ -505,9 +505,9 @@ tts_orioledb_getsysattr(TupleTableSlot *slot, int attnum, bool *isnull)
 	{
 		Datum		values[2 * INDEX_MAX_KEYS];
 		bool		isnulls[2 * INDEX_MAX_KEYS];
-		bytea	   *result;
-		OTableDescr *descr = oslot->descr;
-		OIndexDescr *primary;
+		result: &mut bytea;
+		descr: &mut OTableDescr = oslot->descr;
+		primary: &mut OIndexDescr;
 		int			ctid_off;
 
 		if (oslot->rowid)
@@ -552,13 +552,13 @@ tts_orioledb_getsysattr(TupleTableSlot *slot, int attnum, bool *isnull)
 // good for cache hit ratio, but more importantly requires only memory
 // allocation/deallocation.
 //
-static void
-tts_orioledb_materialize(TupleTableSlot *slot)
+fn
+tts_orioledb_materialize(slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	TupleDesc	desc = slot->tts_tupleDescriptor;
 	Size		sz = 0;
-	char	   *data;
+	data: &mut char;
 
 	// already materialized
 	if (TTS_SHOULDFREE(slot))
@@ -622,7 +622,7 @@ tts_orioledb_materialize(TupleTableSlot *slot)
 // We want to flatten the expanded value so that the materialized
 // slot doesn't depend on it.
 //
-			ExpandedObjectHeader *eoh = DatumGetEOHP(val);
+			eoh: &mut ExpandedObjectHeader = DatumGetEOHP(val);
 
 			data = (char *) att_align_nominal(data,
 											  att->attalign);
@@ -653,10 +653,10 @@ tts_orioledb_materialize(TupleTableSlot *slot)
 	}
 }
 
-void
-tts_orioledb_detoast(TupleTableSlot *slot)
+
+tts_orioledb_detoast(slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	TupleDesc	tupleDesc = slot->tts_tupleDescriptor;
 	int			natts = tupleDesc->natts;
 	int			i;
@@ -688,11 +688,11 @@ tts_orioledb_detoast(TupleTableSlot *slot)
 	}
 }
 
-static void
-tts_orioledb_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
+fn
+tts_orioledb_copyslot(dstslot: &mut TupleTableSlot, srcslot: &mut TupleTableSlot)
 {
 	TupleDesc	srcdesc = srcslot->tts_tupleDescriptor;
-	OTableSlot *dstoslot = (OTableSlot *) dstslot;
+	dstoslot: &mut OTableSlot = (OTableSlot *) dstslot;
 
 	Assert(srcdesc->natts <= dstslot->tts_tupleDescriptor->natts);
 
@@ -700,7 +700,7 @@ tts_orioledb_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 		(((OTableSlot *) srcslot)->descr == dstoslot->descr ||
 		 ((OTableSlot *) dstslot)->descr == NULL))
 	{
-		OTableSlot *srcoslot = (OTableSlot *) srcslot;
+		srcoslot: &mut OTableSlot = (OTableSlot *) srcslot;
 
 		tts_orioledb_clear(dstslot);
 		dstoslot->version = srcoslot->version;
@@ -749,7 +749,7 @@ tts_orioledb_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 }
 
 static HeapTuple
-tts_orioledb_copy_heap_tuple(TupleTableSlot *slot)
+tts_orioledb_copy_heap_tuple(slot: &mut TupleTableSlot)
 {
 	HeapTuple	result;
 
@@ -768,9 +768,9 @@ tts_orioledb_copy_heap_tuple(TupleTableSlot *slot)
 
 static MinimalTuple
 #if PG_VERSION_NUM >= 180000
-tts_orioledb_copy_minimal_tuple(TupleTableSlot *slot, Size extra)
+tts_orioledb_copy_minimal_tuple(slot: &mut TupleTableSlot, Size extra)
 #else
-tts_orioledb_copy_minimal_tuple(TupleTableSlot *slot)
+tts_orioledb_copy_minimal_tuple(slot: &mut TupleTableSlot)
 #endif
 {
 	Assert(!TTS_EMPTY(slot));
@@ -786,11 +786,11 @@ tts_orioledb_copy_minimal_tuple(TupleTableSlot *slot)
 #endif
 }
 
-static void
-tts_orioledb_init_reader(TupleTableSlot *slot)
+fn
+tts_orioledb_init_reader(slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
-	OIndexDescr *idx;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
+	idx: &mut OIndexDescr;
 
 	if (oslot->ixnum == BridgeIndexNumber)
 		idx = oslot->descr->bridge;
@@ -844,13 +844,13 @@ tts_orioledb_init_reader(TupleTableSlot *slot)
 	slot->tts_tableOid = oslot->descr->oids.reloid;
 }
 
-static void
-tts_orioledb_store_tuple_internal(TupleTableSlot *slot, OTuple tuple,
-								  OTableDescr *descr, CommitSeqNo csn,
+fn
+tts_orioledb_store_tuple_internal(slot: &mut TupleTableSlot, OTuple tuple,
+								  descr: &mut OTableDescr, CommitSeqNo csn,
 								  int ixnum, bool leafTuple, bool shouldfree,
-								  BTreeLocationHint *hint)
+								  hint: &mut BTreeLocationHint)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	Assert(COMMITSEQNO_IS_NORMAL(csn) || COMMITSEQNO_IS_INPROGRESS(csn));
 	Assert(slot->tts_ops == &TTSOpsOrioleDB);
@@ -879,33 +879,33 @@ tts_orioledb_store_tuple_internal(TupleTableSlot *slot, OTuple tuple,
 		slot->tts_flags |= TTS_FLAG_SHOULDFREE;
 }
 
-void
-tts_orioledb_store_tuple(TupleTableSlot *slot, OTuple tuple,
-						 OTableDescr *descr, CommitSeqNo csn,
-						 int ixnum, bool shouldfree, BTreeLocationHint *hint)
+
+tts_orioledb_store_tuple(slot: &mut TupleTableSlot, OTuple tuple,
+						 descr: &mut OTableDescr, CommitSeqNo csn,
+						 int ixnum, bool shouldfree, hint: &mut BTreeLocationHint)
 {
 	tts_orioledb_store_tuple_internal(slot, tuple, descr, csn, ixnum, true,
 									  shouldfree, hint);
 }
 
-void
-tts_orioledb_store_non_leaf_tuple(TupleTableSlot *slot, OTuple tuple,
-								  OTableDescr *descr, CommitSeqNo csn,
+
+tts_orioledb_store_non_leaf_tuple(slot: &mut TupleTableSlot, OTuple tuple,
+								  descr: &mut OTableDescr, CommitSeqNo csn,
 								  int ixnum, bool shouldfree,
-								  BTreeLocationHint *hint)
+								  hint: &mut BTreeLocationHint)
 {
 	tts_orioledb_store_tuple_internal(slot, tuple, descr, csn, ixnum, false,
 									  shouldfree, hint);
 }
 
 Datum
-o_get_tbl_att(TupleTableSlot *slot, int attnum, bool primaryIsCtid,
-			  bool *isnull, Oid *typid, bool decompress)
+o_get_tbl_att(slot: &mut TupleTableSlot, int attnum, bool primaryIsCtid,
+			  isnull: &mut bool, typid: &mut Oid, bool decompress)
 {
 	int			i;
 	Datum		value;
 	Form_pg_attribute att;
-	OTableSlot *oSlot = (OTableSlot *) slot;
+	oSlot: &mut OTableSlot = (OTableSlot *) slot;
 
 	if (primaryIsCtid)
 	{
@@ -967,8 +967,8 @@ o_get_tbl_att(TupleTableSlot *slot, int attnum, bool primaryIsCtid,
 }
 
 Datum
-o_get_idx_expr_att(TupleTableSlot *slot, OIndexDescr *idx,
-				   ExprState *exp_state, bool *isnull)
+o_get_idx_expr_att(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
+				   exp_state: &mut ExprState, isnull: &mut bool)
 {
 	Datum		result;
 
@@ -986,14 +986,14 @@ o_get_idx_expr_att(TupleTableSlot *slot, OIndexDescr *idx,
 // Detoasts all the values and marks detoasted values in 'detoasted' array.
 // If 'detoasted' array isn't given, asserts not values are toasted.
 //
-static void
-tts_orioledb_get_index_values(TupleTableSlot *slot, OIndexDescr *idx,
-							  Datum *values, bool *isnull, bool leaf)
+fn
+tts_orioledb_get_index_values(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
+							  values: &mut Datum, isnull: &mut bool, bool leaf)
 {
 	TupleDesc	tupleDesc = leaf ? idx->leafTupdesc : idx->nonLeafTupdesc;
 	int			natts = tupleDesc->natts;
 	int			i;
-	ListCell   *indexpr_item = list_head(idx->expressions_state);
+	indexpr_item: &mut ListCell = list_head(idx->expressions_state);
 
 	Assert(natts <= 2 * INDEX_MAX_KEYS);
 
@@ -1015,16 +1015,16 @@ tts_orioledb_get_index_values(TupleTableSlot *slot, OIndexDescr *idx,
 }
 
 OTuple
-tts_orioledb_make_secondary_tuple(TupleTableSlot *slot, OIndexDescr *idx, bool leaf)
+tts_orioledb_make_secondary_tuple(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bool leaf)
 {
 	Datum		values[2 * INDEX_MAX_KEYS];
 	bool		isnull[2 * INDEX_MAX_KEYS];
 	TupleDesc	tupleDesc;
-	OTupleFixedFormatSpec *spec;
+	spec: &mut OTupleFixedFormatSpec;
 	int			ctid_off = idx->primaryIsCtid ? 1 : 0;
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	BridgeData	bridge_data;
-	BridgeData *bridge_data_arg = NULL;
+	bridge_data_arg: &mut BridgeData = NULL;
 
 	slot_getsomeattrs(slot, idx->maxTableAttnum - ctid_off);
 
@@ -1053,13 +1053,13 @@ tts_orioledb_make_secondary_tuple(TupleTableSlot *slot, OIndexDescr *idx, bool l
 }
 
 // fills key bound from tuple or index tuple that belongs to current BTree
-void
-tts_orioledb_fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx,
-							OBTreeKeyBound *bound)
+
+tts_orioledb_fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
+							bound: &mut OBTreeKeyBound)
 {
 	int			i;
 	int			ctid_off = idx->primaryIsCtid ? 1 : 0;
-	ListCell   *indexpr_item = list_head(idx->expressions_state);
+	indexpr_item: &mut ListCell = list_head(idx->expressions_state);
 
 	slot_getsomeattrs(slot, idx->maxTableAttnum - ctid_off);
 
@@ -1098,11 +1098,11 @@ tts_orioledb_fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx,
 //
 // Appends index key stored in the tuple slot to the given string.
 //
-void
-appendStringInfoIndexKey(StringInfo str, TupleTableSlot *slot, OIndexDescr *id)
+
+appendStringInfoIndexKey(StringInfo str, slot: &mut TupleTableSlot, id: &mut OIndexDescr)
 {
 	int			i;
-	ListCell   *indexpr_item = list_head(id->expressions_state);
+	indexpr_item: &mut ListCell = list_head(id->expressions_state);
 
 	slot_getallattrs(slot);
 
@@ -1132,7 +1132,7 @@ appendStringInfoIndexKey(StringInfo str, TupleTableSlot *slot, OIndexDescr *id)
 		{
 			Oid			typoutput;
 			bool		typisvarlena;
-			char	   *res;
+			res: &mut char;
 
 			getTypeOutputInfo(TupleDescAttr(id->nonLeafTupdesc, i)->atttypid,
 							  &typoutput, &typisvarlena);
@@ -1148,7 +1148,7 @@ appendStringInfoIndexKey(StringInfo str, TupleTableSlot *slot, OIndexDescr *id)
 // tuple slot.
 //
 char *
-tss_orioledb_print_idx_key(TupleTableSlot *slot, OIndexDescr *id)
+tss_orioledb_print_idx_key(slot: &mut TupleTableSlot, id: &mut OIndexDescr)
 {
 	StringInfoData buf;
 
@@ -1163,13 +1163,13 @@ tss_orioledb_print_idx_key(TupleTableSlot *slot, OIndexDescr *id)
 // key index.
 //
 static inline int
-expected_tuple_len(TupleTableSlot *slot, OTableDescr *descr)
+expected_tuple_len(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
-	OIndexDescr *idx = GET_PRIMARY(descr);
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
+	idx: &mut OIndexDescr = GET_PRIMARY(descr);
 	int			tup_size;
 	BridgeData	bridge_data;
-	BridgeData *bridge_data_arg = NULL;
+	bridge_data_arg: &mut BridgeData = NULL;
 
 	if (idx->bridging)
 	{
@@ -1195,7 +1195,7 @@ expected_tuple_len(TupleTableSlot *slot, OTableDescr *descr)
 // stored in the index.
 //
 static inline bool
-can_be_stored_in_index(TupleTableSlot *slot, OTableDescr *descr)
+can_be_stored_in_index(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 {
 	int			tup_size = expected_tuple_len(slot, descr);
 
@@ -1210,10 +1210,10 @@ can_be_stored_in_index(TupleTableSlot *slot, OTableDescr *descr)
 // Apply TOAST including compression and out-of-line storage to the tuple
 // stored in the slot if necessary.
 //
-void
-tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
+
+tts_orioledb_toast(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	Form_pg_attribute att;
 	int			i,
 				full_size = 0,
@@ -1436,19 +1436,19 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 }
 
 OTuple
-tts_orioledb_form_tuple(TupleTableSlot *slot,
-						OTableDescr *descr)
+tts_orioledb_form_tuple(slot: &mut TupleTableSlot,
+						descr: &mut OTableDescr)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	OTuple		tuple;			// return tuple
 	Size		len;
-	OIndexDescr *idx = GET_PRIMARY(descr);
+	idx: &mut OIndexDescr = GET_PRIMARY(descr);
 	TupleDesc	tupleDescriptor = idx->leafTupdesc;
-	OTupleFixedFormatSpec *spec = &idx->leafSpec;
+	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
 	bool		primaryIsCtid = idx->primaryIsCtid;
 	ItemPointer iptr;
 	BridgeData	bridge_data;
-	BridgeData *bridge_data_arg = NULL;
+	bridge_data_arg: &mut BridgeData = NULL;
 
 	if (!O_TUPLE_IS_NULL(oslot->tuple) && oslot->descr == descr &&
 		oslot->ixnum == PrimaryIndexNumber && oslot->leafTuple)
@@ -1494,19 +1494,19 @@ tts_orioledb_form_tuple(TupleTableSlot *slot,
 }
 
 OTuple
-tts_orioledb_form_orphan_tuple(TupleTableSlot *slot,
-							   OTableDescr *descr)
+tts_orioledb_form_orphan_tuple(slot: &mut TupleTableSlot,
+							   descr: &mut OTableDescr)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	OTuple		tuple;
 	Size		len;
-	OIndexDescr *idx = GET_PRIMARY(descr);
+	idx: &mut OIndexDescr = GET_PRIMARY(descr);
 	TupleDesc	tupleDescriptor = idx->leafTupdesc;
-	OTupleFixedFormatSpec *spec = &idx->leafSpec;
+	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
 	bool		primaryIsCtid = idx->primaryIsCtid;
 	ItemPointer iptr;
 	BridgeData	bridge_data;
-	BridgeData *bridge_data_arg = NULL;
+	bridge_data_arg: &mut BridgeData = NULL;
 
 	if (idx->leafTupdesc->natts > MaxTupleAttributeNumber)
 		ereport(ERROR,
@@ -1541,11 +1541,11 @@ tts_orioledb_form_orphan_tuple(TupleTableSlot *slot,
 }
 
 bool
-tts_orioledb_insert_toast_values(TupleTableSlot *slot,
-								 OTableDescr *descr,
+tts_orioledb_insert_toast_values(slot: &mut TupleTableSlot,
+								 descr: &mut OTableDescr,
 								 OXid oxid, CommitSeqNo csn)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	TupleDesc	tupleDesc = slot->tts_tupleDescriptor;
 	OTuple		idx_tup;
 	int			i;
@@ -1590,12 +1590,12 @@ tts_orioledb_insert_toast_values(TupleTableSlot *slot,
 	return result;
 }
 
-void
-tts_orioledb_toast_sort_add(TupleTableSlot *slot,
-							OTableDescr *descr,
-							Tuplesortstate *sortstate)
+
+tts_orioledb_toast_sort_add(slot: &mut TupleTableSlot,
+							descr: &mut OTableDescr,
+							sortstate: &mut Tuplesortstate)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	TupleDesc	tupleDesc = slot->tts_tupleDescriptor;
 	OTuple		idx_tup;
 	int			i;
@@ -1636,8 +1636,8 @@ tts_orioledb_toast_sort_add(TupleTableSlot *slot,
 }
 
 bool
-tts_orioledb_remove_toast_values(TupleTableSlot *slot,
-								 OTableDescr *descr,
+tts_orioledb_remove_toast_values(slot: &mut TupleTableSlot,
+								 descr: &mut OTableDescr,
 								 OXid oxid, CommitSeqNo csn)
 {
 	int			i;
@@ -1685,17 +1685,17 @@ tts_orioledb_remove_toast_values(TupleTableSlot *slot,
 }
 
 bool
-tts_orioledb_update_toast_values(TupleTableSlot *oldSlot,
-								 TupleTableSlot *newSlot,
-								 OTableDescr *descr,
+tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
+								 newSlot: &mut TupleTableSlot,
+								 descr: &mut OTableDescr,
 								 OXid oxid, CommitSeqNo csn)
 {
-	OTableSlot *newOSlot = (OTableSlot *) newSlot;
+	newOSlot: &mut OTableSlot = (OTableSlot *) newSlot;
 	OTuple		idx_tup;
 	OTuple		old_idx_tup PG_USED_FOR_ASSERTS_ONLY;
 	int			i;
 	bool		result = true;
-	OIndexDescr *primary = GET_PRIMARY(descr);
+	primary: &mut OIndexDescr = GET_PRIMARY(descr);
 	int			ctid_off = primary->primaryIsCtid ? 1 : 0;
 
 	if (descr->bridge)
@@ -1741,7 +1741,7 @@ tts_orioledb_update_toast_values(TupleTableSlot *oldSlot,
 				Datum		old_value;
 				Datum		new_value;
 				bool		isnull;
-				OIndexField *pkfield = &primary->fields[i];
+				pkfield: &mut OIndexField = &primary->fields[i];
 				int			cmp;
 
 				old_value = o_fastgetattr(old_idx_tup, i + 1,
@@ -1918,9 +1918,9 @@ tts_orioledb_update_toast_values(TupleTableSlot *oldSlot,
 // the old and new slots, false if all specified attributes are unchanged.
 //
 bool
-tts_orioledb_modified(TupleTableSlot *oldSlot,
-					  TupleTableSlot *newSlot,
-					  Bitmapset *attrs)
+tts_orioledb_modified(oldSlot: &mut TupleTableSlot,
+					  newSlot: &mut TupleTableSlot,
+					  attrs: &mut Bitmapset)
 {
 	TupleDesc	tupdesc = oldSlot->tts_tupleDescriptor;
 	int			attnum,
@@ -1962,10 +1962,10 @@ tts_orioledb_modified(TupleTableSlot *oldSlot,
 	return false;
 }
 
-void
-tts_orioledb_set_ctid(TupleTableSlot *slot, ItemPointer iptr)
+
+tts_orioledb_set_ctid(slot: &mut TupleTableSlot, ItemPointer iptr)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	slot->tts_tid = *iptr;
 	if (!O_TUPLE_IS_NULL(oslot->tuple) &&

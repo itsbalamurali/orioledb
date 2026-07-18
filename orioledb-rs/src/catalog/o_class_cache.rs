@@ -32,15 +32,15 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *class_cache = NULL;
+static class_cache: &mut OSysCache = NULL;
 
 static Pointer o_class_cache_serialize_entry(Pointer entry,
-											 int *len);
+											 len: &mut int);
 static Pointer o_class_cache_deserialize_entry(MemoryContext mcxt,
 											   Pointer data,
 											   Size length);
-static void o_class_cache_free_entry(Pointer entry);
-static void o_class_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_class_cache_free_entry(Pointer entry);
+fn o_class_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									 Pointer arg);
 
 struct OClass
@@ -49,7 +49,7 @@ struct OClass
 	uint16		data_version;
 	Oid			reltype;
 	int			natts;
-	FormData_pg_attribute *attrs;
+	attrs: &mut FormData_pg_attribute;
 };
 
 O_SYS_CACHE_FUNCS(class_cache, OClass, 1);
@@ -74,15 +74,15 @@ O_SYS_CACHE_INIT_FUNC(class_cache)
 									 fastcache, mcxt, &class_cache_funcs);
 }
 
-static void
-o_class_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_class_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	Relation	rel;
 	MemoryContext prev_context;
 	int			i;
 	Size		len;
-	OClass	   *o_class = (OClass *) *entry_ptr;
-	OClassArg  *carg = (OClassArg *) arg;
+	o_class: &mut OClass = (OClass *) *entry_ptr;
+	carg: &mut OClassArg = (OClassArg *) arg;
 	Oid			classoid = DatumGetObjectId(key->keys[0]);
 
 	rel = relation_open(classoid, AccessShareLock);
@@ -107,7 +107,7 @@ o_class_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	o_class->natts = rel->rd_att->natts;
 	for (i = 0; i < o_class->natts; i++)
 	{
-		FormData_pg_attribute *class_attr,
+		class_attr: &mut FormData_pg_attribute,
 				   *typcache_attr;
 
 		class_attr = &o_class->attrs[i];
@@ -146,20 +146,20 @@ o_class_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	relation_close(rel, AccessShareLock);
 }
 
-static void
+fn
 o_class_cache_free_entry(Pointer entry)
 {
-	OClass	   *o_class = (OClass *) entry;
+	o_class: &mut OClass = (OClass *) entry;
 
 	pfree(o_class->attrs);
 	pfree(o_class);
 }
 
 static Pointer
-o_class_cache_serialize_entry(Pointer entry, int *len)
+o_class_cache_serialize_entry(Pointer entry, len: &mut int)
 {
 	StringInfoData str;
-	OClass	   *o_class = (OClass *) entry;
+	o_class: &mut OClass = (OClass *) entry;
 
 	if (o_class->data_version != ORIOLEDB_SYS_TREE_VERSION)
 		elog(FATAL,
@@ -181,7 +181,7 @@ static Pointer
 o_class_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 {
 	Pointer		ptr = data;
-	OClass	   *o_class = (OClass *) data;
+	o_class: &mut OClass = (OClass *) data;
 	int			len;
 
 	o_class = (OClass *) palloc(sizeof(OClass));
@@ -209,7 +209,7 @@ o_class_cache_search_tupdesc(Oid cc_reloid)
 	TupleDesc	result = NULL;
 	Oid			datoid;
 	XLogRecPtr	cur_lsn;
-	OClass	   *o_class;
+	o_class: &mut OClass;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 
@@ -220,7 +220,7 @@ o_class_cache_search_tupdesc(Oid cc_reloid)
 		MemoryContext oldcxt;
 
 #if PG_VERSION_NUM >= 180000
-		Form_pg_attribute *attrs;
+		attrs: &mut Form_pg_attribute;
 
 		// Prepare the pointer array in CurrentMemoryContext
 		attrs = (Form_pg_attribute *) palloc(o_class->natts * sizeof(Form_pg_attribute));
@@ -246,12 +246,12 @@ o_class_cache_search_tupdesc(Oid cc_reloid)
 	return result;
 }
 
-void
+
 o_class_cache_preload_for_column(Oid typoid)
 {
 	Oid			datoid;
 	XLogRecPtr	cur_lsn;
-	OClass	   *o_class PG_USED_FOR_ASSERTS_ONLY;
+	o_class: &mut OClass PG_USED_FOR_ASSERTS_ONLY;
 	bool		found;
 	char		typtype;
 

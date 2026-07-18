@@ -106,7 +106,7 @@ use pgrx::pg_sys;
 #endif
 
 static IndexBuildResult o_pkey_result;
-static void o_drop_table(ORelOids oids);
+fn o_drop_table(ORelOids oids);
 
 typedef struct
 {
@@ -118,55 +118,55 @@ typedef struct
 static ProcessUtility_hook_type next_ProcessUtility_hook = NULL;
 static object_access_hook_type old_objectaccess_hook = NULL;
 
-static List *drop_index_list = NIL;
-static List *partition_drop_index_list = NIL;
-static List *alter_type_exprs = NIL;
-static List *o_alter_generated_column_id = NIL;
-static List *dropped_attrs = NIL;
+static drop_index_list: &mut List = NIL;
+static partition_drop_index_list: &mut List = NIL;
+static alter_type_exprs: &mut List = NIL;
+static o_alter_generated_column_id: &mut List = NIL;
+static dropped_attrs: &mut List = NIL;
 static bool o_composite_alter_index_safe = false;
 Oid			o_saved_relrewrite = InvalidOid;
 static Oid	o_saved_reltablespace = InvalidOid;
-List	   *o_reuse_indices = NIL;
+o_reuse_indices: &mut List = NIL;
 static ORelOids saved_oids;
 static bool in_rewrite = false;
-List	   *reindex_list = NIL;
-static Query *savedDataQuery = NULL;
+reindex_list: &mut List = NIL;
+static savedDataQuery: &mut Query = NULL;
 static IndexBuildResult o_pkey_result = {0};
 bool		o_in_add_column = false;
-static CreateStmt *create_stmt = NULL;
-static List *o_added_columns = NIL;
+static create_stmt: &mut CreateStmt = NULL;
+static o_added_columns: &mut List = NIL;
 static movedb_params o_movedb_data = {InvalidOid, InvalidOid, InvalidOid};
 
-static void orioledb_utility_command(PlannedStmt *pstmt,
-									 const char *queryString,
+fn orioledb_utility_command(pstmt: &mut PlannedStmt,
+									 const queryString: &mut char,
 									 bool readOnlyTree,
 									 ProcessUtilityContext context,
 									 ParamListInfo params,
-									 QueryEnvironment *env,
-									 DestReceiver *dest,
-									 struct QueryCompletion *qc);
-static void orioledb_object_access_hook(ObjectAccessType access, Oid classId,
-										Oid objectId, int subId, void *arg);
+									 env: &mut QueryEnvironment,
+									 dest: &mut DestReceiver,
+									 struct qc: &mut QueryCompletion);
+fn orioledb_object_access_hook(ObjectAccessType access, Oid classId,
+										Oid objectId, int subId,  *arg);
 
-static void o_alter_column_type(AlterTableCmd *cmd, const char *queryString,
+fn o_alter_column_type(cmd: &mut AlterTableCmd, const queryString: &mut char,
 								Relation rel);
-static Node *o_get_alter_type_expr(Relation rel, int attidx);
-static void o_fill_new_slot(OTable *new_o_table, Relation rel, int attidx,
-							Node *expr, TupleTableSlot *old_slot,
-							TupleTableSlot *new_slot, TupleTableSlot *scan_slot);
-static void o_find_collation_dependencies(Oid colloid);
-static void redefine_indices(Relation rel, OTable *new_o_table, bool primary,
+static o_get_alter_type_expr: &mut Node(Relation rel, int attidx);
+fn o_fill_new_slot(new_o_table: &mut OTable, Relation rel, int attidx,
+							expr: &mut Node, old_slot: &mut TupleTableSlot,
+							new_slot: &mut TupleTableSlot, scan_slot: &mut TupleTableSlot);
+fn o_find_collation_dependencies(Oid colloid);
+fn redefine_indices(Relation rel, new_o_table: &mut OTable, bool primary,
 							 Oid oldRelnode);
 
-static bool get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP);
-static Oid	o_createdb(ParseState *pstate, const CreatedbStmt *stmt);
-static void o_validate_replica_identity(Relation rel, ReplicaIdentityStmt *stmt);
-static void o_process_added_column(AlterTableCmd *cmd);
-static void o_check_movedb(const AlterDatabaseStmt *stmt, movedb_params *movedb);
-static void o_movedb_failure_callback(int code, Datum arg);
+static bool get_db_info(const name: &mut char, LOCKMODE lockmode, dbIdP: &mut Oid);
+static Oid	o_createdb(pstate: &mut ParseState, const stmt: &mut CreatedbStmt);
+fn o_validate_replica_identity(Relation rel, stmt: &mut ReplicaIdentityStmt);
+fn o_process_added_column(cmd: &mut AlterTableCmd);
+fn o_check_movedb(const stmt: &mut AlterDatabaseStmt, movedb: &mut movedb_params);
+fn o_movedb_failure_callback(int code, Datum arg);
 
-void
-orioledb_setup_ddl_hooks(void)
+
+orioledb_setup_ddl_hooks()
 {
 	next_ProcessUtility_hook = ProcessUtility_hook;
 	ProcessUtility_hook = orioledb_utility_command;
@@ -315,13 +315,13 @@ alter_table_type_to_string(AlterTableType cmdtype)
 }
 
 static bool
-is_alter_table_partition(PlannedStmt *pstmt)
+is_alter_table_partition(pstmt: &mut PlannedStmt)
 {
-	AlterTableStmt *top_atstmt = (AlterTableStmt *) pstmt->utilityStmt;
+	top_atstmt: &mut AlterTableStmt = (AlterTableStmt *) pstmt->utilityStmt;
 
 	if (list_length(top_atstmt->cmds) == 1)
 	{
-		AlterTableCmd *cmd = linitial(top_atstmt->cmds);
+		cmd: &mut AlterTableCmd = linitial(top_atstmt->cmds);
 
 		if (cmd->subtype == AT_AttachPartition ||
 			cmd->subtype == AT_DetachPartition ||
@@ -341,9 +341,9 @@ is_alter_table_partition(PlannedStmt *pstmt)
 // it does not want us to expand partitioned tables.
 //
 static List *
-expand_vacuum_rel(VacuumRelation *vrel, int options)
+expand_vacuum_rel(vrel: &mut VacuumRelation, int options)
 {
-	List	   *vacrels = NIL;
+	vacrels: &mut List = NIL;
 
 	// If caller supplied OID, there's nothing we need do here.
 	if (OidIsValid(vrel->oid))
@@ -413,8 +413,8 @@ expand_vacuum_rel(VacuumRelation *vrel, int options)
 //
 		if (include_parts)
 		{
-			List	   *part_oids = find_all_inheritors(relid, NoLock, NULL);
-			ListCell   *part_lc;
+			part_oids: &mut List = find_all_inheritors(relid, NoLock, NULL);
+			part_lc: &mut ListCell;
 
 			foreach(part_lc, part_oids)
 			{
@@ -458,7 +458,7 @@ expand_vacuum_rel(VacuumRelation *vrel, int options)
 static List *
 get_all_vacuum_rels(int options)
 {
-	List	   *vacrels = NIL;
+	vacrels: &mut List = NIL;
 	Relation	pgclass;
 	TableScanDesc scan;
 	HeapTuple	tuple;
@@ -503,7 +503,7 @@ get_all_vacuum_rels(int options)
 
 // Based on postgres function ReindexMultipleTables
 static bool
-check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool concurrently)
+check_multiple_tables(const objectName: &mut char, ReindexObjectType objectKind, bool concurrently)
 {
 	Oid			objectOid;
 	Relation	relationRelation;
@@ -655,17 +655,17 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 		tbl = relation_open(relid, AccessShareLock);
 		if (is_orioledb_rel(tbl))
 		{
-			ListCell   *index;
+			index: &mut ListCell;
 
 			foreach(index, RelationGetIndexList(tbl))
 			{
 				Oid			indexOid = lfirst_oid(index);
 				Relation	ind = relation_open(indexOid, AccessShareLock);
-				OBTOptions *options = (OBTOptions *) ind->rd_options;
+				options: &mut OBTOptions = (OBTOptions *) ind->rd_options;
 
 				if (ind->rd_rel->relam == BTREE_AM_OID && !(options && !options->orioledb_index))
 				{
-					String	   *ix_name = makeString(pstrdup(ind->rd_rel->relname.data));
+					ix_name: &mut String = makeString(pstrdup(ind->rd_rel->relname.data));
 
 					reindex_list = list_append_unique(reindex_list, ix_name);
 				}
@@ -693,16 +693,16 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 // provide a list of attributes (ColumnDef nodes).
 //
 static ObjectAddress
-create_ctas_internal(List *attrList, IntoClause *into)
+create_ctas_internal(attrList: &mut List, into: &mut IntoClause)
 {
-	CreateStmt *create = makeNode(CreateStmt);
+	create: &mut CreateStmt = makeNode(CreateStmt);
 	bool		is_matview;
 	char		relkind;
 	Datum		toast_options;
 #if PG_VERSION_NUM < 180000
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	static validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #else
-	const char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	const validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #endif
 	ObjectAddress intoRelationAddr;
 
@@ -745,7 +745,7 @@ create_ctas_internal(List *attrList, IntoClause *into)
 										validnsps,
 										true, false);
 
-	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
+	() heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 
 	NewRelationCreateToastTable(intoRelationAddr.objectId, toast_options);
 
@@ -753,7 +753,7 @@ create_ctas_internal(List *attrList, IntoClause *into)
 	if (is_matview)
 	{
 		// StoreViewQuery scribbles on tree, so make a copy
-		Query	   *query = (Query *) copyObject(into->viewQuery);
+		query: &mut Query = (Query *) copyObject(into->viewQuery);
 
 		StoreViewQuery(intoRelationAddr.objectId, query, false);
 		CommandCounterIncrement();
@@ -769,10 +769,10 @@ create_ctas_internal(List *attrList, IntoClause *into)
 // the targetlist of the SELECT or view definition.
 //
 static ObjectAddress
-create_ctas_nodata(List *tlist, IntoClause *into)
+create_ctas_nodata(tlist: &mut List, into: &mut IntoClause)
 {
-	List	   *attrList;
-	ListCell   *t,
+	attrList: &mut List;
+	t: &mut ListCell,
 			   *lc;
 
 	//
@@ -784,12 +784,12 @@ create_ctas_nodata(List *tlist, IntoClause *into)
 	lc = list_head(into->colNames);
 	foreach(t, tlist)
 	{
-		TargetEntry *tle = (TargetEntry *) lfirst(t);
+		tle: &mut TargetEntry = (TargetEntry *) lfirst(t);
 
 		if (!tle->resjunk)
 		{
-			ColumnDef  *col;
-			char	   *colname;
+			col: &mut ColumnDef;
+			colname: &mut char;
 
 			if (lc)
 			{
@@ -836,8 +836,8 @@ create_ctas_nodata(List *tlist, IntoClause *into)
 static bool
 ReindexPartitions(Oid relid, bool concurrently)
 {
-	List	   *inhoids;
-	ListCell   *lc;
+	inhoids: &mut List;
+	lc: &mut ListCell;
 	bool		has_orioledb = false;
 
 	inhoids = find_all_inheritors(relid, ShareLock, NULL);
@@ -887,18 +887,18 @@ ReindexPartitions(Oid relid, bool concurrently)
 	return has_orioledb;
 }
 
-static void
-orioledb_utility_command(PlannedStmt *pstmt,
-						 const char *queryString,
+fn
+orioledb_utility_command(pstmt: &mut PlannedStmt,
+						 const queryString: &mut char,
 						 bool readOnlyTree,
 						 ProcessUtilityContext context,
 						 ParamListInfo params,
-						 QueryEnvironment *env,
-						 DestReceiver *dest,
-						 struct QueryCompletion *qc)
+						 env: &mut QueryEnvironment,
+						 dest: &mut DestReceiver,
+						 struct qc: &mut QueryCompletion)
 {
 	bool		isTopLevel = (context == PROCESS_UTILITY_TOPLEVEL);
-	ParseState *pstate;
+	pstate: &mut ParseState;
 	bool		call_next = true;
 
 	// copied from standard_ProcessUtility
@@ -939,7 +939,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 // To enforce a stable ordering across the two WAL streams, we treat entry
 // into ProcessUtility as a barrier: before executing any utility command
 // we flush any pending Oriole local WAL so that all Oriole records
-// produced by prior statements become durable/visible in WAL *before*
+// produced by prior statements become durable/visible in before: &mut WAL*
 // this DDL starts producing PostgreSQL WAL.
 //
 // Note: recovery workers do not produce local WAL in the same way and
@@ -951,7 +951,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	if (IsA(pstmt->utilityStmt, AlterTableStmt) &&
 		!is_alter_table_partition(pstmt))
 	{
-		AlterTableStmt *atstmt = (AlterTableStmt *) pstmt->utilityStmt;
+		atstmt: &mut AlterTableStmt = (AlterTableStmt *) pstmt->utilityStmt;
 		Oid			relid;
 		LOCKMODE	lockmode;
 		ObjectType	objtype;
@@ -976,12 +976,12 @@ orioledb_utility_command(PlannedStmt *pstmt,
 		o_composite_alter_index_safe = false;
 		if (objtype == OBJECT_TYPE && atstmt->cmds != NIL)
 		{
-			ListCell   *lc;
+			lc: &mut ListCell;
 			bool		all_safe = true;
 
 			foreach(lc, atstmt->cmds)
 			{
-				AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+				cmd: &mut AlterTableCmd = (AlterTableCmd *) lfirst(lc);
 
 				if (cmd->subtype != AT_AddColumn)
 				{
@@ -1007,11 +1007,11 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 			if (is_orioledb_rel(rel))
 			{
-				ListCell   *lc;
+				lc: &mut ListCell;
 
 				foreach(lc, atstmt->cmds)
 				{
-					AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+					cmd: &mut AlterTableCmd = (AlterTableCmd *) lfirst(lc);
 
 					// make checks
 					switch (cmd->subtype)
@@ -1120,11 +1120,11 @@ orioledb_utility_command(PlannedStmt *pstmt,
 // partitions can use orioledb, so we need to process
 // non-oriole relations as well
 //
-				ListCell   *lc;
+				lc: &mut ListCell;
 
 				foreach(lc, atstmt->cmds)
 				{
-					AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+					cmd: &mut AlterTableCmd = (AlterTableCmd *) lfirst(lc);
 
 					if (cmd->subtype == AT_AddColumn)
 					{
@@ -1137,7 +1137,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, RenameStmt))
 	{
-		RenameStmt *stmt = (RenameStmt *) pstmt->utilityStmt;
+		stmt: &mut RenameStmt = (RenameStmt *) pstmt->utilityStmt;
 
 		//
 // Renaming a composite type or one of its attributes touches only
@@ -1149,7 +1149,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, ClusterStmt))
 	{
-		ClusterStmt *stmt = (ClusterStmt *) pstmt->utilityStmt;
+		stmt: &mut ClusterStmt = (ClusterStmt *) pstmt->utilityStmt;
 
 		if (stmt->relation != NULL)
 		{
@@ -1172,8 +1172,8 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, VacuumStmt))
 	{
-		VacuumStmt *vacstmt = (VacuumStmt *) pstmt->utilityStmt;
-		ListCell   *lc;
+		vacstmt: &mut VacuumStmt = (VacuumStmt *) pstmt->utilityStmt;
+		lc: &mut ListCell;
 		bool		full = false,
 					skip_locked = false,
 					analyze = false;
@@ -1181,7 +1181,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 		foreach(lc, vacstmt->options)
 		{
-			DefElem    *opt = (DefElem *) lfirst(lc);
+			opt: &mut DefElem = (DefElem *) lfirst(lc);
 
 			if (strcmp(opt->defname, "full") == 0)
 				full = defGetBoolean(opt);
@@ -1197,16 +1197,16 @@ orioledb_utility_command(PlannedStmt *pstmt,
 			(full ? VACOPT_FULL : 0);
 		if (full)
 		{
-			List	   *relations = vacstmt->rels;
+			relations: &mut List = vacstmt->rels;
 
 			if (relations != NIL)
 			{
-				List	   *newrels = NIL;
+				newrels: &mut List = NIL;
 
 				foreach(lc, relations)
 				{
-					VacuumRelation *vrel = lfirst_node(VacuumRelation, lc);
-					List	   *sublist;
+					vrel: &mut VacuumRelation = lfirst_node(VacuumRelation, lc);
+					sublist: &mut List;
 
 					sublist = expand_vacuum_rel(vrel, options);
 					newrels = list_concat(newrels, sublist);
@@ -1217,7 +1217,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 				relations = get_all_vacuum_rels(options);
 			foreach(lc, relations)
 			{
-				VacuumRelation *vrel = lfirst_node(VacuumRelation, lc);
+				vrel: &mut VacuumRelation = lfirst_node(VacuumRelation, lc);
 				Relation	rel;
 				bool		orioledb;
 
@@ -1246,7 +1246,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 					}
 					else
 					{
-						ListCell   *lc2;
+						lc2: &mut ListCell;
 
 						ereport(WARNING,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1255,7 +1255,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 						foreach(lc2, vacstmt->options)
 						{
-							DefElem    *opt = (DefElem *) lfirst(lc2);
+							opt: &mut DefElem = (DefElem *) lfirst(lc2);
 
 							if (strcmp(opt->defname, "full") == 0)
 								opt->arg = (Node *) makeInteger(0);
@@ -1268,15 +1268,15 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, ReindexStmt))
 	{
-		ReindexStmt *stmt = (ReindexStmt *) pstmt->utilityStmt;
-		char	   *tablespacename = NULL;
+		stmt: &mut ReindexStmt = (ReindexStmt *) pstmt->utilityStmt;
+		tablespacename: &mut char = NULL;
 		bool		concurrently = false;
 		bool		has_orioledb = false;
-		ListCell   *lc;
+		lc: &mut ListCell;
 
 		foreach(lc, stmt->params)
 		{
-			DefElem    *opt = (DefElem *) lfirst(lc);
+			opt: &mut DefElem = (DefElem *) lfirst(lc);
 
 			if (strcmp(opt->defname, "concurrently") == 0)
 				concurrently = defGetBoolean(opt);
@@ -1322,7 +1322,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 														  false);
 					Relation	iRel,
 								tbl;
-					OBTOptions *options;
+					options: &mut OBTOptions;
 
 					if (get_rel_relkind(indOid) == RELKIND_PARTITIONED_INDEX)
 					{
@@ -1338,7 +1338,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 						iRel->rd_rel->relam == BTREE_AM_OID &&
 						!(options && !options->orioledb_index))
 					{
-						String	   *ix_name;
+						ix_name: &mut String;
 
 						ix_name = makeString(pstrdup(iRel->rd_rel->relname.data));
 						reindex_list = list_append_unique(reindex_list, ix_name);
@@ -1364,17 +1364,17 @@ orioledb_utility_command(PlannedStmt *pstmt,
 					tbl = relation_open(tblOid, AccessShareLock);
 					if (is_orioledb_rel(tbl))
 					{
-						ListCell   *index;
+						index: &mut ListCell;
 
 						foreach(index, RelationGetIndexList(tbl))
 						{
 							Oid			indexOid = lfirst_oid(index);
 							Relation	ind = relation_open(indexOid, AccessShareLock);
-							OBTOptions *options = (OBTOptions *) ind->rd_options;
+							options: &mut OBTOptions = (OBTOptions *) ind->rd_options;
 
 							if (ind->rd_rel->relam == BTREE_AM_OID && !(options && !options->orioledb_index))
 							{
-								String	   *ix_name = makeString(pstrdup(ind->rd_rel->relname.data));
+								ix_name: &mut String = makeString(pstrdup(ind->rd_rel->relname.data));
 
 								reindex_list = list_append_unique(reindex_list, ix_name);
 							}
@@ -1417,7 +1417,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 			foreach(lc, stmt->params)
 			{
-				DefElem    *opt = (DefElem *) lfirst(lc);
+				opt: &mut DefElem = (DefElem *) lfirst(lc);
 
 				if (strcmp(opt->defname, "concurrently") == 0)
 					stmt->params = foreach_delete_current(stmt->params, lc);
@@ -1426,7 +1426,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, TransactionStmt))
 	{
-		TransactionStmt *tstmt = (TransactionStmt *) pstmt->utilityStmt;
+		tstmt: &mut TransactionStmt = (TransactionStmt *) pstmt->utilityStmt;
 
 		if (tstmt->kind == TRANS_STMT_PREPARE && have_retained_undo_location())
 		{
@@ -1438,7 +1438,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, AlterCollationStmt))
 	{
-		AlterCollationStmt *astmt = (AlterCollationStmt *) pstmt->utilityStmt;
+		astmt: &mut AlterCollationStmt = (AlterCollationStmt *) pstmt->utilityStmt;
 		Oid			collOid = get_collation_oid(astmt->collname, false);
 
 		o_find_collation_dependencies(collOid);
@@ -1455,8 +1455,8 @@ orioledb_utility_command(PlannedStmt *pstmt,
 #if PG_VERSION_NUM >= 170000
 	else if (IsA(pstmt->utilityStmt, CreateTableAsStmt))
 	{
-		CreateTableAsStmt *stmt = (CreateTableAsStmt *) pstmt->utilityStmt;
-		IntoClause *into = stmt->into;
+		stmt: &mut CreateTableAsStmt = (CreateTableAsStmt *) pstmt->utilityStmt;
+		into: &mut IntoClause = stmt->into;
 
 		if (!into->skipData)
 		{
@@ -1466,7 +1466,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 				((into->accessMethod && strcmp(into->accessMethod, "orioledb") == 0) ||
 				 (!into->accessMethod && strcmp(default_table_access_method, "orioledb") == 0)))
 			{
-				Query	   *query = castNode(Query, stmt->query);
+				query: &mut Query = castNode(Query, stmt->query);
 				ObjectAddress address;
 
 				Assert(query->commandType == CMD_SELECT);
@@ -1498,7 +1498,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 #endif
 	else if (IsA(pstmt->utilityStmt, RefreshMatViewStmt))
 	{
-		RefreshMatViewStmt *stmt = (RefreshMatViewStmt *) pstmt->utilityStmt;
+		stmt: &mut RefreshMatViewStmt = (RefreshMatViewStmt *) pstmt->utilityStmt;
 		Oid			matviewOid;
 		Relation	matviewRel;
 #if PG_VERSION_NUM >= 170000
@@ -1535,7 +1535,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, IndexStmt))
 	{
-		IndexStmt  *stmt = (IndexStmt *) pstmt->utilityStmt;
+		stmt: &mut IndexStmt = (IndexStmt *) pstmt->utilityStmt;
 
 		if (stmt->concurrent)
 		{
@@ -1650,7 +1650,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, CreateSeqStmt) && o_added_columns != NIL)
 	{
-		CreateSeqStmt *seqstmt = (CreateSeqStmt *) pstmt->utilityStmt;
+		seqstmt: &mut CreateSeqStmt = (CreateSeqStmt *) pstmt->utilityStmt;
 
 		if (seqstmt->for_identity)
 		{
@@ -1660,11 +1660,11 @@ orioledb_utility_command(PlannedStmt *pstmt,
 // first pop the head element, enrich it with data, then push it
 // back to the list tail
 //
-			NextValueExpr *nve = makeNode(NextValueExpr);
+			nve: &mut NextValueExpr = makeNode(NextValueExpr);
 
-			List	   *pair = linitial(o_added_columns);
+			pair: &mut List = linitial(o_added_columns);
 			Oid			typeOid = intVal(linitial(pair));
-			char	   *colname = strVal(lsecond(pair));
+			colname: &mut char = strVal(lsecond(pair));
 
 			o_added_columns = list_delete_first(o_added_columns);
 
@@ -1684,8 +1684,8 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	free_parsestate(pstate);
 }
 
-static void
-o_validate_replica_identity(Relation rel, ReplicaIdentityStmt *stmt)
+fn
+o_validate_replica_identity(Relation rel, stmt: &mut ReplicaIdentityStmt)
 {
 	elog(DEBUG4, "Current replident %c, setting replident %c", rel->rd_rel->relreplident, stmt->identity_type);
 
@@ -1707,16 +1707,16 @@ o_validate_replica_identity(Relation rel, ReplicaIdentityStmt *stmt)
 	}
 }
 
-static void
-o_alter_column_type(AlterTableCmd *cmd, const char *queryString, Relation rel)
+fn
+o_alter_column_type(cmd: &mut AlterTableCmd, const queryString: &mut char, Relation rel)
 {
-	ColumnDef  *def = (ColumnDef *) cmd->def;
+	def: &mut ColumnDef = (ColumnDef *) cmd->def;
 
 	if (def->raw_default)
 	{
-		Node	   *cooked_default;
-		ParseState *pstate;
-		ParseNamespaceItem *nsitem;
+		cooked_default: &mut Node;
+		pstate: &mut ParseState;
+		nsitem: &mut ParseNamespaceItem;
 		AttrNumber	attnum;
 
 		pstate = make_parsestate(NULL);
@@ -1746,7 +1746,7 @@ o_alter_column_type(AlterTableCmd *cmd, const char *queryString, Relation rel)
 	}
 }
 
-static void
+fn
 o_find_collation_dependencies(Oid colloid)
 {
 	Relation	depRel;
@@ -1833,7 +1833,7 @@ o_find_collation_dependencies(Oid colloid)
 	relation_close(depRel, AccessShareLock);
 }
 
-static void
+fn
 o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 {
 	Relation	depRel;
@@ -1892,7 +1892,7 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 			 rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 			is_orioledb_rel(rel))
 		{
-			OTable	   *table;
+			table: &mut OTable;
 			ORelOids	table_oids;
 			bool		found = false;
 			int			i;
@@ -1949,20 +1949,20 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 }
 
 static bool
-ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid objectId,
+ATColumnChangeRequiresRewrite(old_field: &mut OTableField, field: &mut OTableField, Oid objectId,
 							  int subId)
 {
-	ParseState *pstate = make_parsestate(NULL);
-	Node	   *expr = NULL;
+	pstate: &mut ParseState = make_parsestate(NULL);
+	expr: &mut Node = NULL;
 	bool		rewrite = false;
-	ListCell   *lc;
+	lc: &mut ListCell;
 	bool		append_transform = false;
 
 	foreach(lc, alter_type_exprs)
 	{
 		AttrNumber	attnum = intVal(linitial((List *) lfirst(lc)));
 		Oid			oid = intVal(lsecond((List *) lfirst(lc)));
-		const char *attname = ((String *) (lfourth((List *) lfirst(lc))))->sval;
+		const attname: &mut char = ((String *) (lfourth((List *) lfirst(lc))))->sval;
 
 		if (attnum == subId)
 		{
@@ -1986,7 +1986,7 @@ ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid ob
 	{
 		if (append_transform)
 		{
-			char	   *field_name = pstrdup(field->name.data);
+			field_name: &mut char = pstrdup(field->name.data);
 
 			// cppcheck-suppress unknownEvaluationOrder
 			alter_type_exprs = lappend(alter_type_exprs, list_make4(makeInteger(subId), makeInteger(objectId), expr, makeString(field_name)));
@@ -2003,7 +2003,7 @@ ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid ob
 				expr = (Node *) ((RelabelType *) expr)->arg;
 			else if (IsA(expr, CoerceToDomain))
 			{
-				CoerceToDomain *d = (CoerceToDomain *) expr;
+				d: &mut CoerceToDomain = (CoerceToDomain *) expr;
 
 				if (DomainHasConstraints(d->resulttype))
 					rewrite = true;
@@ -2011,7 +2011,7 @@ ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid ob
 			}
 			else if (IsA(expr, FuncExpr))
 			{
-				FuncExpr   *f = (FuncExpr *) expr;
+				f: &mut FuncExpr = (FuncExpr *) expr;
 
 				switch (f->funcid)
 				{
@@ -2034,15 +2034,15 @@ ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid ob
 	return rewrite;
 }
 
-static void
+fn
 set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfactor, bool index_bridging)
 {
 	ORelOids	oids,
 				toastOids;
-	OIndexKey  *trees;
+	trees: &mut OIndexKey;
 	int			numTrees;
-	OTable	   *o_table;
-	ORelOptions *options = (ORelOptions *) rel->rd_options;
+	o_table: &mut OTable;
+	options: &mut ORelOptions = (ORelOptions *) rel->rd_options;
 	OCompress	compress = default_compress,
 				primary_compress = default_primary_compress,
 				toast_compress = default_toast_compress;
@@ -2066,7 +2066,7 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 		{
 			if (options->compress_offset > 0)
 			{
-				char	   *str;
+				str: &mut char;
 
 				str = (char *) (((Pointer) options) +
 								options->compress_offset);
@@ -2075,7 +2075,7 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 			}
 			if (options->primary_compress_offset > 0)
 			{
-				char	   *str;
+				str: &mut char;
 
 				str = (char *) (((Pointer) options) +
 								options->primary_compress_offset);
@@ -2084,7 +2084,7 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 			}
 			if (options->toast_compress_offset > 0)
 			{
-				char	   *str;
+				str: &mut char;
 
 				str = (char *) (((Pointer) options) +
 								options->toast_compress_offset);
@@ -2149,12 +2149,12 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 	o_table_free(o_table);
 }
 
-static void
+fn
 create_o_table_for_rel(Relation rel)
 {
 	ORelOids	oids;
 	TupleDesc	tupdesc;
-	OTable	   *o_table;
+	o_table: &mut OTable;
 	OSnapshot	oSnapshot;
 	OXid		oxid = InvalidOXid;
 	XLogRecPtr	cur_lsn;
@@ -2186,7 +2186,7 @@ typedef struct
 {
 	DestReceiver pub;			// publicly-known function pointers
 	Relation	rel;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	CommitSeqNo csn;
 	OXid		oxid;
 } DR_transientrel;
@@ -2194,10 +2194,10 @@ typedef struct
 //
 // transientrel_startup --- executor startup
 //
-static void
-transientrel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
+fn
+transientrel_startup(self: &mut DestReceiver, int operation, TupleDesc typeinfo)
 {
-	DR_transientrel *myState = (DR_transientrel *) self;
+	myState: &mut DR_transientrel = (DR_transientrel *) self;
 	OSnapshot	oSnapshot;
 
 	fill_current_oxid_osnapshot(&myState->oxid, &oSnapshot);
@@ -2208,9 +2208,9 @@ transientrel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 // transientrel_receive --- receive one tuple
 //
 static bool
-transientrel_receive(TupleTableSlot *slot, DestReceiver *self)
+transientrel_receive(slot: &mut TupleTableSlot, self: &mut DestReceiver)
 {
-	DR_transientrel *myState = (DR_transientrel *) self;
+	myState: &mut DR_transientrel = (DR_transientrel *) self;
 
 	o_tbl_insert(myState->descr, myState->rel, slot, myState->oxid, myState->csn);
 
@@ -2222,16 +2222,16 @@ transientrel_receive(TupleTableSlot *slot, DestReceiver *self)
 //
 // transientrel_shutdown --- executor end
 //
-static void
-transientrel_shutdown(DestReceiver *self)
+fn
+transientrel_shutdown(self: &mut DestReceiver)
 {
 }
 
 //
 // transientrel_destroy --- release DestReceiver object
 //
-static void
-transientrel_destroy(DestReceiver *self)
+fn
+transientrel_destroy(self: &mut DestReceiver)
 {
 	pfree(self);
 }
@@ -2239,7 +2239,7 @@ transientrel_destroy(DestReceiver *self)
 static DestReceiver *
 CreateOrioledbDestReceiver(Relation rel)
 {
-	DR_transientrel *self = (DR_transientrel *) palloc0(sizeof(DR_transientrel));
+	self: &mut DR_transientrel = (DR_transientrel *) palloc0(sizeof(DR_transientrel));
 
 	self->pub.receiveSlot = transientrel_receive;
 	self->pub.rStartup = transientrel_startup;
@@ -2253,13 +2253,13 @@ CreateOrioledbDestReceiver(Relation rel)
 	return (DestReceiver *) self;
 }
 
-static void
+fn
 o_drop_table(ORelOids oids)
 {
 	OSnapshot	oSnapshot;
 	OXid		oxid;
-	OTable	   *table;
-	OIndexKey  *trees;
+	table: &mut OTable;
+	trees: &mut OIndexKey;
 	int			numTrees;
 
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
@@ -2273,15 +2273,15 @@ o_drop_table(ORelOids oids)
 	o_table_free(table);
 }
 
-static void
-rewrite_matview(Relation rel, OTable *old_o_table, OTable *new_o_table)
+fn
+rewrite_matview(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 {
-	DestReceiver *dest = CreateOrioledbDestReceiver(rel);
-	List	   *rewritten;
-	PlannedStmt *plan;
-	QueryDesc  *queryDesc;
-	Query	   *copied_query;
-	Query	   *query;
+	dest: &mut DestReceiver = CreateOrioledbDestReceiver(rel);
+	rewritten: &mut List;
+	plan: &mut PlannedStmt;
+	queryDesc: &mut QueryDesc;
+	copied_query: &mut Query;
+	query: &mut Query;
 
 	// Lock and rewrite, using a copy to preserve the original query.
 	copied_query = copyObject(savedDataQuery);
@@ -2336,24 +2336,24 @@ rewrite_matview(Relation rel, OTable *old_o_table, OTable *new_o_table)
 	SetMatViewPopulatedState(rel, true);
 }
 
-static void
-rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
+fn
+rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 {
-	OTableDescr *old_descr = NULL;
-	void	   *sscan;
-	TupleTableSlot *old_slot;
-	TupleTableSlot *new_slot;
+	old_descr: &mut OTableDescr = NULL;
+		   *sscan;
+	old_slot: &mut TupleTableSlot;
+	new_slot: &mut TupleTableSlot;
 	OTuple		tup;
 	CommitSeqNo tupleCsn;
 	BTreeLocationHint hint;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OSnapshot	oSnapshot;
 	OXid		oxid;
 	int			primary_init_nfields = old_o_table->primary_init_nfields;
 	int			num_check = rel->rd_att->constr ? rel->rd_att->constr->num_check : 0;
-	EState	   *check_estate = NULL;
+	check_estate: &mut EState = NULL;
 	ExprState **check_exprs = NULL;
-	ExprContext *check_econtext = NULL;
+	check_econtext: &mut ExprContext = NULL;
 
 	if (!old_o_table->has_primary)
 		primary_init_nfields--;
@@ -2380,7 +2380,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 	{
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
 		{
-			ListCell   *lc;
+			lc: &mut ListCell;
 #if PG_VERSION_NUM >= 180000
 			bool		attUpdated = false;
 #else
@@ -2414,7 +2414,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 	if (num_check > 0)
 	{
 		int			i;
-		ConstrCheck *check = rel->rd_att->constr->check;
+		check: &mut ConstrCheck = rel->rd_att->constr->check;
 
 		check_estate = CreateExecutorState();
 		check_econtext = GetPerTupleExprContext(check_estate);
@@ -2422,7 +2422,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 		for (i = 0; i < num_check; i++)
 		{
-			Expr	   *checkconstexpr = stringToNode(check[i].ccbin);
+			checkconstexpr: &mut Expr = stringToNode(check[i].ccbin);
 
 #if PG_VERSION_NUM >= 180000
 
@@ -2465,11 +2465,11 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 //
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
 		{
-			Node	   *expr = NULL;
+			expr: &mut Node = NULL;
 			bool		has_def = false;
 			bool		should_build_def = false;
-			OTupleAttrFull *old_attr = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
-			OTupleAttrFull *rel_attr = OTupleDescAttrSlow(rel->rd_att, i);
+			old_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
+			rel_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(rel->rd_att, i);
 
 			//
 // Dropped columns leave a placeholder attribute with atttypid set
@@ -2520,7 +2520,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 			if (should_build_def)
 			{
-				Node	   *defaultexpr = build_column_default(rel, i + 1);
+				defaultexpr: &mut Node = build_column_default(rel, i + 1);
 
 				expr = defaultexpr;
 			}
@@ -2538,7 +2538,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 				Oid			baseTypeId;
 				int32		baseTypeMod;
 				Oid			baseTypeColl;
-				Node	   *defval;
+				defval: &mut Node;
 
 				defval = build_column_default(rel, i + 1);
 
@@ -2567,11 +2567,11 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 			}
 			else if (rel_attr->attidentity && old_slot->tts_isnull[i])
 			{
-				ListCell   *lc;
+				lc: &mut ListCell;
 
 				foreach(lc, o_added_columns)
 				{
-					List	   *pair = lfirst(lc);
+					pair: &mut List = lfirst(lc);
 
 					if (!strcmp(strVal(lsecond(pair)), old_attr->attname.data))
 					{
@@ -2593,9 +2593,9 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
 		{
-			Node	   *expr = NULL;
-			OTupleAttrFull *old_attr = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
-			OTupleAttrFull *rel_attr = OTupleDescAttrSlow(rel->rd_att, i);
+			expr: &mut Node = NULL;
+			old_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
+			rel_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(rel->rd_att, i);
 
 			// See note above: skip placeholder dropped attributes.
 			if (rel_attr->attisdropped)
@@ -2619,7 +2619,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 			// cppcheck-suppress unknownEvaluationOrder
 										 list_make2(makeInteger(RelationGetRelid(rel)), makeInteger(i + 1))))))
 			{
-				Node	   *defaultexpr = build_column_default(rel, i + 1);
+				defaultexpr: &mut Node = build_column_default(rel, i + 1);
 
 				expr = defaultexpr;
 			}
@@ -2703,10 +2703,10 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 	o_drop_table(old_o_table->oids);
 }
 
-static void
-redefine_indices(Relation rel, OTable *new_o_table, bool primary, Oid oldRelnode)
+fn
+redefine_indices(Relation rel, new_o_table: &mut OTable, bool primary, Oid oldRelnode)
 {
-	ListCell   *index;
+	index: &mut ListCell;
 
 	foreach(index, RelationGetIndexList(rel))
 	{
@@ -2716,7 +2716,7 @@ redefine_indices(Relation rel, OTable *new_o_table, bool primary, Oid oldRelnode
 
 		if ((primary && ind->rd_index->indisprimary) || (!primary && !ind->rd_index->indisprimary))
 		{
-			OBTOptions *options = (OBTOptions *) ind->rd_options;
+			options: &mut OBTOptions = (OBTOptions *) ind->rd_options;
 
 			if (ind->rd_rel->relam != BTREE_AM_OID || (options && !options->orioledb_index))
 			{
@@ -2746,7 +2746,7 @@ redefine_indices(Relation rel, OTable *new_o_table, bool primary, Oid oldRelnode
 	if (primary)
 	{
 		ORelOids	oids;
-		OTable	   *updated_o_table;
+		updated_o_table: &mut OTable;
 
 		//
 // Partial reimplementation of assign_new_oids just for toast, because
@@ -2783,11 +2783,11 @@ redefine_indices(Relation rel, OTable *new_o_table, bool primary, Oid oldRelnode
 
 }
 
-void
+
 redefine_pkey_for_rel(Relation rel)
 {
 	ORelOids	oids;
-	OTable	   *o_table;
+	o_table: &mut OTable;
 
 	ORelOidsSetFromRel(oids, rel);
 	o_table = o_tables_get(oids);
@@ -2798,7 +2798,7 @@ redefine_pkey_for_rel(Relation rel)
 	o_table_free(o_table);
 }
 
-static void
+fn
 change_bridging_option(Relation rel, bool value, bool isReset)
 {
 	Oid			relid;
@@ -2812,11 +2812,11 @@ change_bridging_option(Relation rel, bool value, bool isReset)
 	bool		repl_null[Natts_pg_class];
 	bool		repl_repl[Natts_pg_class];
 #if PG_VERSION_NUM < 180000
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	static validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #else
-	const char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	const validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #endif
-	DefElem    *bridging_def;
+	bridging_def: &mut DefElem;
 
 	pgclass = table_open(RelationRelationId, RowExclusiveLock);
 
@@ -2835,7 +2835,7 @@ change_bridging_option(Relation rel, bool value, bool isReset)
 									 list_make1(bridging_def), NULL, validnsps, false, isReset);
 
 	// Validate
-	(void) table_reloptions(rel, rel->rd_rel->relkind, newOptions, true);
+	() table_reloptions(rel, rel->rd_rel->relkind, newOptions, true);
 
 	//
 // All we need do here is update the pg_class row; the new options will be
@@ -2865,14 +2865,14 @@ change_bridging_option(Relation rel, bool value, bool isReset)
 	table_close(pgclass, RowExclusiveLock);
 }
 
-static void
-add_bridge_index(Relation tbl, OTable *o_table, bool manually, Oid amoid)
+fn
+add_bridge_index(Relation tbl, o_table: &mut OTable, bool manually, Oid amoid)
 {
 	OSnapshot	oSnapshot;
 	OXid		oxid;
-	OTable	   *old_o_table;
-	OTableDescr *descr;
-	OTableDescr *old_descr;
+	old_o_table: &mut OTable;
+	descr: &mut OTableDescr;
+	old_descr: &mut OTableDescr;
 	int			ix_num = InvalidIndexNumber;
 
 	if (!manually)
@@ -2924,7 +2924,7 @@ add_bridge_index(Relation tbl, OTable *o_table, bool manually, Oid amoid)
 	for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 	{
 		int			ctid_idx_off;
-		OTableIndex *index;
+		index: &mut OTableIndex;
 
 		ctid_idx_off = o_table->has_primary ? 0 : 1;
 		index = &o_table->indices[ix_num];
@@ -2946,14 +2946,14 @@ add_bridge_index(Relation tbl, OTable *o_table, bool manually, Oid amoid)
 	o_table_free(o_table);
 }
 
-static void
-drop_bridge_index(Relation tbl, OTable *o_table)
+fn
+drop_bridge_index(Relation tbl, o_table: &mut OTable)
 {
 	OSnapshot	oSnapshot;
 	OXid		oxid;
-	OTable	   *old_o_table;
-	OTableDescr *descr;
-	OTableDescr *old_descr;
+	old_o_table: &mut OTable;
+	descr: &mut OTableDescr;
+	old_descr: &mut OTableDescr;
 	int			ix_num = InvalidIndexNumber;
 
 	old_o_table = o_table;
@@ -2977,7 +2977,7 @@ drop_bridge_index(Relation tbl, OTable *o_table)
 	for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 	{
 		int			ctid_idx_off;
-		OTableIndex *index;
+		index: &mut OTableIndex;
 
 		ctid_idx_off = o_table->has_primary ? 0 : 1;
 		index = &o_table->indices[ix_num];
@@ -2999,11 +2999,11 @@ drop_bridge_index(Relation tbl, OTable *o_table)
 	o_table_free(o_table);
 }
 
-static void
-cleanup_tablespace_dir(char *tablespace_path)
+fn
+cleanup_tablespace_dir(tablespace_path: &mut char)
 {
-	DIR		   *dir;
-	struct dirent *file;
+	dir: &mut DIR;
+	struct file: &mut dirent;
 
 	dir = opendir(tablespace_path);
 	if (dir == NULL)
@@ -3012,7 +3012,7 @@ cleanup_tablespace_dir(char *tablespace_path)
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
 		Oid			dbOid;
-		char	   *dbDirName;
+		dbDirName: &mut char;
 
 		if (sscanf(file->d_name, "%u", &dbOid) != 1)
 			continue;
@@ -3058,11 +3058,11 @@ cleanup_tablespace_dir(char *tablespace_path)
 static List *
 get_collation(Oid collation, Oid actual_datatype)
 {
-	List	   *result;
+	result: &mut List;
 	HeapTuple	ht_coll;
 	Form_pg_collation coll_rec;
-	char	   *nsp_name;
-	char	   *coll_name;
+	nsp_name: &mut char;
+	coll_name: &mut char;
 
 	if (!OidIsValid(collation))
 		return NIL;				// easy case
@@ -3093,7 +3093,7 @@ get_collation(Oid collation, Oid actual_datatype)
 static List *
 get_opclass(Oid opclass, Oid actual_datatype)
 {
-	List	   *result = NIL;
+	result: &mut List = NIL;
 	HeapTuple	ht_opc;
 	Form_pg_opclass opc_rec;
 
@@ -3105,8 +3105,8 @@ get_opclass(Oid opclass, Oid actual_datatype)
 	if (GetDefaultOpClass(actual_datatype, opc_rec->opcmethod) != opclass)
 	{
 		// For simplicity, we always schema-qualify the name
-		char	   *nsp_name = get_namespace_name(opc_rec->opcnamespace);
-		char	   *opc_name = pstrdup(NameStr(opc_rec->opcname));
+		nsp_name: &mut char = get_namespace_name(opc_rec->opcnamespace);
+		opc_name: &mut char = pstrdup(NameStr(opc_rec->opcname));
 
 		// cppcheck-suppress unknownEvaluationOrder
 		result = list_make2(makeString(nsp_name), makeString(opc_name));
@@ -3116,9 +3116,9 @@ get_opclass(Oid opclass, Oid actual_datatype)
 	return result;
 }
 
-static void
+fn
 orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
-							int subId, void *arg)
+							int subId,  *arg)
 {
 	Relation	rel;
 
@@ -3136,7 +3136,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_DROP && classId == RelationRelationId)
 	{
-		ObjectAccessDrop *drop_arg = (ObjectAccessDrop *) arg;
+		drop_arg: &mut ObjectAccessDrop = (ObjectAccessDrop *) arg;
 
 		ASAN_UNPOISON_MEMORY_REGION(drop_arg, sizeof(*drop_arg));
 
@@ -3162,14 +3162,14 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				(subId == 0) && is_orioledb_rel(rel) &&
 				!OidIsValid(rel->rd_rel->relrewrite))
 			{
-				ListCell   *lc;
+				lc: &mut ListCell;
 				ORelOids	oids;
-				OTableDescr *descr;
+				descr: &mut OTableDescr;
 
 				ORelOidsSetFromRel(oids, rel);
 				foreach(lc, partition_drop_index_list)
 				{
-					List	   *drop_oids = (List *) lfirst(lc);
+					drop_oids: &mut List = (List *) lfirst(lc);
 
 					if (lsecond_oid(drop_oids) == rel->rd_rel->oid)
 						partition_drop_index_list = foreach_delete_current(partition_drop_index_list, lc);
@@ -3192,8 +3192,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					  rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 					 (subId != 0) && is_orioledb_rel(rel))
 			{
-				OTable	   *o_table;
-				OTableField *o_field = NULL;
+				o_table: &mut OTable;
+				o_field: &mut OTableField = NULL;
 				ORelOids	oids;
 
 				ORelOidsSetFromRel(oids, rel);
@@ -3242,14 +3242,14 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					is_orioledb_rel(tbl))
 				{
 					OIndexNumber ix_num;
-					OTableDescr *descr = relation_get_descr(tbl);
+					descr: &mut OTableDescr = relation_get_descr(tbl);
 
 					Assert(descr != NULL);
 					ix_num = o_find_ix_num_by_name(descr,
 												   rel->rd_rel->relname.data);
 					if (ix_num != InvalidIndexNumber)
 					{
-						String	   *relname;
+						relname: &mut String;
 
 						if (descr->indices[ix_num]->primaryIsCtid)
 							ix_num--;
@@ -3353,7 +3353,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			}
 			else if (rel->rd_rel->relkind == RELKIND_PARTITIONED_INDEX)
 			{
-				ListCell   *lc;
+				lc: &mut ListCell;
 				Relation	tbl = relation_open(rel->rd_index->indrelid,
 												AccessShareLock);
 
@@ -3366,10 +3366,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				{
 					foreach(lc, partition_drop_index_list)
 					{
-						List	   *oids = (List *) lfirst(lc);
+						oids: &mut List = (List *) lfirst(lc);
 						Relation	part_tbl = relation_open(lsecond_oid(oids), AccessShareLock);
 						OIndexNumber ix_num;
-						OTableDescr *descr;
+						descr: &mut OTableDescr;
 						int			i;
 
 						Assert((part_tbl->rd_rel->relkind == RELKIND_RELATION ||
@@ -3478,8 +3478,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 (subId != 0) && is_orioledb_rel(rel))
 			{
 				// Branch is taken during ALTER TABLE ... ADD COLUMN
-				OTableField *field;
-				OTable	   *o_table;
+				field: &mut OTableField;
+				o_table: &mut OTable;
 				ORelOids	oids;
 				OSnapshot	oSnapshot;
 				OXid		oxid;
@@ -3584,7 +3584,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				{
 					OSnapshot	oSnapshot;
 					OXid		oxid;
-					OTable	   *o_table;
+					o_table: &mut OTable;
 					ORelOids	table_oids;
 
 					fill_current_oxid_osnapshot(&oxid, &oSnapshot);
@@ -3633,7 +3633,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						{
 							if (rel->rd_rel->relam == BTREE_AM_OID)
 							{
-								OBTOptions *options = (OBTOptions *) rel->rd_options;
+								options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 								if (options && !options->orioledb_index)
 								{
@@ -3650,7 +3650,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						{
 							if (!in_rewrite && !rel->rd_index->indisprimary && ix_num == InvalidIndexNumber)
 							{
-								OBTOptions *options = (OBTOptions *) rel->rd_options;
+								options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 								if (options && !options->orioledb_index)
 									btree_bridging = true;
@@ -3680,9 +3680,9 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							{
 								Datum		toast_options;
 #if PG_VERSION_NUM < 180000
-								static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+								static validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #else
-								const char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+								const validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #endif
 
 								Assert(create_stmt != NULL);
@@ -3692,7 +3692,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 																	"toast",
 																	validnsps,
 																	true, false);
-								(void) heap_reloptions(RELKIND_TOASTVALUE,
+								() heap_reloptions(RELKIND_TOASTVALUE,
 													   toast_options,
 													   true);
 
@@ -3731,7 +3731,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		if (rel != NULL && (rel->rd_rel->relkind == RELKIND_RELATION) &&
 			(subId != 0) && is_orioledb_rel(rel))
 		{
-			OTable	   *o_table;
+			o_table: &mut OTable;
 			ORelOids	oids;
 			OSnapshot	oSnapshot;
 			OXid		oxid;
@@ -3747,7 +3747,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			else
 			{
 				OTableField old_field;
-				OTableField *field;
+				field: &mut OTableField;
 				bool		changed;
 
 				old_field = o_table->fields[subId - 1];
@@ -3815,7 +3815,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					  rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 					 (subId != 0) && is_orioledb_rel(rel))
 			{
-				OTable	   *o_table;
+				o_table: &mut OTable;
 				ORelOids	oids;
 
 				ORelOidsSetFromRel(oids, rel);
@@ -3829,7 +3829,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				else
 				{
 					OTableField old_field;
-					OTableField *field;
+					field: &mut OTableField;
 					OSnapshot	oSnapshot;
 					OXid		oxid;
 					int			ix_num;
@@ -3877,10 +3877,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							bool		compatible = false;
 							int			field_num;
 							int			ctid_idx_off;
-							OTableIndex *o_table_index;
-							List	   *attributeList = NIL;
+							o_table_index: &mut OTableIndex;
+							attributeList: &mut List = NIL;
 							int			expr_field = 0;
-							ListCell   *indexpr;
+							indexpr: &mut ListCell;
 							bool		has_field = false;
 
 							ctid_idx_off = o_table->has_primary ? 0 : 1;
@@ -3889,10 +3889,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 							for (field_num = 0; field_num < o_table_index->nkeyfields; field_num++)
 							{
-								IndexElem  *iparam;
-								OTableIndexField *iField = &o_table_index->fields[field_num];
+								iparam: &mut IndexElem;
+								iField: &mut OTableIndexField = &o_table_index->fields[field_num];
 								int			attnum = iField->attnum;
-								OTableField *table_field;
+								table_field: &mut OTableField;
 
 								iparam = makeNode(IndexElem);
 								if (attnum != EXPR_ATTNUM)
@@ -3952,7 +3952,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 							if (changed_ty && has_field && (o_table_index->type == oIndexPrimary || !compatible))
 							{
-								String	   *ix_name;
+								ix_name: &mut String;
 
 								ix_name =
 									makeString(pstrdup(o_table_index->name.data));
@@ -3980,7 +3980,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 tbl->rd_rel->relkind == RELKIND_MATVIEW) &&
 					is_orioledb_rel(tbl))
 				{
-					OTable	   *o_table;
+					o_table: &mut OTable;
 					ORelOids	table_oids;
 
 					ORelOidsSetFromRel(table_oids, tbl);
@@ -4007,8 +4007,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						reltablespace = rel->rd_rel->reltablespace;
 						for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 						{
-							OTableIndex *index = &o_table->indices[ix_num];
-							OBTOptions *options = (OBTOptions *) rel->rd_options;
+							index: &mut OTableIndex = &o_table->indices[ix_num];
+							options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 							if (ORelOidsIsEqual(index->oids, idx_oids))
 							{
@@ -4107,7 +4107,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				if (is_orioledb_rel(tbl))
 				{
 					ORelOids	new_oids;
-					OTable	   *old_o_table,
+					old_o_table: &mut OTable,
 							   *new_o_table;
 
 					CommandCounterIncrement();
@@ -4176,8 +4176,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				if (tbl && is_orioledb_rel(tbl))
 				{
 					ORelOids	oids;
-					OTableDescr *descr;
-					ORelOptions *options = (ORelOptions *) tbl->rd_options;
+					descr: &mut OTableDescr;
+					options: &mut ORelOptions = (ORelOptions *) tbl->rd_options;
 					uint8		new_fillfactor;
 					bool		new_index_bridging;
 					Oid			reltablespace = rel->rd_rel->reltablespace;
@@ -4193,7 +4193,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 // We come here during "ALTER TABLE ... SET
 // TABLESPACE"
 //
-						OTable	   *old_o_table,
+						old_o_table: &mut OTable,
 								   *new_o_table;
 
 						Assert(ORelOidsIsValid(saved_oids));
@@ -4267,16 +4267,16 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 						if (GET_PRIMARY(descr)->bridging != new_index_bridging)
 						{
-							OTable	   *o_table;
+							o_table: &mut OTable;
 							ORelOids	table_oids;
-							ListCell   *index;
+							index: &mut ListCell;
 							bool		has_bridged = false;
 
 							foreach(index, RelationGetIndexList(tbl))
 							{
 								Oid			indexOid = lfirst_oid(index);
 								Relation	ind = relation_open(indexOid, AccessShareLock);
-								OBTOptions *options = (OBTOptions *) ind->rd_options;
+								options: &mut OBTOptions = (OBTOptions *) ind->rd_options;
 
 								if (ind->rd_rel->relam != BTREE_AM_OID || (options && !options->orioledb_index))
 									has_bridged = true;
@@ -4407,11 +4407,11 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			OidIsValid(o_movedb_data.dest_tsoid) &&
 			o_tables_num(o_movedb_data.dest_dboid))
 		{
-			char	   *src_dbpath = NULL;
-			char	   *dst_dbpath = NULL;
-			char	   *dst_prefix = NULL;
-			DIR		   *dir;
-			struct dirent *xlde;
+			src_dbpath: &mut char = NULL;
+			dst_dbpath: &mut char = NULL;
+			dst_prefix: &mut char = NULL;
+			dir: &mut DIR;
+			struct xlde: &mut dirent;
 			bool		skipMoving = true;
 
 			o_get_prefixes_for_tablespace(o_movedb_data.dest_dboid, o_movedb_data.src_tsoid, NULL, &src_dbpath);
@@ -4514,7 +4514,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			{
 				int			i;
 				int			ix_num = InvalidIndexNumber;
-				OTableDescr *descr = relation_get_descr(tbl);
+				descr: &mut OTableDescr = relation_get_descr(tbl);
 
 				Assert(RelIsInMyDatabase(tbl));
 				Assert(descr != NULL);
@@ -4546,7 +4546,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_DROP && classId == OperatorClassRelationId)
 	{
-		OOpclass   *o_opclass = o_opclass_get(objectId, MyDatabaseId);
+		o_opclass: &mut OOpclass = o_opclass_get(objectId, MyDatabaseId);
 
 		if (o_opclass)
 			o_add_invalidate_comparator_undo_item(o_opclass->opfamily,
@@ -4555,10 +4555,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_DROP && classId == TableSpaceRelationId)
 	{
-		DIR		   *dir;
+		dir: &mut DIR;
 		char		path[MAXPGPATH];
 		char		targetpath[MAXPGPATH];
-		struct dirent *file;
+		struct file: &mut dirent;
 
 #define PG_TBLSPC "pg_tblspc"
 
@@ -4675,8 +4675,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		if (conForm->contype == CONSTRAINT_NOTNULL && conForm->conrelid != InvalidOid)
 		{
 			Datum		adatum;
-			ArrayType  *arr;
-			int16	   *attnums;
+			arr: &mut ArrayType;
+			attnums: &mut int16;
 			int			numkeys;
 			Relation	conrel = relation_open(conForm->conrelid, AccessShareLock);
 
@@ -4689,7 +4689,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			if (is_orioledb_rel(conrel))
 			{
 				ORelOids	oids;
-				OTable	   *o_table;
+				o_table: &mut OTable;
 
 				ORelOidsSetFromRel(oids, conrel);
 				o_table = o_tables_get(oids);
@@ -4764,7 +4764,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 // return false.
 //
 static bool
-get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
+get_db_info(const name: &mut char, LOCKMODE lockmode, dbIdP: &mut Oid)
 {
 	bool		result = false;
 	Relation	relation;
@@ -4854,12 +4854,12 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 // OrioleDB implementation of CREATE DATABASE.
 //
 static Oid
-o_createdb(ParseState *pstate, const CreatedbStmt *stmt)
+o_createdb(pstate: &mut ParseState, const stmt: &mut CreatedbStmt)
 {
 	Oid			src_dboid;
-	ListCell   *option;
-	DefElem    *dtemplate = NULL;
-	const char *dbtemplate = NULL;
+	option: &mut ListCell;
+	dtemplate: &mut DefElem = NULL;
+	const dbtemplate: &mut char = NULL;
 	Oid			result;
 
 	//
@@ -4870,7 +4870,7 @@ o_createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	// Extract options from the statement node tree
 	foreach(option, stmt->options)
 	{
-		DefElem    *defel = (DefElem *) lfirst(option);
+		defel: &mut DefElem = (DefElem *) lfirst(option);
 
 		if (strcmp(defel->defname, "template") == 0)
 			dtemplate = defel;
@@ -4913,13 +4913,13 @@ o_createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	return result;
 }
 
-static void
-o_check_movedb(const AlterDatabaseStmt *stmt, movedb_params *movedb)
+fn
+o_check_movedb(const stmt: &mut AlterDatabaseStmt, movedb: &mut movedb_params)
 {
 	Oid			src_tblspcoid = InvalidOid;
 	Oid			db_id = InvalidOid;
-	ListCell   *option;
-	DefElem    *dtablespace = NULL;
+	option: &mut ListCell;
+	dtablespace: &mut DefElem = NULL;
 	HeapTuple	tuple = NULL;
 
 	if (!get_db_info(stmt->dbname, NoLock, &db_id))
@@ -4931,7 +4931,7 @@ o_check_movedb(const AlterDatabaseStmt *stmt, movedb_params *movedb)
 
 	foreach(option, stmt->options)
 	{
-		DefElem    *defel = (DefElem *) lfirst(option);
+		defel: &mut DefElem = (DefElem *) lfirst(option);
 
 		if (strcmp(defel->defname, "tablespace") == 0)
 		{
@@ -4960,26 +4960,26 @@ o_check_movedb(const AlterDatabaseStmt *stmt, movedb_params *movedb)
 	movedb->dest_tsoid = get_tablespace_oid(defGetString(dtablespace), false);
 }
 
-static void
+fn
 o_movedb_failure_callback(int code, Datum arg)
 {
-	movedb_params *fparms = (movedb_params *) DatumGetPointer(arg);
-	char	   *dstpath = NULL;
+	fparms: &mut movedb_params = (movedb_params *) DatumGetPointer(arg);
+	dstpath: &mut char = NULL;
 
 	// Get rid of anything we managed to copy to the target directory
 	o_get_prefixes_for_tablespace(fparms->dest_dboid, fparms->dest_tsoid, NULL, &dstpath);
 
 	if (dstpath)
 	{
-		(void) rmtree(dstpath, true);
+		() rmtree(dstpath, true);
 		pfree(dstpath);
 	}
 }
 
 int16
-o_parse_compress(const char *value)
+o_parse_compress(const value: &mut char)
 {
-	const char *ptr = value;
+	const ptr: &mut char = value;
 	int16		result = 0;
 	bool		neg = false;
 	bool		invalid_syntax = false;
@@ -5059,8 +5059,8 @@ o_parse_compress(const char *value)
 	return result;
 }
 
-void
-o_ddl_cleanup(void)
+
+o_ddl_cleanup()
 {
 	if (drop_index_list)
 	{
@@ -5112,8 +5112,8 @@ o_ddl_cleanup(void)
 static Node *
 o_get_alter_type_expr(Relation rel, int attidx)
 {
-	ListCell   *lc;
-	Node	   *expr = NULL;
+	lc: &mut ListCell;
+	expr: &mut Node = NULL;
 
 	foreach(lc, alter_type_exprs)
 	{
@@ -5135,12 +5135,12 @@ o_get_alter_type_expr(Relation rel, int attidx)
 	return expr;
 }
 
-static void
-o_fill_new_slot(OTable *new_o_table, Relation rel, int attidx,
-				Node *expr, TupleTableSlot *old_slot,
-				TupleTableSlot *new_slot, TupleTableSlot *scan_slot)
+fn
+o_fill_new_slot(new_o_table: &mut OTable, Relation rel, int attidx,
+				expr: &mut Node, old_slot: &mut TupleTableSlot,
+				new_slot: &mut TupleTableSlot, scan_slot: &mut TupleTableSlot)
 {
-	OTupleAttrCompact *attr = OTupleDescAttrFast(new_slot->tts_tupleDescriptor, attidx);
+	attr: &mut OTupleAttrCompact = OTupleDescAttrFast(new_slot->tts_tupleDescriptor, attidx);
 
 	if (expr)
 	{
@@ -5171,17 +5171,17 @@ o_fill_new_slot(OTable *new_o_table, Relation rel, int attidx,
 // Store only the column's type and name for
 // further enrichment during sequence relation creation
 //
-static void
-o_process_added_column(AlterTableCmd *cmd)
+fn
+o_process_added_column(cmd: &mut AlterTableCmd)
 {
-	ListCell   *lc;
-	ColumnDef  *def = (ColumnDef *) cmd->def;
+	lc: &mut ListCell;
+	def: &mut ColumnDef = (ColumnDef *) cmd->def;
 	Oid			typeid = def->typeName->typeOid;
 	bool		is_identity = false;
 
 	foreach(lc, def->constraints)
 	{
-		Constraint *con = lfirst_node(Constraint, lc);
+		con: &mut Constraint = lfirst_node(Constraint, lc);
 
 		if (con->contype == CONSTR_IDENTITY)
 		{

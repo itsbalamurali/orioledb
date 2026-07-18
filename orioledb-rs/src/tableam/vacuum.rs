@@ -72,13 +72,13 @@ typedef struct LVRelState
 {
 	// Target heap relation and its indexes
 	Relation	rel;
-	OTableDescr *descr;
-	Relation   *indrels;
+	descr: &mut OTableDescr;
+	indrels: &mut Relation;
 	int			nindexes;
 
 	// Buffer access strategy and parallel vacuum state
 	BufferAccessStrategy bstrategy;
-	ParallelVacuumState *pvs;
+	pvs: &mut ParallelVacuumState;
 
 	// Consider index vacuuming bypass optimization?
 	bool		consider_bypass_optimization;
@@ -88,10 +88,10 @@ typedef struct LVRelState
 	bool		do_index_cleanup;
 
 	// Error reporting state
-	char	   *dbname;
-	char	   *relnamespace;
-	char	   *relname;
-	char	   *indname;		// Current index name
+	dbname: &mut char;
+	relnamespace: &mut char;
+	relname: &mut char;
+	indname: &mut char;		// Current index name
 	BlockNumber blkno;			// used only for heap operations
 	OffsetNumber offnum;		// used only for heap operations
 	VacErrPhase phase;
@@ -108,10 +108,10 @@ typedef struct LVRelState
 // parallel vacuum cases.
 //
 #if PG_VERSION_NUM >= 170000
-	TidStore   *dead_items;		// TIDs whose index tuples we'll delete
-	VacDeadItemsInfo *dead_items_info;
+	dead_items: &mut TidStore;		// TIDs whose index tuples we'll delete
+	dead_items_info: &mut VacDeadItemsInfo;
 #else
-	VacDeadItems *dead_items;	// TIDs whose index tuples we'll delete
+	dead_items: &mut VacDeadItems;	// TIDs whose index tuples we'll delete
 #endif
 
 	BlockNumber rel_pages;		// total number of pages
@@ -153,14 +153,14 @@ typedef struct LVSavedErrInfo
 	VacErrPhase phase;
 } LVSavedErrInfo;
 
-static void dead_items_reset(LVRelState *vacrel);
-static void dead_items_cleanup(LVRelState *vacrel);
-static void update_vacuum_error_info(LVRelState *vacrel,
-									 LVSavedErrInfo *saved_vacrel,
+fn dead_items_reset(vacrel: &mut LVRelState);
+fn dead_items_cleanup(vacrel: &mut LVRelState);
+fn update_vacuum_error_info(vacrel: &mut LVRelState,
+									 saved_vacrel: &mut LVSavedErrInfo,
 									 int phase, BlockNumber blkno,
 									 OffsetNumber offnum);
-static void restore_vacuum_error_info(LVRelState *vacrel,
-									  const LVSavedErrInfo *saved_vacrel);
+fn restore_vacuum_error_info(vacrel: &mut LVRelState,
+									  const saved_vacrel: &mut LVSavedErrInfo);
 
 //
 // Error context callback for errors occurring during vacuum.  The error
@@ -168,10 +168,10 @@ static void restore_vacuum_error_info(LVRelState *vacrel,
 // vacuum.  If you change this function for those phases, change
 // parallel_vacuum_error_callback() as well.
 //
-static void
-vacuum_error_callback(void *arg)
+fn
+vacuum_error_callback( *arg)
 {
-	LVRelState *errinfo = arg;
+	errinfo: &mut LVRelState = arg;
 
 	switch (errinfo->phase)
 	{
@@ -228,12 +228,12 @@ vacuum_error_callback(void *arg)
 	}
 }
 
-static void
+fn
 vac_open_bridged_indexes(Relation relation, LOCKMODE lockmode,
-						 int *nindexes, Relation **Irel)
+						 nindexes: &mut int, Relation **Irel)
 {
-	List	   *indexoidlist;
-	ListCell   *indexoidscan;
+	indexoidlist: &mut List;
+	indexoidscan: &mut ListCell;
 	int			i;
 
 	Assert(lockmode != NoLock);
@@ -245,8 +245,7 @@ vac_open_bridged_indexes(Relation relation, LOCKMODE lockmode,
 
 	if (i > 0)
 		*Irel = (Relation *) palloc(i * sizeof(Relation));
-	else
-		*Irel = NULL;
+	Irel: &mut else = NULL;
 
 	//
 // Collect all ready indexes, including orioledb-managed btree indexes.
@@ -287,16 +286,16 @@ vac_open_bridged_indexes(Relation relation, LOCKMODE lockmode,
 // Also handles parallel initialization as part of allocating dead_items in
 // DSM when required.
 //
-static void
-dead_items_alloc(LVRelState *vacrel, int nworkers)
+fn
+dead_items_alloc(vacrel: &mut LVRelState, int nworkers)
 {
 #if PG_VERSION_NUM >= 170000
-	VacDeadItemsInfo *dead_items_info;
+	dead_items_info: &mut VacDeadItemsInfo;
 	int			vac_work_mem = AmAutoVacuumWorkerProcess() &&
 		autovacuum_work_mem != -1 ?
 		autovacuum_work_mem : maintenance_work_mem;
 #else
-	VacDeadItems *dead_items;
+	dead_items: &mut VacDeadItems;
 	int64		max_items;
 	int			vac_work_mem = IsAutoVacuumWorkerProcess() &&
 		autovacuum_work_mem != -1 ?
@@ -392,8 +391,8 @@ dead_items_alloc(LVRelState *vacrel, int nworkers)
 }
 
 #if PG_VERSION_NUM >= 170000
-static void
-finish_dead_items(LVRelState *vacrel)
+fn
+finish_dead_items(vacrel: &mut LVRelState)
 {
 	const int	prog_index[2] = {
 		PROGRESS_VACUUM_NUM_DEAD_ITEM_IDS,
@@ -414,8 +413,8 @@ finish_dead_items(LVRelState *vacrel)
 	pgstat_progress_update_multi_param(2, prog_index, prog_val);
 }
 
-static void
-add_dead_item(LVRelState *vacrel, ItemPointer item)
+fn
+add_dead_item(vacrel: &mut LVRelState, ItemPointer item)
 {
 	if (vacrel->current_block != ItemPointerGetBlockNumber(item))
 	{
@@ -426,10 +425,10 @@ add_dead_item(LVRelState *vacrel, ItemPointer item)
 	vacrel->current_offsets[vacrel->offsets_count++] = ItemPointerGetOffsetNumber(item);
 }
 #else
-static void
-add_dead_item(LVRelState *vacrel, ItemPointer item)
+fn
+add_dead_item(vacrel: &mut LVRelState, ItemPointer item)
 {
-	VacDeadItems *dead_items = vacrel->dead_items;
+	dead_items: &mut VacDeadItems = vacrel->dead_items;
 
 	dead_items->items[dead_items->num_items++] = *item;
 }
@@ -445,9 +444,9 @@ add_dead_item(LVRelState *vacrel, ItemPointer item)
 // Returns bulk delete stats derived from input stats
 //
 static IndexBulkDeleteResult *
-lazy_cleanup_one_index(Relation indrel, IndexBulkDeleteResult *istat,
+lazy_cleanup_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
 					   double reltuples, bool estimated_count,
-					   LVRelState *vacrel)
+					   vacrel: &mut LVRelState)
 {
 	IndexVacuumInfo ivinfo;
 	LVSavedErrInfo saved_err_info;
@@ -487,8 +486,8 @@ lazy_cleanup_one_index(Relation indrel, IndexBulkDeleteResult *istat,
 //
 // lazy_cleanup_all_indexes() -- cleanup all indexes of relation.
 //
-static void
-lazy_cleanup_all_indexes(LVRelState *vacrel)
+fn
+lazy_cleanup_all_indexes(vacrel: &mut LVRelState)
 {
 	double		reltuples = vacrel->new_rel_tuples;
 	bool		estimated_count = vacrel->scanned_pages < vacrel->rel_pages;
@@ -528,7 +527,7 @@ lazy_cleanup_all_indexes(LVRelState *vacrel)
 		for (int idx = 0; idx < vacrel->nindexes; idx++)
 		{
 			Relation	indrel = vacrel->indrels[idx];
-			IndexBulkDeleteResult *istat = vacrel->indstats[idx];
+			istat: &mut IndexBulkDeleteResult = vacrel->indstats[idx];
 
 			vacrel->indstats[idx] =
 				lazy_cleanup_one_index(indrel, istat, reltuples,
@@ -569,8 +568,8 @@ lazy_cleanup_all_indexes(LVRelState *vacrel)
 // Returns bulk delete stats derived from input stats
 //
 static IndexBulkDeleteResult *
-lazy_vacuum_one_index(Relation indrel, IndexBulkDeleteResult *istat,
-					  double reltuples, LVRelState *vacrel)
+lazy_vacuum_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
+					  double reltuples, vacrel: &mut LVRelState)
 {
 	IndexVacuumInfo ivinfo;
 	LVSavedErrInfo saved_err_info;
@@ -620,8 +619,8 @@ lazy_vacuum_one_index(Relation indrel, IndexBulkDeleteResult *istat,
 // VACUUM operation is at risk of taking too long to finish, leading to
 // wraparound failure.
 //
-static void
-lazy_vacuum_all_indexes(LVRelState *vacrel)
+fn
+lazy_vacuum_all_indexes(vacrel: &mut LVRelState)
 {
 	double		old_live_tuples = vacrel->rel->rd_rel->reltuples;
 #if PG_VERSION_NUM >= 170000
@@ -662,7 +661,7 @@ lazy_vacuum_all_indexes(LVRelState *vacrel)
 		for (int idx = 0; idx < vacrel->nindexes; idx++)
 		{
 			Relation	indrel = vacrel->indrels[idx];
-			IndexBulkDeleteResult *istat = vacrel->indstats[idx];
+			istat: &mut IndexBulkDeleteResult = vacrel->indstats[idx];
 
 			vacrel->indstats[idx] = lazy_vacuum_one_index(indrel, istat,
 														  old_live_tuples,
@@ -727,17 +726,17 @@ lazy_vacuum_all_indexes(LVRelState *vacrel)
 // tuples until we've removed their index entries, and we want to process
 // index entry removal in batches as large as possible.
 //
-static void
-lazy_vacuum_bridge_index(LVRelState *vacrel)
+fn
+lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 {
 	OBTreeFindPageContext context;
-	OTableDescr *descr = vacrel->descr;
-	OIndexDescr *bridge = descr->bridge;
+	descr: &mut OTableDescr = vacrel->descr;
+	bridge: &mut OIndexDescr = descr->bridge;
 	BlockNumber vacuumed_pages = 0;
 	LVSavedErrInfo saved_err_info;
 #if PG_VERSION_NUM >= 170000
-	TidStoreIter *iter;
-	TidStoreIterResult *iter_result;
+	iter: &mut TidStoreIter;
+	iter_result: &mut TidStoreIterResult;
 #endif
 	OBTreeKeyBound bound;
 	ItemPointerData walBuffer[BTREE_PAGE_MAX_ITEMS];
@@ -784,7 +783,7 @@ lazy_vacuum_bridge_index(LVRelState *vacrel)
 		vacuum_delay_point(false);
 #else
 		int			num_offsets = iter_result->num_offsets;
-		OffsetNumber *offsets = iter_result->offsets;
+		offsets: &mut OffsetNumber = iter_result->offsets;
 
 		vacuum_delay_point();
 #endif
@@ -799,7 +798,7 @@ lazy_vacuum_bridge_index(LVRelState *vacrel)
 		ItemPointerSetBlockNumber(&iptr, blkno);
 		for (i = 0; i < num_offsets; i++)
 		{
-			OBtreePageFindItem *item;
+			item: &mut OBtreePageFindItem;
 			Page		p;
 
 			ItemPointerSetOffsetNumber(&iptr, offsets[i]);
@@ -817,7 +816,7 @@ lazy_vacuum_bridge_index(LVRelState *vacrel)
 		bound.keys[0].value = ItemPointerGetDatum(&iptr);
 
 		{
-			OBtreePageFindItem *item;
+			item: &mut OBtreePageFindItem;
 			Page		p;
 #endif
 
@@ -971,8 +970,8 @@ lazy_vacuum_bridge_index(LVRelState *vacrel)
 // ongoing VACUUM operation will definitely only have one index scan/round of
 // index vacuuming.
 //
-static void
-lazy_vacuum(LVRelState *vacrel)
+fn
+lazy_vacuum(vacrel: &mut LVRelState)
 {
 	bool		bypass;
 
@@ -1065,12 +1064,12 @@ lazy_vacuum(LVRelState *vacrel)
 	dead_items_reset(vacrel);
 }
 
-static void
-lazy_scan_bridge_index(LVRelState *vacrel)
+fn
+lazy_scan_bridge_index(vacrel: &mut LVRelState)
 {
 	OBTreeFindPageContext context;
-	OTableDescr *descr = vacrel->descr;
-	OIndexDescr *bridge = descr->bridge;
+	descr: &mut OTableDescr = vacrel->descr;
+	bridge: &mut OIndexDescr = descr->bridge;
 	OFixedKey	hikey;
 	BTreePageItemLocator loc;
 	int64		blocksScanned = 0;
@@ -1108,7 +1107,7 @@ lazy_scan_bridge_index(LVRelState *vacrel)
 			 BTREE_PAGE_LOCATOR_IS_VALID(p, &loc);
 			 BTREE_PAGE_LOCATOR_NEXT(p, &loc))
 		{
-			BTreeLeafTuphdr *tupHdr;
+			tupHdr: &mut BTreeLeafTuphdr;
 			OTuple		tup;
 			ItemPointer iptr;
 			bool		isnull;
@@ -1190,10 +1189,10 @@ lazy_scan_bridge_index(LVRelState *vacrel)
 //
 // Update index statistics in pg_class if the statistics are accurate.
 //
-static void
-update_relstats_all_indexes(LVRelState *vacrel)
+fn
+update_relstats_all_indexes(vacrel: &mut LVRelState)
 {
-	Relation   *indrels = vacrel->indrels;
+	indrels: &mut Relation = vacrel->indrels;
 	int			nindexes = vacrel->nindexes;
 	IndexBulkDeleteResult **indstats = vacrel->indstats;
 
@@ -1202,7 +1201,7 @@ update_relstats_all_indexes(LVRelState *vacrel)
 	for (int idx = 0; idx < nindexes; idx++)
 	{
 		Relation	indrel = indrels[idx];
-		IndexBulkDeleteResult *istat = indstats[idx];
+		istat: &mut IndexBulkDeleteResult = indstats[idx];
 
 		if (istat == NULL || istat->estimated_count)
 			continue;
@@ -1222,12 +1221,12 @@ update_relstats_all_indexes(LVRelState *vacrel)
 	}
 }
 
-void
-orioledb_vacuum_bridged_indexes(Relation rel, OTableDescr *descr,
-								struct VacuumParams *params,
+
+orioledb_vacuum_bridged_indexes(Relation rel, descr: &mut OTableDescr,
+								struct params: &mut VacuumParams,
 								BufferAccessStrategy bstrategy)
 {
-	LVRelState *vacrel;
+	vacrel: &mut LVRelState;
 	char	  **indnames = NULL;
 	bool		verbose;
 	bool		instrument;
@@ -1239,7 +1238,7 @@ orioledb_vacuum_bridged_indexes(Relation rel, OTableDescr *descr,
 	BufferUsage startbufferusage = pgBufferUsage;
 	BlockNumber orig_rel_pages,
 				new_rel_pages;
-	OIndexDescr *bridge;
+	bridge: &mut OIndexDescr;
 	ErrorContextCallback errcallback;
 
 	verbose = (params->options & VACOPT_VERBOSE) != 0;
@@ -1423,7 +1422,7 @@ orioledb_vacuum_bridged_indexes(Relation rel, OTableDescr *descr,
 			WalUsage	walusage;
 			BufferUsage bufferusage;
 			StringInfoData buf;
-			char	   *msgfmt;
+			msgfmt: &mut char;
 			double		read_rate = 0,
 						write_rate = 0;
 
@@ -1473,7 +1472,7 @@ orioledb_vacuum_bridged_indexes(Relation rel, OTableDescr *descr,
 							 (long long) vacrel->lpdead_items);
 			for (int i = 0; i < vacrel->nindexes; i++)
 			{
-				IndexBulkDeleteResult *istat = vacrel->indstats[i];
+				istat: &mut IndexBulkDeleteResult = vacrel->indstats[i];
 
 				if (!istat)
 					continue;
@@ -1535,8 +1534,8 @@ orioledb_vacuum_bridged_indexes(Relation rel, OTableDescr *descr,
 //
 // Forget all collected dead items.
 //
-static void
-dead_items_reset(LVRelState *vacrel)
+fn
+dead_items_reset(vacrel: &mut LVRelState)
 {
 #if PG_VERSION_NUM >= 170000
 	if (ParallelVacuumIsActive(vacrel))
@@ -1559,8 +1558,8 @@ dead_items_reset(LVRelState *vacrel)
 //
 // Perform cleanup for resources allocated in dead_items_alloc
 //
-static void
-dead_items_cleanup(LVRelState *vacrel)
+fn
+dead_items_cleanup(vacrel: &mut LVRelState)
 {
 	if (!ParallelVacuumIsActive(vacrel))
 	{
@@ -1577,8 +1576,8 @@ dead_items_cleanup(LVRelState *vacrel)
 // Updates the information required for vacuum error callback.  This also saves
 // the current information which can be later restored via restore_vacuum_error_info.
 //
-static void
-update_vacuum_error_info(LVRelState *vacrel, LVSavedErrInfo *saved_vacrel,
+fn
+update_vacuum_error_info(vacrel: &mut LVRelState, saved_vacrel: &mut LVSavedErrInfo,
 						 int phase, BlockNumber blkno, OffsetNumber offnum)
 {
 	if (saved_vacrel)
@@ -1596,9 +1595,9 @@ update_vacuum_error_info(LVRelState *vacrel, LVSavedErrInfo *saved_vacrel,
 //
 // Restores the vacuum information saved via a prior call to update_vacuum_error_info.
 //
-static void
-restore_vacuum_error_info(LVRelState *vacrel,
-						  const LVSavedErrInfo *saved_vacrel)
+fn
+restore_vacuum_error_info(vacrel: &mut LVRelState,
+						  const saved_vacrel: &mut LVSavedErrInfo)
 {
 	vacrel->blkno = saved_vacrel->blkno;
 	vacrel->offnum = saved_vacrel->offnum;

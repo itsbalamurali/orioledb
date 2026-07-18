@@ -47,7 +47,7 @@ struct OBuffersGroup
 };
 
 Size
-o_buffers_shmem_needs(OBuffersDesc *desc)
+o_buffers_shmem_needs(desc: &mut OBuffersDesc)
 {
 	desc->groupsCount = (desc->buffersCount + O_BUFFERS_PER_GROUP - 1) / O_BUFFERS_PER_GROUP;
 
@@ -55,8 +55,8 @@ o_buffers_shmem_needs(OBuffersDesc *desc)
 					CACHELINEALIGN(mul_size(sizeof(OBuffersGroup), desc->groupsCount)));
 }
 
-void
-o_buffers_shmem_init(OBuffersDesc *desc, void *buf, bool found)
+
+o_buffers_shmem_init(desc: &mut OBuffersDesc,  *buf, bool found)
 {
 	Pointer		ptr = buf;
 
@@ -79,13 +79,13 @@ o_buffers_shmem_init(OBuffersDesc *desc, void *buf, bool found)
 
 		for (i = 0; i < desc->groupsCount; i++)
 		{
-			OBuffersGroup *group = &desc->groups[i];
+			group: &mut OBuffersGroup = &desc->groups[i];
 
 			LWLockInitialize(&group->groupCtlLock,
 							 desc->metaPageBlkno->groupCtlTrancheId);
 			for (j = 0; j < O_BUFFERS_PER_GROUP; j++)
 			{
-				OBuffer    *buffer = &group->buffers[j];
+				buffer: &mut OBuffer = &group->buffers[j];
 
 				LWLockInitialize(&buffer->bufferCtlLock,
 								 desc->metaPageBlkno->bufferCtlTrancheId);
@@ -108,7 +108,7 @@ o_buffers_shmem_init(OBuffersDesc *desc, void *buf, bool found)
 // false, a missing file (ENOENT) returns false instead of panicking.
 //
 static bool
-open_file(OBuffersDesc *desc, uint32 tag, uint64 fileNum, bool create)
+open_file(desc: &mut OBuffersDesc, uint32 tag, uint64 fileNum, bool create)
 {
 	int			flags;
 
@@ -140,8 +140,8 @@ open_file(OBuffersDesc *desc, uint32 tag, uint64 fileNum, bool create)
 	return true;
 }
 
-static void
-unlink_file(OBuffersDesc *desc, uint32 tag, uint64 fileNum)
+fn
+unlink_file(desc: &mut OBuffersDesc, uint32 tag, uint64 fileNum)
 {
 	static char fileNameToUnlink[MAXPGPATH];
 
@@ -152,11 +152,11 @@ unlink_file(OBuffersDesc *desc, uint32 tag, uint64 fileNum)
 				(uint32) (fileNum >> 32),
 				(uint32) fileNum);
 
-	(void) unlink(fileNameToUnlink);
+	() unlink(fileNameToUnlink);
 }
 
-static void
-write_buffer_data(OBuffersDesc *desc, char *data, uint32 tag, uint64 blockNum)
+fn
+write_buffer_data(desc: &mut OBuffersDesc, data: &mut char, uint32 tag, uint64 blockNum)
 {
 	int			result;
 
@@ -171,8 +171,8 @@ write_buffer_data(OBuffersDesc *desc, char *data, uint32 tag, uint64 blockNum)
 						errmsg("could not write buffer to file %s: %m", desc->curFileName)));
 }
 
-static void
-write_buffer(OBuffersDesc *desc, OBuffer *buffer)
+fn
+write_buffer(desc: &mut OBuffersDesc, buffer: &mut OBuffer)
 {
 	write_buffer_data(desc, buffer->data, buffer->tag, buffer->blockNum);
 }
@@ -182,7 +182,7 @@ write_buffer(OBuffersDesc *desc, OBuffer *buffer)
 // returns false (buffer zeroed) instead of panicking.
 //
 static bool
-read_buffer(OBuffersDesc *desc, OBuffer *buffer, bool missing_ok)
+read_buffer(desc: &mut OBuffersDesc, buffer: &mut OBuffer, bool missing_ok)
 {
 	int			result;
 
@@ -222,11 +222,11 @@ read_buffer(OBuffersDesc *desc, OBuffer *buffer, bool missing_ok)
 // already-cached buffers.
 //
 static OBuffer *
-get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
+get_buffer(desc: &mut OBuffersDesc, uint32 tag, int64 blockNum, bool write,
 		   bool missing_ok)
 {
-	OBuffersGroup *group = &desc->groups[blockNum % desc->groupsCount];
-	OBuffer    *buffer = NULL;
+	group: &mut OBuffersGroup = &desc->groups[blockNum % desc->groupsCount];
+	buffer: &mut OBuffer = NULL;
 	int			i,
 				victim = 0;
 	uint32		victimUsageCount = 0;
@@ -339,7 +339,7 @@ get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
 // past it.
 //
 static bool
-o_buffers_rw(OBuffersDesc *desc, Pointer buf,
+o_buffers_rw(desc: &mut OBuffersDesc, Pointer buf,
 			 uint32 tag, int64 offset, int64 size,
 			 bool write, bool missing_ok, bool mark_clean)
 {
@@ -352,7 +352,7 @@ o_buffers_rw(OBuffersDesc *desc, Pointer buf,
 
 	for (blockNum = firstBlockNum; blockNum <= lastBlockNum; blockNum++)
 	{
-		OBuffer    *buffer = get_buffer(desc, tag, blockNum, write, missing_ok);
+		buffer: &mut OBuffer = get_buffer(desc, tag, blockNum, write, missing_ok);
 		uint32		copySize,
 					copyOffset;
 
@@ -400,14 +400,14 @@ o_buffers_rw(OBuffersDesc *desc, Pointer buf,
 }
 
 bool
-o_buffers_read(OBuffersDesc *desc, Pointer buf, uint32 tag,
+o_buffers_read(desc: &mut OBuffersDesc, Pointer buf, uint32 tag,
 			   int64 offset, int64 size, bool if_exists)
 {
 	return o_buffers_rw(desc, buf, tag, offset, size, false, if_exists, false);
 }
 
 bool
-o_buffers_write(OBuffersDesc *desc, Pointer buf, uint32 tag,
+o_buffers_write(desc: &mut OBuffersDesc, Pointer buf, uint32 tag,
 				int64 offset, int64 size, bool if_exists, bool mark_clean)
 {
 	return o_buffers_rw(desc, buf, tag, offset, size, true,
@@ -437,12 +437,12 @@ o_buffers_write(OBuffersDesc *desc, Pointer buf, uint32 tag,
 // not pulled in: their data stays hot in the caller's ring buffer and a
 // cache copy would only duplicate it.
 //
-void
-o_buffers_write_page_direct(OBuffersDesc *desc, char *data, uint32 tag,
+
+o_buffers_write_page_direct(desc: &mut OBuffersDesc, data: &mut char, uint32 tag,
 							int64 offset)
 {
 	int64		blockNum = offset / ORIOLEDB_BLCKSZ;
-	OBuffersGroup *group;
+	group: &mut OBuffersGroup;
 	int			i;
 
 	Assert(OBuffersMaxTagIsValid(tag));
@@ -454,7 +454,7 @@ o_buffers_write_page_direct(OBuffersDesc *desc, char *data, uint32 tag,
 	LWLockAcquire(&group->groupCtlLock, LW_SHARED);
 	for (i = 0; i < O_BUFFERS_PER_GROUP; i++)
 	{
-		OBuffer    *buffer = &group->buffers[i];
+		buffer: &mut OBuffer = &group->buffers[i];
 
 		if (buffer->blockNum == blockNum && buffer->tag == tag)
 		{
@@ -470,8 +470,8 @@ o_buffers_write_page_direct(OBuffersDesc *desc, char *data, uint32 tag,
 	write_buffer_data(desc, data, tag, blockNum);
 }
 
-static void
-o_buffers_flush(OBuffersDesc *desc,
+fn
+o_buffers_flush(desc: &mut OBuffersDesc,
 				uint32 tag,
 				int64 firstBufferNumber,
 				int64 lastBufferNumber)
@@ -481,11 +481,11 @@ o_buffers_flush(OBuffersDesc *desc,
 
 	for (i = 0; i < desc->groupsCount; i++)
 	{
-		OBuffersGroup *group = &desc->groups[i];
+		group: &mut OBuffersGroup = &desc->groups[i];
 
 		for (j = 0; j < O_BUFFERS_PER_GROUP; j++)
 		{
-			OBuffer    *buffer = &group->buffers[j];
+			buffer: &mut OBuffer = &group->buffers[j];
 
 			LWLockAcquire(&buffer->bufferCtlLock, LW_SHARED);
 			if (buffer->dirty &&
@@ -501,8 +501,8 @@ o_buffers_flush(OBuffersDesc *desc,
 	}
 }
 
-static void
-o_buffers_wipe(OBuffersDesc *desc,
+fn
+o_buffers_wipe(desc: &mut OBuffersDesc,
 			   uint32 tag,
 			   int64 firstBufferNumber,
 			   int64 lastBufferNumber)
@@ -512,11 +512,11 @@ o_buffers_wipe(OBuffersDesc *desc,
 
 	for (i = 0; i < desc->groupsCount; i++)
 	{
-		OBuffersGroup *group = &desc->groups[i];
+		group: &mut OBuffersGroup = &desc->groups[i];
 
 		for (j = 0; j < O_BUFFERS_PER_GROUP; j++)
 		{
-			OBuffer    *buffer = &group->buffers[j];
+			buffer: &mut OBuffer = &group->buffers[j];
 
 			LWLockAcquire(&buffer->bufferCtlLock, LW_EXCLUSIVE);
 			if (buffer->dirty &&
@@ -533,8 +533,8 @@ o_buffers_wipe(OBuffersDesc *desc,
 	}
 }
 
-void
-o_buffers_sync(OBuffersDesc *desc, uint32 tag,
+
+o_buffers_sync(desc: &mut OBuffersDesc, uint32 tag,
 			   int64 fromOffset, int64 toOffset,
 			   uint32 wait_event_info)
 {
@@ -572,8 +572,8 @@ o_buffers_sync(OBuffersDesc *desc, uint32 tag,
 // (e.g. when callers cleanup ahead of the active write frontier) is silently
 // skipped.
 //
-void
-o_buffers_unlink_blocks_range(OBuffersDesc *desc, uint32 tag,
+
+o_buffers_unlink_blocks_range(desc: &mut OBuffersDesc, uint32 tag,
 							  int64 firstBlockNumber, int64 lastBlockNumber)
 {
 	int64		blocksPerFile = desc->singleFileSize / ORIOLEDB_BLCKSZ;
@@ -635,8 +635,8 @@ o_buffers_unlink_blocks_range(OBuffersDesc *desc, uint32 tag,
 // branch is skipped, and everything below transactionRetainStart falls into
 // case 1.
 //
-void
-unlink_unretained_o_buffers(OBuffersDesc *desc, uint32 tag, int64 itemsPerBlock,
+
+unlink_unretained_o_buffers(desc: &mut OBuffersDesc, uint32 tag, int64 itemsPerBlock,
 							int64 cleanupStart, int64 cleanupEnd,
 							int64 chkpRetainStart, int64 chkpRetainEnd,
 							int64 transactionRetainStart)

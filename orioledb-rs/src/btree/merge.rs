@@ -35,9 +35,9 @@ use pgrx::pg_sys;
 //
 #define O_MERGE_NODE_FREE_RATIO (0.7)
 
-static bool can_be_merged(BTreeDescr *desc, Page left, Page right,
+static bool can_be_merged(desc: &mut BTreeDescr, Page left, Page right,
 						  CommitSeqNo csn);
-static void merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
+fn merge_pages(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno,
 						Page right, CommitSeqNo csn);
 
 //
@@ -46,19 +46,19 @@ static void merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 // On success, all pages are unlocked.  On failure, all locks are held.
 //
 bool
-btree_try_merge_pages(BTreeDescr *desc,
-					  OInMemoryBlkno parent_blkno, OFixedKey *parent_hikey,
-					  bool *merge_parent,
+btree_try_merge_pages(desc: &mut BTreeDescr,
+					  OInMemoryBlkno parent_blkno, parent_hikey: &mut OFixedKey,
+					  merge_parent: &mut bool,
 					  OInMemoryBlkno left_blkno,
-					  BTreePageItemLocator *right_loc,
+					  right_loc: &mut BTreePageItemLocator,
 					  OInMemoryBlkno right_blkno,
 					  bool checkpoint)
 {
 	Page		parent = O_GET_IN_MEMORY_PAGE(parent_blkno),
 				left = O_GET_IN_MEMORY_PAGE(left_blkno),
 				right = O_GET_IN_MEMORY_PAGE(right_blkno);
-	OrioleDBPageDesc *right_desc;
-	BTreePageHeader *left_header = (BTreePageHeader *) left;
+	right_desc: &mut OrioleDBPageDesc;
+	left_header: &mut BTreePageHeader = (BTreePageHeader *) left;
 	FileExtent	right_extent;
 	CommitSeqNo csn;
 	CommitSeqNo headerCsn;
@@ -150,11 +150,11 @@ btree_try_merge_pages(BTreeDescr *desc,
 	headerCsn = csn;
 	if (needsUndo)
 	{
-		UndoMeta   *undoMeta = get_undo_meta_by_type(GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType));
+		undoMeta: &mut UndoMeta = get_undo_meta_by_type(GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType));
 		UndoLocation retainLoc = pg_atomic_read_u64(enable_rewind ?
 													&undoMeta->minRewindRetainLocation :
 													&undoMeta->minProcRetainLocation);
-		BTreePageHeader *right_header = (BTreePageHeader *) right;
+		right_header: &mut BTreePageHeader = (BTreePageHeader *) right;
 		bool		noRetainedReader =
 			(!UndoLocationIsValid(left_header->undoLocation) ||
 			 left_header->undoLocation < retainLoc) &&
@@ -252,7 +252,7 @@ btree_try_merge_pages(BTreeDescr *desc,
 // Returns true if page is successfully merged to the left or to the right.
 //
 bool
-btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
+btree_try_merge_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 						   bool nested, bool wait_io)
 {
 	BTreePageItemLocator target_loc,
@@ -327,7 +327,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 	while (true)
 	{
-		BTreeNonLeafTuphdr *target_tuph,
+		target_tuph: &mut BTreeNonLeafTuphdr,
 				   *right_tuph,
 				   *left_tuph;
 		bool		merge_parent,
@@ -570,7 +570,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 // Checks is pages can be merged.
 //
 static bool
-can_be_merged(BTreeDescr *desc, Page left, Page right, CommitSeqNo csn)
+can_be_merged(desc: &mut BTreeDescr, Page left, Page right, CommitSeqNo csn)
 {
 	LocationIndex space_free,
 				space_needed;
@@ -606,12 +606,12 @@ can_be_merged(BTreeDescr *desc, Page left, Page right, CommitSeqNo csn)
 //
 // Merges pages and writes result to the left page.
 //
-static void
-merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
+fn
+merge_pages(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno,
 			Page right, CommitSeqNo csn)
 {
 	Page		left = O_GET_IN_MEMORY_PAGE(left_blkno);
-	BTreePageHeader *left_header = (BTreePageHeader *) left,
+	left_header: &mut BTreePageHeader = (BTreePageHeader *) left,
 			   *right_header = (BTreePageHeader *) right;
 	OTuple		leftHikey,
 				rightHikey;
@@ -645,7 +645,7 @@ merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 	{
 		BTREE_PAGE_FOREACH_ITEMS(left, &loc)
 		{
-			BTreeLeafTuphdr *tupHdr;
+			tupHdr: &mut BTreeLeafTuphdr;
 			OTuple		tup;
 			bool		finished;
 
@@ -679,7 +679,7 @@ merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 	{
 		BTREE_PAGE_FOREACH_ITEMS(right, &loc)
 		{
-			BTreeLeafTuphdr *tupHdr;
+			tupHdr: &mut BTreeLeafTuphdr;
 			OTuple		tup;
 			bool		finished;
 
@@ -741,7 +741,7 @@ merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 // Returns true if page is too sparse and we can try to merge it.
 //
 bool
-is_page_too_sparse(BTreeDescr *desc, Page p)
+is_page_too_sparse(desc: &mut BTreeDescr, Page p)
 {
 	LocationIndex space_free;
 

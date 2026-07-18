@@ -73,27 +73,27 @@ use pgrx::pg_sys;
 
 static Size orioledb_parallelscan_estimate(Relation rel);
 static Size orioledb_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan);
-static void orioledb_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan);
+fn orioledb_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan);
 
 bool		in_nontransactional_truncate = false;
 
 typedef struct OScanDescData
 {
 	TableScanDescData rs_base;	// AM independent part of the descriptor
-	BTreeSeqScan *scan;
+	scan: &mut BTreeSeqScan;
 	OSnapshot	o_snapshot;
 	ItemPointerData iptr;
 } OScanDescData;
-typedef OScanDescData *OScanDesc;
+typedef OScanDesc: &mut OScanDescData;
 
 //
 // Operation with indices. It does not update TOAST BTree. Implementations
 // are in tableam_handler.c.
 //
-static void get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
-								BTreeLocationHint *hint, CommitSeqNo *csn,
-								uint32 *version, ItemPointer *bridge_ctid);
-static void rowid_set_csn(OIndexDescr *id, Datum pkDatum, CommitSeqNo csn);
+fn get_keys_from_rowid(primary: &mut OIndexDescr, Datum pkDatum, key: &mut OBTreeKeyBound,
+								hint: &mut BTreeLocationHint, csn: &mut CommitSeqNo,
+								version: &mut uint32, bridge_ctid: &mut ItemPointer);
+fn rowid_set_csn(id: &mut OIndexDescr, Datum pkDatum, CommitSeqNo csn);
 
 // ------------------------------------------------------------------------
 // SQL functions
@@ -136,8 +136,8 @@ typedef struct OrioledbIndexFetchData
 static IndexFetchTableData *
 orioledb_index_fetch_begin(Relation rel, Relation indexRel)
 {
-	OrioledbIndexFetchData *o_scan = palloc0(sizeof(OrioledbIndexFetchData));
-	OBTOptions *options = (OBTOptions *) indexRel->rd_options;
+	o_scan: &mut OrioledbIndexFetchData = palloc0(sizeof(OrioledbIndexFetchData));
+	options: &mut OBTOptions = (OBTOptions *) indexRel->rd_options;
 
 	o_serializable_lock_relation(RelationGetRelid(rel));
 
@@ -149,15 +149,15 @@ orioledb_index_fetch_begin(Relation rel, Relation indexRel)
 	return &o_scan->xs_base;
 }
 
-static void
-orioledb_index_fetch_reset(IndexFetchTableData *scan)
+fn
+orioledb_index_fetch_reset(scan: &mut IndexFetchTableData)
 {
 }
 
-static void
-orioledb_index_fetch_end(IndexFetchTableData *scan)
+fn
+orioledb_index_fetch_end(scan: &mut IndexFetchTableData)
 {
-	OrioledbIndexFetchData *o_scan = (OrioledbIndexFetchData *) scan;
+	o_scan: &mut OrioledbIndexFetchData = (OrioledbIndexFetchData *) scan;
 
 	orioledb_index_fetch_reset(scan);
 
@@ -165,15 +165,15 @@ orioledb_index_fetch_end(IndexFetchTableData *scan)
 }
 
 static bool
-orioledb_index_fetch_tuple(struct IndexFetchTableData *scan,
+orioledb_index_fetch_tuple(struct scan: &mut IndexFetchTableData,
 						   Datum tupleid,
 						   bool is_rowid,
 						   Snapshot snapshot,
-						   TupleTableSlot *slot,
-						   bool *call_again, bool *all_dead)
+						   slot: &mut TupleTableSlot,
+						   call_again: &mut bool, all_dead: &mut bool)
 {
-	OrioledbIndexFetchData *o_scan = (OrioledbIndexFetchData *) scan;
-	OTableDescr *descr;
+	o_scan: &mut OrioledbIndexFetchData = (OrioledbIndexFetchData *) scan;
+	descr: &mut OTableDescr;
 	OBTreeKeyBound pkey;
 	OTuple		tuple;
 	BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
@@ -198,9 +198,9 @@ orioledb_index_fetch_tuple(struct IndexFetchTableData *scan,
 
 		if (is_rowid)
 		{
-			bytea	   *rowid;
+			rowid: &mut bytea;
 			Pointer		p;
-			ORowIdBridgeData *bridgeData;
+			bridgeData: &mut ORowIdBridgeData;
 
 			Assert(GET_PRIMARY(descr)->bridging);
 			rowid = DatumGetByteaP(tupleid);
@@ -269,8 +269,8 @@ orioledb_index_fetch_tuple(struct IndexFetchTableData *scan,
 //
 
 static TupleFetchCallbackResult
-fetch_row_version_callback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
-						   void *arg, bool oxidIsFinished)
+fetch_row_version_callback(OTuple tuple, OXid tupOxid, oSnapshot: &mut OSnapshot,
+						    *arg, bool oxidIsFinished)
 {
 	uint32		version = *((uint32 *) arg);
 
@@ -294,10 +294,10 @@ static bool
 orioledb_fetch_row_version(Relation relation,
 						   Datum tupleid,
 						   Snapshot snapshot,
-						   TupleTableSlot *slot)
+						   slot: &mut TupleTableSlot)
 {
 	OBTreeKeyBound pkey;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OTuple		tuple;
 	BTreeLocationHint hint;
 	CommitSeqNo csn;
@@ -348,7 +348,7 @@ orioledb_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 	return false;
 }
 
-static void
+fn
 orioledb_set_tidrange(TableScanDesc sscan, ItemPointer mintid, ItemPointer maxtid)
 {
 	ereport(ERROR,
@@ -359,7 +359,7 @@ orioledb_set_tidrange(TableScanDesc sscan, ItemPointer mintid, ItemPointer maxti
 // Just to be safe. Normally this function should not be called before orioledb_set_tidrange.
 static bool
 orioledb_getnextslot_tidrange(TableScanDesc sscan, ScanDirection direction,
-							  TupleTableSlot *slot)
+							  slot: &mut TupleTableSlot)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -368,11 +368,11 @@ orioledb_getnextslot_tidrange(TableScanDesc sscan, ScanDirection direction,
 }
 
 static bool
-orioledb_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot,
+orioledb_tuple_satisfies_snapshot(Relation rel, slot: &mut TupleTableSlot,
 								  Snapshot snapshot)
 {
 	OBTreeKeyBound pkey;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OTuple		tuple;
 	CommitSeqNo tupleCsn;
 	BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
@@ -407,8 +407,8 @@ orioledb_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot,
 #if PG_VERSION_NUM >= 180000
 // OrioleDB doesn't store xmin in tuples, just return false
 static bool
-orioledb_tuple_get_transaction_info(TupleTableSlot *slot, TransactionId *xmin,
-									RepOriginId *originid, TimestampTz *ts)
+orioledb_tuple_get_transaction_info(slot: &mut TupleTableSlot, xmin: &mut TransactionId,
+									originid: &mut RepOriginId, ts: &mut TimestampTz)
 {
 	*xmin = InvalidTransactionId;
 	*originid = InvalidRepOriginId;
@@ -425,7 +425,7 @@ orioledb_tuple_get_transaction_info(TupleTableSlot *slot, TransactionId *xmin,
 static RowRefType
 orioledb_get_row_ref_type(Relation rel)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 
 	descr = relation_get_descr(rel);
 	if (!descr)
@@ -445,7 +445,7 @@ orioledb_get_row_ref_type(Relation rel)
 }
 
 static inline bool
-is_keys_eq(BTreeDescr *desc, OBTreeKeyBound *k1, OBTreeKeyBound *k2)
+is_keys_eq(desc: &mut BTreeDescr, k1: &mut OBTreeKeyBound, k2: &mut OBTreeKeyBound)
 {
 	return (o_idx_cmp(desc,
 					  (Pointer) k1, BTreeKeyBound,
@@ -455,7 +455,7 @@ is_keys_eq(BTreeDescr *desc, OBTreeKeyBound *k1, OBTreeKeyBound *k2)
 static bool
 orioledb_row_ref_equals(Relation rel, Datum tupleidDatum1, Datum tupleidDatum2)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OBTreeKeyBound rowid1;
 	OBTreeKeyBound rowid2;
 
@@ -478,18 +478,18 @@ orioledb_row_ref_equals(Relation rel, Datum tupleidDatum1, Datum tupleidDatum2)
 // has a PK-applied/SK-pending fix-up obligation for the checkpointer to
 // emit.
 //
-static void
+fn
 orioledb_tuple_complete_modification(Relation rel)
 {
-	(void) rel;
+	() rel;
 	clear_pending_sk_marker();
 }
 
 static TupleTableSlot *
-orioledb_tuple_insert(Relation relation, TupleTableSlot *slot,
+orioledb_tuple_insert(Relation relation, slot: &mut TupleTableSlot,
 					  CommandId cid, int options, BulkInsertState bistate)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OSnapshot	oSnapshot;
 	OXid		oxid;
 
@@ -506,20 +506,20 @@ orioledb_tuple_insert(Relation relation, TupleTableSlot *slot,
 }
 
 static TupleTableSlot *
-orioledb_tuple_insert_with_arbiter(ResultRelInfo *rinfo,
-								   TupleTableSlot *slot,
+orioledb_tuple_insert_with_arbiter(rinfo: &mut ResultRelInfo,
+								   slot: &mut TupleTableSlot,
 								   CommandId cid, int options,
-								   struct BulkInsertStateData *bistate,
-								   List *arbiterIndexes,
-								   EState *estate,
+								   struct bistate: &mut BulkInsertStateData,
+								   arbiterIndexes: &mut List,
+								   estate: &mut EState,
 								   LockTupleMode lockmode,
-								   TupleTableSlot *lockedSlot,
-								   TupleTableSlot *tempSlot)
+								   lockedSlot: &mut TupleTableSlot,
+								   tempSlot: &mut TupleTableSlot)
 {
 	Relation	rel = rinfo->ri_RelationDesc;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OTuple		tup;
-	OIndexDescr *id;
+	id: &mut OIndexDescr;
 
 	o_serializable_lock_relation(RelationGetRelid(rel));
 
@@ -568,13 +568,13 @@ orioledb_tuple_insert_with_arbiter(ResultRelInfo *rinfo,
 static TM_Result
 orioledb_tuple_delete(Relation relation, Datum tupleid, CommandId cid,
 					  Snapshot snapshot, Snapshot crosscheck, int options,
-					  TM_FailureData *tmfd, bool changingPart,
-					  TupleTableSlot *oldSlot)
+					  tmfd: &mut TM_FailureData, bool changingPart,
+					  oldSlot: &mut TupleTableSlot)
 {
 	OModifyCallbackArg marg;
 	OTableModifyResult mres;
 	OBTreeKeyBound pkey;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OXid		oxid;
 	BTreeLocationHint hint;
 	OSnapshot	oSnapshot;
@@ -660,17 +660,17 @@ orioledb_tuple_delete(Relation relation, Datum tupleid, CommandId cid,
 }
 
 static TM_Result
-orioledb_tuple_update(Relation relation, Datum tupleid, TupleTableSlot *slot,
+orioledb_tuple_update(Relation relation, Datum tupleid, slot: &mut TupleTableSlot,
 					  CommandId cid, Snapshot snapshot, Snapshot crosscheck,
-					  int options, TM_FailureData *tmfd,
-					  LockTupleMode *lockmode,
-					  TU_UpdateIndexes *update_indexes,
-					  TupleTableSlot *oldSlot)
+					  int options, tmfd: &mut TM_FailureData,
+					  lockmode: &mut LockTupleMode,
+					  update_indexes: &mut TU_UpdateIndexes,
+					  oldSlot: &mut TupleTableSlot)
 {
 	OTableModifyResult mres;
 	OModifyCallbackArg marg;
 	OBTreeKeyBound old_pkey;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OXid		oxid;
 	BTreeLocationHint hint;
 	OSnapshot	oSnapshot;
@@ -769,14 +769,14 @@ orioledb_tuple_update(Relation relation, Datum tupleid, TupleTableSlot *slot,
 
 static TM_Result
 orioledb_tuple_lock(Relation rel, Datum tupleid, Snapshot snapshot,
-					TupleTableSlot *slot, CommandId cid, LockTupleMode mode,
+					slot: &mut TupleTableSlot, CommandId cid, LockTupleMode mode,
 					LockWaitPolicy wait_policy, uint8 flags,
-					TM_FailureData *tmfd)
+					tmfd: &mut TM_FailureData)
 {
 	OLockCallbackArg larg;
 	OBTreeModifyResult res;
 	OBTreeKeyBound pkey;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OXid		oxid;
 	BTreeLocationHint hint;
 
@@ -849,7 +849,7 @@ orioledb_tuple_lock(Relation rel, Datum tupleid, Snapshot snapshot,
 	return TM_Ok;
 }
 
-static void
+fn
 orioledb_finish_bulk_insert(Relation relation, int options)
 {
 	// Do nothing here
@@ -860,12 +860,12 @@ orioledb_finish_bulk_insert(Relation relation, int options)
 // ------------------------------------------------------------------------
 //
 
-static void
+fn
 orioledb_relation_set_new_filenode(Relation rel,
-								   const RelFileNode *newrnode,
+								   const newrnode: &mut RelFileNode,
 								   char persistence,
-								   TransactionId *freezeXid,
-								   MultiXactId *minmulti)
+								   freezeXid: &mut TransactionId,
+								   minmulti: &mut MultiXactId)
 {
 	SMgrRelation srel;
 
@@ -874,7 +874,7 @@ orioledb_relation_set_new_filenode(Relation rel,
 		rel->rd_rel->relkind != RELKIND_TOASTVALUE &&
 		!is_in_indexes_rebuild())
 	{
-		OTable	   *old_o_table,
+		old_o_table: &mut OTable,
 				   *new_o_table;
 		TupleDesc	tupdesc;
 		OSnapshot	oSnapshot;
@@ -882,9 +882,9 @@ orioledb_relation_set_new_filenode(Relation rel,
 		int			oldTreesNum,
 					newTreesNum;
 		ORelOids	old_oids;
-		OIndexKey  *oldTrees;
+		oldTrees: &mut OIndexKey;
 		ORelOids	new_oids;
-		OIndexKey  *newTrees;
+		newTrees: &mut OIndexKey;
 		bool		is_temp;
 		Oid			toast_relid;
 
@@ -984,17 +984,17 @@ orioledb_relation_set_new_filenode(Relation rel,
 	smgrclose(srel);
 }
 
-static void
+fn
 drop_indices_for_rel(Relation rel, bool primary)
 {
-	ListCell   *index;
+	index: &mut ListCell;
 	Oid			indexOid;
 
 	foreach(index, RelationGetIndexList(rel))
 	{
 		Relation	ind;
 		bool		closed = false;
-		OBTOptions *options;
+		options: &mut OBTOptions;
 
 		indexOid = lfirst_oid(index);
 		ind = relation_open(indexOid, AccessShareLock);
@@ -1004,7 +1004,7 @@ drop_indices_for_rel(Relation rel, bool primary)
 			((primary && ind->rd_index->indisprimary) || (!primary && !ind->rd_index->indisprimary)))
 		{
 			OIndexNumber ix_num;
-			OTableDescr *descr = relation_get_descr(rel);
+			descr: &mut OTableDescr = relation_get_descr(rel);
 
 			Assert(descr != NULL);
 			ix_num = o_find_ix_num_by_name(descr, ind->rd_rel->relname.data);
@@ -1019,7 +1019,7 @@ drop_indices_for_rel(Relation rel, bool primary)
 	}
 }
 
-static void
+fn
 orioledb_relation_nontransactional_truncate(Relation rel)
 {
 	ORelOids	oids;
@@ -1041,8 +1041,8 @@ orioledb_relation_nontransactional_truncate(Relation rel)
 		add_truncate_wal_record(oids);
 }
 
-static void
-orioledb_relation_copy_data(Relation rel, const RelFileNode *new_relfilenode)
+fn
+orioledb_relation_copy_data(Relation rel, const new_relfilenode: &mut RelFileNode)
 {
 	SMgrRelation dstrel;
 
@@ -1056,22 +1056,22 @@ orioledb_relation_copy_data(Relation rel, const RelFileNode *new_relfilenode)
 	smgrclose(dstrel);
 }
 
-static void
+fn
 orioledb_relation_copy_for_cluster(Relation OldHeap, Relation NewHeap,
 								   Relation OldIndex, bool use_sort,
 								   TransactionId OldestXmin,
-								   TransactionId *xid_cutoff,
-								   MultiXactId *multi_cutoff,
-								   double *num_tuples,
-								   double *tups_vacuumed,
-								   double *tups_recently_dead)
+								   xid_cutoff: &mut TransactionId,
+								   multi_cutoff: &mut MultiXactId,
+								   num_tuples: &mut double,
+								   tups_vacuumed: &mut double,
+								   tups_recently_dead: &mut double)
 {
 	elog(ERROR, "Not implemented: %s", PG_FUNCNAME_MACRO);
 }
 
 static bool
 #if PG_VERSION_NUM >= 170000
-orioledb_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
+orioledb_scan_analyze_next_block(TableScanDesc scan, stream: &mut ReadStream)
 #else
 orioledb_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 								 BufferAccessStrategy bstrategy)
@@ -1095,11 +1095,11 @@ orioledb_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 
 static bool
 orioledb_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin,
-								 double *liverows, double *deadrows,
-								 TupleTableSlot *slot)
+								 liverows: &mut double, deadrows: &mut double,
+								 slot: &mut TupleTableSlot)
 {
 	OScanDesc	oscan = (OScanDesc) scan;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	BTreeLocationHint hint;
 	OTuple		tuple;
 	bool		end;
@@ -1134,30 +1134,30 @@ orioledb_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin,
 static double
 orioledb_index_build_range_scan(Relation heapRelation,
 								Relation indexRelation,
-								IndexInfo *indexInfo,
+								indexInfo: &mut IndexInfo,
 								bool allow_sync,
 								bool anyvisible,
 								bool progress,
 								BlockNumber start_blockno,
 								BlockNumber numblocks,
 								IndexBuildCallback callback,
-								void *callback_state,
+								 *callback_state,
 								TableScanDesc scan)
 {
-	OBTOptions *options = (OBTOptions *) indexRelation->rd_options;
+	options: &mut OBTOptions = (OBTOptions *) indexRelation->rd_options;
 
 	if (indexRelation->rd_rel->relam != BTREE_AM_OID || (options && !options->orioledb_index))
 	{
-		OTableDescr *descr;
-		BTreeSeqScan *seq_scan;
-		TupleTableSlot *primarySlot;
+		descr: &mut OTableDescr;
+		seq_scan: &mut BTreeSeqScan;
+		primarySlot: &mut TupleTableSlot;
 		double		heap_tuples;
 		OTuple		tup;
 		BTreeLocationHint hint;
 		CommitSeqNo tupleCsn;
-		ExprState  *predicate;
-		EState	   *estate;
-		ExprContext *econtext;
+		predicate: &mut ExprState;
+		estate: &mut EState;
+		econtext: &mut ExprContext;
 		Datum		values[INDEX_MAX_KEYS];
 		bool		isnull[INDEX_MAX_KEYS];
 
@@ -1195,7 +1195,7 @@ orioledb_index_build_range_scan(Relation heapRelation,
 		heap_tuples = 0;
 		while (!O_TUPLE_IS_NULL(tup = btree_seq_scan_getnext(seq_scan, primarySlot->tts_mcxt, &tupleCsn, &hint)))
 		{
-			OTableSlot *oslot = (OTableSlot *) primarySlot;
+			oslot: &mut OTableSlot = (OTableSlot *) primarySlot;
 
 			tts_orioledb_store_tuple(primarySlot, tup, descr, tupleCsn, PrimaryIndexNumber, true, &hint);
 			slot_getallattrs(primarySlot);
@@ -1256,12 +1256,12 @@ orioledb_index_build_range_scan(Relation heapRelation,
 	return 0.0;
 }
 
-static void
+fn
 orioledb_index_validate_scan(Relation heapRelation,
 							 Relation indexRelation,
-							 IndexInfo *indexInfo,
+							 indexInfo: &mut IndexInfo,
 							 Snapshot snapshot,
-							 ValidateIndexState *state)
+							 state: &mut ValidateIndexState)
 {
 	elog(ERROR, "Not implemented: %s", PG_FUNCNAME_MACRO);
 }
@@ -1288,7 +1288,7 @@ orioledb_index_validate_scan(Relation heapRelation,
 int64
 orioledb_calculate_relation_size(Relation rel, ForkNumber forkNumber, uint8 method)
 {
-	BTreeDescr *td;
+	td: &mut BTreeDescr;
 	int64		result = 0;
 
 	if (forkNumber != MAIN_FORKNUM)
@@ -1299,7 +1299,7 @@ orioledb_calculate_relation_size(Relation rel, ForkNumber forkNumber, uint8 meth
 
 	if (rel->rd_rel->relkind != RELKIND_INDEX)
 	{
-		OTableDescr *descr;
+		descr: &mut OTableDescr;
 		int			i;
 
 		if (!is_orioledb_rel(rel))
@@ -1380,7 +1380,7 @@ orioledb_calculate_relation_size(Relation rel, ForkNumber forkNumber, uint8 meth
 		Relation	tbl;
 		ORelOids	tblOids;
 		ORelOids	idxOids;
-		OTableDescr *table_desc;
+		table_desc: &mut OTableDescr;
 		OIndexNumber ixnum;
 
 		idxOids.datoid = MyDatabaseId;
@@ -1437,10 +1437,10 @@ orioledb_relation_toast_am(Relation rel)
 // ------------------------------------------------------------------------
 //
 
-static void
-orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
-						   BlockNumber *pages, double *tuples,
-						   double *allvisfrac)
+fn
+orioledb_estimate_rel_size(Relation rel, attr_widths: &mut int32,
+						   pages: &mut BlockNumber, tuples: &mut double,
+						   allvisfrac: &mut double)
 {
 	BlockNumber curpages;
 	BlockNumber relpages;
@@ -1487,8 +1487,7 @@ orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
 		!rel->rd_rel->relhassubclass)
 		curpages = 10;
 
-	// report estimated # pages
-	*pages = curpages;
+	// report estimated # pages: &mut pages = curpages;
 	// quick exit if rel is clearly empty
 	if (curpages == 0)
 	{
@@ -1536,8 +1535,7 @@ orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
 		*allvisfrac = 0;
 	else if ((double) relallvisible >= curpages)
 		*allvisfrac = 1;
-	else
-		*allvisfrac = (double) relallvisible / curpages;
+	allvisfrac: &mut else = (double) relallvisible / curpages;
 }
 
 // ------------------------------------------------------------------------
@@ -1548,7 +1546,7 @@ orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
 #if PG_VERSION_NUM < 180000
 static bool
 orioledb_scan_bitmap_next_block(TableScanDesc scan,
-								TBMIterateResult *tbmres)
+								tbmres: &mut TBMIterateResult)
 {
 	elog(ERROR, "Not implemented: %s", PG_FUNCNAME_MACRO);
 	return false;
@@ -1558,14 +1556,14 @@ orioledb_scan_bitmap_next_block(TableScanDesc scan,
 static bool
 #if PG_VERSION_NUM >= 180000
 orioledb_scan_bitmap_next_tuple(TableScanDesc scan,
-								TupleTableSlot *slot,
-								bool *recheck,
-								uint64 *lossy_pages,
-								uint64 *exact_pages)
+								slot: &mut TupleTableSlot,
+								recheck: &mut bool,
+								lossy_pages: &mut uint64,
+								exact_pages: &mut uint64)
 #else
 orioledb_scan_bitmap_next_tuple(TableScanDesc scan,
-								TBMIterateResult *tbmres,
-								TupleTableSlot *slot)
+								tbmres: &mut TBMIterateResult,
+								slot: &mut TupleTableSlot)
 #endif
 {
 	elog(ERROR, "Not implemented: %s", PG_FUNCNAME_MACRO);
@@ -1573,15 +1571,15 @@ orioledb_scan_bitmap_next_tuple(TableScanDesc scan,
 }
 
 static bool
-orioledb_scan_sample_next_block(TableScanDesc scan, SampleScanState *scanstate)
+orioledb_scan_sample_next_block(TableScanDesc scan, scanstate: &mut SampleScanState)
 {
 	elog(ERROR, "Not implemented: %s", PG_FUNCNAME_MACRO);
 	return false;
 }
 
 static bool
-orioledb_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate,
-								TupleTableSlot *slot)
+orioledb_scan_sample_next_tuple(TableScanDesc scan, scanstate: &mut SampleScanState,
+								slot: &mut TupleTableSlot)
 {
 	elog(ERROR, "Not implemented: %s", PG_FUNCNAME_MACRO);
 	return false;
@@ -1597,7 +1595,7 @@ orioledb_parallelscan_estimate(Relation rel)
 	return sizeof(ParallelOScanDescData);
 }
 
-static void
+fn
 orioledb_parallelscan_initialize_internal(ParallelTableScanDesc pscan)
 {
 	ParallelOScanDesc poscan = (ParallelOScanDesc) pscan;
@@ -1662,7 +1660,7 @@ orioledb_parallelscan_initialize_inner(ParallelTableScanDesc pscan)
 	return sizeof(ParallelOScanDescData);
 }
 
-static void
+fn
 orioledb_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 {
 	if (!is_orioledb_rel(rel))
@@ -1678,7 +1676,7 @@ orioledb_beginscan(Relation relation, Snapshot snapshot,
 				   ParallelTableScanDesc parallel_scan,
 				   uint32 flags)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OScanDesc	scan;
 
 	if (flags & SO_TYPE_TIDSCAN)
@@ -1740,11 +1738,11 @@ orioledb_beginscan(Relation relation, Snapshot snapshot,
 	return &scan->rs_base;
 }
 
-static void
+fn
 orioledb_rescan(TableScanDesc sscan, ScanKey key, bool set_params,
 				bool allow_strat, bool allow_sync, bool allow_pagemode)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OScanDesc	scan;
 
 	scan = (OScanDesc) sscan;
@@ -1763,7 +1761,7 @@ orioledb_rescan(TableScanDesc sscan, ScanKey key, bool set_params,
 		pgstat_count_heap_scan(scan->rs_base.rs_rd);
 }
 
-static void
+fn
 orioledb_endscan(TableScanDesc sscan)
 {
 	OScanDesc	scan = (OScanDesc) sscan;
@@ -1778,7 +1776,7 @@ orioledb_endscan(TableScanDesc sscan)
 }
 
 static bool
-slot_keytest(TupleTableSlot *slot, int nkeys, ScanKey keys)
+slot_keytest(slot: &mut TupleTableSlot, int nkeys, ScanKey keys)
 {
 	int			i;
 	ScanKey		key;
@@ -1813,10 +1811,10 @@ slot_keytest(TupleTableSlot *slot, int nkeys, ScanKey keys)
 
 static bool
 orioledb_getnextslot(TableScanDesc sscan, ScanDirection direction,
-					 TupleTableSlot *slot)
+					 slot: &mut TupleTableSlot)
 {
 	OScanDesc	scan;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	bool		result;
 
 	if (OidIsValid(o_saved_relrewrite))
@@ -1852,11 +1850,11 @@ orioledb_getnextslot(TableScanDesc sscan, ScanDirection direction,
 	return true;
 }
 
-static void
+fn
 orioledb_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 					  CommandId cid, int options, BulkInsertState bistate)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OSnapshot	oSnapshot;
 	OXid		oxid;
 	int			i;
@@ -1884,7 +1882,7 @@ orioledb_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 		o_tbl_insert(descr, relation, slots[i], oxid, oSnapshot.csn);
 }
 
-static void
+fn
 orioledb_get_latest_tid(TableScanDesc sscan,
 						ItemPointer tid)
 {
@@ -1894,11 +1892,11 @@ orioledb_get_latest_tid(TableScanDesc sscan,
 			 errhint("Use a primary key to identify rows instead.")));
 }
 
-static void
-orioledb_vacuum_rel(Relation onerel, VacuumParams *params,
+fn
+orioledb_vacuum_rel(Relation onerel, params: &mut VacuumParams,
 					BufferAccessStrategy bstrategy)
 {
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 
 	descr = relation_get_descr(onerel);
 
@@ -1912,13 +1910,13 @@ orioledb_vacuum_rel(Relation onerel, VacuumParams *params,
 }
 
 static TransactionId
-orioledb_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
+orioledb_index_delete_tuples(Relation rel, delstate: &mut TM_IndexDeleteOp)
 {
 	delstate->ndeltids = 0;
 	return InvalidTransactionId;
 }
 
-void
+
 orioledb_free_rd_amcache(Relation rel)
 {
 	if (rel->rd_amcache)
@@ -1930,7 +1928,7 @@ orioledb_free_rd_amcache(Relation rel)
 // Comparator for sorting rows[] array
 //
 static int
-compare_rows(const void *a, const void *b, void *arg)
+compare_rows(a: &mut const, b: &mut const,  *arg)
 {
 	HeapTuple	ha = *(const HeapTuple *) a;
 	HeapTuple	hb = *(const HeapTuple *) b;
@@ -1952,18 +1950,18 @@ compare_rows(const void *a, const void *b, void *arg)
 
 static int
 orioledb_acquire_sample_rows(Relation relation, int elevel,
-							 HeapTuple *rows, int targrows,
-							 double *totalrows,
-							 double *totaldeadrows)
+							 rows: &mut HeapTuple, int targrows,
+							 totalrows: &mut double,
+							 totaldeadrows: &mut double)
 {
-	OTableDescr *descr = relation_get_descr(relation);
-	OIndexDescr *pk = GET_PRIMARY(descr);
-	BTreeSeqScan *scan;
+	descr: &mut OTableDescr = relation_get_descr(relation);
+	pk: &mut OIndexDescr = GET_PRIMARY(descr);
+	scan: &mut BTreeSeqScan;
 	BlockNumber nblocks;
 	ReservoirStateData rstate;
 	bool		scanEnd;
 	OTuple		tuple;
-	TupleTableSlot *slot = descr->newTuple;
+	slot: &mut TupleTableSlot = descr->newTuple;
 	int			numrows = 0;	// # rows now in reservoir
 	double		samplerows = 0; // total # rows collected
 	double		liverows = 0;	// # live rows seen
@@ -2098,13 +2096,13 @@ orioledb_acquire_sample_rows(Relation relation, int elevel,
 	return numrows;
 }
 
-static void
+fn
 orioledb_analyze_table(Relation relation,
-					   AcquireSampleRowsFunc *func,
-					   BlockNumber *totalpages)
+					   func: &mut AcquireSampleRowsFunc,
+					   totalpages: &mut BlockNumber)
 {
-	OTableDescr *descr = relation_get_descr(relation);
-	OIndexDescr *pk = GET_PRIMARY(descr);
+	descr: &mut OTableDescr = relation_get_descr(relation);
+	pk: &mut OIndexDescr = GET_PRIMARY(descr);
 
 	o_btree_load_shmem(&pk->desc);
 
@@ -2112,22 +2110,22 @@ orioledb_analyze_table(Relation relation,
 	*totalpages = TREE_NUM_LEAF_PAGES(&pk->desc);
 }
 
-static void
-validate_default_compress(const char *value)
+fn
+validate_default_compress(const value: &mut char)
 {
 	if (value)
 		validate_compress(o_parse_compress(value), "Default");
 }
 
-static void
-validate_primary_compress(const char *value)
+fn
+validate_primary_compress(const value: &mut char)
 {
 	if (value)
 		validate_compress(o_parse_compress(value), "Primary index");
 }
 
-static void
-validate_toast_compress(const char *value)
+fn
+validate_toast_compress(const value: &mut char)
 {
 	if (value)
 		validate_compress(o_parse_compress(value), "TOAST");
@@ -2387,7 +2385,7 @@ orioledb_default_reloptions(Datum reloptions, bool validate, relopt_kind kind)
 static bytea *
 orioledb_reloptions(char relkind, Datum reloptions, bool validate)
 {
-	StdRdOptions *rdopts;
+	rdopts: &mut StdRdOptions;
 
 	switch (relkind)
 	{
@@ -2413,9 +2411,9 @@ orioledb_reloptions(char relkind, Datum reloptions, bool validate)
 }
 
 static bool
-orioledb_tuple_is_current(Relation rel, TupleTableSlot *slot)
+orioledb_tuple_is_current(Relation rel, slot: &mut TupleTableSlot)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	return COMMITSEQNO_IS_INPROGRESS(oslot->csn);
 }
@@ -2521,7 +2519,7 @@ orioledb_tableam_handler(PG_FUNCTION_ARGS)
 OTableDescr *
 relation_get_descr(Relation rel)
 {
-	OTableDescr *result;
+	result: &mut OTableDescr;
 	ORelOids	oids;
 
 	Assert(rel != NULL);
@@ -2542,12 +2540,12 @@ relation_get_descr(Relation rel)
 	return result;
 }
 
-static void
-get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
-					BTreeLocationHint *hint, CommitSeqNo *csn, uint32 *version,
-					ItemPointer *bridge_ctid)
+fn
+get_keys_from_rowid(primary: &mut OIndexDescr, Datum pkDatum, key: &mut OBTreeKeyBound,
+					hint: &mut BTreeLocationHint, csn: &mut CommitSeqNo, version: &mut uint32,
+					bridge_ctid: &mut ItemPointer)
 {
-	bytea	   *rowid;
+	rowid: &mut bytea;
 	Pointer		p;
 
 	key->nkeys = primary->nonLeafTupdesc->natts;
@@ -2555,7 +2553,7 @@ get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
 	if (!primary->primaryIsCtid)
 	{
 		OTuple		tuple;
-		ORowIdAddendumNonCtid *add;
+		add: &mut ORowIdAddendumNonCtid;
 
 		rowid = DatumGetByteaP(pkDatum);
 		p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
@@ -2570,7 +2568,7 @@ get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
 		{
 			if (bridge_ctid)
 			{
-				ORowIdBridgeData *bridgeData = (ORowIdBridgeData *) p;
+				bridgeData: &mut ORowIdBridgeData = (ORowIdBridgeData *) p;
 
 				*bridge_ctid = &bridgeData->bridgeCtid;
 			}
@@ -2585,7 +2583,7 @@ get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
 	}
 	else
 	{
-		ORowIdAddendumCtid *add;
+		add: &mut ORowIdAddendumCtid;
 
 		rowid = DatumGetByteaP(pkDatum);
 		p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
@@ -2609,7 +2607,7 @@ get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
 			p += MAXALIGN(sizeof(ItemPointerData));
 			if (bridge_ctid)
 			{
-				ORowIdBridgeData *bridgeData = (ORowIdBridgeData *) p;
+				bridgeData: &mut ORowIdBridgeData = (ORowIdBridgeData *) p;
 
 				*bridge_ctid = &bridgeData->bridgeCtid;
 			}
@@ -2617,15 +2615,15 @@ get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
 	}
 }
 
-static void
-rowid_set_csn(OIndexDescr *id, Datum pkDatum, CommitSeqNo csn)
+fn
+rowid_set_csn(id: &mut OIndexDescr, Datum pkDatum, CommitSeqNo csn)
 {
-	bytea	   *rowid;
+	rowid: &mut bytea;
 	Pointer		p;
 
 	if (!id->primaryIsCtid)
 	{
-		ORowIdAddendumNonCtid *add;
+		add: &mut ORowIdAddendumNonCtid;
 
 		rowid = DatumGetByteaP(pkDatum);
 		p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
@@ -2634,7 +2632,7 @@ rowid_set_csn(OIndexDescr *id, Datum pkDatum, CommitSeqNo csn)
 	}
 	else
 	{
-		ORowIdAddendumCtid *add;
+		add: &mut ORowIdAddendumCtid;
 
 		rowid = DatumGetByteaP(pkDatum);
 		p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
@@ -2648,11 +2646,11 @@ rowid_set_csn(OIndexDescr *id, Datum pkDatum, CommitSeqNo csn)
 // Private copy of Postgres db_dir_size()
 //
 static int64
-orioledb_db_dir_size(const char *path)
+orioledb_db_dir_size(const path: &mut char)
 {
 	int64		dirsize = 0;
-	struct dirent *direntry;
-	DIR		   *dirdesc;
+	struct direntry: &mut dirent;
+	dirdesc: &mut DIR;
 	char		filename[MAXPGPATH * 2];
 
 	dirdesc = AllocateDir(path);
@@ -2697,8 +2695,8 @@ int64
 orioledb_calculate_database_size(Oid dbOid)
 {
 	int64		totalsize;
-	DIR		   *dirdesc;
-	struct dirent *direntry;
+	dirdesc: &mut DIR;
+	struct direntry: &mut dirent;
 	char		dirpath[MAXPGPATH];
 	char		pathname[MAXPGPATH + 21 + sizeof(TABLESPACE_VERSION_DIRECTORY) + 13];
 

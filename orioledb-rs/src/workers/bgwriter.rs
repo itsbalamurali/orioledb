@@ -38,7 +38,7 @@ use pgrx::pg_sys;
 bool		IsBGWriter = false;
 int			BGWriterNum = -1;
 
-void
+
 register_bgwriter(int num)
 {
 	BackgroundWorker worker;
@@ -57,10 +57,10 @@ register_bgwriter(int num)
 	RegisterBackgroundWorker(&worker);
 }
 
-void
+
 bgwriter_main(Datum main_arg)
 {
-	PagePool   *pool;
+	pool: &mut PagePool;
 	int			rc,
 				wake_events = WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT;
 	bool		need_eviction,
@@ -180,7 +180,7 @@ bgwriter_main(Datum main_arg)
 
 			for (j = 0; j < (int) UndoLogsCount; j++)
 			{
-				UndoMeta   *undo_meta = get_undo_meta_by_type((UndoLogType) j);
+				undo_meta: &mut UndoMeta = get_undo_meta_by_type((UndoLogType) j);
 
 				writeInProgressLocation = pg_atomic_read_u64(&undo_meta->writeInProgressLocation);
 				lastUsedLocation = pg_atomic_read_u64(&undo_meta->lastUsedLocation);

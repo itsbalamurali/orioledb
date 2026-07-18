@@ -49,7 +49,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static int	btree_smgr_read(BTreeDescr *desc, char *buffer, uint32 chkpNum,
+static int	btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 							int amount, off_t offset);
 
 typedef struct
@@ -72,48 +72,48 @@ typedef struct IOWriteBack
 {
 	int			extentsNumber;
 	int			extentsAllocated;
-	TreeOffset *extents;
+	extents: &mut TreeOffset;
 } IOWriteBack;
 
 static IOWriteBack io_writeback =
 {
 	0, 0, NULL
 };
-static LWLockPadded *io_locks;
-static IOShmem *ioShmem = NULL;
+static io_locks: &mut LWLockPadded;
+static ioShmem: &mut IOShmem = NULL;
 static int	num_io_lwlocks;
 static bool io_in_progress = false;
 
 static bool prepare_non_leaf_page(Page p);
-static uint64 get_free_disk_offset(BTreeDescr *desc);
-static bool get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
-								 off_t page_size, FileExtent *extent);
-static bool get_free_disk_extent_copy_blkno(BTreeDescr *desc, off_t page_size,
-											FileExtent *extent, uint32 checkpoint_number);
+static uint64 get_free_disk_offset(desc: &mut BTreeDescr);
+static bool get_free_disk_extent(desc: &mut BTreeDescr, uint32 chkpNum,
+								 off_t page_size, extent: &mut FileExtent);
+static bool get_free_disk_extent_copy_blkno(desc: &mut BTreeDescr, off_t page_size,
+											extent: &mut FileExtent, uint32 checkpoint_number);
 
-static bool write_page_to_disk(BTreeDescr *desc, FileExtent *extent,
+static bool write_page_to_disk(desc: &mut BTreeDescr, extent: &mut FileExtent,
 							   uint32 curChkpNum,
 							   Pointer page, off_t page_size);
-static void write_page(OBTreeFindPageContext *context,
+fn write_page(context: &mut OBTreeFindPageContext,
 					   OInMemoryBlkno blkno, Page img,
 					   uint32 checkpoint_number,
 					   bool evict, bool copy_blkno);
-static int	tree_offsets_cmp(const void *a, const void *b);
-static void writeback_put_extent(IOWriteBack *writeback, BTreeDescr *desc,
+static int	tree_offsets_cmp(a: &mut const, b: &mut const);
+fn writeback_put_extent(writeback: &mut IOWriteBack, desc: &mut BTreeDescr,
 								 uint64 downlink);
-static void perform_writeback(IOWriteBack *writeback);
+fn perform_writeback(writeback: &mut IOWriteBack);
 
 PG_FUNCTION_INFO_V1(orioledb_evict_pages);
 PG_FUNCTION_INFO_V1(orioledb_write_pages);
 
 Size
-btree_io_shmem_needs(void)
+btree_io_shmem_needs()
 {
 	return CACHELINEALIGN(offsetof(IOShmem, cv) +
 						  sizeof(ConditionVariable) * max_procs);
 }
 
-void
+
 btree_io_shmem_init(Pointer buf, bool found)
 {
 	Pointer		ptr = buf;
@@ -131,8 +131,8 @@ btree_io_shmem_init(Pointer buf, bool found)
 	}
 }
 
-static void
-io_start(void)
+fn
+io_start()
 {
 	uint64		startNum;
 	bool		slept = false;
@@ -151,8 +151,8 @@ io_start(void)
 		ConditionVariableCancelSleep();
 }
 
-static void
-io_finish(void)
+fn
+io_finish()
 {
 	uint64		finishNum;
 
@@ -165,7 +165,7 @@ io_finish(void)
 }
 
 int
-OFileRead(File file, char *buffer, int amount, off_t offset,
+OFileRead(File file, buffer: &mut char, int amount, off_t offset,
 		  uint32 wait_event_info)
 {
 	int			result;
@@ -177,7 +177,7 @@ OFileRead(File file, char *buffer, int amount, off_t offset,
 }
 
 int
-OFileWrite(File file, char *buffer, int amount, off_t offset,
+OFileWrite(File file, buffer: &mut char, int amount, off_t offset,
 		   uint32 wait_event_info)
 {
 	int			result;
@@ -215,8 +215,8 @@ typedef struct
 char *
 btree_filename(OIndexKey key, int segno, uint32 chkpNum)
 {
-	char	   *result;
-	char	   *db_prefix;
+	result: &mut char;
+	db_prefix: &mut char;
 
 	o_get_prefixes_for_tablespace(key.oids.datoid, key.tablespace,
 								  NULL, &db_prefix);
@@ -253,7 +253,7 @@ btree_filename(OIndexKey key, int segno, uint32 chkpNum)
 }
 
 char *
-btree_smgr_filename(BTreeDescr *desc, off_t offset, uint32 chkpNum)
+btree_smgr_filename(desc: &mut BTreeDescr, off_t offset, uint32 chkpNum)
 {
 	int			segno = offset / ORIOLEDB_SEGMENT_SIZE;
 	OIndexKey	key = {.oids = desc->oids,.tablespace = desc->tablespace};
@@ -262,15 +262,15 @@ btree_smgr_filename(BTreeDescr *desc, off_t offset, uint32 chkpNum)
 }
 
 static File
-btree_open_smgr_file(BTreeDescr *desc, uint32 num, uint32 chkpNum,
+btree_open_smgr_file(desc: &mut BTreeDescr, uint32 num, uint32 chkpNum,
 					 uint32 loadId)
 {
 	if (orioledb_s3_mode)
 	{
-		FileHashElement *hashElem;
+		hashElem: &mut FileHashElement;
 		FileHashKey key;
 		bool		found;
-		char	   *filename;
+		filename: &mut char;
 
 		key.checkpointNumber = chkpNum;
 		key.segmentNumber = num;
@@ -297,7 +297,7 @@ btree_open_smgr_file(BTreeDescr *desc, uint32 num, uint32 chkpNum,
 	}
 	else
 	{
-		char	   *filename;
+		filename: &mut char;
 
 		if (num >= desc->smgr.array.filesAllocated)
 		{
@@ -335,8 +335,8 @@ btree_open_smgr_file(BTreeDescr *desc, uint32 num, uint32 chkpNum,
 	}
 }
 
-void
-btree_init_smgr(BTreeDescr *descr)
+
+btree_init_smgr(descr: &mut BTreeDescr)
 {
 	if (orioledb_s3_mode)
 	{
@@ -349,8 +349,8 @@ btree_init_smgr(BTreeDescr *descr)
 	}
 }
 
-void
-btree_open_smgr(BTreeDescr *descr)
+
+btree_open_smgr(descr: &mut BTreeDescr)
 {
 	if (orioledb_s3_mode)
 	{
@@ -381,12 +381,12 @@ btree_open_smgr(BTreeDescr *descr)
 															  sizeof(File) * descr->smgr.array.filesAllocated);
 		for (i = 0; i < descr->smgr.array.filesAllocated; i++)
 			descr->smgr.array.files[i] = -1;
-		(void) btree_open_smgr_file(descr, 0, 0, 0);
+		() btree_open_smgr_file(descr, 0, 0, 0);
 	}
 }
 
-void
-btree_close_smgr(BTreeDescr *descr)
+
+btree_close_smgr(descr: &mut BTreeDescr)
 {
 	int			i;
 
@@ -425,7 +425,7 @@ btree_close_smgr(BTreeDescr *descr)
 		if (descr->smgr.hash)
 		{
 			s3Files_iterator i;
-			FileHashElement *hashElem;
+			hashElem: &mut FileHashElement;
 
 			s3Files_start_iterate(descr->smgr.hash, &i);
 			while ((hashElem = s3Files_iterate(descr->smgr.hash, &i)) != NULL)
@@ -447,11 +447,11 @@ btree_close_smgr(BTreeDescr *descr)
 	descr->smgr.array.files = NULL;
 }
 
-static void
-btree_s3_flush(BTreeDescr *desc, uint32 chkpNum)
+fn
+btree_s3_flush(desc: &mut BTreeDescr, uint32 chkpNum)
 {
 	int			i;
-	BTreeMetaPage *meta = BTREE_GET_META(desc);
+	meta: &mut BTreeMetaPage = BTREE_GET_META(desc);
 
 	for (i = 0; i < MAX_NUM_DIRTY_PARTS; i++)
 	{
@@ -475,8 +475,8 @@ btree_s3_flush(BTreeDescr *desc, uint32 chkpNum)
 	}
 }
 
-static void
-btree_smgr_schedule_s3_write(BTreeDescr *desc, uint32 chkpNum,
+fn
+btree_smgr_schedule_s3_write(desc: &mut BTreeDescr, uint32 chkpNum,
 							 int32 segNum, int32 partNum)
 {
 	int			i;
@@ -486,11 +486,11 @@ btree_smgr_schedule_s3_write(BTreeDescr *desc, uint32 chkpNum,
 				tmpSegNum,
 				tmpPartNum,
 				tmpChkpNum;
-	BTreeS3PartsInfo *partsInfo = NULL;
+	partsInfo: &mut BTreeS3PartsInfo = NULL;
 
 	if (OInMemoryBlknoIsValid(desc->rootInfo.metaPageBlkno))
 	{
-		BTreeMetaPage *meta = BTREE_GET_META(desc);
+		meta: &mut BTreeMetaPage = BTREE_GET_META(desc);
 
 		partsInfo = meta->partsInfo;
 	}
@@ -534,7 +534,7 @@ btree_smgr_schedule_s3_write(BTreeDescr *desc, uint32 chkpNum,
 }
 
 static int
-btree_smgr_write(BTreeDescr *desc, char *buffer, uint32 chkpNum,
+btree_smgr_write(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 				 int amount, off_t offset)
 {
 	int			result = 0;
@@ -627,7 +627,7 @@ btree_smgr_write(BTreeDescr *desc, char *buffer, uint32 chkpNum,
 }
 
 static int
-btree_smgr_read(BTreeDescr *desc, char *buffer, uint32 chkpNum,
+btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 				int amount, off_t offset)
 {
 	int			result = 0;
@@ -705,8 +705,8 @@ btree_smgr_read(BTreeDescr *desc, char *buffer, uint32 chkpNum,
 	return result;
 }
 
-void
-btree_smgr_writeback(BTreeDescr *desc, uint32 chkpNum,
+
+btree_smgr_writeback(desc: &mut BTreeDescr, uint32 chkpNum,
 					 off_t offset, int amount)
 {
 	if (use_mmap)
@@ -758,8 +758,8 @@ btree_smgr_writeback(BTreeDescr *desc, uint32 chkpNum,
 	}
 }
 
-void
-btree_smgr_sync(BTreeDescr *desc, uint32 chkpNum, off_t length)
+
+btree_smgr_sync(desc: &mut BTreeDescr, uint32 chkpNum, off_t length)
 {
 	int			num;
 
@@ -794,8 +794,8 @@ btree_smgr_sync(BTreeDescr *desc, uint32 chkpNum, off_t length)
 // returns; callers don't need to handle the return value because the data
 // is being discarded either way.
 //
-void
-punch_fd_hole(int fd, off_t offset, off_t length, const char *fileName)
+
+punch_fd_hole(int fd, off_t offset, off_t length, const fileName: &mut char)
 {
 	int			ret;
 
@@ -824,8 +824,8 @@ punch_fd_hole(int fd, off_t offset, off_t length, const char *fileName)
 	}
 }
 
-void
-btree_smgr_punch_hole(BTreeDescr *desc, uint32 chkpNum,
+
+btree_smgr_punch_hole(desc: &mut BTreeDescr, uint32 chkpNum,
 					  off_t offset, int length)
 {
 	Assert(!orioledb_s3_mode && !use_mmap && !use_device);
@@ -858,22 +858,22 @@ btree_smgr_punch_hole(BTreeDescr *desc, uint32 chkpNum,
 	}
 }
 
-void
-btree_io_error_cleanup(void)
+
+btree_io_error_cleanup()
 {
 	if (io_in_progress)
 		io_finish();
 }
 
-void
-request_btree_io_lwlocks(void)
+
+request_btree_io_lwlocks()
 {
 	num_io_lwlocks = max_procs * 4;
 	RequestNamedLWLockTranche("orioledb_btree_io", num_io_lwlocks);
 }
 
-void
-init_btree_io_lwlocks(void)
+
+init_btree_io_lwlocks()
 {
 	io_locks = GetNamedLWLockTranche("orioledb_btree_io");
 }
@@ -909,7 +909,7 @@ assign_io_num(OInMemoryBlkno blkno, OffsetNumber offnum)
 //
 // Wait until particular IO operation is completed.
 //
-void
+
 wait_for_io_completion(int ionum)
 {
 	LWLockAcquire(&io_locks[ionum].lock, LW_SHARED);
@@ -919,7 +919,7 @@ wait_for_io_completion(int ionum)
 //
 // Report given IO operation to be finished.
 //
-void
+
 unlock_io(int ionum)
 {
 	LWLockRelease(&io_locks[ionum].lock);
@@ -930,10 +930,10 @@ unlock_io(int ionum)
 // Returns InvalidFileExtentOff if fails.
 //
 static uint64
-get_free_disk_offset(BTreeDescr *desc)
+get_free_disk_offset(desc: &mut BTreeDescr)
 {
-	BTreeMetaPage *metaPage = BTREE_GET_META(desc);
-	LWLock	   *metaLock = &metaPage->metaLock;
+	metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
+	metaLock: &mut LWLock = &metaPage->metaLock;
 	uint64		result,
 				numFreeBlocks;
 	uint32		free_buf_num;
@@ -1057,14 +1057,14 @@ get_free_disk_offset(BTreeDescr *desc)
 // FileExtentIsValid(extent) == false if fails.
 //
 static bool
-get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
-					 off_t page_size, FileExtent *extent)
+get_free_disk_extent(desc: &mut BTreeDescr, uint32 chkpNum,
+					 off_t page_size, extent: &mut FileExtent)
 {
 	if (orioledb_s3_mode)
 	{
 		int			len = OCompressIsValid(desc->compress) ? FileExtentLen(page_size) : 1;
 		int			threshold = ORIOLEDB_S3_PART_SIZE / (OCompressIsValid(desc->compress) ? ORIOLEDB_COMP_BLCKSZ : ORIOLEDB_BLCKSZ);
-		BTreeMetaPage *metaPage = BTREE_GET_META(desc);
+		metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
 
 		extent->off = pg_atomic_fetch_add_u64(&metaPage->datafileLength[chkpNum % 2], len);
 		extent->len = len;
@@ -1090,7 +1090,7 @@ get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
 //
 	if (btree_desc_is_local_temp(desc))
 	{
-		BTreeMetaPage *metaPage = BTREE_GET_META(desc);
+		metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
 		uint16		len = OCompressIsValid(desc->compress) ? FileExtentLen(page_size) : 1;
 
 		if (!local_free_extents_pop(desc, len, extent))
@@ -1127,10 +1127,10 @@ get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
 // FileExtentIsValid(extent) == false if fails.
 //
 static bool
-get_free_disk_extent_copy_blkno(BTreeDescr *desc, off_t page_size,
-								FileExtent *extent, uint32 checkpoint_number)
+get_free_disk_extent_copy_blkno(desc: &mut BTreeDescr, off_t page_size,
+								extent: &mut FileExtent, uint32 checkpoint_number)
 {
-	BTreeMetaPage *metaPage = BTREE_GET_META(desc);
+	metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
 
 	LWLockAcquire(&metaPage->copyBlknoLock, LW_SHARED);
 
@@ -1197,7 +1197,7 @@ reset_read_page_checkpoint_stats(PG_FUNCTION_ARGS)
 Datum
 fetch_read_page_checkpoint_stats(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	bool		nulls[2] = {false};
 	Datum		values[2];
 
@@ -1212,7 +1212,7 @@ fetch_read_page_checkpoint_stats(PG_FUNCTION_ARGS)
 }
 
 // Store checkpoint statistics for page reads for eviction_page_checkpoint_numbers test
-static void
+fn
 store_read_page_checkpoint_stats(uint32 checkpointNum)
 {
 	// Remember for checkpoint read test only
@@ -1239,7 +1239,7 @@ check_orioledb_page_version(OrioleDBOndiskPageHeader ondisk_page_header)
 	return false;
 }
 
-static void
+fn
 convert_orioledb_page_version(Pointer img)
 {
 	Assert(ORIOLEDB_PAGE_VERSION == 1);
@@ -1267,8 +1267,8 @@ check_orioledb_compress_version(OrioleDBOndiskPageHeader ondisk_page_header)
 // array of offsets for the page.
 //
 bool
-read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
-					FileExtent *extent)
+read_page_from_disk(desc: &mut BTreeDescr, Pointer img, uint64 downlink,
+					extent: &mut FileExtent)
 {
 	off_t		byte_offset,
 				read_size;
@@ -1393,7 +1393,7 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 // Writes a page to the disk. An array of file offsets must be valid.
 //
 static bool
-write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
+write_page_to_disk(desc: &mut BTreeDescr, extent: &mut FileExtent, uint32 curChkpNum,
 				   Pointer page, off_t page_size)
 {
 
@@ -1415,7 +1415,7 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 
 	if (!OCompressIsValid(desc->compress))
 	{
-		OrioleDBOndiskPageHeader *ondisk_page_header;
+		ondisk_page_header: &mut OrioleDBOndiskPageHeader;
 
 		//
 // Easy case, write whole page to uncompressed index.
@@ -1496,20 +1496,20 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 // Load the page where context is pointing from disk to memory, assuming parent
 // page is locked.
 //
-void
-load_page(OBTreeFindPageContext *context)
+
+load_page(context: &mut OBTreeFindPageContext)
 {
-	OrioleDBPageDesc *page_desc;
-	BTreeDescr *desc = context->desc;
+	page_desc: &mut OrioleDBPageDesc;
+	desc: &mut BTreeDescr = context->desc;
 	OInMemoryBlkno parent_blkno;
 	Page		parent_page;
-	BTreePageItemLocator *parent_loc;
+	parent_loc: &mut BTreePageItemLocator;
 	CommitSeqNo csn;
 	uint64		downlink;
 	int			context_index,
 				ionum;
 	uint32		parent_change_count;
-	BTreeNonLeafTuphdr *int_hdr;
+	int_hdr: &mut BTreeNonLeafTuphdr;
 	OInMemoryBlkno blkno;
 	OFixedKey	target_hikey;
 	int			target_level;
@@ -1607,10 +1607,10 @@ load_page(OBTreeFindPageContext *context)
 //
 		BTREE_PAGE_FOREACH_ITEMS(page, &loc)
 		{
-			BTreeNonLeafTuphdr *tupHdr;
+			tupHdr: &mut BTreeNonLeafTuphdr;
 
 			tupHdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(page, &loc);
-			(void) s3_schedule_downlink_load(desc, tupHdr->downlink);
+			() s3_schedule_downlink_load(desc, tupHdr->downlink);
 		}
 	}
 
@@ -1620,7 +1620,7 @@ load_page(OBTreeFindPageContext *context)
 
 	if (STOPEVENTS_ENABLED())
 	{
-		Jsonb	   *params;
+		params: &mut Jsonb;
 
 		params = btree_page_stopevent_params(desc, page);
 		STOPEVENT(STOPEVENT_LOAD_PAGE_REFIND, params);
@@ -1722,7 +1722,7 @@ load_page(OBTreeFindPageContext *context)
 // Returns pointer to writable image. It compresses page if needed.
 //
 static inline Pointer
-get_write_img(BTreeDescr *desc, Page page, size_t *size)
+get_write_img(desc: &mut BTreeDescr, Page page, size: &mut size_t)
 {
 	Pointer		result;
 
@@ -1747,7 +1747,7 @@ get_write_img(BTreeDescr *desc, Page page, size_t *size)
 }
 
 #ifdef USE_ASSERT_CHECKING
-static void
+fn
 prewrite_image_check(Page p)
 {
 	if (!O_PAGE_IS(p, LEAF))
@@ -1756,7 +1756,7 @@ prewrite_image_check(Page p)
 
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 
 			Assert(DOWNLINK_IS_ON_DISK(tuphdr->downlink));
 		}
@@ -1768,13 +1768,13 @@ prewrite_image_check(Page p)
 // Returns downlink to the page or InvalidDiskDownlink if fails.
 //
 uint64
-perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
+perform_page_io(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				Page img, uint32 checkpoint_number, bool copy_blkno,
-				bool *dirty_parent)
+				dirty_parent: &mut bool)
 {
 	Page		page = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) page;
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	header: &mut BTreePageHeader = (BTreePageHeader *) page;
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 	Pointer		write_img;
 	size_t		write_size;
 	int			chkp_index;
@@ -1827,8 +1827,7 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 		{
 			if (!OCompressIsValid(desc->compress))
 			{
-				// easy case: no compression
-				*dirty_parent = false;
+				// easy case: no dirty_parent: &mut compression = false;
 			}
 			else
 			{
@@ -1909,8 +1908,7 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 		Assert(FileExtentIsValid(page_desc->fileExtent));
 		if (!OCompressIsValid(desc->compress))
 		{
-			// easy case: no compression
-			*dirty_parent = false;
+			// easy case: no dirty_parent: &mut compression = false;
 		}
 		else
 		{
@@ -1989,7 +1987,7 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 // Returns downlink to the page.
 //
 uint64
-perform_page_io_autonomous(BTreeDescr *desc, uint32 chkpNum, Page img, FileExtent *extent)
+perform_page_io_autonomous(desc: &mut BTreeDescr, uint32 chkpNum, Page img, extent: &mut FileExtent)
 {
 	Pointer		write_img;
 	size_t		write_size;
@@ -2044,8 +2042,8 @@ perform_page_io_autonomous(BTreeDescr *desc, uint32 chkpNum, Page img, FileExten
 // Returns downlink to the page.
 //
 uint64
-perform_page_io_build(BTreeDescr *desc, Page img,
-					  FileExtent *extent, BTreeMetaPage *metaPage)
+perform_page_io_build(desc: &mut BTreeDescr, Page img,
+					  extent: &mut FileExtent, metaPage: &mut BTreeMetaPage)
 {
 	Pointer		write_img;
 	size_t		write_size;
@@ -2136,7 +2134,7 @@ prepare_non_leaf_page(Page p)
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
-		BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
+		tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 
 		if (DOWNLINK_IS_IN_IO(tuphdr->downlink))
 			return false;
@@ -2144,7 +2142,7 @@ prepare_non_leaf_page(Page p)
 		if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 		{
 			OInMemoryBlkno child = DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink);
-			OrioleDBPageDesc *desc = O_GET_IN_MEMORY_PAGEDESC(child);
+			desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(child);
 
 			if (!try_lock_page(child))
 				return false;
@@ -2173,21 +2171,21 @@ prepare_non_leaf_page(Page p)
 //
 // Evict the page, assuming target page and its parent are locked.
 //
-static void
-write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
+fn
+write_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno, Page img,
 		   uint32 checkpoint_number,
 		   bool evict, bool copy_blkno)
 {
-	BTreeDescr *desc = context->desc;
+	desc: &mut BTreeDescr = context->desc;
 	OInMemoryBlkno parent_blkno = OInvalidInMemoryBlkno;
 	Page		parent_page = NULL;
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageItemLocator *parent_loc;
+	parent_loc: &mut BTreePageItemLocator;
 	int			ionum = -1,
 				context_index;
-	BTreeNonLeafTuphdr *int_hdr = NULL;
+	int_hdr: &mut BTreeNonLeafTuphdr = NULL;
 	uint32		parent_change_count = 0;
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 	bool		is_root = desc->rootInfo.rootPageBlkno == blkno;
 
 	// rootPageBlkno can not be evicted here
@@ -2280,7 +2278,7 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 
 			if (STOPEVENTS_ENABLED())
 			{
-				Jsonb	   *params;
+				params: &mut Jsonb;
 
 				params = btree_page_stopevent_params(desc, p);
 				STOPEVENT(STOPEVENT_AFTER_IONUM_SET, params);
@@ -2384,8 +2382,8 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 	perform_writeback(&io_writeback);
 }
 
-static void
-btree_finalize_private_seq_bufs(BTreeDescr *desc, EvictedTreeData *evicted_data)
+fn
+btree_finalize_private_seq_bufs(desc: &mut BTreeDescr, evicted_data: &mut EvictedTreeData)
 {
 	int			chkp_index;
 	bool		is_compressed = OCompressIsValid(desc->compress);
@@ -2461,12 +2459,12 @@ btree_finalize_private_seq_bufs(BTreeDescr *desc, EvictedTreeData *evicted_data)
 // Evict the tree, assuming rootPageBlkno page is locked.
 //
 static bool
-evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
+evict_btree(desc: &mut BTreeDescr, uint32 checkpoint_number)
 {
 	OInMemoryBlkno root_blkno = desc->rootInfo.rootPageBlkno;
 	Page		rootPageBlkno = O_GET_IN_MEMORY_PAGE(root_blkno);
-	OrioleDBPageDesc *root_desc = O_GET_IN_MEMORY_PAGEDESC(root_blkno);
-	BTreeMetaPage *metaPage = BTREE_GET_META(desc);
+	root_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(root_blkno);
+	metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	CheckpointFileHeader file_header = {0};
 	EvictedTreeData evicted_tree_data = {{0}};
 	uint64		new_downlink;
@@ -2633,8 +2631,8 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 BTreeDescr *
 index_oids_get_btree_descr(ORelOids oids, OIndexType type)
 {
-	OIndexDescr *indexDescr = NULL;
-	BTreeDescr *desc;
+	indexDescr: &mut OIndexDescr = NULL;
+	desc: &mut BTreeDescr;
 	bool		nested;
 
 	// Check is this table is visible for us
@@ -2667,10 +2665,10 @@ typedef struct
 //
 static BTreeDescr *
 get_evict_btree_locks(OInMemoryBlkno blkno, ORelOids oids, OIndexType type,
-					  EvictBtreeLocksState *state)
+					  state: &mut EvictBtreeLocksState)
 {
-	BTreeDescr *desc;
-	OIndexDescr *id;
+	desc: &mut BTreeDescr;
+	id: &mut OIndexDescr;
 	bool		recovery = is_recovery_in_progress();
 	bool		nested = false;
 
@@ -2726,8 +2724,8 @@ get_evict_btree_locks(OInMemoryBlkno blkno, ORelOids oids, OIndexType type,
 	return desc;
 }
 
-static void
-release_evict_btree_locks(ORelOids oids, EvictBtreeLocksState *state)
+fn
+release_evict_btree_locks(ORelOids oids, state: &mut EvictBtreeLocksState)
 {
 	if (state->indexRegularLock)
 		o_tables_rel_unlock_extended(&oids, AccessExclusiveLock, false);
@@ -2744,14 +2742,14 @@ release_evict_btree_locks(ORelOids oids, EvictBtreeLocksState *state)
 // btree descriptor before the page lock is acquired.
 //
 // Returns the BTreeDescr pointer on success (caller should proceed to lock),
-// or NULL if the page should be skipped.  Sets *oids as a side effect.
+// or NULL if the page should be skipped.  oids: &mut Sets as a side effect.
 //
 static BTreeDescr *
 walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
-						OrioleDBPageDesc *page_desc, Page p,
-						ORelOids *oids)
+						page_desc: &mut OrioleDBPageDesc, Page p,
+						oids: &mut ORelOids)
 {
-	BTreeDescr *desc;
+	desc: &mut BTreeDescr;
 
 	if (!ORelOidsIsValid(page_desc->oids) || page_desc->type == oIndexInvalid)
 		return NULL;
@@ -2770,8 +2768,7 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 	if (!evict && !IS_DIRTY(blkno))
 		return NULL;
 
-	// Important to access the shared memory once
-	*oids = *((volatile ORelOids *) &page_desc->oids);
+	// Important to access the shared memory oids: &mut once = *((volatile ORelOids *) &page_desc->oids);
 
 	//
 // index_oids_get_btree_descr() might imply page eviction.  We shouldn't
@@ -2817,8 +2814,8 @@ typedef enum WalkPageCheckResult
 //
 static WalkPageCheckResult
 walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
-					   OrioleDBPageDesc *page_desc, Page p,
-					   ORelOids oids, char *img, int *ionum)
+					   page_desc: &mut OrioleDBPageDesc, Page p,
+					   ORelOids oids, img: &mut char, ionum: &mut int)
 {
 	if (!ORelOidsIsValid(page_desc->oids) ||
 		page_desc->type == oIndexInvalid ||
@@ -2840,8 +2837,7 @@ walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
 		return WalkPageCheckFailed;
 	}
 
-	// On concurrent IO, unlock and let the caller decide to wait or skip
-	*ionum = page_desc->ionum;
+	// On concurrent IO, unlock and let the caller decide to wait or ionum: &mut skip = page_desc->ionum;
 	if (*ionum >= 0)
 	{
 		unlock_page(blkno);
@@ -2880,8 +2876,8 @@ walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
 // Guarantees release_evict_btree_locks() is called after get_evict_btree_locks().
 //
 static OWalkPageResult
-walk_page_evict_root(BTreeDescr *desc, OInMemoryBlkno blkno,
-					 OrioleDBPageDesc *page_desc, Page p,
+walk_page_evict_root(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
+					 page_desc: &mut OrioleDBPageDesc, Page p,
 					 ORelOids oids)
 {
 	EvictBtreeLocksState locksState;
@@ -2964,13 +2960,13 @@ walk_page_evict_root(BTreeDescr *desc, OInMemoryBlkno blkno,
 OWalkPageResult
 walk_page(OInMemoryBlkno blkno, bool evict)
 {
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 	OBTreeFindPageContext context;
-	BTreeDescr *desc;
+	desc: &mut BTreeDescr;
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno),
 				parent_page;
 	ORelOids	oids;
-	BTreeNonLeafTuphdr *int_hdr;
+	int_hdr: &mut BTreeNonLeafTuphdr;
 	uint32		checkpoint_number;
 	bool		copy_blkno,
 				merge_tried = false;
@@ -3145,7 +3141,7 @@ write_tree_pages_recursive(UndoLogType undoType,
 	{
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 			{
@@ -3159,7 +3155,7 @@ write_tree_pages_recursive(UndoLogType undoType,
 	unlock_page(blkno);
 
 	for (i = 0; i < childPagesCount; i++)
-		(void) write_tree_pages_recursive(undoType,
+		() write_tree_pages_recursive(undoType,
 										  childPageNumbers[i],
 										  childPageChangeCounts[i],
 										  maxLevel,
@@ -3180,8 +3176,8 @@ write_tree_pages_recursive(UndoLogType undoType,
 	return true;
 }
 
-void
-write_tree_pages(BTreeDescr *desc, int maxLevel, bool evict)
+
+write_tree_pages(desc: &mut BTreeDescr, int maxLevel, bool evict)
 {
 	o_btree_load_shmem(desc);
 	if (!write_tree_pages_recursive(desc->undoType,
@@ -3193,18 +3189,18 @@ write_tree_pages(BTreeDescr *desc, int maxLevel, bool evict)
 		desc->rootInfo.metaPageBlkno = OInvalidInMemoryBlkno;
 		desc->rootInfo.rootPageChangeCount = 0;
 		o_btree_load_shmem(desc);
-		(void) write_tree_pages_recursive(desc->undoType,
+		() write_tree_pages_recursive(desc->undoType,
 										  desc->rootInfo.rootPageBlkno,
 										  desc->rootInfo.rootPageChangeCount,
 										  maxLevel, evict);
 	}
 }
 
-static void
+fn
 write_relation_pages(Oid relid, int maxLevel, bool evict)
 {
-	OTableDescr *descr;
-	BTreeDescr *td;
+	descr: &mut OTableDescr;
+	td: &mut BTreeDescr;
 	Relation	rel;
 	int			treen;
 
@@ -3253,7 +3249,7 @@ orioledb_write_pages(PG_FUNCTION_ARGS)
 }
 
 static int
-tree_offsets_cmp(const void *a, const void *b)
+tree_offsets_cmp(a: &mut const, b: &mut const)
 {
 	TreeOffset	val1 = *(TreeOffset *) a;
 	TreeOffset	val2 = *(TreeOffset *) b;
@@ -3280,8 +3276,8 @@ tree_offsets_cmp(const void *a, const void *b)
 	return 0;
 }
 
-static void
-writeback_put_extent(IOWriteBack *writeback, BTreeDescr *desc,
+fn
+writeback_put_extent(writeback: &mut IOWriteBack, desc: &mut BTreeDescr,
 					 uint64 downlink)
 {
 	TreeOffset	offset;
@@ -3343,8 +3339,8 @@ writeback_put_extent(IOWriteBack *writeback, BTreeDescr *desc,
 	}
 }
 
-static void
-perform_writeback(IOWriteBack *writeback)
+fn
+perform_writeback(writeback: &mut IOWriteBack)
 {
 	int			i,
 				len = 0,
@@ -3409,7 +3405,7 @@ perform_writeback(IOWriteBack *writeback)
 			chkpNum = cur.chkpNum;
 			if (!use_mmap)
 			{
-				char	   *filename;
+				filename: &mut char;
 
 				filename = btree_filename(cur.key, segno, chkpNum);
 				file = PathNameOpenFile(filename, O_RDWR | O_CREAT | PG_BINARY);
@@ -3459,8 +3455,8 @@ perform_writeback(IOWriteBack *writeback)
 	writeback->extentsNumber = 0;
 }
 
-typedef void (*RelnodeFileCallback) (const char *filename, uint32 segno,
-									 char *ext, void *arg);
+typedef  (*RelnodeFileCallback) (const filename: &mut char, uint32 segno,
+									 ext: &mut char,  *arg);
 
 //
 // Iterate all the files belonging to given (datoid, relnode) pair and call
@@ -3469,13 +3465,13 @@ typedef void (*RelnodeFileCallback) (const char *filename, uint32 segno,
 // Guarantees that at first we process the first data file.
 //
 static bool
-iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback, void *arg)
+iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback,  *arg)
 {
-	struct dirent *file;
-	DIR		   *dir;
-	char	   *filename;
+	struct file: &mut dirent;
+	dir: &mut DIR;
+	filename: &mut char;
 	bool		first_file_deleted = false;
-	char	   *db_prefix;
+	db_prefix: &mut char;
 
 	o_get_prefixes_for_tablespace(key.oids.datoid, key.tablespace,
 								  NULL, &db_prefix);
@@ -3491,7 +3487,7 @@ iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback, void *arg)
 					file_chkp = 0,
 					file_segno = 0;
 		char		file_ext[5];
-		char	   *file_ext_p = NULL;
+		file_ext_p: &mut char = NULL;
 
 		if ((sscanf(file->d_name, "%10u-%10u.%4s",
 					&file_relnode, &file_chkp, file_ext) == 3 &&
@@ -3538,8 +3534,8 @@ iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback, void *arg)
 	return true;
 }
 
-static void
-unlink_callback(const char *filename, uint32 segno, char *ext, void *arg)
+fn
+unlink_callback(const filename: &mut char, uint32 segno, ext: &mut char,  *arg)
 {
 	//
 // Recovery determines relation data presence by presence of the first
@@ -3557,11 +3553,11 @@ unlink_callback(const char *filename, uint32 segno, char *ext, void *arg)
 bool
 cleanup_btree_files(OIndexKey key, bool fsync)
 {
-	return iterate_relnode_files(key, unlink_callback, (void *) &fsync);
+	return iterate_relnode_files(key, unlink_callback, ( *) &fsync);
 }
 
-static void
-fsync_callback(const char *filename, uint32 segno, char *ext, void *arg)
+fn
+fsync_callback(const filename: &mut char, uint32 segno, ext: &mut char,  *arg)
 {
 	if (ext == NULL || strcmp(ext, "tmp") != 0)
 		fsync_fname(filename, false);
@@ -3573,20 +3569,20 @@ fsync_btree_files(OIndexKey key)
 	return iterate_relnode_files(key, fsync_callback, NULL);
 }
 
-void
-try_to_punch_holes(BTreeDescr *desc)
+
+try_to_punch_holes(desc: &mut BTreeDescr)
 {
-	BTreeMetaPage *metaPage;
+	metaPage: &mut BTreeMetaPage;
 	File		file;
 	uint64		file_size;
-	char	   *filename,
+	filename: &mut char,
 				buf[ORIOLEDB_BLCKSZ];
 	uint64		len = 0,
 				i,
 				buf_len;
 	uint32		chkp_num;
-	LWLock	   *metaLock;
-	LWLock	   *punchHolesLock;
+	metaLock: &mut LWLock;
+	punchHolesLock: &mut LWLock;
 
 	Assert(orioledb_use_sparse_files);
 	Assert(!OCompressIsValid(desc->compress));
@@ -3655,7 +3651,7 @@ try_to_punch_holes(BTreeDescr *desc)
 
 		while (true)
 		{
-			BlockNumber *cur_off;
+			cur_off: &mut BlockNumber;
 
 			buf_len = OFileRead(file, buf, ORIOLEDB_BLCKSZ, len, WAIT_EVENT_DATA_FILE_READ);
 			if (buf_len <= 0)

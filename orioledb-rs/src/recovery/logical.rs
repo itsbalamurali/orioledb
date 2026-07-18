@@ -31,14 +31,14 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static inline bool FilterByOrigin(LogicalDecodingContext *ctx, RepOriginId origin_id);
+static inline bool FilterByOrigin(ctx: &mut LogicalDecodingContext, RepOriginId origin_id);
 
 //
 // Copy identity attributes from srcSlot to dstSlot.
 //
-static void
-tts_copy_identity(TupleTableSlot *srcSlot, TupleTableSlot *dstSlot,
-				  OIndexDescr *idx)
+fn
+tts_copy_identity(srcSlot: &mut TupleTableSlot, dstSlot: &mut TupleTableSlot,
+				  idx: &mut OIndexDescr)
 {
 	int			i;
 	int			nattrs = dstSlot->tts_tupleDescriptor->natts;
@@ -75,7 +75,7 @@ tts_copy_identity(TupleTableSlot *srcSlot, TupleTableSlot *dstSlot,
 // Saves the heap tuple to the reorder buffer.
 //
 static REORDER_BUFFER_TUPLE_TYPE
-record_buffer_tuple(ReorderBuffer *reorder, HeapTuple htup, bool freeHtup)
+record_buffer_tuple(reorder: &mut ReorderBuffer, HeapTuple htup, bool freeHtup)
 {
 	HeapTuple	changeTup;
 	REORDER_BUFFER_TUPLE_TYPE result;
@@ -105,7 +105,7 @@ record_buffer_tuple(ReorderBuffer *reorder, HeapTuple htup, bool freeHtup)
 // Saves the tuple from the slot to the reorder buffer.
 //
 static REORDER_BUFFER_TUPLE_TYPE
-record_buffer_tuple_slot(ReorderBuffer *reorder, TupleTableSlot *slot)
+record_buffer_tuple_slot(reorder: &mut ReorderBuffer, slot: &mut TupleTableSlot)
 {
 	HeapTuple	htup;
 	bool		freeHtup;
@@ -119,13 +119,13 @@ record_buffer_tuple_slot(ReorderBuffer *reorder, TupleTableSlot *slot)
 typedef struct ReorderBufferTXNByIdEnt
 {
 	TransactionId xid;
-	ReorderBufferTXN *txn;
+	txn: &mut ReorderBufferTXN;
 } ReorderBufferTXNByIdEnt;
 
 static ReorderBufferTXN *
-get_reorder_buffer_txn(ReorderBuffer *rb, TransactionId xid)
+get_reorder_buffer_txn(rb: &mut ReorderBuffer, TransactionId xid)
 {
-	ReorderBufferTXNByIdEnt *ent;
+	ent: &mut ReorderBufferTXNByIdEnt;
 	bool		found;
 
 	if (TransactionIdIsValid(rb->by_txn_last_xid) &&
@@ -146,13 +146,13 @@ get_reorder_buffer_txn(ReorderBuffer *rb, TransactionId xid)
 // conversion of TOAST pointers to PG format.
 //
 static HeapTuple
-o_convert_toast_pointers(OTableDescr *descr, OIndexDescr *indexDescr,
+o_convert_toast_pointers(descr: &mut OTableDescr, indexDescr: &mut OIndexDescr,
 						 OTuple tuple)
 {
 	int			natts = descr->tupdesc->natts;
-	Datum	   *old_values = palloc0(natts * sizeof(Datum));
-	Datum	   *new_values = palloc0(natts * sizeof(Datum));
-	bool	   *isnull = palloc0(natts * sizeof(bool));
+	old_values: &mut Datum = palloc0(natts * sizeof(Datum));
+	new_values: &mut Datum = palloc0(natts * sizeof(Datum));
+	isnull: &mut bool = palloc0(natts * sizeof(bool));
 	int			ctid_off = 0;
 
 	if (indexDescr->primaryIsCtid)
@@ -177,8 +177,8 @@ o_convert_toast_pointers(OTableDescr *descr, OIndexDescr *indexDescr,
 	for (int i = 0; i < descr->ntoastable; i++)
 	{
 		int			toast_attn = descr->toastable[i] - ctid_off;
-		struct varlena *old_toastptr;
-		struct varlena *new_toastptr;
+		struct old_toastptr: &mut varlena;
+		struct new_toastptr: &mut varlena;
 		OToastValue otv;
 		varatt_external ve;
 
@@ -219,7 +219,7 @@ o_convert_toast_pointers(OTableDescr *descr, OIndexDescr *indexDescr,
 }
 
 static bool
-set_snapshot(LogicalDecodingContext *ctx,
+set_snapshot(ctx: &mut LogicalDecodingContext,
 			 TransactionId logicalXid, XLogRecPtr changeXLogPtr)
 {
 	//
@@ -255,7 +255,7 @@ set_snapshot(LogicalDecodingContext *ctx,
 // function only returns reodrer buffer tuple without any side effects.
 //
 static REORDER_BUFFER_TUPLE_TYPE
-o_convert_non_toast_tuple(ReorderBuffer *reorderbuf, OTableDescr *descr, OIndexDescr *indexDescr, OTuple tuple, bool force_store_to_slot, TupleTableSlot *store_slot, HeapTuple *heaptuple, bool leafTuple)
+o_convert_non_toast_tuple(reorderbuf: &mut ReorderBuffer, descr: &mut OTableDescr, indexDescr: &mut OIndexDescr, OTuple tuple, bool force_store_to_slot, store_slot: &mut TupleTableSlot, heaptuple: &mut HeapTuple, bool leafTuple)
 {
 	REORDER_BUFFER_TUPLE_TYPE result;
 
@@ -312,9 +312,9 @@ o_convert_non_toast_tuple(ReorderBuffer *reorderbuf, OTableDescr *descr, OIndexD
 
 // Convert chunk in a TOAST relation from OrioleDB format to reorder buffer (heap) format
 static REORDER_BUFFER_TUPLE_TYPE
-o_convert_toast_chunk(ReorderBuffer *reorderbuf, OIndexDescr *indexDescr,
-					  OTuple tuple, TupleDescData *o_toast_tupDesc,
-					  TupleDescData *heap_toast_tupDesc, OffsetNumber debug_length)
+o_convert_toast_chunk(reorderbuf: &mut ReorderBuffer, indexDescr: &mut OIndexDescr,
+					  OTuple tuple, o_toast_tupDesc: &mut TupleDescData,
+					  heap_toast_tupDesc: &mut TupleDescData, OffsetNumber debug_length)
 {
 	uint16		attnum;
 	uint32		chunk_seq;
@@ -392,12 +392,12 @@ o_convert_toast_chunk(ReorderBuffer *reorderbuf, OIndexDescr *indexDescr,
 	return result;
 }
 
-static void
-o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
-					   OIndexType ix_type, ReorderBufferChange *change,
-					   OTableDescr *descr, OIndexDescr *indexDescr,
-					   TupleDescData *o_toast_tupDesc,
-					   TupleDescData *heap_toast_tupDesc,
+fn
+o_decode_modify_tuples(reorderbuf: &mut ReorderBuffer, WalRecordType rec_type,
+					   OIndexType ix_type, change: &mut ReorderBufferChange,
+					   descr: &mut OTableDescr, indexDescr: &mut OIndexDescr,
+					   o_toast_tupDesc: &mut TupleDescData,
+					   heap_toast_tupDesc: &mut TupleDescData,
 					   OTuple tuple1, OTuple tuple2,
 					   OffsetNumber debug_length, char relreplident)
 {
@@ -531,7 +531,7 @@ o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
 // cannot be decoded due to missing historical metadata (e.g. rolled back and
 // already cleaned from undo).  Initial size is intentionally tiny.
 //
-static void
+fn
 create_skipped_dml(HTAB **cache)
 {
 	Assert(cache);
@@ -559,7 +559,7 @@ create_skipped_dml(HTAB **cache)
 // historical metadata.  Instead, it records the fact of skipping so that the
 // finish record handling can emit diagnostics and clean up the cache entry.
 //
-static void
+fn
 register_skipped_dml(HTAB **cache, uint64 oxid)
 {
 	create_skipped_dml(cache);
@@ -622,10 +622,10 @@ remove_skipped_dml(HTAB **cache, uint64 oxid)
 // transaction finish record
 // (COMMIT/ROLLBACK/ROLLBACK_TO_SAVEPOINT/JOIN_COMMIT as applicable).
 //
-static HTAB *skippedDMLHash = NULL;
+static skippedDMLHash: &mut HTAB = NULL;
 
 static WalParseResult
-decode_check_version(const WalReaderState *r)
+decode_check_version(const r: &mut WalReaderState)
 {
 	Assert(r);
 
@@ -646,24 +646,24 @@ typedef struct
 	// Input params
 	XLogRecPtr	xlogRecPtr;
 	XLogRecPtr	xlogRecEndPtr;
-	LogicalDecodingContext *decodeCtx;
-	XLogRecordBuffer *decodeBuf;
+	decodeCtx: &mut LogicalDecodingContext;
+	decodeBuf: &mut XLogRecordBuffer;
 
 	// Decoder state params
-	OTableDescr *descr;
-	OIndexDescr *indexDescr;
+	descr: &mut OTableDescr;
+	indexDescr: &mut OIndexDescr;
 	OIndexType	ix_type;
-	TupleDescData *o_toast_tupDesc;
-	TupleDescData *heap_toast_tupDesc;
+	o_toast_tupDesc: &mut TupleDescData;
+	heap_toast_tupDesc: &mut TupleDescData;
 	bool		has_origin;
 } DecodeWalDescCtx;
 
 static WalParseResult
-decode_on_container(WalReaderState *r)
+decode_on_container(r: &mut WalReaderState)
 {
 	if (r->container.flags & WAL_CONTAINER_HAS_ORIGIN_INFO)
 	{
-		DecodeWalDescCtx *ctx = (DecodeWalDescCtx *) r->ctx;
+		ctx: &mut DecodeWalDescCtx = (DecodeWalDescCtx *) r->ctx;
 
 		ctx->has_origin = r->container.origin_info.id != InvalidRepOriginId;
 	}
@@ -672,10 +672,10 @@ decode_on_container(WalReaderState *r)
 }
 
 static WalParseResult
-decode_on_record(WalReaderState *r, WalRecord *rec)
+decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 {
-	DecodeWalDescCtx *ctx = (DecodeWalDescCtx *) r->ctx;
-	const char *recname = NULL;
+	ctx: &mut DecodeWalDescCtx = (DecodeWalDescCtx *) r->ctx;
+	const recname: &mut char = NULL;
 
 	Assert(rec);
 
@@ -689,7 +689,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 			{
 				if (TransactionIdIsValid(rec->logicalXid))
 				{
-					CSNSnapshotData *csnSnapshot;
+					csnSnapshot: &mut CSNSnapshotData;
 
 					elog(DEBUG4, "RECEIVE record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
 						 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
@@ -732,8 +732,8 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 		case WAL_REC_ROLLBACK:
 			{
 				dlist_iter	cur_txn_i;
-				ReorderBufferTXN *txn = NULL;
-				CSNSnapshotData *csnSnapshot = NULL;
+				txn: &mut ReorderBufferTXN = NULL;
+				csnSnapshot: &mut CSNSnapshotData = NULL;
 				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
 
 				elog(DEBUG4, "RECEIVE record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
@@ -806,7 +806,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 							dlist_foreach(cur_txn_i, &txn->subtxns)
 							{
-								ReorderBufferTXN *cur_txn;
+								cur_txn: &mut ReorderBufferTXN;
 
 								cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 								ReorderBufferForget(ctx->decodeCtx->reorder, cur_txn->xid,
@@ -828,7 +828,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 //
 						dlist_foreach(cur_txn_i, &txn->subtxns)
 						{
-							ReorderBufferTXN *cur_txn;
+							cur_txn: &mut ReorderBufferTXN;
 
 							cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 							ReorderBufferCommitChild(ctx->decodeCtx->reorder, txn->xid, cur_txn->xid,
@@ -865,7 +865,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 						dlist_foreach(cur_txn_i, &txn->subtxns)
 						{
-							ReorderBufferTXN *cur_txn;
+							cur_txn: &mut ReorderBufferTXN;
 
 							cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 							ReorderBufferAbort(ctx->decodeCtx->reorder, cur_txn->xid, ctx->xlogRecPtr, 0);
@@ -887,7 +887,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 		case WAL_REC_JOINT_COMMIT:
 			{
-				CSNSnapshotData *csnSnapshot = NULL;
+				csnSnapshot: &mut CSNSnapshotData = NULL;
 				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
 
 				elog(DEBUG4, "RECEIVE record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
@@ -1109,8 +1109,8 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 		case WAL_REC_ROLLBACK_TO_SAVEPOINT:
 			{
 				dlist_iter	cur_txn_i;
-				ReorderBufferTXN *txn = NULL;
-				CSNSnapshotData *csnSnapshot = NULL;
+				txn: &mut ReorderBufferTXN = NULL;
+				csnSnapshot: &mut CSNSnapshotData = NULL;
 				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
 
 				if (r->container.version < 17)
@@ -1180,7 +1180,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 					dlist_foreach(cur_txn_i, &txn->subtxns)
 					{
-						ReorderBufferTXN *cur_txn;
+						cur_txn: &mut ReorderBufferTXN;
 
 						cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 						ReorderBufferAbort(ctx->decodeCtx->reorder, cur_txn->xid, ctx->xlogRecPtr, 0);
@@ -1208,7 +1208,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 				OFixedTuple tuple1,
 							tuple2;
 				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
-				ReorderBufferTXN *txn = NULL;
+				txn: &mut ReorderBufferTXN = NULL;
 
 				build_fixed_tuples(rec, &tuple1, &tuple2);
 
@@ -1249,7 +1249,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 					// Skip
 					break;
 
-				(void) set_snapshot(ctx->decodeCtx, rec->logicalXid, xlogPtr);
+				() set_snapshot(ctx->decodeCtx, rec->logicalXid, xlogPtr);
 
 				txn = get_reorder_buffer_txn(ctx->decodeCtx->reorder, rec->logicalXid);
 				txn->txn_flags |= RBTXN_DISTR_SKIP_CLEANUP;
@@ -1279,7 +1279,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 					}
 					else
 					{
-						ReorderBufferChange *change;
+						change: &mut ReorderBufferChange;
 
 						Assert(ctx->descr != NULL);
 						Assert(!O_TUPLE_IS_NULL(tuple1.tuple));
@@ -1320,10 +1320,10 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 //
 // Handle OrioleDB records for LogicalDecodingProcessRecord().
 //
-void
-orioledb_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
+
+orioledb_decode(ctx: &mut LogicalDecodingContext, buf: &mut XLogRecordBuffer)
 {
-	XLogReaderState *record = buf->record;
+	record: &mut XLogReaderState = buf->record;
 	XLogRecPtr	startXLogPtr = record->ReadRecPtr;
 	XLogRecPtr	endXLogPtr = record->EndRecPtr;
 	Pointer		startPtr = (Pointer) XLogRecGetData(record);
@@ -1372,7 +1372,7 @@ orioledb_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 }
 
 static inline bool
-FilterByOrigin(LogicalDecodingContext *ctx, RepOriginId origin_id)
+FilterByOrigin(ctx: &mut LogicalDecodingContext, RepOriginId origin_id)
 {
 	if (ctx->callbacks.filter_by_origin_cb == NULL)
 		return false;

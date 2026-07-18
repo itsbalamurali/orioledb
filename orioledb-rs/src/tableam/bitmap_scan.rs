@@ -30,23 +30,23 @@ use pgrx::pg_sys;
 
 typedef struct BitmapSeqScanArg
 {
-	OTableDescr *tbl_desc;
-	OKeyBitmap *bitmap;
+	tbl_desc: &mut OTableDescr;
+	bitmap: &mut OKeyBitmap;
 } BitmapSeqScanArg;
 
 typedef struct BridgeIterator
 {
-	TIDBitmap  *tidbitmap;
+	tidbitmap: &mut TIDBitmap;
 
 #if PG_VERSION_NUM >= 180000
-	TBMPrivateIterator *tbmiterator;
+	tbmiterator: &mut TBMPrivateIterator;
 	TBMIterateResult tbmres;
 
 	OffsetNumber offsets[TBM_MAX_TUPLES_PER_PAGE];
 	int			iter_ntuples;
 #else
-	TBMIterator *tbmiterator;
-	TBMIterateResult *tbmres;
+	tbmiterator: &mut TBMIterator;
+	tbmres: &mut TBMIterateResult;
 #endif
 
 	int			cur_tuple;
@@ -89,7 +89,7 @@ typedef struct BridgeIterator
 typedef struct OBitmapStreamChild
 {
 	OScanState	ostate;
-	OIndexDescr *ix;
+	ix: &mut OIndexDescr;
 	Relation	index;			// kept open for scandesc.indexRelation
 	bool		scandesc_ready; // scandesc + cxt were initialized
 	bool		empty;			// qual_ok false / empty array: no rows
@@ -97,13 +97,13 @@ typedef struct OBitmapStreamChild
 
 typedef struct OBitmapScan
 {
-	ScanState  *ss;
+	ss: &mut ScanState;
 	OSnapshot	oSnapshot;
 	MemoryContext cxt;
 
 	Oid			typeoid;
 
-	BTreeSeqScan *seq_scan;
+	seq_scan: &mut BTreeSeqScan;
 	BitmapSeqScanArg arg;
 
 	BridgeIterator bridge_iter;
@@ -122,20 +122,20 @@ typedef struct OBitmapScan
 // bit.
 //
 	bool		stream_primary;
-	OBitmapStreamChild *stream_children;
+	stream_children: &mut OBitmapStreamChild;
 	int			stream_nchildren;
 	int			stream_cur;
-	OKeyBitmap *stream_dedup;	// NULL for a single child (no dup possible)
+	stream_dedup: &mut OKeyBitmap;	// NULL for a single child (no dup possible)
 } OBitmapScan;
 
-static bool o_bitmap_is_range_valid(OTuple low, OTuple high, void *arg);
-static bool o_bitmap_get_next_key(OFixedKey *key, BTreeKeyType keyType,
-								  bool inclusive, void *arg);
+static bool o_bitmap_is_range_valid(OTuple low, OTuple high,  *arg);
+static bool o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType,
+								  bool inclusive,  *arg);
 
-static void bridge_begin_iterate(BridgeIterator *iter);
-static bool bridge_iterate(BridgeIterator *iter);
-static void bridge_next_page(OBitmapScan *scan,
-							 OBitmapHeapPlanState *bitmap_state);
+fn bridge_begin_iterate(iter: &mut BridgeIterator);
+static bool bridge_iterate(iter: &mut BridgeIterator);
+fn bridge_next_page(scan: &mut OBitmapScan,
+							 bitmap_state: &mut OBitmapHeapPlanState);
 
 static BTreeSeqScanCallbacks bitmap_seq_scan_callbacks = {
 	.isRangeValid = o_bitmap_is_range_valid,
@@ -183,7 +183,7 @@ val_get_uint64(Datum val, Oid typeoid)
 	}
 }
 
-static void
+fn
 uint64_get_val(uint64 val, Oid typeoid, Pointer ptr)
 {
 	ItemPointer iptr;
@@ -208,7 +208,7 @@ uint64_get_val(uint64 val, Oid typeoid, Pointer ptr)
 }
 
 static uint64
-seconary_tuple_get_pk_data(OTuple tuple, OIndexDescr *ix_descr)
+seconary_tuple_get_pk_data(OTuple tuple, ix_descr: &mut OIndexDescr)
 {
 	AttrNumber	attnum;
 	Form_pg_attribute attr;
@@ -230,7 +230,7 @@ seconary_tuple_get_pk_data(OTuple tuple, OIndexDescr *ix_descr)
 }
 
 static uint64
-primary_tuple_get_data(OTuple tuple, OIndexDescr *primary, bool onlyPkey)
+primary_tuple_get_data(OTuple tuple, primary: &mut OIndexDescr, bool onlyPkey)
 {
 	AttrNumber	attnum;
 	Form_pg_attribute attr;
@@ -238,7 +238,7 @@ primary_tuple_get_data(OTuple tuple, OIndexDescr *primary, bool onlyPkey)
 	bool		is_null;
 	BTreeKeyType keyType = onlyPkey ? BTreeKeyNonLeafKey : BTreeKeyLeafTuple;
 	TupleDesc	tupdesc = onlyPkey ? primary->nonLeafTupdesc : primary->leafTupdesc;
-	OTupleFixedFormatSpec *spec = onlyPkey ? &primary->nonLeafSpec : &primary->leafSpec;
+	spec: &mut OTupleFixedFormatSpec = onlyPkey ? &primary->nonLeafSpec : &primary->leafSpec;
 
 	Assert(primary->nFields == 1);
 
@@ -315,13 +315,13 @@ o_pk_fixed_lookup(Oid typeoid)
 static int
 o_pk_fixed_width(Oid typeoid)
 {
-	const OPkFixedType *t = o_pk_fixed_lookup(typeoid);
+	const t: &mut OPkFixedType = o_pk_fixed_lookup(typeoid);
 
 	return t ? t->width : -1;
 }
 
 OKeyBitmapMode
-o_keybitmap_pk_mode(OIndexDescr *primary, int *fixedKeyLen)
+o_keybitmap_pk_mode(primary: &mut OIndexDescr, fixedKeyLen: &mut int)
 {
 	int			i;
 	int			len = 0;
@@ -330,7 +330,7 @@ o_keybitmap_pk_mode(OIndexDescr *primary, int *fixedKeyLen)
 // For the primary index descriptor the PK columns are its own key fields
 // (nKeyFields; INCLUDE columns in nFields are not part of the ordering
 // and must be ignored).  nPrimaryFields is zero here (it counts the PK
-// columns appended to *secondary* indexes).
+// columns appended secondary: &mut to* indexes).
 //
 
 	//
@@ -403,9 +403,9 @@ o_keybitmap_pk_mode(OIndexDescr *primary, int *fixedKeyLen)
 // returns the width written.  See OPkEncKind for the per-kind transforms.
 //
 static int
-o_pk_encode_one(Datum val, Oid typeoid, uint8 *out)
+o_pk_encode_one(Datum val, Oid typeoid, out: &mut uint8)
 {
-	const OPkFixedType *t = o_pk_fixed_lookup(typeoid);
+	const t: &mut OPkFixedType = o_pk_fixed_lookup(typeoid);
 	int			i,
 				w;
 	uint64		u = 0;
@@ -500,9 +500,9 @@ o_pk_encode_one(Datum val, Oid typeoid, uint8 *out)
 }
 
 static Datum
-o_pk_decode_one(const uint8 *in, Oid typeoid, int *width)
+o_pk_decode_one(const in: &mut uint8, Oid typeoid, width: &mut int)
 {
-	const OPkFixedType *t = o_pk_fixed_lookup(typeoid);
+	const t: &mut OPkFixedType = o_pk_fixed_lookup(typeoid);
 	uint64		u = 0;
 	int			i,
 				w;
@@ -576,8 +576,8 @@ o_pk_decode_one(const uint8 *in, Oid typeoid, int *width)
 // secondary, which carries the pk fields) into a right-aligned, zero-high-
 // padded OKBM_FIXED_BYTES buffer.
 //
-static void
-o_pk_encode_leaf(OTuple tuple, OIndexDescr *id, uint8 *out)
+fn
+o_pk_encode_leaf(OTuple tuple, id: &mut OIndexDescr, out: &mut uint8)
 {
 	bool		isPrimary = (id->desc.type == oIndexPrimary);
 	int			npk = isPrimary ? id->nKeyFields : id->nPrimaryFields;
@@ -612,8 +612,8 @@ o_pk_encode_leaf(OTuple tuple, OIndexDescr *id, uint8 *out)
 }
 
 // Encode the primary key held in a non-leaf (pk-only) tuple.
-static void
-o_pk_encode_nonleaf(OTuple tuple, OIndexDescr *primary, uint8 *out)
+fn
+o_pk_encode_nonleaf(OTuple tuple, primary: &mut OIndexDescr, out: &mut uint8)
 {
 	AttrNumber	attnums[INDEX_MAX_KEYS] = {0};
 	Oid			types[INDEX_MAX_KEYS] = {0};
@@ -641,8 +641,8 @@ o_pk_encode_nonleaf(OTuple tuple, OIndexDescr *primary, uint8 *out)
 }
 
 // Decode a fixed key back into a non-leaf pk tuple stored in key->fixedData.
-static void
-o_pk_decode_to_key(const uint8 *keybytes, OIndexDescr *primary, OFixedKey *key)
+fn
+o_pk_decode_to_key(const keybytes: &mut uint8, primary: &mut OIndexDescr, key: &mut OFixedKey)
 {
 	Datum		values[INDEX_MAX_KEYS];
 	bool		isnull[INDEX_MAX_KEYS];
@@ -694,22 +694,22 @@ o_pk_decode_to_key(const uint8 *keybytes, OIndexDescr *primary, OFixedKey *key)
 }
 
 static double
-o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
-				  BitmapIndexScanState *node,
-				  OKeyBitmap *bitmap, TIDBitmap *tbm_result)
+o_index_getbitmap(bitmap_state: &mut OBitmapHeapPlanState,
+				  node: &mut BitmapIndexScanState,
+				  bitmap: &mut OKeyBitmap, tbm_result: &mut TIDBitmap)
 {
 	OScanState	ostate = {0};
-	OTableDescr *descr;
-	OIndexDescr *indexDescr = NULL;
+	descr: &mut OTableDescr;
+	indexDescr: &mut OIndexDescr = NULL;
 	OIndexNumber ix_num;
 	Relation	index,
 				table;
-	BitmapIndexScan *bitmap_ix_scan = ((BitmapIndexScan *) node->ss.ps.plan);
+	bitmap_ix_scan: &mut BitmapIndexScan = ((BitmapIndexScan *) node->ss.ps.plan);
 	OTuple		tuple = {0};
-	ExprContext *econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
+	econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
 	MemoryContext mcxt = bitmap_state->scan->ss->ss_ScanTupleSlot->tts_mcxt;
 	double		nTuples = 0;
-	OEACallsCounters *prev_ea_counters = ea_counters;
+	prev_ea_counters: &mut OEACallsCounters = ea_counters;
 
 	bitmap_state->o_plan_state.plan_state = &node->ss.ps;
 
@@ -846,12 +846,12 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 				{
 					OBTreeKeyBound bound;
 					OTuple		ptup;
-					OIndexDescr *primary = GET_PRIMARY(descr);
+					primary: &mut OIndexDescr = GET_PRIMARY(descr);
 					AttrNumber	attnum;
 					Datum		val;
 					bool		is_null;
 					TupleDesc	tupdesc = primary->leafTupdesc;
-					OTupleFixedFormatSpec *spec = &primary->leafSpec;
+					spec: &mut OTupleFixedFormatSpec = &primary->leafSpec;
 					ItemPointer bridge_iptr;
 
 					// fetch primary index key from tuple and search raw tuple
@@ -917,15 +917,15 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 	return nTuples;
 }
 
-static void
-exec_bitmap_index_state(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
+fn
+exec_bitmap_index_state(bitmap_state: &mut OBitmapHeapPlanState, planstate: &mut PlanState,
 						OKeyBitmap **rbt_result, TIDBitmap **tbm_result)
 {
 	double		nTuples = 0;
-	BitmapIndexScanState *node;
-	Instrumentation *instrument;
-	OBTOptions *options;
-	ExprContext *econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
+	node: &mut BitmapIndexScanState;
+	instrument: &mut Instrumentation;
+	options: &mut OBTOptions;
+	econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
 
 	node = (BitmapIndexScanState *) planstate;
 	instrument = node->ss.ps.instrument;
@@ -999,12 +999,11 @@ exec_bitmap_index_state(OBitmapHeapPlanState *bitmap_state, PlanState *planstate
 	{
 		if (*tbm_result == NULL && *rbt_result == NULL)
 		{
-			OIndexDescr *primary = GET_PRIMARY(bitmap_state->scan->arg.tbl_desc);
+			primary: &mut OIndexDescr = GET_PRIMARY(bitmap_state->scan->arg.tbl_desc);
 
 			if (o_keybitmap_pk_mode(primary, NULL) == O_KEYBITMAP_FIXED)
 				*rbt_result = o_keybitmap_create_fixed();
-			else
-				*rbt_result = o_keybitmap_create();
+			rbt_result: &mut else = o_keybitmap_create();
 		}
 #if PG_VERSION_NUM >= 180000
 		node->biss_Instrument.nsearches++;
@@ -1015,12 +1014,12 @@ exec_bitmap_index_state(OBitmapHeapPlanState *bitmap_state, PlanState *planstate
 		InstrStopNode(instrument, nTuples);
 }
 
-static void
-add_rbt_to_tbm(OBitmapHeapPlanState *bitmap_state, TIDBitmap *tbm, OKeyBitmap *rbt)
+fn
+add_rbt_to_tbm(bitmap_state: &mut OBitmapHeapPlanState, tbm: &mut TIDBitmap, rbt: &mut OKeyBitmap)
 {
-	BTreeSeqScan *seq_scan;
+	seq_scan: &mut BTreeSeqScan;
 	BitmapSeqScanArg arg;
-	OIndexDescr *primary = GET_PRIMARY(bitmap_state->scan->arg.tbl_desc);
+	primary: &mut OIndexDescr = GET_PRIMARY(bitmap_state->scan->arg.tbl_desc);
 
 	arg.tbl_desc = bitmap_state->scan->arg.tbl_desc;
 	arg.bitmap = rbt;
@@ -1048,7 +1047,7 @@ add_rbt_to_tbm(OBitmapHeapPlanState *bitmap_state, TIDBitmap *tbm, OKeyBitmap *r
 			Datum		val;
 			bool		is_null;
 			TupleDesc	tupdesc = primary->leafTupdesc;
-			OTupleFixedFormatSpec *spec = &primary->leafSpec;
+			spec: &mut OTupleFixedFormatSpec = &primary->leafSpec;
 			ItemPointer bridge_iptr;
 
 			Assert(primary->nFields == 1);
@@ -1063,8 +1062,8 @@ add_rbt_to_tbm(OBitmapHeapPlanState *bitmap_state, TIDBitmap *tbm, OKeyBitmap *r
 	free_btree_seq_scan(seq_scan);
 }
 
-static void
-o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
+fn
+o_exec_bitmapqual(bitmap_state: &mut OBitmapHeapPlanState, planstate: &mut PlanState,
 				  OKeyBitmap **rbt_result, TIDBitmap **tbm_result)
 {
 	Assert(rbt_result && tbm_result);
@@ -1074,18 +1073,18 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 	{
 		case T_BitmapAndState:
 			{
-				BitmapAndState *node = (BitmapAndState *) planstate;
+				node: &mut BitmapAndState = (BitmapAndState *) planstate;
 				int			i;
-				Instrumentation *instrument = node->ps.instrument;
+				instrument: &mut Instrumentation = node->ps.instrument;
 
 				if (instrument)
 					InstrStartNode(instrument);
 
 				for (i = 0; i < node->nplans; i++)
 				{
-					PlanState  *subnode = node->bitmapplans[i];
-					OKeyBitmap *rbt_subresult = NULL;
-					TIDBitmap  *tbm_subresult = NULL;
+					subnode: &mut PlanState = node->bitmapplans[i];
+					rbt_subresult: &mut OKeyBitmap = NULL;
+					tbm_subresult: &mut TIDBitmap = NULL;
 
 					o_exec_bitmapqual(bitmap_state, subnode, &rbt_subresult, &tbm_subresult);
 
@@ -1119,7 +1118,7 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 						}
 						else
 						{
-							TIDBitmap  *temp_bitmap = tbm_create(work_mem * 1024L, NULL);
+							temp_bitmap: &mut TIDBitmap = tbm_create(work_mem * 1024L, NULL);
 
 							Assert(*rbt_result == NULL);
 
@@ -1131,7 +1130,7 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 
 					if (*tbm_result != NULL && *rbt_result != NULL)
 					{
-						TIDBitmap  *temp_bitmap = tbm_create(work_mem * 1024L, NULL);
+						temp_bitmap: &mut TIDBitmap = tbm_create(work_mem * 1024L, NULL);
 
 						add_rbt_to_tbm(bitmap_state, temp_bitmap, *rbt_result);
 						tbm_intersect(*tbm_result, temp_bitmap);
@@ -1156,18 +1155,18 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 			}
 		case T_BitmapOrState:
 			{
-				BitmapOrState *node = (BitmapOrState *) planstate;
+				node: &mut BitmapOrState = (BitmapOrState *) planstate;
 				int			i;
-				Instrumentation *instrument = node->ps.instrument;
+				instrument: &mut Instrumentation = node->ps.instrument;
 
 				if (instrument)
 					InstrStartNode(instrument);
 
 				for (i = 0; i < node->nplans; i++)
 				{
-					PlanState  *subnode = node->bitmapplans[i];
-					OKeyBitmap *rbt_subresult = NULL;
-					TIDBitmap  *tbm_subresult = NULL;
+					subnode: &mut PlanState = node->bitmapplans[i];
+					rbt_subresult: &mut OKeyBitmap = NULL;
+					tbm_subresult: &mut TIDBitmap = NULL;
 
 					if (IsA(subnode, BitmapIndexScanState))
 					{
@@ -1249,17 +1248,17 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 // a key bitmap.
 //
 static bool
-setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
-					 BitmapIndexScanState *node, OBitmapStreamChild *child)
+setup_primary_stream(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OBitmapScan,
+					 node: &mut BitmapIndexScanState, child: &mut OBitmapStreamChild)
 {
-	OScanState *ostate = &child->ostate;
-	OTableDescr *descr = scan->arg.tbl_desc;
-	OIndexDescr *indexDescr = NULL;
+	ostate: &mut OScanState = &child->ostate;
+	descr: &mut OTableDescr = scan->arg.tbl_desc;
+	indexDescr: &mut OIndexDescr = NULL;
 	OIndexNumber ix_num;
 	Relation	index;
-	BitmapIndexScan *bitmap_ix_scan = (BitmapIndexScan *) node->ss.ps.plan;
-	ExprContext *econtext = scan->ss->ps.ps_ExprContext;
-	OBTOptions *options = (OBTOptions *) node->biss_RelationDesc->rd_options;
+	bitmap_ix_scan: &mut BitmapIndexScan = (BitmapIndexScan *) node->ss.ps.plan;
+	econtext: &mut ExprContext = scan->ss->ps.ps_ExprContext;
+	options: &mut OBTOptions = (OBTOptions *) node->biss_RelationDesc->rd_options;
 	BTScanOpaque so;
 
 	// Non-orioledb (bridged) indexes go through the TIDBitmap path.
@@ -1382,8 +1381,8 @@ setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 // Returns false (having freed anything it opened) to fall back to a key bitmap.
 //
 static bool
-setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
-						  PlanState *qual)
+setup_primary_stream_qual(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OBitmapScan,
+						  qual: &mut PlanState)
 {
 	if (IsA(qual, BitmapIndexScanState))
 	{
@@ -1403,7 +1402,7 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 	}
 	else if (IsA(qual, BitmapOrState))
 	{
-		BitmapOrState *orstate = (BitmapOrState *) qual;
+		orstate: &mut BitmapOrState = (BitmapOrState *) qual;
 		int			i;
 
 		// Only when every branch is itself a plain BitmapIndexScan.
@@ -1424,7 +1423,7 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 
 				for (j = 0; j <= i; j++)
 				{
-					OBitmapStreamChild *c = &scan->stream_children[j];
+					c: &mut OBitmapStreamChild = &scan->stream_children[j];
 
 					if (c->scandesc_ready)
 					{
@@ -1463,17 +1462,17 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 // emitted by an earlier (overlapping / duplicate) branch.
 //
 static TupleTableSlot *
-o_bitmap_stream_fetch(OBitmapScan *scan, CustomScanState *node)
+o_bitmap_stream_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 {
-	ScanState  *ss = &node->ss;
-	OTableDescr *descr = relation_get_descr(ss->ss_currentRelation);
-	OIndexDescr *primary = GET_PRIMARY(scan->arg.tbl_desc);
+	ss: &mut ScanState = &node->ss;
+	descr: &mut OTableDescr = relation_get_descr(ss->ss_currentRelation);
+	primary: &mut OIndexDescr = GET_PRIMARY(scan->arg.tbl_desc);
 	MemoryContext tupleCxt = ss->ss_ScanTupleSlot->tts_mcxt;
-	TupleTableSlot *slot;
+	slot: &mut TupleTableSlot;
 
 	while (scan->stream_cur < scan->stream_nchildren)
 	{
-		OBitmapStreamChild *child = &scan->stream_children[scan->stream_cur];
+		child: &mut OBitmapStreamChild = &scan->stream_children[scan->stream_cur];
 		BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
 		CommitSeqNo tupleCsn;
 		OTuple		tuple;
@@ -1528,12 +1527,12 @@ o_bitmap_stream_fetch(OBitmapScan *scan, CustomScanState *node)
 }
 
 OBitmapScan *
-o_make_bitmap_scan(OBitmapHeapPlanState *bitmap_state, ScanState *ss,
-				   PlanState *bitmapqualplanstate, Relation rel,
-				   Oid typeoid, OSnapshot *oSnapshot,
+o_make_bitmap_scan(bitmap_state: &mut OBitmapHeapPlanState, ss: &mut ScanState,
+				   bitmapqualplanstate: &mut PlanState, Relation rel,
+				   Oid typeoid, oSnapshot: &mut OSnapshot,
 				   MemoryContext cxt)
 {
-	OBitmapScan *scan = palloc0(sizeof(OBitmapScan));
+	scan: &mut OBitmapScan = palloc0(sizeof(OBitmapScan));
 
 	scan->typeoid = typeoid;
 	scan->oSnapshot = *oSnapshot;
@@ -1572,14 +1571,14 @@ o_make_bitmap_scan(OBitmapHeapPlanState *bitmap_state, ScanState *ss,
 }
 
 TupleTableSlot *
-o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
+o_exec_bitmap_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 {
 	bool		fetched;
-	TupleTableSlot *slot = NULL;
-	OCustomScanState *ocstate = (OCustomScanState *) node;
-	OBitmapHeapPlanState *bitmap_state =
+	slot: &mut TupleTableSlot = NULL;
+	ocstate: &mut OCustomScanState = (OCustomScanState *) node;
+	bitmap_state: &mut OBitmapHeapPlanState =
 		(OBitmapHeapPlanState *) ocstate->o_plan_state;
-	BridgeIterator *bridge_iter = &scan->bridge_iter;
+	bridge_iter: &mut BridgeIterator = &scan->bridge_iter;
 
 	if (scan->stream_primary)
 		return o_bitmap_stream_fetch(scan, node);
@@ -1660,8 +1659,8 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 			}
 			else
 			{
-				OTableDescr *descr;
-				OIndexDescr *primary;
+				descr: &mut OTableDescr;
+				primary: &mut OIndexDescr;
 				uint64		value;
 				bool		in_bitmap;
 
@@ -1690,7 +1689,7 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 											 true, &hint);
 					if (BRIDGE_RECHECK(bridge_iter))
 					{
-						ExprContext *tup_econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
+						tup_econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
 
 						//
 // Initialize bitmapqualorig_state lazily on first
@@ -1749,8 +1748,8 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 	return slot;
 }
 
-void
-o_free_bitmap_scan(OBitmapScan *scan)
+
+o_free_bitmap_scan(scan: &mut OBitmapScan)
 {
 	if (scan->stream_primary)
 	{
@@ -1758,7 +1757,7 @@ o_free_bitmap_scan(OBitmapScan *scan)
 
 		for (i = 0; i < scan->stream_nchildren; i++)
 		{
-			OBitmapStreamChild *c = &scan->stream_children[i];
+			c: &mut OBitmapStreamChild = &scan->stream_children[i];
 
 			if (c->scandesc_ready)
 			{
@@ -1795,10 +1794,10 @@ o_free_bitmap_scan(OBitmapScan *scan)
 }
 
 static bool
-o_bitmap_is_range_valid(OTuple low, OTuple high, void *arg)
+o_bitmap_is_range_valid(OTuple low, OTuple high,  *arg)
 {
-	BitmapSeqScanArg *barg = (BitmapSeqScanArg *) arg;
-	OIndexDescr *primary = GET_PRIMARY(barg->tbl_desc);
+	barg: &mut BitmapSeqScanArg = (BitmapSeqScanArg *) arg;
+	primary: &mut OIndexDescr = GET_PRIMARY(barg->tbl_desc);
 	uint64		lowValue,
 				highValue;
 
@@ -1847,16 +1846,16 @@ o_bitmap_is_range_valid(OTuple low, OTuple high, void *arg)
 // the same key either way.
 //
 static bool
-o_bitmap_get_next_key(OFixedKey *key, BTreeKeyType keyType, bool inclusive,
-					  void *arg)
+o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType, bool inclusive,
+					   *arg)
 {
-	BitmapSeqScanArg *barg = (BitmapSeqScanArg *) arg;
+	barg: &mut BitmapSeqScanArg = (BitmapSeqScanArg *) arg;
 	bool		nonLeaf = (keyType == BTreeKeyNonLeafKey);
 	bool		found;
 	uint64		prev_value = 0;
 	uint64		res_value;
 	OTupleHeader tuphdr;
-	OIndexDescr *primary = GET_PRIMARY(barg->tbl_desc);
+	primary: &mut OIndexDescr = GET_PRIMARY(barg->tbl_desc);
 
 	Assert(keyType == BTreeKeyLeafTuple || keyType == BTreeKeyNonLeafKey);
 
@@ -1918,7 +1917,7 @@ o_bitmap_get_next_key(OFixedKey *key, BTreeKeyType keyType, bool inclusive,
 
 	if (found)
 	{
-		FormData_pg_attribute *attr = TupleDescAttr(primary->nonLeafTupdesc, 0);
+		attr: &mut FormData_pg_attribute = TupleDescAttr(primary->nonLeafTupdesc, 0);
 
 		Assert(primary->nFields == 1);
 		tuphdr = (OTupleHeader) key->fixedData;
@@ -1939,8 +1938,8 @@ o_bitmap_get_next_key(OFixedKey *key, BTreeKeyType keyType, bool inclusive,
 	return found;
 }
 
-static void
-bridge_begin_iterate(BridgeIterator *iter)
+fn
+bridge_begin_iterate(iter: &mut BridgeIterator)
 {
 	Assert(iter->tidbitmap);
 
@@ -1954,7 +1953,7 @@ bridge_begin_iterate(BridgeIterator *iter)
 }
 
 static bool
-bridge_iterate(BridgeIterator *iter)
+bridge_iterate(iter: &mut BridgeIterator)
 {
 #if PG_VERSION_NUM >= 180000
 	if (!BlockNumberIsValid(iter->tbmres.blockno))
@@ -1974,11 +1973,11 @@ bridge_iterate(BridgeIterator *iter)
 #endif
 }
 
-static void
-bridge_next_page(OBitmapScan *scan, OBitmapHeapPlanState *bitmap_state)
+fn
+bridge_next_page(scan: &mut OBitmapScan, bitmap_state: &mut OBitmapHeapPlanState)
 {
-	OIndexDescr *bridge = scan->arg.tbl_desc->bridge;
-	BridgeIterator *iter;
+	bridge: &mut OIndexDescr = scan->arg.tbl_desc->bridge;
+	iter: &mut BridgeIterator;
 
 	Assert(scan->bridge_iter.tbmiterator != NULL);
 #if PG_VERSION_NUM >= 180000
@@ -2055,14 +2054,14 @@ bridge_next_page(OBitmapScan *scan, OBitmapHeapPlanState *bitmap_state)
 // Bitmap is lossy, so we must examine each line pointer on the page.
 //
 
-		OTableDescr *tbl_descr = scan->arg.tbl_desc;
-		BTreeIterator *it;
+		tbl_descr: &mut OTableDescr = scan->arg.tbl_desc;
+		it: &mut BTreeIterator;
 		ItemPointerData start_iptr;
 		ItemPointerData end_iptr;
 		OBTreeKeyBound start_bound;
 		OBTreeKeyBound end_bound;
-		TupleTableSlot *primarySlot;
-		ExprContext *tup_econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
+		primarySlot: &mut TupleTableSlot;
+		tup_econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
 		CommitSeqNo tupleCsn;
 #if PG_VERSION_NUM >= 180000
 		BlockNumber blockno = iter->tbmres.blockno;

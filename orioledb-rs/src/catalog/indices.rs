@@ -82,10 +82,10 @@ use pgrx::pg_sys;
 typedef struct oIdxLeader
 {
 	// parallel context itself
-	ParallelContext *pcxt;
+	pcxt: &mut ParallelContext;
 
 	// Recovery parallel context of recovery workers
-	ParallelRecoveryContext *recoveryContext;
+	recoveryContext: &mut ParallelRecoveryContext;
 
 	//
 // nparticipanttuplesorts is the exact number of worker processes
@@ -107,10 +107,10 @@ typedef struct oIdxLeader
 // btshared is the shared state for entire build.  sharedsort is the
 // shared, tuplesort-managed state passed to each process tuplesort.
 //
-	oIdxShared *btshared;
+	btshared: &mut oIdxShared;
 	Sharedsort **sharedsort;
-	WalUsage   *walusage;
-	BufferUsage *bufferusage;
+	walusage: &mut WalUsage;
+	bufferusage: &mut BufferUsage;
 } oIdxLeader;
 
 //
@@ -122,30 +122,30 @@ typedef struct oIdxBuildState
 {
 	bool		isunique;
 	Relation	heap;
-	oIdxSpool  *spool;
+	spool: &mut oIdxSpool;
 	double		reltuples;
 
 	// Oriole-specific
-	oIdxLeader *btleader;
-	void		(*worker_heap_sort_fn) (oIdxSpool *, void *, Sharedsort **, int worker_sortmem, bool progress);
+	btleader: &mut oIdxLeader;
+			(*worker_heap_sort_fn) (oIdxSpool *,  *, Sharedsort **, int worker_sortmem, bool progress);
 	OIndexNumber ix_num;
 	bool		isrebuild;
 } oIdxBuildState;
 
-static void _o_index_end_parallel(oIdxLeader *btleader);
-static void _o_index_leader_participate_as_worker(oIdxBuildState *buildstate);
+fn _o_index_end_parallel(btleader: &mut oIdxLeader);
+fn _o_index_leader_participate_as_worker(buildstate: &mut oIdxBuildState);
 static Size _o_index_parallel_estimate_shared(Size o_table_size);
-static void build_secondary_index_worker_sort(oIdxSpool *btspool, void *btshared,
+fn build_secondary_index_worker_sort(btspool: &mut oIdxSpool,  *btshared,
 											  Sharedsort **sharedsort, int worker_sortmem,
 											  bool progress);
-static void build_secondary_index_worker_heap_scan(OTableDescr *descr, OIndexDescr *idx, ParallelOScanDesc poscan, Tuplesortstate **sortstates, bool progress, double *heap_tuples, double *index_tuples[]);
-static void rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
+fn build_secondary_index_worker_heap_scan(descr: &mut OTableDescr, idx: &mut OIndexDescr, ParallelOScanDesc poscan, Tuplesortstate **sortstates, bool progress, heap_tuples: &mut double, index_tuples: &mut double[]);
+fn rebuild_indices_worker_sort(btspool: &mut oIdxSpool,  *bt_shared,
 										Sharedsort **sharedsort, int worker_sortmem,
 										bool progress);
-static void rebuild_indices_worker_heap_scan(OTableDescr *old_descr, OTableDescr *descr, ParallelOScanDesc poscan,
-											 Tuplesortstate **sortstates, bool progress, double *heap_tuples,
-											 double *index_tuples[], uint64 *ctid, uint64 *bridge_ctid);
-static int	o_calculate_index_workers(BTreeDescr *primary, bool shmem_loaded, int nindices);
+fn rebuild_indices_worker_heap_scan(old_descr: &mut OTableDescr, descr: &mut OTableDescr, ParallelOScanDesc poscan,
+											 Tuplesortstate **sortstates, bool progress, heap_tuples: &mut double,
+											 index_tuples: &mut double[], ctid: &mut uint64, bridge_ctid: &mut uint64);
+static int	o_calculate_index_workers(primary: &mut BTreeDescr, bool shmem_loaded, int nindices);
 static int	o_estimate_parallel_workers(double table_pages, double index_pages,
 										int max_workers);
 
@@ -153,21 +153,21 @@ static int	o_estimate_parallel_workers(double table_pages, double index_pages,
 typedef struct NewColumnValue
 {
 	AttrNumber	attnum;			// which column
-	Expr	   *expr;			// expression to compute
-	ExprState  *exprstate;		// execution state
+	expr: &mut Expr;			// expression to compute
+	exprstate: &mut ExprState;		// execution state
 	bool		is_generated;	// is it a GENERATED expression?
 }			NewColumnValue;
 
 static bool in_indexes_rebuild = false;
 
 bool
-is_in_indexes_rebuild(void)
+is_in_indexes_rebuild()
 {
 	return in_indexes_rebuild;
 }
 
-void
-assign_new_oids(OTable *oTable, Relation rel, bool drop_pkey)
+
+assign_new_oids(oTable: &mut OTable, Relation rel, bool drop_pkey)
 {
 	Oid			toast_relid;
 
@@ -195,9 +195,9 @@ assign_new_oids(OTable *oTable, Relation rel, bool drop_pkey)
 
 	PG_TRY();
 	{
-		List	   *indexIds;
+		indexIds: &mut List;
 		char		persistence;
-		ListCell   *indexId;
+		indexId: &mut ListCell;
 
 		in_indexes_rebuild = true;
 
@@ -212,7 +212,7 @@ assign_new_oids(OTable *oTable, Relation rel, bool drop_pkey)
 		{
 			Oid			indexOid = lfirst_oid(indexId);
 			Relation	iRel = index_open(indexOid, AccessExclusiveLock);
-			OBTOptions *options = (OBTOptions *) iRel->rd_options;
+			options: &mut OBTOptions = (OBTOptions *) iRel->rd_options;
 
 			if (iRel->rd_rel->relam == BTREE_AM_OID && !(options && !options->orioledb_index))
 				RelationSetNewRelfilenode(iRel, persistence);
@@ -232,17 +232,17 @@ assign_new_oids(OTable *oTable, Relation rel, bool drop_pkey)
 	orioledb_free_rd_amcache(rel);
 }
 
-void
-recreate_o_table(OTable *old_o_table, OTable *o_table)
+
+recreate_o_table(old_o_table: &mut OTable, o_table: &mut OTable)
 {
 	OSnapshot	oSnapshot;
 	OXid		oxid;
 	int			oldTreesNum,
 				newTreesNum;
 	ORelOids	oldOids;
-	OIndexKey  *oldTrees;
+	oldTrees: &mut OIndexKey;
 	ORelOids	newOids;
-	OIndexKey  *newTrees;
+	newTrees: &mut OIndexKey;
 	bool		is_temp;
 
 	Assert(old_o_table != NULL && o_table != NULL);
@@ -279,8 +279,8 @@ recreate_o_table(OTable *old_o_table, OTable *o_table)
 	pfree(newTrees);
 }
 
-static void
-o_validate_index_elements(List *expressions, List *predicate)
+fn
+o_validate_index_elements(expressions: &mut List, predicate: &mut List)
 {
 	o_validate_funcexpr((Node *) predicate, " are supported in "
 						"orioledb index predicate");
@@ -288,8 +288,8 @@ o_validate_index_elements(List *expressions, List *predicate)
 						"orioledb index expressions");
 }
 
-void
-o_define_index_validate(ORelOids oids, Relation index, IndexInfo *indexInfo, OTable *o_table)
+
+o_define_index_validate(ORelOids oids, Relation index, indexInfo: &mut IndexInfo, o_table: &mut OTable)
 {
 	int			nattrs;
 	OIndexType	ix_type;
@@ -344,8 +344,8 @@ o_define_index_validate(ORelOids oids, Relation index, IndexInfo *indexInfo, OTa
 							  RelationGetIndexPredicate(index));
 }
 
-void
-rebuild_indices_insert_placeholders(OTableDescr *descr)
+
+rebuild_indices_insert_placeholders(descr: &mut OTableDescr)
 {
 	int			i;
 
@@ -368,10 +368,10 @@ rebuild_indices_insert_placeholders(OTableDescr *descr)
 }
 
 static Jsonb *
-index_build_params(OTableIndex *index)
+index_build_params(index: &mut OTableIndex)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -397,16 +397,16 @@ index_build_params(OTableIndex *index)
 // So, checkpointer can't reach the new tree until the meta-information is
 // complete.  Also checkpoint numer in tree headers is valid.
 //
-void
+
 o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 			   OIndexNumber old_ix_num, Oid oldTblRelnode,
-			   IndexBuildResult *result)
+			   result: &mut IndexBuildResult)
 {
-	OTable	   *old_o_table = NULL;
-	OTable	   *o_table;
+	old_o_table: &mut OTable = NULL;
+	o_table: &mut OTable;
 	OIndexNumber ix_num;
-	OTableIndex *table_index;
-	OTableDescr *old_descr = NULL,
+	table_index: &mut OTableIndex;
+	old_descr: &mut OTableDescr = NULL,
 			   *descr = NULL;
 	bool		reuse_relnode = old_ix_num != InvalidIndexNumber;
 	bool		is_build = false;
@@ -417,7 +417,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 	Oid			tablespace;
 	OCompress	compress = InvalidOCompress;
 	uint8		fillfactor = BTREE_DEFAULT_FILLFACTOR;
-	OBTOptions *options;
+	options: &mut OBTOptions;
 	bool		setting_tbl_tablespace = OidIsValid(oldTblRelnode);
 
 	Assert(index == NULL || !(OidIsValid(indoid)));
@@ -435,7 +435,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 	{
 		if (options->compress_offset > 0)
 		{
-			char	   *str;
+			str: &mut char;
 
 			str = (char *) (((Pointer) options) + options->compress_offset);
 			if (str)
@@ -515,7 +515,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 			// Rebuild, assign new oids
 			if (ix_type == oIndexPrimary)
 			{
-				OTable	   *new_o_table;
+				new_o_table: &mut OTable;
 
 				new_o_table = o_tables_get(oids);
 				o_table = new_o_table;
@@ -629,8 +629,8 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		{
 			if (!setting_tbl_tablespace)
 			{
-				char	   *prefix;
-				char	   *db_prefix;
+				prefix: &mut char;
+				db_prefix: &mut char;
 
 				o_get_prefixes_for_tablespace(MyDatabaseId, tablespace,
 											  &prefix, &db_prefix);
@@ -642,8 +642,8 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		}
 		else if (!setting_tbl_tablespace)
 		{
-			char	   *prefix;
-			char	   *db_prefix;
+			prefix: &mut char;
+			db_prefix: &mut char;
 
 			o_get_prefixes_for_tablespace(MyDatabaseId, tablespace,
 										  &prefix, &db_prefix);
@@ -668,8 +668,8 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 //
 	if (!is_build && table_index->type != oIndexPrimary && o_table->tablespace != tablespace)
 	{
-		char	   *prefix;
-		char	   *db_prefix;
+		prefix: &mut char;
+		db_prefix: &mut char;
 
 		o_get_prefixes_for_tablespace(MyDatabaseId, tablespace,
 									  &prefix, &db_prefix);
@@ -689,7 +689,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		o_tables_table_meta_unlock(NULL, InvalidOid);
 		if (STOPEVENTS_ENABLED())
 		{
-			Jsonb	   *params;
+			params: &mut Jsonb;
 
 			params = index_build_params(table_index);
 			STOPEVENT(STOPEVENT_BUILD_INDEX_PLACEHOLDER_INSERTED, params);
@@ -740,24 +740,24 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 // build.  If not even a single worker process can be launched, this is
 // never set, and caller should proceed with a serial index build.
 //
-static void
-_o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int request)
+fn
+_o_index_begin_parallel(buildstate: &mut oIdxBuildState, bool isconcurrent, int request)
 {
-	ParallelContext *pcxt = NULL;
-	ParallelRecoveryContext *recoveryContext = NULL;
+	pcxt: &mut ParallelContext = NULL;
+	recoveryContext: &mut ParallelRecoveryContext = NULL;
 	int			nworkers;
-	shm_toc_estimator *estimator;
-	shm_toc    *toc;
-	dsm_segment *seg;
+	estimator: &mut shm_toc_estimator;
+	toc: &mut shm_toc;
+	seg: &mut dsm_segment;
 	int			scantuplesortstates;
 	Size		estbtshared;
 	Size		estsort = 0;
-	oIdxShared *btshared;
+	btshared: &mut oIdxShared;
 	Sharedsort **sharedsort;
-	oIdxSpool  *btspool = buildstate->spool;
-	oIdxLeader *btleader = (oIdxLeader *) palloc0(sizeof(oIdxLeader));
-	WalUsage   *walusage = NULL;
-	BufferUsage *bufferusage = NULL;
+	btspool: &mut oIdxSpool = buildstate->spool;
+	btleader: &mut oIdxLeader = (oIdxLeader *) palloc0(sizeof(oIdxLeader));
+	walusage: &mut WalUsage = NULL;
+	bufferusage: &mut BufferUsage = NULL;
 	bool		leaderparticipates = true;
 	int			o_table_size = 0;
 	Pointer		o_table_serialized;
@@ -1052,8 +1052,8 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 //
 // Shut down workers, destroy parallel context, and end parallel mode.
 //
-static void
-_o_index_end_parallel(oIdxLeader *btleader)
+fn
+_o_index_end_parallel(btleader: &mut oIdxLeader)
 {
 	if (!is_recovery_in_progress())
 	{
@@ -1100,10 +1100,10 @@ _o_index_parallel_estimate_shared(Size o_table_size)
 // as a worker, we should end up here just as workers are finishing).
 //
 //
-static void
-_o_index_parallel_heapscan(oIdxBuildState *buildstate)
+fn
+_o_index_parallel_heapscan(buildstate: &mut oIdxBuildState)
 {
-	oIdxShared *btshared = buildstate->btleader->btshared;
+	btshared: &mut oIdxShared = buildstate->btleader->btshared;
 	int			nparticipanttuplesorts;
 	bool		in_recovery = is_recovery_in_progress();
 
@@ -1144,11 +1144,11 @@ _o_index_parallel_heapscan(oIdxBuildState *buildstate)
 	ConditionVariableCancelSleep();
 }
 
-static void
-_o_index_leader_participate_as_worker(oIdxBuildState *buildstate)
+fn
+_o_index_leader_participate_as_worker(buildstate: &mut oIdxBuildState)
 {
-	oIdxLeader *btleader = buildstate->btleader;
-	oIdxSpool  *leaderworker;
+	btleader: &mut oIdxLeader = buildstate->btleader;
+	leaderworker: &mut oIdxSpool;
 	int			worker_sortmem;
 
 	// Allocate memory and initialize private spool
@@ -1184,8 +1184,8 @@ _o_index_leader_participate_as_worker(oIdxBuildState *buildstate)
 //
 // Wrapper to be called from parallel context when not in recovery.
 //
-void
-_o_index_parallel_build_main(dsm_segment *seg, shm_toc *toc)
+
+_o_index_parallel_build_main(seg: &mut dsm_segment, toc: &mut shm_toc)
 {
 	_o_index_parallel_build_inner(seg, toc, NULL, NULL);
 }
@@ -1195,15 +1195,15 @@ _o_index_parallel_build_main(dsm_segment *seg, shm_toc *toc)
 // For recovery attaches to recovery shared memory and gets
 // serialized o_table as an explicit argument.
 //
-void
-_o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
-							  OTable *recovery_o_table, OTable *recovery_old_o_table)
+
+_o_index_parallel_build_inner(seg: &mut dsm_segment, toc: &mut shm_toc,
+							  recovery_o_table: &mut OTable, recovery_old_o_table: &mut OTable)
 {
-	oIdxSpool  *btspool;
-	oIdxShared *btshared;
+	btspool: &mut oIdxSpool;
+	btshared: &mut oIdxShared;
 	Sharedsort **sharedsort;
-	WalUsage   *walusage;
-	BufferUsage *bufferusage;
+	walusage: &mut WalUsage;
+	bufferusage: &mut BufferUsage;
 	int			worker_sortmem;
 	int			i;
 	int			nallindices;
@@ -1285,7 +1285,7 @@ _o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
 	btshared->worker_heap_sort_fn(btspool, btshared, sharedsort,
 								  worker_sortmem, false);
 
-	pfree((void *) sharedsort);
+	pfree(( *) sharedsort);
 
 	o_free_tmp_table_descr(btspool->descr);
 	pfree(btspool->descr);
@@ -1325,17 +1325,17 @@ _o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
 // worker_sortmem is the amount of working memory to use within each worker,
 // expressed in KBs.
 //
-static void
-build_secondary_index_worker_sort(oIdxSpool *btspool, void *bt_shared, Sharedsort **sharedsort,
+fn
+build_secondary_index_worker_sort(btspool: &mut oIdxSpool,  *bt_shared, Sharedsort **sharedsort,
 								  int worker_sortmem, bool progress)
 {
 	SortCoordinate coordinate;
-	double	   *indtuples,
+	indtuples: &mut double,
 				heaptuples;
-	oIdxShared *btshared = (oIdxShared *) bt_shared;
+	btshared: &mut oIdxShared = (oIdxShared *) bt_shared;
 	ParallelOScanDesc poscan = &btshared->poscan;
-	OTable	   *o_table;
-	OIndexDescr *idx;
+	o_table: &mut OTable;
+	idx: &mut OIndexDescr;
 
 	indtuples = palloc0(sizeof(double));
 	// Initialize local tuplesort coordination state
@@ -1394,8 +1394,8 @@ build_secondary_index_worker_sort(oIdxSpool *btspool, void *bt_shared, Sharedsor
 // Get next tuple and store all its attributes to a slot
 static inline
 bool
-scan_getnextslot_allattrs(BTreeSeqScan *scan, OTableDescr *descr,
-						  TupleTableSlot *slot, double *ntuples)
+scan_getnextslot_allattrs(scan: &mut BTreeSeqScan, descr: &mut OTableDescr,
+						  slot: &mut TupleTableSlot, ntuples: &mut double)
 {
 	OTuple		tup;
 	BTreeLocationHint hint;
@@ -1417,15 +1417,15 @@ scan_getnextslot_allattrs(BTreeSeqScan *scan, OTableDescr *descr,
 // Make a local heapscan in a worker, in a leader, or sequentially
 // for building secomndary index. Put result into provided sortstate
 //
-static void
-build_secondary_index_worker_heap_scan(OTableDescr *descr, OIndexDescr *idx,
+fn
+build_secondary_index_worker_heap_scan(descr: &mut OTableDescr, idx: &mut OIndexDescr,
 									   ParallelOScanDesc poscan,
 									   Tuplesortstate **sortstates,
-									   bool progress, double *heap_tuples,
-									   double *index_tuples[])
+									   bool progress, heap_tuples: &mut double,
+									   index_tuples: &mut double[])
 {
-	void	   *sscan;
-	TupleTableSlot *primarySlot;
+		   *sscan;
+	primarySlot: &mut TupleTableSlot;
 
 	sscan = make_btree_seq_scan(&GET_PRIMARY(descr)->desc, &o_in_progress_snapshot, poscan);
 	primarySlot = MakeSingleTupleTableSlot(descr->tupdesc, &TTSOpsOrioleDB);
@@ -1460,7 +1460,7 @@ build_secondary_index_worker_heap_scan(OTableDescr *descr, OIndexDescr *idx,
 // Capping is similar to plan_create_index_workers()
 //
 static int
-o_calculate_index_workers(BTreeDescr *primary, bool shmem_loaded, int nindices)
+o_calculate_index_workers(primary: &mut BTreeDescr, bool shmem_loaded, int nindices)
 {
 	int			parallel_workers;
 	BlockNumber table_blocks;
@@ -1574,11 +1574,11 @@ o_estimate_parallel_workers(double table_pages, double index_pages,
 	return parallel_workers;
 }
 
-void
-build_secondary_index(Oid oldTblRelnode, OTable *o_table,
-					  OTableDescr *descr, OIndexNumber ix_num,
+
+build_secondary_index(Oid oldTblRelnode, o_table: &mut OTable,
+					  descr: &mut OTableDescr, OIndexNumber ix_num,
 					  bool in_dedicated_recovery_worker,
-					  IndexBuildResult *result)
+					  result: &mut IndexBuildResult)
 {
 	Tuplesortstate **sortstates;
 	Relation	tableRelation,
@@ -1586,13 +1586,13 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 	CheckpointFileHeader fileHeader;
 
 	// Infrastructure for parallel build corresponds to _bt_spools_heapscan
-	oIdxSpool  *btspool = NULL;
+	btspool: &mut oIdxSpool = NULL;
 	oIdxBuildState buildstate = {0};
 	SortCoordinate coordinate = NULL;
 	uint64		ctid;
 	double		heap_tuples;
-	double	   *index_tuples;
-	OIndexDescr *idx;
+	index_tuples: &mut double;
+	idx: &mut OIndexDescr;
 	int			i;
 	bool		setting_tbl_tablespace = OidIsValid(oldTblRelnode);
 
@@ -1687,7 +1687,7 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 						   ctid, 0, &fileHeader);
 	// End serial/leader sort
 	tuplesort_end(sortstates[0]);
-	pfree((void *) sortstates);
+	pfree(( *) sortstates);
 
 	if (buildstate.btleader)
 	{
@@ -1759,15 +1759,15 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 // worker_sortmem is the amount of working memory to use within each worker,
 // expressed in KBs.
 //
-static void
-rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
+fn
+rebuild_indices_worker_sort(btspool: &mut oIdxSpool,  *bt_shared,
 							Sharedsort **sharedsort, int worker_sortmem,
 							bool progress)
 {
 	SortCoordinate coordinate;
-	double	   *indtuples,
+	indtuples: &mut double,
 				heaptuples;
-	oIdxShared *btshared = (oIdxShared *) bt_shared;
+	btshared: &mut oIdxShared = (oIdxShared *) bt_shared;
 	ParallelOScanDesc poscan = &btshared->poscan;
 	int			i;
 	int			nIndices = btspool->descr->nIndices;
@@ -1865,16 +1865,16 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 // and for each tuple put extracted attributes for each index into each index partial
 // sort state.
 //
-static void
-rebuild_indices_worker_heap_scan(OTableDescr *old_descr, OTableDescr *descr,
+fn
+rebuild_indices_worker_heap_scan(old_descr: &mut OTableDescr, descr: &mut OTableDescr,
 								 ParallelOScanDesc poscan, Tuplesortstate **sortstates,
-								 bool progress, double *heap_tuples, double *index_tuples[],
-								 uint64 *ctid, uint64 *bridge_ctid)
+								 bool progress, heap_tuples: &mut double, index_tuples: &mut double[],
+								 ctid: &mut uint64, bridge_ctid: &mut uint64)
 {
-	void	   *sscan;
-	OIndexDescr *idx;
+		   *sscan;
+	idx: &mut OIndexDescr;
 	int			i;
-	TupleTableSlot *primarySlot;
+	primarySlot: &mut TupleTableSlot;
 
 	primarySlot = MakeSingleTupleTableSlot(old_descr->tupdesc, &TTSOpsOrioleDB);
 
@@ -1915,7 +1915,7 @@ rebuild_indices_worker_heap_scan(OTableDescr *old_descr, OTableDescr *descr,
 				}
 				if (idx->bridging && bridge_ctid)
 				{
-					OTableSlot *o_slot = (OTableSlot *) primarySlot;
+					o_slot: &mut OTableSlot = (OTableSlot *) primarySlot;
 					BlockNumber max_block_number = MaxBlockNumber;
 
 					if (BlockNumberIsValid(max_bridge_ctid_blkno))
@@ -1959,27 +1959,27 @@ rebuild_indices_worker_heap_scan(OTableDescr *old_descr, OTableDescr *descr,
 	free_btree_seq_scan(sscan);
 }
 
-void
-rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
-				OTable *o_table, OTableDescr *descr,
+
+rebuild_indices(old_o_table: &mut OTable, old_descr: &mut OTableDescr,
+				o_table: &mut OTable, descr: &mut OTableDescr,
 				bool in_dedicated_recovery_worker,
-				IndexBuildResult *result)
+				result: &mut IndexBuildResult)
 {
 	Tuplesortstate **sortstates;
 	int			i;
 	Relation	tableRelation;
 	double		heap_tuples;
-	double	   *index_tuples;
+	index_tuples: &mut double;
 	uint64		ctid;
 	uint64		bridge_ctid;
-	CheckpointFileHeader *fileHeaders;
+	fileHeaders: &mut CheckpointFileHeader;
 	oIdxBuildState buildstate = {0};
-	oIdxSpool  *btspool = NULL;
-	SortCoordinate *coordinate = NULL;
+	btspool: &mut oIdxSpool = NULL;
+	coordinate: &mut SortCoordinate = NULL;
 	S3TaskLocation maxLocation = 0,
 				location = 0;
-	BTreeDescr *old_td;
-	BTreeMetaPage *meta;
+	old_td: &mut BTreeDescr;
+	meta: &mut BTreeMetaPage;
 	int			nallindices = descr->nIndices;
 	int			leader_sortmem;
 
@@ -2141,7 +2141,7 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 	}
 	o_unset_syscache_hooks();
 
-	pfree((void *) sortstates);
+	pfree(( *) sortstates);
 
 	if (buildstate.btleader)
 	{
@@ -2212,7 +2212,7 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 			}
 			if (i != 0 || o_table->has_primary)
 			{
-				OTableIndex *table_index = &o_table->indices[i];
+				table_index: &mut OTableIndex = &o_table->indices[i];
 				Relation	indexRelation;
 
 				indexRelation = index_open(table_index->oids.reloid,
@@ -2230,12 +2230,12 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 	pfree(index_tuples);
 }
 
-void
-drop_primary_index(Relation rel, OTable *o_table)
+
+drop_primary_index(Relation rel, o_table: &mut OTable)
 {
-	OTable	   *old_o_table;
-	OTableDescr *descr;
-	OTableDescr *old_descr;
+	old_o_table: &mut OTable;
+	descr: &mut OTableDescr;
+	old_descr: &mut OTableDescr;
 
 	Assert(o_table->indices[PrimaryIndexNumber].type == oIndexPrimary);
 
@@ -2261,8 +2261,8 @@ drop_primary_index(Relation rel, OTable *o_table)
 
 }
 
-static void
-drop_secondary_index(OTable *o_table, OIndexNumber ix_num)
+fn
+drop_secondary_index(o_table: &mut OTable, OIndexNumber ix_num)
 {
 	OSnapshot	oSnapshot;
 	OXid		oxid;
@@ -2289,11 +2289,11 @@ drop_secondary_index(OTable *o_table, OIndexNumber ix_num)
 	recreate_table_descr_by_oids(o_table->oids);
 }
 
-void
+
 o_index_drop(Relation tbl, OIndexNumber ix_num)
 {
 	ORelOids	oids;
-	OTable	   *o_table;
+	o_table: &mut OTable;
 
 	ORelOidsSetFromRel(oids, tbl);
 	o_table = o_tables_get(oids);
@@ -2315,7 +2315,7 @@ o_index_drop(Relation tbl, OIndexNumber ix_num)
 }
 
 OIndexNumber
-o_find_ix_num_by_name(OTableDescr *descr, char *ix_name)
+o_find_ix_num_by_name(descr: &mut OTableDescr, ix_name: &mut char)
 {
 	OIndexNumber result = InvalidIndexNumber;
 	int			i;

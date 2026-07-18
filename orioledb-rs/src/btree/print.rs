@@ -29,7 +29,7 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	BTreePrintOptions *options;
+	options: &mut BTreePrintOptions;
 	// Page number in NLR tree traversal
 	OInMemoryBlkno NLRPageNumber;
 	uint32		minCheckpointNum;
@@ -43,15 +43,15 @@ typedef struct
 #endif
 	bool		hasCsn;
 	// hash mapping of the backend id with the number of
-	HTAB	   *backendIdHash;
+	backendIdHash: &mut HTAB;
 
 	//
 // hash mapping of the page number in memory with number in the NLR tree
 // traversal
 //
-	HTAB	   *pageHash;
+	pageHash: &mut HTAB;
 	// sorted list of unique undo locations in ascending order
-	List	   *undosList[(int) UndoLogsCount];
+	undosList: &mut List[(int) UndoLogsCount];
 } BTreePrintData;
 
 typedef OInMemoryBlkno PageHashKey;
@@ -78,37 +78,37 @@ typedef struct
 	OInMemoryBlkno NLRPageNumber;
 } PageHashEntry;
 
-static void print_page_contents_recursive(BTreeDescr *desc,
+fn print_page_contents_recursive(desc: &mut BTreeDescr,
 										  OInMemoryBlkno blkno,
 										  PrintFunc keyPrintFunc,
 										  PrintFunc tuplePrintFunc,
 										  Pointer printArg,
-										  BTreePrintData *printData,
+										  printData: &mut BTreePrintData,
 										  int depthLeft, StringInfo outbuf);
-static void btree_calculate_min_values(UndoLogType undoType,
+fn btree_calculate_min_values(UndoLogType undoType,
 									   OInMemoryBlkno blkno,
-									   BTreePrintData *printData);
+									   printData: &mut BTreePrintData);
 static bool btree_print_csn(CommitSeqNo csn, StringInfo outbuf,
-							BTreePrintData *printData, bool addComma);
-static void btree_print_backend_id(OXid oxid, StringInfo outbuf,
-								   BTreePrintData *printData);
-static uint64 lundo_location(List *list, UndoLocation location);
+							printData: &mut BTreePrintData, bool addComma);
+fn btree_print_backend_id(OXid oxid, StringInfo outbuf,
+								   printData: &mut BTreePrintData);
+static uint64 lundo_location(list: &mut List, UndoLocation location);
 static bool btree_print_undo_location(UndoLogType undoType,
 									  UndoLocation undoLocation,
 									  StringInfo outbuf,
-									  BTreePrintData *printData,
+									  printData: &mut BTreePrintData,
 									  bool addComma);
 static bool btree_print_format_flags(int formatFlags, StringInfo outbuf,
-									 BTreePrintData *printData, bool addComma);
-static void btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf,
-									BTreePrintData *printData);
-static void btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf,
-										  BTreePrintData *printData);
-static void btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf,
-								  BTreePrintData *printData);
-static void pdata_set_min_csn(BTreePrintData *printData,
+									 printData: &mut BTreePrintData, bool addComma);
+fn btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf,
+									printData: &mut BTreePrintData);
+fn btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf,
+										  printData: &mut BTreePrintData);
+fn btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf,
+								  printData: &mut BTreePrintData);
+fn pdata_set_min_csn(printData: &mut BTreePrintData,
 							  CommitSeqNo csn);
-static List *ladd_unique_undo(List *list,
+static ladd_unique_undo: &mut List(list: &mut List,
 							  UndoLogType undoType,
 							  UndoLocation location);
 
@@ -116,10 +116,10 @@ static List *ladd_unique_undo(List *list,
 // Recursively print contents of B-tree pages with given depth.  Uses
 // callbacks for printing keys and tuples.
 //
-void
-o_print_btree_pages(BTreeDescr *desc, StringInfo outbuf,
+
+o_print_btree_pages(desc: &mut BTreeDescr, StringInfo outbuf,
 					PrintFunc keyPrintFunc, PrintFunc tuplePrintFunc,
-					Pointer printArg, BTreePrintOptions *options, int depth)
+					Pointer printArg, options: &mut BTreePrintOptions, int depth)
 {
 	HASHCTL		ctl;
 	BTreePrintData printData = {0};
@@ -180,17 +180,17 @@ o_print_btree_pages(BTreeDescr *desc, StringInfo outbuf,
 // Print contents of give B-tree page.  If non-leaf page is given, recursively
 // print childredn.
 //
-static void
-print_page_contents_recursive(BTreeDescr *desc, OInMemoryBlkno blkno,
+fn
+print_page_contents_recursive(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 							  PrintFunc keyPrintFunc,
 							  PrintFunc tuplePrintFunc,
 							  Pointer printArg,
-							  BTreePrintData *printData,
+							  printData: &mut BTreePrintData,
 							  int depthLeft, StringInfo outbuf)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 	BTreePageItemLocator loc;
 	OffsetNumber i,
 				j,
@@ -486,7 +486,7 @@ print_page_contents_recursive(BTreeDescr *desc, OInMemoryBlkno blkno,
 			}
 			else
 			{
-				BTreeNonLeafTuphdr *tuphdr;
+				tuphdr: &mut BTreeNonLeafTuphdr;
 				OTuple		tuple;
 
 				BTREE_PAGE_READ_INTERNAL_ITEM(tuphdr, tuple, p, &loc);
@@ -522,7 +522,7 @@ print_page_contents_recursive(BTreeDescr *desc, OInMemoryBlkno blkno,
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
 			Pointer		ptr = BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) ptr;
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) ptr;
 
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 				print_page_contents_recursive(desc,
@@ -542,14 +542,14 @@ print_page_contents_recursive(BTreeDescr *desc, OInMemoryBlkno blkno,
 // Calculate values needed for printing page positions in NLR traversal,
 // relative CSNs and Undo locations.
 //
-static void
+fn
 btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
-						   BTreePrintData *printData)
+						   printData: &mut BTreePrintData)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
-	PageHashEntry *pageHashEntry;
-	BackendIdHashEntry *backendIdHashEntry;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
+	pageHashEntry: &mut PageHashEntry;
+	backendIdHashEntry: &mut BackendIdHashEntry;
 	BTreePageItemLocator loc;
 	bool		found;
 	UndoLogType pageUndoType = GET_PAGE_LEVEL_UNDO_TYPE(undoType);
@@ -618,7 +618,7 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 		}
 		else
 		{
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) ptr;
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) ptr;
 
 			// If tuple is downlink in memory
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
@@ -641,7 +641,7 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 // Print in memory downlink for child node
 //
 static bool
-btree_print_csn(CommitSeqNo csn, StringInfo outbuf, BTreePrintData *printData, bool addComma)
+btree_print_csn(CommitSeqNo csn, StringInfo outbuf, printData: &mut BTreePrintData, bool addComma)
 {
 	CommitSeqNo printedCsn = csn;
 
@@ -673,8 +673,8 @@ btree_print_csn(CommitSeqNo csn, StringInfo outbuf, BTreePrintData *printData, b
 //
 // Print node backend id
 //
-static void
-btree_print_backend_id(OXid oxid, StringInfo outbuf, BTreePrintData *printData)
+fn
+btree_print_backend_id(OXid oxid, StringInfo outbuf, printData: &mut BTreePrintData)
 {
 #if PG_VERSION_NUM >= 170000
 	ProcNumber	backendId = oxid_get_procnum(oxid);
@@ -682,7 +682,7 @@ btree_print_backend_id(OXid oxid, StringInfo outbuf, BTreePrintData *printData)
 	BackendId	backendId = oxid_get_procnum(oxid);
 #endif
 
-	BackendIdHashEntry *hentry;
+	hentry: &mut BackendIdHashEntry;
 	bool		found;
 
 	if (printData->options->backendIdPrintType != BTreeNotPrint)
@@ -695,9 +695,9 @@ btree_print_backend_id(OXid oxid, StringInfo outbuf, BTreePrintData *printData)
 }
 
 static uint64
-lundo_location(List *list, UndoLocation location)
+lundo_location(list: &mut List, UndoLocation location)
 {
-	ListCell   *lc;
+	lc: &mut ListCell;
 	uint64		i = 0;
 
 	foreach(lc, list)
@@ -711,7 +711,7 @@ lundo_location(List *list, UndoLocation location)
 
 static bool
 btree_print_undo_location(UndoLogType undoType, UndoLocation undoLocation,
-						  StringInfo outbuf, BTreePrintData *printData,
+						  StringInfo outbuf, printData: &mut BTreePrintData,
 						  bool addComma)
 {
 	UndoLocation printedUndoLoc = undoLocation;
@@ -746,7 +746,7 @@ btree_print_undo_location(UndoLogType undoType, UndoLocation undoLocation,
 
 static bool
 btree_print_format_flags(int formatFlags, StringInfo outbuf,
-						 BTreePrintData *printData, bool addComma)
+						 printData: &mut BTreePrintData, bool addComma)
 {
 	if (printData->options->printFormatFlags)
 	{
@@ -763,10 +763,10 @@ btree_print_format_flags(int formatFlags, StringInfo outbuf,
 //
 // Print page number for node
 //
-static void
-btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, BTreePrintData *printData)
+fn
+btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, printData: &mut BTreePrintData)
 {
-	PageHashEntry *hentry;
+	hentry: &mut PageHashEntry;
 	bool		found;
 	OInMemoryBlkno printedPageNumber = blkno;
 
@@ -784,10 +784,10 @@ btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, BTreePrintData 
 //
 // Print in memory downlink for child node
 //
-static void
-btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, BTreePrintData *printData)
+fn
+btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, printData: &mut BTreePrintData)
 {
-	PageHashEntry *hentry;
+	hentry: &mut PageHashEntry;
 	bool		found;
 	OInMemoryBlkno printedPageNumber = DOWNLINK_GET_IN_MEMORY_BLKNO(downlink);
 
@@ -807,10 +807,10 @@ btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, BTreePrintData
 //
 // Print rightlink for node
 //
-static void
-btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf, BTreePrintData *printData)
+fn
+btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf, printData: &mut BTreePrintData)
 {
-	PageHashEntry *hentry;
+	hentry: &mut PageHashEntry;
 	bool		found;
 	OInMemoryBlkno printedPageNumber = rightlink;
 
@@ -833,8 +833,8 @@ btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf, BTreePrintDat
 		appendStringInfo(outbuf, "Rightlink is invalid\n");
 }
 
-static void
-pdata_set_min_csn(BTreePrintData *printData, CommitSeqNo csn)
+fn
+pdata_set_min_csn(printData: &mut BTreePrintData, CommitSeqNo csn)
 {
 	if (!COMMITSEQNO_IS_NORMAL(csn))
 		return;
@@ -848,9 +848,9 @@ pdata_set_min_csn(BTreePrintData *printData, CommitSeqNo csn)
 
 // adds unique undo location in ascending order
 static List *
-ladd_unique_undo(List *list, UndoLogType undoType, UndoLocation location)
+ladd_unique_undo(list: &mut List, UndoLogType undoType, UndoLocation location)
 {
-	ListCell   *lc;
+	lc: &mut ListCell;
 	UndoLocation lLoc,
 			   *copyLoc;
 	int			insertAt = -1,

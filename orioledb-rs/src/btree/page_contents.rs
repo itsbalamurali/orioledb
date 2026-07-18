@@ -30,18 +30,18 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void clear_fixed_tuple(OFixedTuple *dst);
+fn clear_fixed_tuple(dst: &mut OFixedTuple);
 
 //
 // Navigates and reads the page image from undo log according to `key` of
-// `keyType` and `csn`.  Saves lokey of the page to lokey if *lokey != NULL.
+// `keyType` and `csn`.  Saves lokey of the page to lokey lokey: &mut if != NULL.
 //
 UndoLocation
-read_page_from_undo(BTreeDescr *desc, Page img, UndoLocation undo_loc,
-					CommitSeqNo csn, void *key, BTreeKeyType keyType,
-					OFixedKey *lokey)
+read_page_from_undo(desc: &mut BTreeDescr, Page img, UndoLocation undo_loc,
+					CommitSeqNo csn,  *key, BTreeKeyType keyType,
+					lokey: &mut OFixedKey)
 {
-	BTreePageHeader *header;
+	header: &mut BTreePageHeader;
 	CommitSeqNo page_csn;
 	UndoLocation rec_undo_location;
 	bool		is_left = true;
@@ -84,9 +84,9 @@ read_page_from_undo(BTreeDescr *desc, Page img, UndoLocation undo_loc,
 // Try to copy consistent image of page with page number = blkno to dest.
 //
 static inline ReadPageResult
-try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
-			  Page dest, PartialPageState *partial, bool loadHikeysChunk,
-			  CommitSeqNo *readCsn)
+try_copy_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageChangeCount,
+			  Page dest, partial: &mut PartialPageState, bool loadHikeysChunk,
+			  readCsn: &mut CommitSeqNo)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	uint64		state1,
@@ -95,7 +95,7 @@ try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 #ifdef USE_ASSERT_CHECKING
 	ORelOids	pageOids;
 #endif
-	PagePool   *ppool;
+	ppool: &mut PagePool;
 
 	state1 = pg_atomic_read_u64(&(O_PAGE_HEADER(p)->state));
 	if (O_PAGE_STATE_READ_IS_BLOCKED(state1))
@@ -105,7 +105,7 @@ try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 
 	if (partial)
 	{
-		BTreePageHeader *header = (BTreePageHeader *) p;
+		header: &mut BTreePageHeader = (BTreePageHeader *) p;
 		LocationIndex hikeysEnd = loadHikeysChunk ? header->hikeysEnd : offsetof(BTreePageHeader, chunkDesc);
 
 		pg_read_barrier();
@@ -178,9 +178,9 @@ try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 // Copy consistent image of page with page number = blkno to dest.
 //
 static inline bool
-copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
-		  Page dest, PartialPageState *partial, bool loadHikeysChunk,
-		  CommitSeqNo *readCsn)
+copy_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageChangeCount,
+		  Page dest, partial: &mut PartialPageState, bool loadHikeysChunk,
+		  readCsn: &mut CommitSeqNo)
 {
 	while (true)
 	{
@@ -193,7 +193,7 @@ copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 			return true;
 		else if (result == ReadPageResultWrongPageChangeCount)
 			return false;
-		(void) page_wait_for_read_enable(blkno);
+		() page_wait_for_read_enable(blkno);
 	}
 }
 
@@ -203,15 +203,15 @@ copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 // `keyType`.
 //
 bool
-o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
+o_btree_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				  uint32 pageChangeCount, Page img,
-				  CommitSeqNo csn, void *key, BTreeKeyType keyType,
-				  OFixedKey *lokey, PartialPageState *partial,
-				  bool loadHikeysChunk, UndoLocation *undoLocation,
-				  CommitSeqNo *readCsn)
+				  CommitSeqNo csn,  *key, BTreeKeyType keyType,
+				  lokey: &mut OFixedKey, partial: &mut PartialPageState,
+				  bool loadHikeysChunk, undoLocation: &mut UndoLocation,
+				  readCsn: &mut CommitSeqNo)
 {
 	Page		p;
-	BTreePageHeader *header;
+	header: &mut BTreePageHeader;
 	bool		read_undo;
 
 	Assert(pageChangeCount != InvalidOPageChangeCount);
@@ -254,7 +254,7 @@ o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
 	//
 // Always copy the live page into img first, then -- if it is too new for
 // our snapshot -- walk the page-level undo chain transforming img in
-// place.  Differential undo images (UndoPageImage*Diff) do not store page
+// place.  Differential undo images (Diff: &mut UndoPageImage) do not store page
 // bytes; they reconstruct the historical page from the newer image
 // already sitting in img.  So img must hold the live page before the
 // chain walk, which is why the former "read undo without copying" fast
@@ -303,13 +303,13 @@ o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
 // Try to read page with concurrent changes.  Returns true on success.
 //
 ReadPageResult
-o_btree_try_read_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount, Page img,
+o_btree_try_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageChangeCount, Page img,
 					  CommitSeqNo csn, Pointer key, BTreeKeyType keyType,
-					  PartialPageState *partial, bool loadHikeysChunk,
-					  CommitSeqNo *readCsn)
+					  partial: &mut PartialPageState, bool loadHikeysChunk,
+					  readCsn: &mut CommitSeqNo)
 {
 	Page		p;
-	BTreePageHeader *header;
+	header: &mut BTreePageHeader;
 	bool		read_undo;
 	ReadPageResult result;
 
@@ -361,13 +361,13 @@ o_btree_try_read_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeC
 	return ReadPageResultOK;
 }
 
-void
-init_new_btree_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint16 flags,
+
+init_new_btree_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint16 flags,
 					uint16 level, bool noLock)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	if (!noLock)
 	{
@@ -404,12 +404,12 @@ init_new_btree_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint16 flags,
 		   ORIOLEDB_BLCKSZ - offsetof(BTreePageHeader, chunkDesc));
 }
 
-void
+
 init_meta_page(OInMemoryBlkno blkno, uint32 leafPagesNum)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	BTreeMetaPage *metaPage = (BTreeMetaPage *) p;
+	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	metaPage: &mut BTreeMetaPage = (BTreeMetaPage *) p;
 	int			i,
 				j;
 
@@ -459,7 +459,7 @@ init_meta_page(OInMemoryBlkno blkno, uint32 leafPagesNum)
 // Estimate vacated space in the page after item replace on the given offset.
 //
 LocationIndex
-page_get_vacated_skip_item(BTreeDescr *desc, Page p, CommitSeqNo csn,
+page_get_vacated_skip_item(desc: &mut BTreeDescr, Page p, CommitSeqNo csn,
 						   LocationIndex offset)
 {
 	LocationIndex vacatedBytes = 0;
@@ -467,7 +467,7 @@ page_get_vacated_skip_item(BTreeDescr *desc, Page p, CommitSeqNo csn,
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
-		BTreeLeafTuphdr *header;
+		header: &mut BTreeLeafTuphdr;
 		OTuple		tuple;
 
 		if (BTREE_PAGE_LOCATOR_GET_OFFSET(p, &loc) == offset)
@@ -498,15 +498,15 @@ page_get_vacated_skip_item(BTreeDescr *desc, Page p, CommitSeqNo csn,
 // Estimate vacated space in the page.
 //
 LocationIndex
-page_get_vacated_space(BTreeDescr *desc, Page p, CommitSeqNo csn)
+page_get_vacated_space(desc: &mut BTreeDescr, Page p, CommitSeqNo csn)
 {
 	return page_get_vacated_skip_item(desc, p, csn, -1);
 }
 
-void
+
 page_cut_first_key(Page node)
 {
-	BTreeNonLeafTuphdr *tuphdr,
+	tuphdr: &mut BTreeNonLeafTuphdr,
 				tmp;
 	BTreePageItemLocator loc;
 
@@ -523,7 +523,7 @@ page_cut_first_key(Page node)
 	*tuphdr = tmp;
 }
 
-void
+
 put_page_image(OInMemoryBlkno blkno, Page img)
 {
 	Page		page = O_GET_IN_MEMORY_PAGE(blkno);
@@ -540,8 +540,8 @@ put_page_image(OInMemoryBlkno blkno, Page img)
 // Calculates number of vacated bytes for leaf pages and number of
 // disk downlinks for non-leaf pages.
 //
-void
-o_btree_page_calculate_statistics(BTreeDescr *desc, Pointer p)
+
+o_btree_page_calculate_statistics(desc: &mut BTreeDescr, Pointer p)
 {
 	BTreePageItemLocator loc;
 
@@ -555,7 +555,7 @@ o_btree_page_calculate_statistics(BTreeDescr *desc, Pointer p)
 
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
-			BTreeLeafTuphdr *tupHdr;
+			tupHdr: &mut BTreeLeafTuphdr;
 			OTuple		tuple;
 
 			BTREE_PAGE_READ_LEAF_ITEM(tupHdr, tuple, p, &loc);
@@ -574,7 +574,7 @@ o_btree_page_calculate_statistics(BTreeDescr *desc, Pointer p)
 
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
-			BTreeNonLeafTuphdr *tupHdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
+			tupHdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 
 			if (DOWNLINK_IS_ON_DISK(tupHdr->downlink))
 				nOnDisk++;
@@ -583,8 +583,8 @@ o_btree_page_calculate_statistics(BTreeDescr *desc, Pointer p)
 	}
 }
 
-void
-copy_fixed_tuple(BTreeDescr *desc, OFixedTuple *dst, OTuple src)
+
+copy_fixed_tuple(desc: &mut BTreeDescr, dst: &mut OFixedTuple, OTuple src)
 {
 	int			tuplen;
 
@@ -603,8 +603,8 @@ copy_fixed_tuple(BTreeDescr *desc, OFixedTuple *dst, OTuple src)
 		memset(&dst->fixedData[tuplen], 0, MAXALIGN(tuplen) - tuplen);
 }
 
-static void
-copy_fixed_key_with_len(OFixedKey *dst, OTuple src, int tuplen)
+fn
+copy_fixed_key_with_len(dst: &mut OFixedKey, OTuple src, int tuplen)
 {
 	if (O_TUPLE_IS_NULL(src))
 	{
@@ -619,8 +619,8 @@ copy_fixed_key_with_len(OFixedKey *dst, OTuple src, int tuplen)
 		memset(&dst->fixedData[tuplen], 0, MAXALIGN(tuplen) - tuplen);
 }
 
-void
-copy_fixed_key(BTreeDescr *desc, OFixedKey *dst, OTuple src)
+
+copy_fixed_key(desc: &mut BTreeDescr, dst: &mut OFixedKey, OTuple src)
 {
 	int			tuplen;
 
@@ -635,9 +635,9 @@ copy_fixed_key(BTreeDescr *desc, OFixedKey *dst, OTuple src)
 	copy_fixed_key_with_len(dst, src, tuplen);
 }
 
-void
-copy_fixed_page_key(BTreeDescr *desc, OFixedKey *dst,
-					Page p, BTreePageItemLocator *loc)
+
+copy_fixed_page_key(desc: &mut BTreeDescr, dst: &mut OFixedKey,
+					Page p, loc: &mut BTreePageItemLocator)
 {
 	OTuple		src;
 
@@ -645,8 +645,8 @@ copy_fixed_page_key(BTreeDescr *desc, OFixedKey *dst,
 	copy_fixed_key(desc, dst, src);
 }
 
-void
-copy_fixed_hikey(BTreeDescr *desc, OFixedKey *dst, Page p)
+
+copy_fixed_hikey(desc: &mut BTreeDescr, dst: &mut OFixedKey, Page p)
 {
 	OTuple		src;
 
@@ -654,22 +654,22 @@ copy_fixed_hikey(BTreeDescr *desc, OFixedKey *dst, Page p)
 	copy_fixed_key(desc, dst, src);
 }
 
-static void
-clear_fixed_tuple(OFixedTuple *dst)
+fn
+clear_fixed_tuple(dst: &mut OFixedTuple)
 {
 	dst->tuple.formatFlags = 0;
 	dst->tuple.data = NULL;
 }
 
-void
-clear_fixed_key(OFixedKey *dst)
+
+clear_fixed_key(dst: &mut OFixedKey)
 {
 	dst->tuple.formatFlags = 0;
 	dst->tuple.data = NULL;
 }
 
-void
-copy_from_fixed_shmem_key(OFixedKey *dst, OFixedShmemKey *src)
+
+copy_from_fixed_shmem_key(dst: &mut OFixedKey, src: &mut OFixedShmemKey)
 {
 	if (!src->notNull)
 	{
@@ -682,8 +682,8 @@ copy_from_fixed_shmem_key(OFixedKey *dst, OFixedShmemKey *src)
 	dst->tuple.formatFlags = src->formatFlags;
 }
 
-void
-copy_fixed_shmem_key(BTreeDescr *desc, OFixedShmemKey *dst, OTuple src)
+
+copy_fixed_shmem_key(desc: &mut BTreeDescr, dst: &mut OFixedShmemKey, OTuple src)
 {
 	if (O_TUPLE_IS_NULL(src))
 	{
@@ -698,9 +698,9 @@ copy_fixed_shmem_key(BTreeDescr *desc, OFixedShmemKey *dst, OTuple src)
 	dst->formatFlags = src.formatFlags;
 }
 
-void
-copy_fixed_shmem_page_key(BTreeDescr *desc, OFixedShmemKey *dst,
-						  Page p, BTreePageItemLocator *loc)
+
+copy_fixed_shmem_page_key(desc: &mut BTreeDescr, dst: &mut OFixedShmemKey,
+						  Page p, loc: &mut BTreePageItemLocator)
 {
 	OTuple		src;
 
@@ -708,8 +708,8 @@ copy_fixed_shmem_page_key(BTreeDescr *desc, OFixedShmemKey *dst,
 	copy_fixed_shmem_key(desc, dst, src);
 }
 
-void
-copy_fixed_shmem_hikey(BTreeDescr *desc, OFixedShmemKey *dst, Page p)
+
+copy_fixed_shmem_hikey(desc: &mut BTreeDescr, dst: &mut OFixedShmemKey, Page p)
 {
 	OTuple		src;
 
@@ -717,8 +717,8 @@ copy_fixed_shmem_hikey(BTreeDescr *desc, OFixedShmemKey *dst, Page p)
 	copy_fixed_shmem_key(desc, dst, src);
 }
 
-void
-clear_fixed_shmem_key(OFixedShmemKey *dst)
+
+clear_fixed_shmem_key(dst: &mut OFixedShmemKey)
 {
 	dst->notNull = false;
 	dst->formatFlags = 0;
@@ -726,7 +726,7 @@ clear_fixed_shmem_key(OFixedShmemKey *dst)
 }
 
 OTuple
-fixed_shmem_key_get_tuple(OFixedShmemKey *src)
+fixed_shmem_key_get_tuple(src: &mut OFixedShmemKey)
 {
 	OTuple		result;
 
@@ -746,8 +746,8 @@ fixed_shmem_key_get_tuple(OFixedShmemKey *src)
 OTuple
 page_get_hikey(Page p)
 {
-	BTreePageChunkDesc *chunkDesc;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	chunkDesc: &mut BTreePageChunkDesc;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OTuple		result;
 
 	Assert(!O_PAGE_IS(p, RIGHTMOST));
@@ -763,8 +763,8 @@ page_get_hikey(Page p)
 int
 page_get_hikey_size(Page p)
 {
-	BTreePageChunkDesc *chunkDesc;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	chunkDesc: &mut BTreePageChunkDesc;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	Assert(!O_PAGE_IS(p, RIGHTMOST));
 	chunkDesc = &header->chunkDesc[header->chunksCount - 1];
@@ -772,11 +772,11 @@ page_get_hikey_size(Page p)
 	return (header->hikeysEnd - SHORT_GET_LOCATION(chunkDesc->hikeyShortLocation));
 }
 
-void
+
 page_set_hikey_flags(Page p, uint8 flags)
 {
-	BTreePageChunkDesc *chunkDesc;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	chunkDesc: &mut BTreePageChunkDesc;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	Assert(!O_PAGE_IS(p, RIGHTMOST));
 	chunkDesc = &header->chunkDesc[header->chunksCount - 1];
@@ -786,7 +786,7 @@ page_set_hikey_flags(Page p, uint8 flags)
 bool
 page_fits_hikey(Page p, LocationIndex newHikeySize)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	LocationIndex dataShift,
 				hikeyLocation,
 				dataLocation;
@@ -803,10 +803,10 @@ page_fits_hikey(Page p, LocationIndex newHikeySize)
 	return (header->dataSize + dataShift <= ORIOLEDB_BLCKSZ);
 }
 
-void
+
 page_resize_hikey(Page p, LocationIndex newHikeySize)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	LocationIndex dataShift,
 				hikeyLocation,
 				dataLocation;
@@ -833,11 +833,11 @@ page_resize_hikey(Page p, LocationIndex newHikeySize)
 	header->dataSize += dataShift;
 }
 
-void
-btree_page_update_max_key_len(BTreeDescr *desc, Page p)
+
+btree_page_update_max_key_len(desc: &mut BTreeDescr, Page p)
 {
 	LocationIndex maxKeyLen;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	BTreePageItemLocator loc;
 
 	if (!O_PAGE_IS(p, RIGHTMOST))

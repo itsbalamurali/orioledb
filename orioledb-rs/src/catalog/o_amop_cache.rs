@@ -25,16 +25,16 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *amop_cache = NULL;
-static OSysCache *amop_strat_cache = NULL;
+static amop_cache: &mut OSysCache = NULL;
+static amop_strat_cache: &mut OSysCache = NULL;
 
-static void o_amop_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_amop_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									Pointer arg);
-static void o_amop_cache_free_entry(Pointer entry);
+fn o_amop_cache_free_entry(Pointer entry);
 
-static void o_amop_strat_cache_fill_entry(Pointer *entry_ptr,
-										  OSysCacheKey *key, Pointer arg);
-static void o_amop_strat_cache_free_entry(Pointer entry);
+fn o_amop_strat_cache_fill_entry(entry_ptr: &mut Pointer,
+										  key: &mut OSysCacheKey, Pointer arg);
+fn o_amop_strat_cache_free_entry(Pointer entry);
 
 O_SYS_CACHE_FUNCS(amop_cache, OAmOp, 3);
 O_SYS_CACHE_FUNCS(amop_strat_cache, OAmOpStrat, 4);
@@ -78,12 +78,12 @@ O_SYS_CACHE_INIT_FUNC(amop_strat_cache)
 										  &amop_strat_cache_funcs);
 }
 
-static void
-o_amop_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_amop_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	amoptup;
 	Form_pg_amop amopform;
-	OAmOp	   *o_amop = (OAmOp *) *entry_ptr;
+	o_amop: &mut OAmOp = (OAmOp *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			amopopr;
 	char		amoppurpose;
@@ -121,19 +121,19 @@ o_amop_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(amoptup);
 }
 
-static void
+fn
 o_amop_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
 }
 
-static void
-o_amop_strat_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn
+o_amop_strat_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							  Pointer arg)
 {
 	HeapTuple	amoptup;
 	Form_pg_amop amopform;
-	OAmOpStrat *o_amop_strat = (OAmOpStrat *) *entry_ptr;
+	o_amop_strat: &mut OAmOpStrat = (OAmOpStrat *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			amopfamily;
 	Oid			amoplefttype;
@@ -169,14 +169,14 @@ o_amop_strat_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	ReleaseSysCache(amoptup);
 }
 
-static void
+fn
 o_amop_strat_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
 }
 
 static HeapTuple
-o_amop_to_htup(OAmOp *o_amop, TupleDesc tupdesc)
+o_amop_to_htup(o_amop: &mut OAmOp, TupleDesc tupdesc)
 {
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_amop] = {0};
@@ -207,7 +207,7 @@ o_amop_cache_search_htup(TupleDesc tupdesc, Oid amopopr, char amoppurpose,
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
-	OAmOp	   *o_amop;
+	o_amop: &mut OAmOp;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_amop = o_amop_cache_search(datoid, amopopr, amoppurpose, amopfamily,
@@ -218,9 +218,9 @@ o_amop_cache_search_htup(TupleDesc tupdesc, Oid amopopr, char amoppurpose,
 List *
 o_amop_cache_search_htup_list(TupleDesc tupdesc, Oid amopopr)
 {
-	List	   *result = NIL;
-	BTreeDescr *td = get_sys_tree(amop_cache->sys_tree_num);
-	BTreeIterator *it;
+	result: &mut List = NIL;
+	td: &mut BTreeDescr = get_sys_tree(amop_cache->sys_tree_num);
+	it: &mut BTreeIterator;
 	OSysCacheKey3 key = {0};
 	OSysCacheBound bound = {.key = (OSysCacheKey *) &key,.nkeys = 1};
 
@@ -236,7 +236,7 @@ o_amop_cache_search_htup_list(TupleDesc tupdesc, Oid amopopr)
 												 (Pointer) &bound,
 												 BTreeKeyBound, true,
 												 NULL);
-		OAmOp	   *o_amop = (OAmOp *) tup.data;
+		o_amop: &mut OAmOp = (OAmOp *) tup.data;
 
 		if (O_TUPLE_IS_NULL(tup))
 			break;
@@ -252,7 +252,7 @@ o_amop_cache_search_htup_list(TupleDesc tupdesc, Oid amopopr)
 }
 
 static HeapTuple
-o_amop_strat_to_htup(OAmOpStrat *o_amop_strat, TupleDesc tupdesc)
+o_amop_strat_to_htup(o_amop_strat: &mut OAmOpStrat, TupleDesc tupdesc)
 {
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_amop] = {0};
@@ -279,7 +279,7 @@ o_amop_strat_cache_search_htup(TupleDesc tupdesc, Oid amopfamily,
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
-	OAmOpStrat *o_amop_strat;
+	o_amop_strat: &mut OAmOpStrat;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_amop_strat = o_amop_strat_cache_search(datoid, amopfamily, amoplefttype,
@@ -291,11 +291,11 @@ o_amop_strat_cache_search_htup(TupleDesc tupdesc, Oid amopfamily,
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_amop_cache_tup_print(BTreeDescr *desc, StringInfo buf,
+
+o_amop_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 					   OTuple tup, Pointer arg)
 {
-	OAmOp	   *o_amop = (OAmOp *) tup.data;
+	o_amop: &mut OAmOp = (OAmOp *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);
@@ -311,11 +311,11 @@ o_amop_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_amop_strat_cache_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup,
+
+o_amop_strat_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup,
 							 Pointer arg)
 {
-	OAmOpStrat *o_amop_strat = (OAmOpStrat *) tup.data;
+	o_amop_strat: &mut OAmOpStrat = (OAmOpStrat *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);

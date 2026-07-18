@@ -40,7 +40,7 @@ use pgrx::pg_sys;
 //
 typedef struct
 {
-	OBTreeFindPageContext *pageFindContext;
+	pageFindContext: &mut OBTreeFindPageContext;
 	OTuple		tuple;
 	BTreeKeyType tupleType;
 	BTreeLeafTuphdr leafTuphdr;
@@ -62,7 +62,7 @@ typedef struct
 	Pointer		key;
 	BTreeKeyType keyType;
 	UndoLocation savepointUndoLocation;
-	BTreeModifyCallbackInfo *callbackInfo;
+	callbackInfo: &mut BTreeModifyCallbackInfo;
 } BTreeModifyInternalContext;
 
 typedef enum ConflictResolution
@@ -83,32 +83,32 @@ BTreeModifyCallbackInfo nullCallbackInfo =
 
 static const LOCKMODE hwLockModes[] = {AccessShareLock, RowShareLock, ExclusiveLock, AccessExclusiveLock};
 
-static void unlock_release(BTreeModifyInternalContext *context, bool unlock);
-static ConflictResolution o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context);
-static OBTreeModifyResult o_btree_modify_handle_tuple_not_found(BTreeModifyInternalContext *context);
-static bool o_btree_modify_item_rollback(BTreeModifyInternalContext *context);
-static void o_btree_modify_insert_update(BTreeModifyInternalContext *context);
-static void o_btree_modify_add_undo_record(BTreeModifyInternalContext *context);
-static OBTreeModifyResult o_btree_modify_delete(BTreeModifyInternalContext *context);
-static OBTreeModifyResult o_btree_modify_lock(BTreeModifyInternalContext *context);
-static Jsonb *prepare_modify_start_params(BTreeDescr *desc);
-static OBTreeModifyResult o_btree_normal_modify(BTreeDescr *desc,
+fn unlock_release(context: &mut BTreeModifyInternalContext, bool unlock);
+static ConflictResolution o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext);
+static OBTreeModifyResult o_btree_modify_handle_tuple_not_found(context: &mut BTreeModifyInternalContext);
+static bool o_btree_modify_item_rollback(context: &mut BTreeModifyInternalContext);
+fn o_btree_modify_insert_update(context: &mut BTreeModifyInternalContext);
+fn o_btree_modify_add_undo_record(context: &mut BTreeModifyInternalContext);
+static OBTreeModifyResult o_btree_modify_delete(context: &mut BTreeModifyInternalContext);
+static OBTreeModifyResult o_btree_modify_lock(context: &mut BTreeModifyInternalContext);
+static prepare_modify_start_params: &mut Jsonb(desc: &mut BTreeDescr);
+static OBTreeModifyResult o_btree_normal_modify(desc: &mut BTreeDescr,
 												BTreeOperationType action,
 												OTuple tuple, BTreeKeyType tupleType,
 												Pointer key, BTreeKeyType keyType,
 												OXid opOxid,
 												CommitSeqNo opCsn,
 												RowLockMode lockMode,
-												BTreeLocationHint *hint,
+												hint: &mut BTreeLocationHint,
 												BTreeLeafTupleDeletedStatus deleted,
-												BTreeModifyCallbackInfo *callbackInfo);
+												callbackInfo: &mut BTreeModifyCallbackInfo);
 
 //
 // Perform modification of btree leaf tuple, when page is alredy located
 // and locked, all reservations are done.
 //
 static OBTreeModifyResult
-o_btree_modify_internal(OBTreeFindPageContext *pageFindContext,
+o_btree_modify_internal(pageFindContext: &mut OBTreeFindPageContext,
 						BTreeOperationType action,
 						OTuple _tuple, BTreeKeyType tupleType,
 						Pointer key, BTreeKeyType keyType,
@@ -116,15 +116,15 @@ o_btree_modify_internal(OBTreeFindPageContext *pageFindContext,
 						RowLockMode _lockMode,
 						BTreeLeafTupleDeletedStatus deleted,
 						int pageReserveKind,
-						BTreeModifyCallbackInfo *callbackInfo)
+						callbackInfo: &mut BTreeModifyCallbackInfo)
 {
-	BTreeDescr *desc = pageFindContext->desc;
+	desc: &mut BTreeDescr = pageFindContext->desc;
 	Page		page;
 	BTreePageItemLocator loc;
 	OInMemoryBlkno blkno;
 	OBTreeModifyResult result = OBTreeModifyResultInserted;
 	OTuple		curTuple;
-	BTreeLeafTuphdr *tuphdr;
+	tuphdr: &mut BTreeLeafTuphdr;
 	BTreeModifyInternalContext context;
 	OXid		tupleOxid = OXidIsValid(opOxid) ? opOxid : BootstrapTransactionId;
 
@@ -230,7 +230,7 @@ retry:
 
 		if (cbAction == OBTreeCallbackActionUndo)
 		{
-			(void) o_btree_modify_item_rollback(&context);
+			() o_btree_modify_item_rollback(&context);
 			goto retry;
 		}
 
@@ -311,7 +311,7 @@ retry:
 
 			if (cbAction == OBTreeCallbackActionUndo)
 			{
-				(void) o_btree_modify_item_rollback(&context);
+				() o_btree_modify_item_rollback(&context);
 				goto retry;
 			}
 
@@ -339,7 +339,7 @@ retry:
 // If we don't need undo, just revert the deletion and then
 // continue with normal insert (with undo).
 //
-				(void) o_btree_modify_item_rollback(&context);
+				() o_btree_modify_item_rollback(&context);
 				context.needsUndo = true;
 			}
 			else if (IsolationUsesXactSnapshot() && IsRelationTree(desc))
@@ -375,11 +375,11 @@ retry:
 	return result;
 }
 
-static void
-unlock_release(BTreeModifyInternalContext *context, bool unlock)
+fn
+unlock_release(context: &mut BTreeModifyInternalContext, bool unlock)
 {
-	OBTreeFindPageContext *pageFindContext = context->pageFindContext;
-	BTreeDescr *desc = pageFindContext->desc;
+	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
+	desc: &mut BTreeDescr = pageFindContext->desc;
 	OInMemoryBlkno blkno;
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
@@ -399,10 +399,10 @@ unlock_release(BTreeModifyInternalContext *context, bool unlock)
 		LockRelease(&context->hwLockTag, context->hwLockMode, false);
 }
 
-static void
-wait_for_tuple(BTreeDescr *desc, OTuple tuple, OXid oxid,
+fn
+wait_for_tuple(desc: &mut BTreeDescr, OTuple tuple, OXid oxid,
 			   RowLockMode lockMode, BTreeModifyLockStatus lockStatus,
-			   LOCKTAG *hwLockTag, LOCKMODE *hwLockMode)
+			   hwLockTag: &mut LOCKTAG, hwLockMode: &mut LOCKMODE)
 {
 	uint32		hash;
 
@@ -421,23 +421,23 @@ wait_for_tuple(BTreeDescr *desc, OTuple tuple, OXid oxid,
 						  0);
 		*hwLockMode = hwLockModes[lockMode];
 
-		(void) LockAcquire(hwLockTag, *hwLockMode, false, false);
+		() LockAcquire(hwLockTag, *hwLockMode, false, false);
 	}
 
 	wait_for_oxid(oxid, false);
 }
 
 static ConflictResolution
-o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
+o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 {
 	bool		haveRedundantRowLocks = false;
-	OBTreeFindPageContext *pageFindContext = context->pageFindContext;
-	BTreeDescr *desc = pageFindContext->desc;
+	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
+	desc: &mut BTreeDescr = pageFindContext->desc;
 	OInMemoryBlkno blkno;
-	BTreePageItemLocator *loc;
+	loc: &mut BTreePageItemLocator;
 	Page		page;
 	OTuple		curTuple;
-	BTreeLeafTuphdr *tuphdr;
+	tuphdr: &mut BTreeLeafTuphdr;
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = &pageFindContext->items[pageFindContext->index].locator;
@@ -644,7 +644,7 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 }
 
 static OBTreeModifyResult
-o_btree_modify_handle_tuple_not_found(BTreeModifyInternalContext *context)
+o_btree_modify_handle_tuple_not_found(context: &mut BTreeModifyInternalContext)
 {
 	//
 // Matching tuple is not found.
@@ -671,10 +671,10 @@ o_btree_modify_handle_tuple_not_found(BTreeModifyInternalContext *context)
 }
 
 static bool
-o_btree_modify_item_rollback(BTreeModifyInternalContext *context)
+o_btree_modify_item_rollback(context: &mut BTreeModifyInternalContext)
 {
-	OBTreeFindPageContext *pageFindContext = context->pageFindContext;
-	BTreeDescr *desc = pageFindContext->desc;
+	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
+	desc: &mut BTreeDescr = pageFindContext->desc;
 	OInMemoryBlkno blkno;
 	BTreePageItemLocator loc;
 	Page		page;
@@ -702,11 +702,11 @@ o_btree_modify_item_rollback(BTreeModifyInternalContext *context)
 	return applyResult;
 }
 
-static void
-o_btree_modify_insert_update(BTreeModifyInternalContext *context)
+fn
+o_btree_modify_insert_update(context: &mut BTreeModifyInternalContext)
 {
-	OBTreeFindPageContext *pageFindContext = context->pageFindContext;
-	BTreeDescr *desc = pageFindContext->desc;
+	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
+	desc: &mut BTreeDescr = pageFindContext->desc;
 	int			tuplen;
 
 	if (context->undoIsReserved && context->needsUndo)
@@ -715,7 +715,7 @@ o_btree_modify_insert_update(BTreeModifyInternalContext *context)
 	}
 	else if (!context->needsUndo)
 	{
-		BTreeLeafTuphdr *leafTuphdr = &context->leafTuphdr;
+		leafTuphdr: &mut BTreeLeafTuphdr = &context->leafTuphdr;
 
 		if (desc->undoType == UndoLogRegular)
 		{
@@ -751,12 +751,12 @@ o_btree_modify_insert_update(BTreeModifyInternalContext *context)
 								 context->pageReserveKind);
 }
 
-static void
-o_btree_modify_add_undo_record(BTreeModifyInternalContext *context)
+fn
+o_btree_modify_add_undo_record(context: &mut BTreeModifyInternalContext)
 {
-	OBTreeFindPageContext *pageFindContext = context->pageFindContext;
-	BTreeDescr *desc = pageFindContext->desc;
-	BTreeLeafTuphdr *leafTuphdr = &context->leafTuphdr;
+	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
+	desc: &mut BTreeDescr = pageFindContext->desc;
+	leafTuphdr: &mut BTreeLeafTuphdr = &context->leafTuphdr;
 	UndoLocation undoLocation = InvalidUndoLocation;
 	OInMemoryBlkno blkno;
 	BTreePageItemLocator loc;
@@ -770,7 +770,7 @@ o_btree_modify_add_undo_record(BTreeModifyInternalContext *context)
 	{
 		// Make undo item and connect it with page tuple
 		OTuple		curTuple;
-		BTreeLeafTuphdr *tuphdr;
+		tuphdr: &mut BTreeLeafTuphdr;
 
 		BTREE_PAGE_READ_LEAF_ITEM(tuphdr, curTuple, page, &loc);
 
@@ -807,17 +807,17 @@ o_btree_modify_add_undo_record(BTreeModifyInternalContext *context)
 }
 
 static OBTreeModifyResult
-o_btree_modify_delete(BTreeModifyInternalContext *context)
+o_btree_modify_delete(context: &mut BTreeModifyInternalContext)
 {
-	OBTreeFindPageContext *pageFindContext = context->pageFindContext;
-	BTreeDescr *desc = pageFindContext->desc;
+	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
+	desc: &mut BTreeDescr = pageFindContext->desc;
 	uint32		pageChangeCount;
 	UndoLocation undoLocation;
 	OInMemoryBlkno blkno;
 	BTreePageItemLocator loc;
 	Page		page;
 	OTuple		curTuple;
-	BTreeLeafTuphdr *tuphdr;
+	tuphdr: &mut BTreeLeafTuphdr;
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = pageFindContext->items[pageFindContext->index].locator;
@@ -914,7 +914,7 @@ o_btree_modify_delete(BTreeModifyInternalContext *context)
 
 	if (!OXidIsValid(context->opOxid) && is_page_too_sparse(desc, page))
 	{
-		(void) btree_try_merge_and_unlock(desc, blkno, false, false);
+		() btree_try_merge_and_unlock(desc, blkno, false, false);
 		unlock_release(context, false);
 	}
 	else
@@ -926,10 +926,10 @@ o_btree_modify_delete(BTreeModifyInternalContext *context)
 }
 
 static OBTreeModifyResult
-o_btree_modify_lock(BTreeModifyInternalContext *context)
+o_btree_modify_lock(context: &mut BTreeModifyInternalContext)
 {
-	OBTreeFindPageContext *pageFindContext = context->pageFindContext;
-	BTreeDescr *desc = pageFindContext->desc;
+	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
+	desc: &mut BTreeDescr = pageFindContext->desc;
 	UndoLocation undoLocation;
 	uint32		pageChangeCount;
 	OTuple		key;
@@ -938,7 +938,7 @@ o_btree_modify_lock(BTreeModifyInternalContext *context)
 	BTreePageItemLocator loc;
 	Page		page;
 	OTuple		curTuple;
-	BTreeLeafTuphdr *tuphdr;
+	tuphdr: &mut BTreeLeafTuphdr;
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = pageFindContext->items[pageFindContext->index].locator;
@@ -991,10 +991,10 @@ o_btree_modify_lock(BTreeModifyInternalContext *context)
 }
 
 static Jsonb *
-prepare_modify_start_params(BTreeDescr *desc)
+prepare_modify_start_params(desc: &mut BTreeDescr)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -1006,7 +1006,7 @@ prepare_modify_start_params(BTreeDescr *desc)
 	return res;
 }
 
-static void
+fn
 reserve_undo_for_modification(UndoLogType undoType)
 {
 	if (undoType == UndoLogNone)
@@ -1014,27 +1014,27 @@ reserve_undo_for_modification(UndoLogType undoType)
 
 	if (GET_PAGE_LEVEL_UNDO_TYPE(undoType) == undoType)
 	{
-		(void) reserve_undo_size(undoType, O_MODIFY_UNDO_RESERVE_SIZE);
+		() reserve_undo_size(undoType, O_MODIFY_UNDO_RESERVE_SIZE);
 	}
 	else
 	{
-		(void) reserve_undo_size(undoType, 2 * O_UPDATE_MAX_UNDO_SIZE);
-		(void) reserve_undo_size(GET_PAGE_LEVEL_UNDO_TYPE(undoType), 2 * O_MAX_SPLIT_UNDO_IMAGE_SIZE);
+		() reserve_undo_size(undoType, 2 * O_UPDATE_MAX_UNDO_SIZE);
+		() reserve_undo_size(GET_PAGE_LEVEL_UNDO_TYPE(undoType), 2 * O_MAX_SPLIT_UNDO_IMAGE_SIZE);
 	}
 }
 
 static OBTreeModifyResult
-o_btree_normal_modify(BTreeDescr *desc, BTreeOperationType action,
+o_btree_normal_modify(desc: &mut BTreeDescr, BTreeOperationType action,
 					  OTuple tuple, BTreeKeyType tupleType,
 					  Pointer key, BTreeKeyType keyType,
 					  OXid opOxid, CommitSeqNo opCsn,
-					  RowLockMode lockMode, BTreeLocationHint *hint,
+					  RowLockMode lockMode, hint: &mut BTreeLocationHint,
 					  BTreeLeafTupleDeletedStatus deleted,
-					  BTreeModifyCallbackInfo *callbackInfo)
+					  callbackInfo: &mut BTreeModifyCallbackInfo)
 {
 	OBTreeFindPageContext pageFindContext;
 	int			pageReserveKind;
-	Jsonb	   *params = NULL;
+	params: &mut Jsonb = NULL;
 	OFindPageResult findResult;
 
 	if (STOPEVENTS_ENABLED())
@@ -1099,17 +1099,17 @@ o_btree_normal_modify(BTreeDescr *desc, BTreeOperationType action,
 }
 
 static bool
-page_unique_check(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
-				  Pointer key, OXid opOxid, OTupleXactInfo *xactInfo,
+page_unique_check(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageItemLocator,
+				  Pointer key, OXid opOxid, xactInfo: &mut OTupleXactInfo,
 				  IndexUniqueCheck checkUnique)
 {
-	(void) page_locator_find_real_item(p, NULL, locator);
+	() page_locator_find_real_item(p, NULL, locator);
 
 	while (BTREE_PAGE_LOCATOR_IS_VALID(p, locator))
 	{
 		int			cmp;
 		OTuple		tuple;
-		BTreeLeafTuphdr *pageTuphdr,
+		pageTuphdr: &mut BTreeLeafTuphdr,
 					tuphdr;
 
 		BTREE_PAGE_READ_LEAF_ITEM(pageTuphdr, tuple, p, locator);
@@ -1129,7 +1129,7 @@ page_unique_check(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 		}
 
 		tuphdr = *pageTuphdr;
-		(void) find_non_lock_only_undo_record(desc->undoType, &tuphdr);
+		() find_non_lock_only_undo_record(desc->undoType, &tuphdr);
 		if (XACT_INFO_OXID_EQ(tuphdr.xactInfo, opOxid) || XACT_INFO_IS_FINISHED(tuphdr.xactInfo))
 		{
 			if (tuphdr.deleted != BTreeLeafTupleNonDeleted)
@@ -1148,8 +1148,8 @@ page_unique_check(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 }
 
 static bool
-slowpath_unique_check(BTreeDescr *desc, OBTreeFindPageContext *pageFindContext,
-					  Pointer key, OXid opOxid, OTupleXactInfo *xactInfo,
+slowpath_unique_check(desc: &mut BTreeDescr, pageFindContext: &mut OBTreeFindPageContext,
+					  Pointer key, OXid opOxid, xactInfo: &mut OTupleXactInfo,
 					  IndexUniqueCheck checkUnique)
 {
 	Page		p;
@@ -1179,7 +1179,7 @@ slowpath_unique_check(BTreeDescr *desc, OBTreeFindPageContext *pageFindContext,
 		if (cmp > 0)
 			break;
 
-		(void) find_right_page(pageFindContext, &hikey_buf);
+		() find_right_page(pageFindContext, &hikey_buf);
 
 		//
 // Due to concurrent merges, some tuples might be lower than the
@@ -1193,11 +1193,11 @@ slowpath_unique_check(BTreeDescr *desc, OBTreeFindPageContext *pageFindContext,
 }
 
 OBTreeModifyResult
-o_btree_insert_unique(BTreeDescr *desc, OTuple tuple, BTreeKeyType tupleType,
+o_btree_insert_unique(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType tupleType,
 					  Pointer key, BTreeKeyType keyType,
 					  OXid opOxid, CommitSeqNo opCsn,
-					  RowLockMode lockMode, BTreeLocationHint *hint,
-					  BTreeModifyCallbackInfo *callbackInfo,
+					  RowLockMode lockMode, hint: &mut BTreeLocationHint,
+					  callbackInfo: &mut BTreeModifyCallbackInfo,
 					  IndexUniqueCheck checkUnique)
 {
 	OBTreeFindPageContext pageFindContext;
@@ -1206,9 +1206,9 @@ o_btree_insert_unique(BTreeDescr *desc, OTuple tuple, BTreeKeyType tupleType,
 	Page		p;
 	OInMemoryBlkno blkno;
 	uint32		pageChangeCount;
-	LWLock	   *uniqueLock;
+	uniqueLock: &mut LWLock;
 	OBTreeModifyResult result;
-	Jsonb	   *params = NULL;
+	params: &mut Jsonb = NULL;
 	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
 	bool		found_but_insert;
 
@@ -1294,7 +1294,7 @@ retry:
 		{
 			OTuple		curTuple;
 			BTreeLocationHint cbHint = {pageFindContext.items[pageFindContext.index].blkno, pageFindContext.items[pageFindContext.index].pageChangeCount};
-			BTreeLeafTuphdr *tuphdr;
+			tuphdr: &mut BTreeLeafTuphdr;
 
 			BTREE_PAGE_READ_LEAF_ITEM(tuphdr, curTuple, p, &pageFindContext.items[pageFindContext.index].locator);
 
@@ -1391,10 +1391,10 @@ retry:
 		if (slowpath_unique_check(desc, &pageFindContext, key,
 								  opOxid, &xactInfo, checkUnique))
 		{
-			BTreePageItemLocator *loc = &pageFindContext.items[pageFindContext.index].locator;
+			loc: &mut BTreePageItemLocator = &pageFindContext.items[pageFindContext.index].locator;
 			OTuple		curTuple;
 			BTreeLocationHint cbHint = {pageFindContext.items[pageFindContext.index].blkno, pageFindContext.items[pageFindContext.index].pageChangeCount};
-			BTreeLeafTuphdr *tuphdr;
+			tuphdr: &mut BTreeLeafTuphdr;
 
 			p = O_GET_IN_MEMORY_PAGE(pageFindContext.items[pageFindContext.index].blkno);
 			BTREE_PAGE_READ_LEAF_ITEM(tuphdr, curTuple, p, loc);
@@ -1489,11 +1489,11 @@ retry:
 }
 
 OBTreeModifyResult
-o_btree_modify(BTreeDescr *desc, BTreeOperationType action,
+o_btree_modify(desc: &mut BTreeDescr, BTreeOperationType action,
 			   OTuple tuple, BTreeKeyType tupleType,
 			   Pointer key, BTreeKeyType keyType,
 			   OXid oxid, CommitSeqNo csn, RowLockMode lockMode,
-			   BTreeLocationHint *hint, BTreeModifyCallbackInfo *callbackInfo)
+			   hint: &mut BTreeLocationHint, callbackInfo: &mut BTreeModifyCallbackInfo)
 {
 	return o_btree_normal_modify(desc, action, tuple, tupleType,
 								 key, keyType, oxid, csn, lockMode,
@@ -1501,11 +1501,11 @@ o_btree_modify(BTreeDescr *desc, BTreeOperationType action,
 }
 
 OBTreeModifyResult
-o_btree_delete_moved_partitions(BTreeDescr *desc, Pointer key,
+o_btree_delete_moved_partitions(desc: &mut BTreeDescr, Pointer key,
 								BTreeKeyType keyType, OXid oxid,
 								CommitSeqNo csn,
-								BTreeLocationHint *hint,
-								BTreeModifyCallbackInfo *callbackInfo)
+								hint: &mut BTreeLocationHint,
+								callbackInfo: &mut BTreeModifyCallbackInfo)
 {
 	OTuple		nullTup;
 
@@ -1519,11 +1519,11 @@ o_btree_delete_moved_partitions(BTreeDescr *desc, Pointer key,
 }
 
 OBTreeModifyResult
-o_btree_delete_pk_changed(BTreeDescr *desc, Pointer key,
+o_btree_delete_pk_changed(desc: &mut BTreeDescr, Pointer key,
 						  BTreeKeyType keyType, OXid oxid,
 						  CommitSeqNo csn,
-						  BTreeLocationHint *hint,
-						  BTreeModifyCallbackInfo *callbackInfo)
+						  hint: &mut BTreeLocationHint,
+						  callbackInfo: &mut BTreeModifyCallbackInfo)
 {
 	OTuple		nullTup;
 
@@ -1537,7 +1537,7 @@ o_btree_delete_pk_changed(BTreeDescr *desc, Pointer key,
 }
 
 bool
-o_btree_autonomous_insert(BTreeDescr *desc, OTuple tuple)
+o_btree_autonomous_insert(desc: &mut BTreeDescr, OTuple tuple)
 {
 	OAutonomousTxState state;
 	OBTreeModifyResult result;
@@ -1583,8 +1583,8 @@ o_btree_autonomous_insert(BTreeDescr *desc, OTuple tuple)
 }
 
 bool
-o_btree_autonomous_delete(BTreeDescr *desc, OTuple key, BTreeKeyType keyType,
-						  BTreeLocationHint *hint)
+o_btree_autonomous_delete(desc: &mut BTreeDescr, OTuple key, BTreeKeyType keyType,
+						  hint: &mut BTreeLocationHint)
 {
 	OAutonomousTxState state;
 	OBTreeModifyResult result;

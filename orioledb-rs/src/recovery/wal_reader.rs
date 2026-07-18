@@ -27,20 +27,20 @@ use pgrx::pg_sys;
 //
 
 // Parsers
-static WalParseResult wal_parse_empty(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_xid(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_finish(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_relation(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_o_tables_meta_unlock(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_savepoint(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_rollback_to_savepoint(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_joint_commit(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_truncate(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_bridge_erase(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_switch_logical_xid(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_relreplident(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_modify(WalReaderState *r, WalRecord *rec);
-static WalParseResult wal_parse_rec_dbcopy(WalReaderState *r, WalRecord *rec);
+static WalParseResult wal_parse_empty(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_xid(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_finish(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_relation(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_o_tables_meta_unlock(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_savepoint(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_rollback_to_savepoint(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_joint_commit(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_truncate(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_bridge_erase(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_switch_logical_xid(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_relreplident(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_modify(r: &mut WalReaderState, rec: &mut WalRecord);
+static WalParseResult wal_parse_rec_dbcopy(r: &mut WalReaderState, rec: &mut WalRecord);
 
 const char *
 wal_type_name(WalRecordType type)
@@ -57,14 +57,14 @@ wal_type_name(WalRecordType type)
 
 // Parse zero-length record
 static WalParseResult
-wal_parse_empty(WalReaderState *r, WalRecord *rec)
+wal_parse_empty(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	return WALPARSE_OK;
 }
 
 // Parser for WAL_REC_XID
 static WalParseResult
-wal_parse_rec_xid(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_xid(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -84,7 +84,7 @@ wal_parse_rec_xid(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_COMMIT and WAL_REC_ROLLBACK
 static WalParseResult
-wal_parse_rec_finish(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_finish(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -97,7 +97,7 @@ wal_parse_rec_finish(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_JOINT_COMMIT
 static WalParseResult
-wal_parse_rec_joint_commit(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_joint_commit(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -111,7 +111,7 @@ wal_parse_rec_joint_commit(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_RELATION
 static WalParseResult
-wal_parse_rec_relation(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_relation(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -146,7 +146,7 @@ wal_parse_rec_relation(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_RELREPLIDENT
 static WalParseResult
-wal_parse_rec_relreplident(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_relreplident(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -168,7 +168,7 @@ wal_parse_rec_relreplident(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_O_TABLES_META_UNLOCK
 static WalParseResult
-wal_parse_rec_o_tables_meta_unlock(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_o_tables_meta_unlock(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -183,7 +183,7 @@ wal_parse_rec_o_tables_meta_unlock(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_SAVEPOINT
 static WalParseResult
-wal_parse_rec_savepoint(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_savepoint(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -197,7 +197,7 @@ wal_parse_rec_savepoint(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_ROLLBACK_TO_SAVEPOINT
 static WalParseResult
-wal_parse_rec_rollback_to_savepoint(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_rollback_to_savepoint(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -218,7 +218,7 @@ wal_parse_rec_rollback_to_savepoint(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_TRUNCATE
 static WalParseResult
-wal_parse_rec_truncate(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_truncate(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -232,7 +232,7 @@ wal_parse_rec_truncate(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_BRIDGE_ERASE
 static WalParseResult
-wal_parse_rec_bridge_erase(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_bridge_erase(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -244,7 +244,7 @@ wal_parse_rec_bridge_erase(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_SWITCH_LOGICAL_XID
 static WalParseResult
-wal_parse_rec_switch_logical_xid(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_switch_logical_xid(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -260,7 +260,7 @@ wal_parse_rec_switch_logical_xid(WalReaderState *r, WalRecord *rec)
 // Two tuples in certain cases: (1) WAL_REC_REINSERT, (2) WAL_REC_UPDATE with REPLICA_IDENTITY_FULL
 //
 static WalParseResult
-wal_parse_rec_modify(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_modify(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -301,7 +301,7 @@ wal_parse_rec_modify(WalReaderState *r, WalRecord *rec)
 
 // Parser for WAL_REC_DATABASE_COPY
 static WalParseResult
-wal_parse_rec_dbcopy(WalReaderState *r, WalRecord *rec)
+wal_parse_rec_dbcopy(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	Assert(r);
 	Assert(rec);
@@ -313,8 +313,8 @@ wal_parse_rec_dbcopy(WalReaderState *r, WalRecord *rec)
 	return WALPARSE_OK;
 }
 
-static void
-build_fixed_tuple_from_tuple_view(const OTuple *view, const OffsetNumber len, OFixedTuple *tuple)
+fn
+build_fixed_tuple_from_tuple_view(const view: &mut OTuple, const OffsetNumber len, tuple: &mut OFixedTuple)
 {
 	Assert(view);
 	Assert(tuple);
@@ -346,8 +346,8 @@ build_fixed_tuple_from_tuple_view(const OTuple *view, const OffsetNumber len, OF
 // The function expects tuple->fixedData to be allocated by the caller and
 // sized to hold MAXALIGN(len).
 //
-void
-build_fixed_tuples(const WalRecord *rec, OFixedTuple *tuple1, OFixedTuple *tuple2)
+
+build_fixed_tuples(const rec: &mut WalRecord, tuple1: &mut OFixedTuple, tuple2: &mut OFixedTuple)
 {
 	Assert(rec);
 	Assert(tuple1);
@@ -389,7 +389,7 @@ build_fixed_tuples(const WalRecord *rec, OFixedTuple *tuple1, OFixedTuple *tuple
 // container header.
 //
 static WalParseResult
-wal_container_read_header(WalReaderState *r, bool allow_logging)
+wal_container_read_header(r: &mut WalReaderState, bool allow_logging)
 {
 	uint16		wal_version = 0;
 	uint8		wal_flags = 0;
@@ -476,7 +476,7 @@ wal_container_read_header(WalReaderState *r, bool allow_logging)
 // On success, r->ptr is positioned at the first record tag byte.
 //
 static inline WalParseResult
-wal_container_parse_flags(WalReaderState *r)
+wal_container_parse_flags(r: &mut WalReaderState)
 {
 	if (r->container.flags & WAL_CONTAINER_HAS_XACT_INFO)
 	{
@@ -519,7 +519,7 @@ wal_container_parse_flags(WalReaderState *r)
 // while the input buffer remains valid.
 //
 WalParseResult
-wal_parse_container(WalReaderState *r, bool allow_logging)
+wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 {
 	WalParseResult st;
 	WalRecord	rec;

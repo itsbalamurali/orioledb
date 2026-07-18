@@ -52,10 +52,10 @@ use pgrx::pg_sys;
 
 #endif
 
-static void set_pending_sk_marker_from_slot(UndoLocation pkUndoLoc, void *arg);
-static void set_pending_sk_marker_from_modify_arg(UndoLocation pkUndoLoc,
-												  void *arg);
-static int	o_exclusion_cmp(OIndexDescr *id, OBTreeKeyBound *key1, OTuple *tuple2);
+fn set_pending_sk_marker_from_slot(UndoLocation pkUndoLoc,  *arg);
+fn set_pending_sk_marker_from_modify_arg(UndoLocation pkUndoLoc,
+												   *arg);
+static int	o_exclusion_cmp(id: &mut OIndexDescr, key1: &mut OBTreeKeyBound, tuple2: &mut OTuple);
 
 //
 // Set ODBProcData.pendingSkUndoLoc to mark the PK-applied/SK-pending
@@ -74,20 +74,20 @@ static int	o_exclusion_cmp(OIndexDescr *id, OBTreeKeyBound *key1, OTuple *tuple2
 // in BTreeModifyCallbackInfo.  Each call site picks the variant that
 // matches its `arg`.
 //
-static void
-set_pending_sk_marker_from_slot(UndoLocation pkUndoLoc, void *arg)
+fn
+set_pending_sk_marker_from_slot(UndoLocation pkUndoLoc,  *arg)
 {
 	set_pending_sk_marker(((OTableSlot *) arg)->descr, pkUndoLoc);
 }
 
-static void
-set_pending_sk_marker_from_modify_arg(UndoLocation pkUndoLoc, void *arg)
+fn
+set_pending_sk_marker_from_modify_arg(UndoLocation pkUndoLoc,  *arg)
 {
 	set_pending_sk_marker(((OModifyCallbackArg *) arg)->descr, pkUndoLoc);
 }
 
-void
-set_pending_sk_marker(OTableDescr *descr, UndoLocation pkUndoLoc)
+
+set_pending_sk_marker(descr: &mut OTableDescr, UndoLocation pkUndoLoc)
 {
 	if (GET_PRIMARY(descr)->desc.undoType != UndoLogRegular)
 		return;
@@ -120,8 +120,8 @@ set_pending_sk_marker(OTableDescr *descr, UndoLocation pkUndoLoc)
 // marker was not actually installed for this proc (e.g. PK btree had no
 // undo, table has no SK, or the modify did not happen).
 //
-void
-fire_sk_modify_pending_stopevent(OTableDescr *descr)
+
+fire_sk_modify_pending_stopevent(descr: &mut OTableDescr)
 {
 	UndoLocation cur;
 
@@ -137,8 +137,8 @@ fire_sk_modify_pending_stopevent(OTableDescr *descr)
 		return;
 
 	{
-		JsonbParseState *state = NULL;
-		Jsonb	   *params;
+		state: &mut JsonbParseState = NULL;
+		params: &mut Jsonb;
 		MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
 		pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
@@ -149,116 +149,116 @@ fire_sk_modify_pending_stopevent(OTableDescr *descr)
 	}
 }
 
-void
-clear_pending_sk_marker(void)
+
+clear_pending_sk_marker()
 {
 	pg_atomic_write_u64(&GET_CUR_PROCDATA()->pendingSkUndoLoc,
 						InvalidUndoLocation);
 }
 
-static OTableModifyResult o_tbl_indices_overwrite(OTableDescr *descr,
-												  OBTreeKeyBound *oldPkey,
-												  TupleTableSlot *newSlot,
+static OTableModifyResult o_tbl_indices_overwrite(descr: &mut OTableDescr,
+												  oldPkey: &mut OBTreeKeyBound,
+												  newSlot: &mut TupleTableSlot,
 												  OXid oxid, CommitSeqNo csn,
-												  BTreeLocationHint *hint,
-												  OModifyCallbackArg *arg);
-static OTableModifyResult o_tbl_indices_reinsert(OTableDescr *descr,
-												 OBTreeKeyBound *oldPkey,
-												 OBTreeKeyBound *newPkey,
-												 TupleTableSlot *newSlot,
+												  hint: &mut BTreeLocationHint,
+												  arg: &mut OModifyCallbackArg);
+static OTableModifyResult o_tbl_indices_reinsert(descr: &mut OTableDescr,
+												 oldPkey: &mut OBTreeKeyBound,
+												 newPkey: &mut OBTreeKeyBound,
+												 newSlot: &mut TupleTableSlot,
 												 OXid oxid, CommitSeqNo csn,
-												 BTreeLocationHint *hint,
-												 OModifyCallbackArg *arg);
-static OTableModifyResult o_tbl_indices_delete(OTableDescr *descr,
-											   OBTreeKeyBound *key,
+												 hint: &mut BTreeLocationHint,
+												 arg: &mut OModifyCallbackArg);
+static OTableModifyResult o_tbl_indices_delete(descr: &mut OTableDescr,
+											   key: &mut OBTreeKeyBound,
 											   OXid oxid, CommitSeqNo csn,
-											   BTreeLocationHint *hint,
-											   OModifyCallbackArg *arg);
-static void o_toast_insert_values(Relation rel, OTableDescr *descr,
-								  TupleTableSlot *slot, OXid oxid, CommitSeqNo csn);
+											   hint: &mut BTreeLocationHint,
+											   arg: &mut OModifyCallbackArg);
+fn o_toast_insert_values(Relation rel, descr: &mut OTableDescr,
+								  slot: &mut TupleTableSlot, OXid oxid, CommitSeqNo csn);
 static inline bool o_callback_is_modified(OXid oxid, CommitSeqNo csn, OTupleXactInfo xactInfo);
-static OBTreeModifyCallbackAction o_insert_callback(BTreeDescr *descr,
-													OTuple tup, OTuple *newtup,
+static OBTreeModifyCallbackAction o_insert_callback(descr: &mut BTreeDescr,
+													OTuple tup, newtup: &mut OTuple,
 													OXid oxid, OTupleXactInfo xactInfo,
 													BTreeLeafTupleDeletedStatus deleted,
 													UndoLocation location,
-													RowLockMode *lock_mode,
-													BTreeLocationHint *hint,
-													void *arg);
-static OBTreeWaitCallbackAction o_insert_with_arbiter_wait_callback(BTreeDescr *descr,
-																	OTuple tup, OTuple *newtup,
+													lock_mode: &mut RowLockMode,
+													hint: &mut BTreeLocationHint,
+													 *arg);
+static OBTreeWaitCallbackAction o_insert_with_arbiter_wait_callback(descr: &mut BTreeDescr,
+																	OTuple tup, newtup: &mut OTuple,
 																	OXid oxid, OTupleXactInfo xactInfo,
 																	UndoLocation location,
-																	RowLockMode *lock_mode,
-																	BTreeLocationHint *hint,
-																	void *arg);
-static OBTreeModifyCallbackAction o_insert_with_arbiter_modify_deleted_callback(BTreeDescr *descr,
-																				OTuple tup, OTuple *newtup,
+																	lock_mode: &mut RowLockMode,
+																	hint: &mut BTreeLocationHint,
+																	 *arg);
+static OBTreeModifyCallbackAction o_insert_with_arbiter_modify_deleted_callback(descr: &mut BTreeDescr,
+																				OTuple tup, newtup: &mut OTuple,
 																				OXid oxid, OTupleXactInfo xactInfo,
 																				BTreeLeafTupleDeletedStatus deleted,
 																				UndoLocation location,
-																				RowLockMode *lock_mode,
-																				BTreeLocationHint *hint,
-																				void *arg);
-static OBTreeModifyCallbackAction o_insert_with_arbiter_modify_callback(BTreeDescr *descr,
-																		OTuple tup, OTuple *newtup,
+																				lock_mode: &mut RowLockMode,
+																				hint: &mut BTreeLocationHint,
+																				 *arg);
+static OBTreeModifyCallbackAction o_insert_with_arbiter_modify_callback(descr: &mut BTreeDescr,
+																		OTuple tup, newtup: &mut OTuple,
 																		OXid oxid, OTupleXactInfo xactInfo,
 																		UndoLocation location,
-																		RowLockMode *lock_mode,
-																		BTreeLocationHint *hint,
-																		void *arg);
-static OBTreeModifyCallbackAction o_delete_callback(BTreeDescr *descr,
-													OTuple tup, OTuple *newtup,
+																		lock_mode: &mut RowLockMode,
+																		hint: &mut BTreeLocationHint,
+																		 *arg);
+static OBTreeModifyCallbackAction o_delete_callback(descr: &mut BTreeDescr,
+													OTuple tup, newtup: &mut OTuple,
 													OXid oxid, OTupleXactInfo xactInfo,
 													UndoLocation location,
-													RowLockMode *lock_mode,
-													BTreeLocationHint *hint,
-													void *arg);
-static OBTreeModifyCallbackAction o_delete_deleted_callback(BTreeDescr *desc,
+													lock_mode: &mut RowLockMode,
+													hint: &mut BTreeLocationHint,
+													 *arg);
+static OBTreeModifyCallbackAction o_delete_deleted_callback(desc: &mut BTreeDescr,
 															OTuple oldTup,
-															OTuple *newTup,
+															newTup: &mut OTuple,
 															OXid oxid,
 															OTupleXactInfo prevXactInfo,
 															BTreeLeafTupleDeletedStatus deleted,
 															UndoLocation location,
-															RowLockMode *lockMode,
-															BTreeLocationHint *hint,
-															void *arg);
-static OBTreeModifyCallbackAction o_update_callback(BTreeDescr *descr,
-													OTuple tup, OTuple *newtup,
+															lockMode: &mut RowLockMode,
+															hint: &mut BTreeLocationHint,
+															 *arg);
+static OBTreeModifyCallbackAction o_update_callback(descr: &mut BTreeDescr,
+													OTuple tup, newtup: &mut OTuple,
 													OXid oxid, OTupleXactInfo xactInfo,
 													UndoLocation location,
-													RowLockMode *lock_mode,
-													BTreeLocationHint *hint,
-													void *arg);
-static OBTreeModifyCallbackAction o_update_deleted_callback(BTreeDescr *descr,
-															OTuple tup, OTuple *newtup,
+													lock_mode: &mut RowLockMode,
+													hint: &mut BTreeLocationHint,
+													 *arg);
+static OBTreeModifyCallbackAction o_update_deleted_callback(descr: &mut BTreeDescr,
+															OTuple tup, newtup: &mut OTuple,
 															OXid oxid, OTupleXactInfo xactInfo,
 															BTreeLeafTupleDeletedStatus deleted,
 															UndoLocation location,
-															RowLockMode *lock_mode,
-															BTreeLocationHint *hint,
-															void *arg);
-static OBTreeWaitCallbackAction o_lock_wait_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
+															lock_mode: &mut RowLockMode,
+															hint: &mut BTreeLocationHint,
+															 *arg);
+static OBTreeWaitCallbackAction o_lock_wait_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 													 OXid oxid, OTupleXactInfo xactInfo,
 													 UndoLocation location,
-													 RowLockMode *lock_mode, BTreeLocationHint *hint,
-													 void *arg);
-static OBTreeModifyCallbackAction o_lock_modify_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
+													 lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
+													  *arg);
+static OBTreeModifyCallbackAction o_lock_modify_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 														 OXid oxid, OTupleXactInfo xactInfo,
 														 UndoLocation location,
-														 RowLockMode *lock_mode, BTreeLocationHint *hint,
-														 void *arg);
-static OBTreeModifyCallbackAction o_lock_deleted_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
+														 lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
+														  *arg);
+static OBTreeModifyCallbackAction o_lock_deleted_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 														  OXid oxid, OTupleXactInfo xactInfo,
 														  BTreeLeafTupleDeletedStatus deleted,
 														  UndoLocation location,
-														  RowLockMode *lock_mode, BTreeLocationHint *hint,
-														  void *arg);
-static void fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bound);
-static inline bool is_keys_eq(OIndexDescr *id, OBTreeKeyBound *k1, OBTreeKeyBound *k2);
-static void o_report_duplicate(Relation rel, OIndexDescr *id,
-							   TupleTableSlot *slot);
+														  lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
+														   *arg);
+fn fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &mut OBTreeKeyBound);
+static inline bool is_keys_eq(id: &mut OIndexDescr, k1: &mut OBTreeKeyBound, k2: &mut OBTreeKeyBound);
+fn o_report_duplicate(Relation rel, id: &mut OIndexDescr,
+							   slot: &mut TupleTableSlot);
 
 //
 // If we're inside a logical replication apply (or tablesync) worker, bump
@@ -269,20 +269,20 @@ static void o_report_duplicate(Relation rel, OIndexDescr *id,
 // CheckAndReportConflict.
 //
 #if PG_VERSION_NUM >= 180000
-static inline void
+static inline 
 o_report_apply_conflict(ConflictType type)
 {
 	if (MySubscription)
 		pgstat_report_subscription_conflict(MySubscription->oid, type);
 }
 #else
-#define o_report_apply_conflict(type)	((void) 0)
+#define o_report_apply_conflict(type)	(() 0)
 #endif
 
 PG_FUNCTION_INFO_V1(orioledb_int4range_immutable);
 
 static TupleTableSlot *
-update_arg_get_slot(OModifyCallbackArg *arg)
+update_arg_get_slot(arg: &mut OModifyCallbackArg)
 {
 	if ((!arg->modified && (arg->options & TABLE_MODIFY_FETCH_OLD_TUPLE)) ||
 		(arg->modified && (arg->options & TABLE_MODIFY_LOCK_UPDATED)))
@@ -291,12 +291,12 @@ update_arg_get_slot(OModifyCallbackArg *arg)
 		return arg->tmpSlot;
 }
 
-void
-o_apply_new_bridge_index_ctid(OTableDescr *descr, Relation relation,
-							  TupleTableSlot *slot, CommitSeqNo csn, bool increment_bridge_ctid)
+
+o_apply_new_bridge_index_ctid(descr: &mut OTableDescr, Relation relation,
+							  slot: &mut TupleTableSlot, CommitSeqNo csn, bool increment_bridge_ctid)
 {
-	OIndexDescr *primary = GET_PRIMARY(descr);
-	OTableSlot *oslot = (OTableSlot *) slot;
+	primary: &mut OIndexDescr = GET_PRIMARY(descr);
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	bool		success;
 	BTreeModifyCallbackInfo callbackInfo =
 	{
@@ -307,7 +307,7 @@ o_apply_new_bridge_index_ctid(OTableDescr *descr, Relation relation,
 	};
 	OSnapshot	o_snapshot;
 	OXid		oxid;
-	TupleTableSlot *bridge_slot;
+	bridge_slot: &mut TupleTableSlot;
 	uint32		version = 0;
 	OTuple		tuple;
 	Datum		values[INDEX_MAX_KEYS + 1];
@@ -370,15 +370,15 @@ o_apply_new_bridge_index_ctid(OTableDescr *descr, Relation relation,
 		pfree(tuple.data);
 }
 
-static void
-delete_old_bridge_index_ctid(OTableDescr *descr, Relation relation,
+fn
+delete_old_bridge_index_ctid(descr: &mut OTableDescr, Relation relation,
 							 ItemPointer iptr, CommitSeqNo csn)
 {
-	OIndexDescr *primary = GET_PRIMARY(descr);
+	primary: &mut OIndexDescr = GET_PRIMARY(descr);
 	OSnapshot	o_snapshot;
 	OXid		oxid;
-	TupleTableSlot *bridge_slot;
-	OTableSlot *bridge_oslot;
+	bridge_slot: &mut TupleTableSlot;
+	bridge_oslot: &mut OTableSlot;
 	OTableModifyResult result PG_USED_FOR_ASSERTS_ONLY;
 
 	bridge_slot = descr->bridge->new_leaf_slot;
@@ -412,12 +412,12 @@ delete_old_bridge_index_ctid(OTableDescr *descr, Relation relation,
 }
 
 TupleTableSlot *
-o_tbl_insert(OTableDescr *descr, Relation relation,
-			 TupleTableSlot *slot, OXid oxid, CommitSeqNo csn)
+o_tbl_insert(descr: &mut OTableDescr, Relation relation,
+			 slot: &mut TupleTableSlot, OXid oxid, CommitSeqNo csn)
 {
 	OTableModifyResult mres;
 	OTuple		tup;
-	OIndexDescr *primary = GET_PRIMARY(descr);
+	primary: &mut OIndexDescr = GET_PRIMARY(descr);
 	bool		was_saving;
 	BTreeModifyCallbackInfo callbackInfo =
 	{
@@ -510,14 +510,14 @@ o_tbl_insert(OTableDescr *descr, Relation relation,
 //
 typedef struct MultiInsertSortCtx
 {
-	BTreeDescr *desc;
-	OBTreeKeyBound *keys;
+	desc: &mut BTreeDescr;
+	keys: &mut OBTreeKeyBound;
 } MultiInsertSortCtx;
 
 static int
-multi_insert_sort_cmp(const void *a, const void *b, void *arg)
+multi_insert_sort_cmp(a: &mut const, b: &mut const,  *arg)
 {
-	MultiInsertSortCtx *cx = (MultiInsertSortCtx *) arg;
+	cx: &mut MultiInsertSortCtx = (MultiInsertSortCtx *) arg;
 	int			ia = *(const int *) a;
 	int			ib = *(const int *) b;
 
@@ -559,18 +559,18 @@ multi_insert_sort_cmp(const void *a, const void *b, void *arg)
 // scratch slot and can't be batched -- in that case fall back to per-row
 // o_tbl_insert before doing any work.
 //
-void
-o_tbl_multi_insert(OTableDescr *descr, Relation relation,
+
+o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 				   TupleTableSlot **slots, int ntuples,
 				   OXid oxid, CommitSeqNo csn)
 {
-	OIndexDescr *primary = GET_PRIMARY(descr);
-	BTreeDescr *pdesc = &primary->desc;
+	primary: &mut OIndexDescr = GET_PRIMARY(descr);
+	pdesc: &mut BTreeDescr = &primary->desc;
 	bool		was_saving;
-	OTuple	   *tuples;
-	LocationIndex *tuplens;
-	OBTreeKeyBound *keys;
-	Pointer    *keyptrs;
+	tuples: &mut OTuple;
+	tuplens: &mut LocationIndex;
+	keys: &mut OBTreeKeyBound;
+	keyptrs: &mut Pointer;
 	OBTreeFindPageContext ctx;
 	BTreeModifyCallbackInfo callbackInfo =
 	{
@@ -594,7 +594,7 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 //
 	for (i = 0; i < ntuples; i++)
 	{
-		TupleTableSlot *slot = slots[i];
+		slot: &mut TupleTableSlot = slots[i];
 
 		if (slot->tts_ops != descr->newTuple->tts_ops ||
 			(((OTableSlot *) slot)->descr != NULL &&
@@ -614,7 +614,7 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 	// Phase 1: per-slot prep (ctid, bridge, toast, form, key bound).
 	for (i = 0; i < ntuples; i++)
 	{
-		TupleTableSlot *slot = slots[i];
+		slot: &mut TupleTableSlot = slots[i];
 
 		if (primary->primaryIsCtid)
 		{
@@ -654,11 +654,11 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 // slot via idx[].
 //
 	{
-		OTuple	   *use_tuples = tuples;
-		LocationIndex *use_tuplens = tuplens;
-		Pointer    *use_keyptrs = keyptrs;
-		void	  **use_cb_args = (void **) slots;
-		int		   *idx = NULL;
+		use_tuples: &mut OTuple = tuples;
+		use_tuplens: &mut LocationIndex = tuplens;
+		use_keyptrs: &mut Pointer = keyptrs;
+			  **use_cb_args = ( **) slots;
+		idx: &mut int = NULL;
 		bool		sorted = true;
 
 		for (i = 1; i < ntuples; i++)
@@ -674,10 +674,10 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 		if (!sorted)
 		{
 			MultiInsertSortCtx sortcx = {pdesc, keys};
-			OTuple	   *sorted_tuples;
-			LocationIndex *sorted_tuplens;
-			Pointer    *sorted_keyptrs;
-			void	  **sorted_cb_args;
+			sorted_tuples: &mut OTuple;
+			sorted_tuplens: &mut LocationIndex;
+			sorted_keyptrs: &mut Pointer;
+				  **sorted_cb_args;
 
 			idx = (int *) palloc(sizeof(int) * ntuples);
 			for (i = 0; i < ntuples; i++)
@@ -688,7 +688,7 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 			sorted_tuples = (OTuple *) palloc(sizeof(OTuple) * ntuples);
 			sorted_tuplens = (LocationIndex *) palloc(sizeof(LocationIndex) * ntuples);
 			sorted_keyptrs = (Pointer *) palloc(sizeof(Pointer) * ntuples);
-			sorted_cb_args = (void **) palloc(sizeof(void *) * ntuples);
+			sorted_cb_args = ( **) palloc(sizeof( *) * ntuples);
 			for (i = 0; i < ntuples; i++)
 			{
 				sorted_tuples[i] = tuples[idx[i]];
@@ -813,7 +813,7 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 	// Phase 4: per-slot TOAST values + WAL.
 	for (i = 0; i < ntuples; i++)
 	{
-		TupleTableSlot *slot = slots[i];
+		slot: &mut TupleTableSlot = slots[i];
 		OTuple		tup;
 
 		o_toast_insert_values(relation, descr, slot, oxid, csn);
@@ -851,8 +851,8 @@ tuple_lock_mode_to_row_lock_mode(LockTupleMode mode)
 }
 
 OBTreeModifyResult
-o_tbl_lock(OTableDescr *descr, OBTreeKeyBound *pkey, LockTupleMode mode,
-		   OXid oxid, OLockCallbackArg *larg, BTreeLocationHint *hint)
+o_tbl_lock(descr: &mut OTableDescr, pkey: &mut OBTreeKeyBound, LockTupleMode mode,
+		   OXid oxid, larg: &mut OLockCallbackArg, hint: &mut BTreeLocationHint)
 {
 	RowLockMode lock_mode;
 	OBTreeModifyResult res;
@@ -878,10 +878,10 @@ o_tbl_lock(OTableDescr *descr, OBTreeKeyBound *pkey, LockTupleMode mode,
 	return res;
 }
 
-static void
-fill_pkey_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *pkey)
+fn
+fill_pkey_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, pkey: &mut OBTreeKeyBound)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 	slot_getsomeattrs(slot, idx->leafTupdesc->natts);
 
@@ -924,8 +924,8 @@ fill_pkey_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *pkey)
 	}
 }
 
-static void
-bridged_index_fill_pkey_bound(TupleTableSlot *slot, OIndexDescr *primary, OBTreeKeyBound *pkey)
+fn
+bridged_index_fill_pkey_bound(slot: &mut TupleTableSlot, primary: &mut OIndexDescr, pkey: &mut OBTreeKeyBound)
 {
 	if (primary->primaryIsCtid)
 	{
@@ -961,10 +961,10 @@ bridged_index_fill_pkey_bound(TupleTableSlot *slot, OIndexDescr *primary, OBTree
 }
 
 static int
-o_exclusion_cmp(OIndexDescr *id, OBTreeKeyBound *key1, OTuple *tuple2)
+o_exclusion_cmp(id: &mut OIndexDescr, key1: &mut OBTreeKeyBound, tuple2: &mut OTuple)
 {
 	TupleDesc	tupdesc;
-	OTupleFixedFormatSpec *spec;
+	spec: &mut OTupleFixedFormatSpec;
 	int			i,
 				attnum;
 	Datum		value;
@@ -994,12 +994,12 @@ o_exclusion_cmp(OIndexDescr *id, OBTreeKeyBound *key1, OTuple *tuple2)
 	return 0;
 }
 
-static void
-exclusion_fill_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bound)
+fn
+exclusion_fill_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &mut OBTreeKeyBound)
 {
 	int			i;
 	int			ctid_off = idx->primaryIsCtid ? 1 : 0;
-	ListCell   *indexpr_item = list_head(idx->expressions_state);
+	indexpr_item: &mut ListCell = list_head(idx->expressions_state);
 
 	slot_getsomeattrs(slot, idx->maxTableAttnum - ctid_off);
 
@@ -1040,11 +1040,11 @@ exclusion_fill_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bou
 }
 
 static bool
-o_check_exclusion_constraint(OTableDescr *descr, OIndexDescr *index, TupleTableSlot *slot)
+o_check_exclusion_constraint(descr: &mut OTableDescr, index: &mut OIndexDescr, slot: &mut TupleTableSlot)
 {
 	OSnapshot	o_snapshot;
 	OXid		oxid;
-	BTreeIterator *iter;
+	iter: &mut BTreeIterator;
 	OTuple		tuple;
 	OBTreeKeyBound bound;
 
@@ -1082,14 +1082,14 @@ o_check_exclusion_constraint(OTableDescr *descr, OIndexDescr *index, TupleTableS
 
 TupleTableSlot *
 o_tbl_insert_with_arbiter(Relation rel,
-						  OTableDescr *descr,
-						  TupleTableSlot *slot,
-						  List *arbiterIndexes,
+						  descr: &mut OTableDescr,
+						  slot: &mut TupleTableSlot,
+						  arbiterIndexes: &mut List,
 						  CommandId cid,
 						  LockTupleMode lockmode,
-						  TupleTableSlot *lockedSlot,
-						  EState *estate,
-						  ResultRelInfo *resultRelInfo)
+						  lockedSlot: &mut TupleTableSlot,
+						  estate: &mut EState,
+						  resultRelInfo: &mut ResultRelInfo)
 {
 	InsertOnConflictCallbackArg ioc_arg;
 	UndoStackLocations undoStackLocations;
@@ -1097,7 +1097,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 	OSnapshot	oSnapshot = {0};
 	CommitSeqNo csn;
 	OXid		oxid;
-	Datum		conflictRowid = PointerGetDatum((void *) 0xB0B);
+	Datum		conflictRowid = PointerGetDatum(( *) 0xB0B);
 
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 	csn = oSnapshot.csn;
@@ -1171,7 +1171,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 		if (descr->bridge)
 		{
-			Datum	   *conflictRowidPtr = &conflictRowid;
+			conflictRowidPtr: &mut Datum = &conflictRowid;
 			Datum		conflictRowidPtrDatum = PointerGetDatum(conflictRowidPtr);
 
 #if PG_VERSION_NUM >= 180000
@@ -1354,9 +1354,9 @@ o_tbl_insert_with_arbiter(Relation rel,
 			{
 				if (lockedSlot)
 				{
-					bytea	   *rowid;
+					rowid: &mut bytea;
 					Pointer		p;
-					OIndexDescr *primary = GET_PRIMARY(descr);
+					primary: &mut OIndexDescr = GET_PRIMARY(descr);
 
 					ExecCopySlot(lockedSlot, slot);
 
@@ -1365,7 +1365,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 					if (!primary->primaryIsCtid)
 					{
-						ORowIdAddendumNonCtid *add;
+						add: &mut ORowIdAddendumNonCtid;
 						OTuple		tuple;
 
 						add = (ORowIdAddendumNonCtid *) p;
@@ -1424,7 +1424,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 		// Successful insert case
 		if (success)
 		{
-			OIndexDescr *primary = GET_PRIMARY(descr);
+			primary: &mut OIndexDescr = GET_PRIMARY(descr);
 
 			pgstat_count_heap_insert(rel, 1);
 
@@ -1481,7 +1481,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 		if (OXidIsValid(ioc_arg.conflictOxid))
 		{
 			// helps avoid deadlocks
-			(void) wait_for_oxid(ioc_arg.conflictOxid, false);
+			() wait_for_oxid(ioc_arg.conflictOxid, false);
 			continue;
 		}
 
@@ -1489,7 +1489,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 		if (lockedSlot)
 		{
-			OIndexDescr *primary_td = GET_PRIMARY(descr),
+			primary_td: &mut OIndexDescr = GET_PRIMARY(descr),
 					   *conflict_td = descr->indices[failedIndexNumber];
 			OBTreeKeyBound key,
 						key2;
@@ -1582,16 +1582,16 @@ o_tbl_insert_with_arbiter(Relation rel,
 }
 
 OTableModifyResult
-o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
-			 OBTreeKeyBound *oldPkey, Relation rel, OXid oxid,
-			 CommitSeqNo csn, BTreeLocationHint *hint,
-			 OModifyCallbackArg *arg, ItemPointer bridge_ctid)
+o_tbl_update(descr: &mut OTableDescr, slot: &mut TupleTableSlot,
+			 oldPkey: &mut OBTreeKeyBound, Relation rel, OXid oxid,
+			 CommitSeqNo csn, hint: &mut BTreeLocationHint,
+			 arg: &mut OModifyCallbackArg, ItemPointer bridge_ctid)
 {
-	TupleTableSlot *oldSlot;
+	oldSlot: &mut TupleTableSlot;
 	OTableModifyResult mres;
 	OBTreeKeyBound newPkey;
 	OTuple		newTup;
-	OIndexDescr *primary = GET_PRIMARY(descr);
+	primary: &mut OIndexDescr = GET_PRIMARY(descr);
 	bool		touched_indices = false;
 	bool		was_saving;
 
@@ -1614,18 +1614,18 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 
 	if (bridge_ctid)
 	{
-		OTableSlot *oslot = (OTableSlot *) slot;
+		oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 		oslot->bridge_ctid = *bridge_ctid;
 	}
 
 	if (descr->bridge)
 	{
-		List	   *indexIds;
-		ListCell   *indexId;
+		indexIds: &mut List;
+		indexId: &mut ListCell;
 		int			attnum;
-		TupleTableSlot *newSlot;
-		Bitmapset  *changed_attrs = NULL;
+		newSlot: &mut TupleTableSlot;
+		changed_attrs: &mut Bitmapset = NULL;
 
 		was_saving = o_start_saving_inval_messages();
 		// not using simple reindex_relation here anymore,
@@ -1637,7 +1637,7 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 		Assert(oldSlot->tts_tupleDescriptor->natts == newSlot->tts_tupleDescriptor->natts);
 		for (attnum = 0; attnum < oldSlot->tts_nvalid; attnum++)
 		{
-			OTupleAttrCompact *attr = OTupleDescAttrFast(oldSlot->tts_tupleDescriptor,
+			attr: &mut OTupleAttrCompact = OTupleDescAttrFast(oldSlot->tts_tupleDescriptor,
 														 attnum);
 
 			if ((oldSlot->tts_isnull[attnum] != newSlot->tts_isnull[attnum]) ||
@@ -1672,7 +1672,7 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 
 			if (!interesting)
 			{
-				OBTOptions *options = (OBTOptions *) index_rel->rd_options;
+				options: &mut OBTOptions = (OBTOptions *) index_rel->rd_options;
 
 				interesting = options && !options->orioledb_index;
 			}
@@ -1684,9 +1684,9 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 
 					if (index_rel->rd_indpred != NIL)
 					{
-						ExprState  *predicate;
-						EState	   *estate;
-						ExprContext *econtext;
+						predicate: &mut ExprState;
+						estate: &mut EState;
+						econtext: &mut ExprContext;
 
 						estate = CreateExecutorState();
 						predicate = ExecPrepareQual(index_rel->rd_indpred, estate);
@@ -1833,9 +1833,9 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 }
 
 OTableModifyResult
-o_tbl_delete(Relation rel, OTableDescr *descr, OBTreeKeyBound *primary_key,
+o_tbl_delete(Relation rel, descr: &mut OTableDescr, primary_key: &mut OBTreeKeyBound,
 			 OXid oxid, CommitSeqNo csn,
-			 BTreeLocationHint *hint, OModifyCallbackArg *arg)
+			 hint: &mut BTreeLocationHint, arg: &mut OModifyCallbackArg)
 {
 	OTableModifyResult result;
 	bool		was_saving;
@@ -1872,9 +1872,9 @@ o_tbl_delete(Relation rel, OTableDescr *descr, OBTreeKeyBound *primary_key,
 	{
 		if (result.action == BTreeOperationDelete)
 		{
-			OIndexDescr *primary = GET_PRIMARY(descr);
+			primary: &mut OIndexDescr = GET_PRIMARY(descr);
 			OTuple		primary_tuple;
-			OTableSlot *oslot = (OTableSlot *) result.oldTuple;
+			oslot: &mut OTableSlot = (OTableSlot *) result.oldTuple;
 
 			csn = arg->csn;
 
@@ -1904,8 +1904,8 @@ o_tbl_delete(Relation rel, OTableDescr *descr, OBTreeKeyBound *primary_key,
 }
 
 bool
-o_is_index_predicate_satisfied(OIndexDescr *idx, TupleTableSlot *slot,
-							   ExprContext *econtext)
+o_is_index_predicate_satisfied(idx: &mut OIndexDescr, slot: &mut TupleTableSlot,
+							   econtext: &mut ExprContext)
 {
 	bool		result = true;
 
@@ -1921,10 +1921,10 @@ o_is_index_predicate_satisfied(OIndexDescr *idx, TupleTableSlot *slot,
 }
 
 // fills key bound from tuple or index tuple that belongs to current BTree
-static void
-fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bound)
+fn
+fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &mut OBTreeKeyBound)
 {
-	OTableSlot *oslot = (OTableSlot *) slot;
+	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	int			i;
 
 	slot_getallattrs(slot);
@@ -1974,13 +1974,13 @@ fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bound)
 }
 
 OTableModifyResult
-o_update_secondary_index(OIndexDescr *id,
+o_update_secondary_index(id: &mut OIndexDescr,
 						 OIndexNumber ix_num,
 						 bool new_valid,
 						 bool old_valid,
-						 TupleTableSlot *newSlot,
+						 newSlot: &mut TupleTableSlot,
 						 OTuple new_ix_tup,
-						 TupleTableSlot *oldSlot,
+						 oldSlot: &mut TupleTableSlot,
 						 OXid oxid,
 						 CommitSeqNo csn,
 						 IndexUniqueCheck checkUnique)
@@ -2047,12 +2047,12 @@ o_update_secondary_index(OIndexDescr *id,
 
 // returns TupleTableSlot of old tuple as OTableModifyResul.result
 static OTableModifyResult
-o_tbl_indices_overwrite(OTableDescr *descr,
-						OBTreeKeyBound *oldPkey,
-						TupleTableSlot *newSlot,
+o_tbl_indices_overwrite(descr: &mut OTableDescr,
+						oldPkey: &mut OBTreeKeyBound,
+						newSlot: &mut TupleTableSlot,
 						OXid oxid, CommitSeqNo csn,
-						BTreeLocationHint *hint,
-						OModifyCallbackArg *arg)
+						hint: &mut BTreeLocationHint,
+						arg: &mut OModifyCallbackArg)
 {
 	OTableModifyResult result;
 	OTuple		newTup;
@@ -2118,12 +2118,12 @@ o_tbl_indices_overwrite(OTableDescr *descr,
 }
 
 static OTableModifyResult
-o_tbl_indices_reinsert(OTableDescr *descr,
-					   OBTreeKeyBound *oldPkey,
-					   OBTreeKeyBound *newPkey,
-					   TupleTableSlot *newSlot,
+o_tbl_indices_reinsert(descr: &mut OTableDescr,
+					   oldPkey: &mut OBTreeKeyBound,
+					   newPkey: &mut OBTreeKeyBound,
+					   newSlot: &mut TupleTableSlot,
 					   OXid oxid, CommitSeqNo csn,
-					   BTreeLocationHint *hint, OModifyCallbackArg *arg)
+					   hint: &mut BTreeLocationHint, arg: &mut OModifyCallbackArg)
 {
 	OTableModifyResult result;
 	OBTreeModifyResult modify_result;
@@ -2206,7 +2206,7 @@ o_tbl_indices_reinsert(OTableDescr *descr,
 }
 
 OTableModifyResult
-o_tbl_index_delete(OIndexDescr *id, OIndexNumber ix_num, TupleTableSlot *slot,
+o_tbl_index_delete(id: &mut OIndexDescr, OIndexNumber ix_num, slot: &mut TupleTableSlot,
 				   OXid oxid, CommitSeqNo csn)
 {
 	OTableModifyResult result;
@@ -2243,13 +2243,13 @@ o_tbl_index_delete(OIndexDescr *id, OIndexNumber ix_num, TupleTableSlot *slot,
 
 // Returns TupleTableSlot of old tuple as OTableModifyResult.result
 static OTableModifyResult
-o_tbl_indices_delete(OTableDescr *descr, OBTreeKeyBound *key,
-					 OXid oxid, CommitSeqNo csn, BTreeLocationHint *hint,
-					 OModifyCallbackArg *arg)
+o_tbl_indices_delete(descr: &mut OTableDescr, key: &mut OBTreeKeyBound,
+					 OXid oxid, CommitSeqNo csn, hint: &mut BTreeLocationHint,
+					 arg: &mut OModifyCallbackArg)
 {
 	OTableModifyResult result;
 	OBTreeModifyResult res;
-	TupleTableSlot *slot;
+	slot: &mut TupleTableSlot;
 	OTuple		nullTup;
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = NULL,
@@ -2306,15 +2306,15 @@ o_tbl_indices_delete(OTableDescr *descr, OBTreeKeyBound *key,
 }
 
 OBTreeModifyResult
-o_tbl_index_insert(OTableDescr *descr,
-				   OIndexDescr *id,
-				   OTuple *own_tup,
-				   TupleTableSlot *slot,
+o_tbl_index_insert(descr: &mut OTableDescr,
+				   id: &mut OIndexDescr,
+				   own_tup: &mut OTuple,
+				   slot: &mut TupleTableSlot,
 				   OXid oxid, CommitSeqNo csn,
-				   BTreeModifyCallbackInfo *callbackInfo,
+				   callbackInfo: &mut BTreeModifyCallbackInfo,
 				   IndexUniqueCheck checkUnique)
 {
-	BTreeDescr *bd = &id->desc;
+	bd: &mut BTreeDescr = &id->desc;
 	OTuple		tup;
 	OBTreeKeyBound knew;
 	bool		primary = (bd->type == oIndexPrimary);
@@ -2362,9 +2362,9 @@ o_tbl_index_insert(OTableDescr *descr,
 	return result;
 }
 
-static void
-o_toast_insert_values(Relation rel, OTableDescr *descr,
-					  TupleTableSlot *slot, OXid oxid, CommitSeqNo csn)
+fn
+o_toast_insert_values(Relation rel, descr: &mut OTableDescr,
+					  slot: &mut TupleTableSlot, OXid oxid, CommitSeqNo csn)
 {
 	if (!tts_orioledb_insert_toast_values(slot, descr, oxid, csn))
 	{
@@ -2378,11 +2378,11 @@ o_toast_insert_values(Relation rel, OTableDescr *descr,
 	}
 }
 
-void
+
 o_check_tbl_update_mres(OTableModifyResult mres,
-						OTableDescr *descr,
+						descr: &mut OTableDescr,
 						Relation rel,
-						TupleTableSlot *slot)
+						slot: &mut TupleTableSlot)
 {
 	if (!mres.success && mres.failedIxNum == TOASTIndexNumber)
 	{
@@ -2422,14 +2422,14 @@ o_check_tbl_update_mres(OTableModifyResult mres,
 	}
 }
 
-void
+
 o_check_tbl_delete_mres(OTableModifyResult mres,
-						OTableDescr *descr,
+						descr: &mut OTableDescr,
 						Relation rel)
 {
 	if (!mres.success && mres.failedIxNum == TOASTIndexNumber)
 	{
-		TupleTableSlot *oldSlot = mres.oldTuple;
+		oldSlot: &mut TupleTableSlot = mres.oldTuple;
 
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -2444,7 +2444,7 @@ o_check_tbl_delete_mres(OTableModifyResult mres,
 	{
 		if (mres.oldTuple != NULL)
 		{
-			TupleTableSlot *oldSlot = mres.oldTuple;
+			oldSlot: &mut TupleTableSlot = mres.oldTuple;
 
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
@@ -2487,12 +2487,12 @@ o_callback_is_modified(OXid oxid, CommitSeqNo csn, OTupleXactInfo xactInfo)
 	return false;
 }
 
-static void
-copy_tuple_to_slot(OTuple tup, TupleTableSlot *slot, OTableDescr *descr,
+fn
+copy_tuple_to_slot(OTuple tup, slot: &mut TupleTableSlot, descr: &mut OTableDescr,
 				   CommitSeqNo csn, OIndexNumber ix_num,
-				   BTreeLocationHint *hint)
+				   hint: &mut BTreeLocationHint)
 {
-	OIndexDescr *id = descr->indices[ix_num];
+	id: &mut OIndexDescr = descr->indices[ix_num];
 	Size		sz = o_tuple_size(tup, &id->leafSpec);
 	OTuple		copy;
 
@@ -2503,18 +2503,18 @@ copy_tuple_to_slot(OTuple tup, TupleTableSlot *slot, OTableDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-o_insert_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
+o_insert_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 				  OXid oxid, OTupleXactInfo xactInfo,
 				  BTreeLeafTupleDeletedStatus deleted,
-				  UndoLocation location, RowLockMode *lock_mode,
-				  BTreeLocationHint *hint, void *arg)
+				  UndoLocation location, lock_mode: &mut RowLockMode,
+				  hint: &mut BTreeLocationHint,  *arg)
 {
-	OTableSlot *oslot = (OTableSlot *) arg;
+	oslot: &mut OTableSlot = (OTableSlot *) arg;
 
 	if (descr->type == oIndexPrimary &&
 		XACT_INFO_OXID_IS_CURRENT(xactInfo))
 	{
-		OIndexDescr *id = (OIndexDescr *) descr->arg;
+		id: &mut OIndexDescr = (OIndexDescr *) descr->arg;
 
 		o_tuple_set_version(&id->leafSpec, newtup,
 							o_tuple_get_version(tup) + 1);
@@ -2524,15 +2524,15 @@ o_insert_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
 }
 
 static OBTreeWaitCallbackAction
-o_insert_with_arbiter_wait_callback(BTreeDescr *descr,
-									OTuple tup, OTuple *newtup,
+o_insert_with_arbiter_wait_callback(descr: &mut BTreeDescr,
+									OTuple tup, newtup: &mut OTuple,
 									OXid oxid, OTupleXactInfo xactInfo,
 									UndoLocation location,
-									RowLockMode *lock_mode,
-									BTreeLocationHint *hint,
-									void *arg)
+									lock_mode: &mut RowLockMode,
+									hint: &mut BTreeLocationHint,
+									 *arg)
 {
-	InsertOnConflictCallbackArg *ioc_arg = (InsertOnConflictCallbackArg *) arg;
+	ioc_arg: &mut InsertOnConflictCallbackArg = (InsertOnConflictCallbackArg *) arg;
 
 	if (descr->type == oIndexPrimary && ioc_arg->copyPrimaryOxid)
 	{
@@ -2544,22 +2544,22 @@ o_insert_with_arbiter_wait_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-o_insert_with_arbiter_modify_deleted_callback(BTreeDescr *descr,
-											  OTuple tup, OTuple *newtup,
+o_insert_with_arbiter_modify_deleted_callback(descr: &mut BTreeDescr,
+											  OTuple tup, newtup: &mut OTuple,
 											  OXid oxid,
 											  OTupleXactInfo xactInfo,
 											  BTreeLeafTupleDeletedStatus deleted,
 											  UndoLocation location,
-											  RowLockMode *lock_mode,
-											  BTreeLocationHint *hint,
-											  void *arg)
+											  lock_mode: &mut RowLockMode,
+											  hint: &mut BTreeLocationHint,
+											   *arg)
 {
-	InsertOnConflictCallbackArg *ioc_arg = (InsertOnConflictCallbackArg *) arg;
+	ioc_arg: &mut InsertOnConflictCallbackArg = (InsertOnConflictCallbackArg *) arg;
 
 	if (descr->type == oIndexPrimary &&
 		XACT_INFO_OXID_IS_CURRENT(xactInfo))
 	{
-		OIndexDescr *id = (OIndexDescr *) descr->arg;
+		id: &mut OIndexDescr = (OIndexDescr *) descr->arg;
 
 		o_tuple_set_version(&id->leafSpec, newtup,
 							o_tuple_get_version(tup) + 1);
@@ -2569,15 +2569,15 @@ o_insert_with_arbiter_modify_deleted_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-o_insert_with_arbiter_modify_callback(BTreeDescr *descr,
-									  OTuple tup, OTuple *newtup,
+o_insert_with_arbiter_modify_callback(descr: &mut BTreeDescr,
+									  OTuple tup, newtup: &mut OTuple,
 									  OXid oxid, OTupleXactInfo xactInfo,
 									  UndoLocation location,
-									  RowLockMode *lock_mode,
-									  BTreeLocationHint *hint,
-									  void *arg)
+									  lock_mode: &mut RowLockMode,
+									  hint: &mut BTreeLocationHint,
+									   *arg)
 {
-	InsertOnConflictCallbackArg *ioc_arg = (InsertOnConflictCallbackArg *) arg;
+	ioc_arg: &mut InsertOnConflictCallbackArg = (InsertOnConflictCallbackArg *) arg;
 
 	if (ioc_arg->scanSlot && ioc_arg->conflictIxNum != InvalidIndexNumber)
 	{
@@ -2611,13 +2611,13 @@ o_insert_with_arbiter_modify_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-o_delete_callback(BTreeDescr *descr,
-				  OTuple tup, OTuple *newtup,
+o_delete_callback(descr: &mut BTreeDescr,
+				  OTuple tup, newtup: &mut OTuple,
 				  OXid oxid, OTupleXactInfo xactInfo,
-				  UndoLocation location, RowLockMode *lock_mode,
-				  BTreeLocationHint *hint, void *arg)
+				  UndoLocation location, lock_mode: &mut RowLockMode,
+				  hint: &mut BTreeLocationHint,  *arg)
 {
-	OModifyCallbackArg *o_arg = (OModifyCallbackArg *) arg;
+	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
 	bool		modified;
 
 	if (descr->type != oIndexPrimary)
@@ -2661,18 +2661,18 @@ o_delete_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-o_delete_deleted_callback(BTreeDescr *desc,
+o_delete_deleted_callback(desc: &mut BTreeDescr,
 						  OTuple oldTup,
-						  OTuple *newTup,
+						  newTup: &mut OTuple,
 						  OXid oxid,
 						  OTupleXactInfo xactInfo,
 						  BTreeLeafTupleDeletedStatus deleted,
 						  UndoLocation location,
-						  RowLockMode *lockMode,
-						  BTreeLocationHint *hint,
-						  void *arg)
+						  lockMode: &mut RowLockMode,
+						  hint: &mut BTreeLocationHint,
+						   *arg)
 {
-	OModifyCallbackArg *o_arg = (OModifyCallbackArg *) arg;
+	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
 	bool		modified;
 
 	o_arg->deleted = deleted;
@@ -2701,15 +2701,15 @@ o_delete_deleted_callback(BTreeDescr *desc,
 }
 
 static OBTreeModifyCallbackAction
-o_update_callback(BTreeDescr *descr,
-				  OTuple tup, OTuple *newtup,
+o_update_callback(descr: &mut BTreeDescr,
+				  OTuple tup, newtup: &mut OTuple,
 				  OXid oxid, OTupleXactInfo xactInfo,
 				  UndoLocation location,
-				  RowLockMode *lock_mode,
-				  BTreeLocationHint *hint, void *arg)
+				  lock_mode: &mut RowLockMode,
+				  hint: &mut BTreeLocationHint,  *arg)
 {
-	OModifyCallbackArg *o_arg = (OModifyCallbackArg *) arg;
-	TupleTableSlot *slot;
+	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
+	slot: &mut TupleTableSlot;
 	bool		modified;
 	uint32		version = 0;
 
@@ -2719,7 +2719,7 @@ o_update_callback(BTreeDescr *descr,
 	if (descr->type == oIndexPrimary &&
 		XACT_INFO_OXID_IS_CURRENT(xactInfo))
 	{
-		OIndexDescr *id = (OIndexDescr *) descr->arg;
+		id: &mut OIndexDescr = (OIndexDescr *) descr->arg;
 
 		version = o_tuple_get_version(tup) + 1;
 		o_tuple_set_version(&id->leafSpec, newtup, version);
@@ -2749,8 +2749,7 @@ o_update_callback(BTreeDescr *descr,
 						   PrimaryIndexNumber, hint);
 		if (tts_orioledb_modified(slot, &o_arg->newSlot->base, o_arg->keyAttrs))
 			*lock_mode = RowLockUpdate;
-		else
-			*lock_mode = RowLockNoKeyUpdate;
+		lock_mode: &mut else = RowLockNoKeyUpdate;
 	}
 
 	if (o_arg->selfModified)
@@ -2765,15 +2764,15 @@ o_update_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-o_update_deleted_callback(BTreeDescr *descr,
-						  OTuple tup, OTuple *newtup,
+o_update_deleted_callback(descr: &mut BTreeDescr,
+						  OTuple tup, newtup: &mut OTuple,
 						  OXid oxid, OTupleXactInfo xactInfo,
 						  BTreeLeafTupleDeletedStatus deleted,
 						  UndoLocation location,
-						  RowLockMode *lock_mode,
-						  BTreeLocationHint *hint, void *arg)
+						  lock_mode: &mut RowLockMode,
+						  hint: &mut BTreeLocationHint,  *arg)
 {
-	OModifyCallbackArg *o_arg = (OModifyCallbackArg *) arg;
+	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
 	bool		modified;
 
 	o_arg->deleted = deleted;
@@ -2801,12 +2800,12 @@ o_update_deleted_callback(BTreeDescr *descr,
 }
 
 static OBTreeWaitCallbackAction
-o_lock_wait_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
+o_lock_wait_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 					 OXid oxid, OTupleXactInfo xactInfo, UndoLocation location,
-					 RowLockMode *lock_mode, BTreeLocationHint *hint,
-					 void *arg)
+					 lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
+					  *arg)
 {
-	OLockCallbackArg *o_arg = (OLockCallbackArg *) arg;
+	o_arg: &mut OLockCallbackArg = (OLockCallbackArg *) arg;
 
 	switch (o_arg->waitPolicy)
 	{
@@ -2829,14 +2828,14 @@ o_lock_wait_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
 }
 
 static OBTreeModifyCallbackAction
-o_lock_modify_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
+o_lock_modify_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 					   OXid oxid, OTupleXactInfo xactInfo,
 					   UndoLocation location,
-					   RowLockMode *lock_mode, BTreeLocationHint *hint,
-					   void *arg)
+					   lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
+					    *arg)
 {
-	OLockCallbackArg *o_arg = (OLockCallbackArg *) arg;
-	TupleTableSlot *slot = o_arg->scanSlot;
+	o_arg: &mut OLockCallbackArg = (OLockCallbackArg *) arg;
+	slot: &mut TupleTableSlot = o_arg->scanSlot;
 
 	o_arg->modified = o_callback_is_modified(o_arg->oxid, o_arg->csn, xactInfo);
 
@@ -2877,15 +2876,15 @@ o_lock_modify_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
 }
 
 static OBTreeModifyCallbackAction
-o_lock_deleted_callback(BTreeDescr *descr,
-						OTuple tup, OTuple *newtup,
+o_lock_deleted_callback(descr: &mut BTreeDescr,
+						OTuple tup, newtup: &mut OTuple,
 						OXid oxid, OTupleXactInfo xactInfo,
 						BTreeLeafTupleDeletedStatus deleted,
 						UndoLocation location,
-						RowLockMode *lock_mode,
-						BTreeLocationHint *hint, void *arg)
+						lock_mode: &mut RowLockMode,
+						hint: &mut BTreeLocationHint,  *arg)
 {
-	OLockCallbackArg *o_arg = (OLockCallbackArg *) arg;
+	o_arg: &mut OLockCallbackArg = (OLockCallbackArg *) arg;
 	bool		modified;
 
 	modified = o_callback_is_modified(o_arg->oxid, o_arg->csn, xactInfo);
@@ -2919,7 +2918,7 @@ o_lock_deleted_callback(BTreeDescr *descr,
 // Check if two keys are binary equal.
 //
 static inline bool
-is_keys_eq(OIndexDescr *id, OBTreeKeyBound *k1, OBTreeKeyBound *k2)
+is_keys_eq(id: &mut OIndexDescr, k1: &mut OBTreeKeyBound, k2: &mut OBTreeKeyBound)
 {
 	int			i,
 				n;
@@ -2936,7 +2935,7 @@ is_keys_eq(OIndexDescr *id, OBTreeKeyBound *k1, OBTreeKeyBound *k2)
 
 	for (i = 0; i < n; i++)
 	{
-		OTupleAttrCompact *attr = OTupleDescAttrFast(id->nonLeafTupdesc, i);
+		attr: &mut OTupleAttrCompact = OTupleDescAttrFast(id->nonLeafTupdesc, i);
 
 		if (k1->keys[i].flags != k2->keys[i].flags)
 			return false;
@@ -2950,8 +2949,8 @@ is_keys_eq(OIndexDescr *id, OBTreeKeyBound *k1, OBTreeKeyBound *k2)
 	return true;
 }
 
-static void
-o_report_duplicate(Relation rel, OIndexDescr *id, TupleTableSlot *slot)
+fn
+o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot)
 {
 	bool		is_ctid = id->primaryIsCtid;
 	bool		is_primary = id->desc.type == oIndexPrimary;
@@ -2991,11 +2990,11 @@ o_report_duplicate(Relation rel, OIndexDescr *id, TupleTableSlot *slot)
 	}
 }
 
-void
+
 o_truncate_table(ORelOids oids, bool missingOK)
 {
-	OIndexKey  *trees;
-	OTable	   *o_table;
+	trees: &mut OIndexKey;
+	o_table: &mut OTable;
 	int			treesNum;
 	int			i;
 	bool		invalidatedTable = false;
@@ -3054,7 +3053,7 @@ o_truncate_table(ORelOids oids, bool missingOK)
 Datum
 orioledb_int4range_immutable(PG_FUNCTION_ARGS)
 {
-	char	   *range_input = text_to_cstring(PG_GETARG_TEXT_PP(0));
+	range_input: &mut char = text_to_cstring(PG_GETARG_TEXT_PP(0));
 	Datum		range;
 
 	range = OidInputFunctionCall(F_RANGE_IN, range_input,

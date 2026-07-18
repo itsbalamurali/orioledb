@@ -56,15 +56,15 @@ PG_FUNCTION_INFO_V1(orioledb_tbl_are_indices_equal);
 PG_FUNCTION_INFO_V1(orioledb_table_pages);
 PG_FUNCTION_INFO_V1(orioledb_tree_stat);
 
-extern void log_btree(BTreeDescr *desc);
+extern  log_btree(desc: &mut BTreeDescr);
 
 // Maximum length for truncated values (when 't' option is used)
 #define TRUNCATE_VALUE_LEN 40
 
-static void
-o_tuple_print(TupleDesc tupDesc, OTupleFixedFormatSpec *spec,
-			  FmgrInfo *outputFns, StringInfo buf, OTuple tup,
-			  Datum *values, bool *nulls, bool printVersion,
+fn
+o_tuple_print(TupleDesc tupDesc, spec: &mut OTupleFixedFormatSpec,
+			  outputFns: &mut FmgrInfo, StringInfo buf, OTuple tup,
+			  values: &mut Datum, nulls: &mut bool, bool printVersion,
 			  bool truncateValues)
 {
 	Form_pg_attribute atti;
@@ -88,7 +88,7 @@ o_tuple_print(TupleDesc tupDesc, OTupleFixedFormatSpec *spec,
 		}
 		else
 		{
-			char	   *output;
+			output: &mut char;
 
 			atti = TupleDescAttr(tupDesc, i);
 			if (!atti->attbyval && atti->attlen && !nulls[i])
@@ -112,32 +112,32 @@ o_tuple_print(TupleDesc tupDesc, OTupleFixedFormatSpec *spec,
 	appendStringInfo(buf, ")");
 }
 
-static void
-idx_key_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+idx_key_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	TuplePrintOpaque *opaque = (TuplePrintOpaque *) arg;
+	opaque: &mut TuplePrintOpaque = (TuplePrintOpaque *) arg;
 
 	o_tuple_print(opaque->keyDesc, opaque->keySpec, opaque->keyOutputFns, buf,
 				  tup, opaque->values, opaque->nulls, false,
 				  opaque->truncateValues);
 }
 
-static void
-idx_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+idx_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	TuplePrintOpaque *opaque = (TuplePrintOpaque *) arg;
+	opaque: &mut TuplePrintOpaque = (TuplePrintOpaque *) arg;
 
 	o_tuple_print(opaque->desc, opaque->spec, opaque->outputFns, buf,
 				  tup, opaque->values, opaque->nulls, opaque->printRowVersion,
 				  opaque->truncateValues);
 }
 
-void
-init_print_options(BTreePrintOptions *printOptions, VarChar *optionsArg)
+
+init_print_options(printOptions: &mut BTreePrintOptions, optionsArg: &mut VarChar)
 {
 	int			i;
 	int			optionsSize = VARSIZE(optionsArg) - VARHDRSZ;
-	char	   *options = (char *) VARDATA(optionsArg);
+	options: &mut char = (char *) VARDATA(optionsArg);
 
 	// parse options argument and update options
 	for (i = 0; i < optionsSize; i++)
@@ -200,15 +200,15 @@ init_print_options(BTreePrintOptions *printOptions, VarChar *optionsArg)
 	}
 }
 
-static void
-print_unloaded_tree(StringInfoData *buf, BTreeDescr *td, const char *treeName,
-					BTreePrintOptions *printOptions)
+fn
+print_unloaded_tree(buf: &mut StringInfoData, td: &mut BTreeDescr, const treeName: &mut char,
+					printOptions: &mut BTreePrintOptions)
 {
-	char	   *prev_chkp_fname;
+	prev_chkp_fname: &mut char;
 	File		prev_chkp_file;
 	CheckpointFileHeader file_header = {0};
 	SeqBufTag	prev_chkp_tag;
-	EvictedTreeData *evicted_data;
+	evicted_data: &mut EvictedTreeData;
 
 	memset(&prev_chkp_tag, 0, sizeof(prev_chkp_tag));
 	prev_chkp_tag.key.oids = td->oids;
@@ -260,18 +260,18 @@ print_unloaded_tree(StringInfoData *buf, BTreeDescr *td, const char *treeName,
 	appendStringInfo(buf, "\n");
 }
 
-static void
+fn
 tree_structure(StringInfo buf,
-			   OIndexDescr *id,
+			   id: &mut OIndexDescr,
 			   BTreePrintOptions printOptions,
 			   int depth)
 {
 	int			i;
 	TuplePrintOpaque opaque;
 	SharedRootInfoKey key = {0};
-	SharedRootInfo *sharedRootInfo = NULL;
-	BTreeDescr *td;
-	const char *treeName;
+	sharedRootInfo: &mut SharedRootInfo = NULL;
+	td: &mut BTreeDescr;
+	const treeName: &mut char;
 
 	opaque.desc = id->leafTupdesc;
 	opaque.spec = &id->leafSpec;
@@ -333,11 +333,11 @@ Datum
 orioledb_tbl_structure(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
-	VarChar    *optionsArg = (VarChar *) PG_GETARG_VARCHAR_P(1);
+	optionsArg: &mut VarChar = (VarChar *) PG_GETARG_VARCHAR_P(1);
 	int			depth = PG_GETARG_INT32(2);
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	Relation	rel;
-	text	   *result;
+	result: &mut text;
 	int			treen;
 	StringInfoData buf;
 	BTreePrintOptions printOptions;
@@ -378,8 +378,8 @@ orioledb_tbl_structure(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(result);
 }
 
-static inline void
-append_bytes(StringInfo str, Page p, OffsetNumber *offset, int len, int level,
+static inline 
+append_bytes(StringInfo str, Page p, offset: &mut OffsetNumber, int len, int level,
 			 bool print_bytes)
 {
 	if (print_bytes)
@@ -405,9 +405,9 @@ append_bytes(StringInfo str, Page p, OffsetNumber *offset, int len, int level,
 	}
 }
 
-static inline void
-append_bits(StringInfo str, Page p, OffsetNumber *offset,
-			OffsetNumber *bit_offset, int len, int level, bool print_bytes)
+static inline 
+append_bits(StringInfo str, Page p, offset: &mut OffsetNumber,
+			bit_offset: &mut OffsetNumber, int len, int level, bool print_bytes)
 {
 	if (print_bytes)
 	{
@@ -472,13 +472,13 @@ append_bits(StringInfo str, Page p, OffsetNumber *offset,
 // Print contents of give B-tree page.  If non-leaf page is given, recursively
 // print childredn.
 //
-static void
-print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
-						 int *NLRPageNumber, Pointer printArg,
+fn
+print_page_bin_structure(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
+						 NLRPageNumber: &mut int, Pointer printArg,
 						 bool print_bytes, int depthLeft, StringInfo outbuf)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	BTreePageItemLocator loc;
 	OffsetNumber i,
 				j,
@@ -573,7 +573,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 	{
 		OffsetNumber chunkItemsCount;
 		LocationIndex chunkSize;
-		BTreePageChunk *chunk;
+		chunk: &mut BTreePageChunk;
 		int			align;
 
 		if (i + 1 < header->chunksCount)
@@ -630,7 +630,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 			{
 				OTuple		tup;
 				OTupleReaderState reader;
-				TuplePrintOpaque *opaque = (TuplePrintOpaque *) printArg;
+				opaque: &mut TuplePrintOpaque = (TuplePrintOpaque *) printArg;
 				TupleDesc	tupdesc = opaque->desc;
 				LocationIndex len;
 
@@ -710,7 +710,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 					level++;	// Tuple data BEGIN
 					for (k = 0; k < opaque->desc->natts; k++)
 					{
-						OTupleAttrFull *atti = OTupleDescAttrSlow(opaque->desc, k);
+						atti: &mut OTupleAttrFull = OTupleDescAttrSlow(opaque->desc, k);
 
 						if (reader.hasnulls && att_isnull(k, reader.bp))
 						{
@@ -781,7 +781,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
 			Pointer		ptr = BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) ptr;
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) ptr;
 
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 			{
@@ -805,15 +805,15 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 	}
 }
 
-static void
-tree_bin_structure(StringInfo buf, OIndexDescr *id, bool print_bytes,
+fn
+tree_bin_structure(StringInfo buf, id: &mut OIndexDescr, bool print_bytes,
 				   int depth)
 {
 	TuplePrintOpaque opaque;
 	SharedRootInfoKey key = {0};
-	SharedRootInfo *sharedRootInfo = NULL;
-	BTreeDescr *td;
-	const char *treeName;
+	sharedRootInfo: &mut SharedRootInfo = NULL;
+	td: &mut BTreeDescr;
+	const treeName: &mut char;
 
 	opaque.desc = id->leafTupdesc;
 	opaque.spec = &id->leafSpec;
@@ -852,9 +852,9 @@ orioledb_tbl_bin_structure(PG_FUNCTION_ARGS)
 	Oid			relid = PG_GETARG_OID(0);
 	bool		print_bytes = PG_GETARG_BOOL(1);
 	int			depth = PG_GETARG_INT32(2);
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	Relation	rel;
-	text	   *result;
+	result: &mut text;
 	int			treen;
 	StringInfoData buf;
 
@@ -891,12 +891,12 @@ Datum
 orioledb_idx_structure(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
-	const char *treeName = text_to_cstring(PG_GETARG_TEXT_PP(1));
-	VarChar    *optionsArg = (VarChar *) PG_GETARG_VARCHAR_P(2);
+	const treeName: &mut char = text_to_cstring(PG_GETARG_TEXT_PP(1));
+	optionsArg: &mut VarChar = (VarChar *) PG_GETARG_VARCHAR_P(2);
 	int			depth = PG_GETARG_INT32(3);
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	Relation	rel;
-	text	   *result;
+	result: &mut text;
 	int			treen;
 	StringInfoData buf;
 	BTreePrintOptions printOptions = {0};
@@ -933,8 +933,8 @@ orioledb_idx_structure(PG_FUNCTION_ARGS)
 }
 
 // No existing callers
-void
-log_btree(BTreeDescr *desc)
+
+log_btree(desc: &mut BTreeDescr)
 {
 	BTreePrintOptions printOptions = {
 		.pagePrintType = BTreePrintAbsolute,
@@ -955,7 +955,7 @@ log_btree(BTreeDescr *desc)
 	initStringInfo(&buf);
 	if (!IS_SYS_TREE_OIDS(desc->oids))
 	{
-		OIndexDescr *id = (OIndexDescr *) desc->arg;
+		id: &mut OIndexDescr = (OIndexDescr *) desc->arg;
 		TuplePrintOpaque opaque;
 		int			i,
 					j;
@@ -1018,14 +1018,14 @@ log_btree(BTreeDescr *desc)
 	elog(LOG, "%s", buf.data);
 }
 
-static void
-table_pages_walk_page(BTreeDescr *desc, BlockNumber blkno,
-					  TupleDesc tupdesc, Tuplestorestate *tupstore)
+fn
+table_pages_walk_page(desc: &mut BTreeDescr, BlockNumber blkno,
+					  TupleDesc tupdesc, tupstore: &mut Tuplestorestate)
 {
 	Datum		values[4];
 	bool		nulls[4];
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *pageHdr = (BTreePageHeader *) p;
+	pageHdr: &mut BTreePageHeader = (BTreePageHeader *) p;
 	int			j = 0;
 	BTreePageItemLocator loc;
 
@@ -1047,8 +1047,8 @@ table_pages_walk_page(BTreeDescr *desc, BlockNumber blkno,
 	j++;
 	if (!O_PAGE_IS(p, RIGHTMOST))
 	{
-		JsonbParseState *state = NULL;
-		JsonbValue *jsval;
+		state: &mut JsonbParseState = NULL;
+		jsval: &mut JsonbValue;
 		OTuple		hikey;
 
 		BTREE_PAGE_GET_HIKEY(hikey, p);
@@ -1068,7 +1068,7 @@ table_pages_walk_page(BTreeDescr *desc, BlockNumber blkno,
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
-		BTreeNonLeafTuphdr *hdr;
+		hdr: &mut BTreeNonLeafTuphdr;
 
 		hdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 		if (DOWNLINK_IS_IN_MEMORY(hdr->downlink))
@@ -1081,14 +1081,14 @@ table_pages_walk_page(BTreeDescr *desc, BlockNumber blkno,
 Datum
 orioledb_table_pages(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	Oid			relid = PG_GETARG_OID(0);
 	bool		randomAccess;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext oldcontext;
 	Relation	rel;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	int			treen;
 	AttrNumber	attnum;
 
@@ -1134,9 +1134,9 @@ orioledb_table_pages(PG_FUNCTION_ARGS)
 
 	for (treen = 0; treen < descr->nIndices + 1; treen++)
 	{
-		BTreeDescr *td;
+		td: &mut BTreeDescr;
 		SharedRootInfoKey key = {0};
-		SharedRootInfo *sharedRootInfo = NULL;
+		sharedRootInfo: &mut SharedRootInfo = NULL;
 
 		if (treen < descr->nIndices)
 			td = &descr->indices[treen]->desc;
@@ -1163,7 +1163,7 @@ orioledb_tbl_are_indices_equal(PG_FUNCTION_ARGS)
 {
 	Oid			idx_oid1 = PG_GETARG_OID(0),
 				idx_oid2 = PG_GETARG_OID(1);
-	OTableDescr *descr1,
+	descr1: &mut OTableDescr,
 			   *descr2;
 	Relation	idx1,
 				idx2,
@@ -1171,9 +1171,9 @@ orioledb_tbl_are_indices_equal(PG_FUNCTION_ARGS)
 				tbl2;
 	bool		are_equal = true;
 	int			i;
-	OIndexDescr *td1,
+	td1: &mut OIndexDescr,
 			   *td2;
-	BTreeIterator *iter1,
+	iter1: &mut BTreeIterator,
 			   *iter2;
 	OIndexNumber ix_num1,
 				ix_num2;
@@ -1253,7 +1253,7 @@ orioledb_tbl_check(PG_FUNCTION_ARGS)
 	Oid			relid = PG_GETARG_OID(0);
 	bool		force_map_check = PG_GETARG_OID(1);
 	Relation	rel;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	bool		result = true;
 	int			i;
 
@@ -1273,7 +1273,7 @@ orioledb_tbl_check(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
-		OIndexDescr *idx = descr->indices[i];
+		idx: &mut OIndexDescr = descr->indices[i];
 
 		o_tables_rel_lock_extended(&idx->oids, AccessExclusiveLock, true);
 		o_btree_load_shmem(&idx->desc);
@@ -1299,9 +1299,9 @@ verify_orioledb(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
 	bool		thorough_check = PG_GETARG_BOOL(1);
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	Relation	rel;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	int			i;
 
 	InitMaterializedSRF(fcinfo, 0);
@@ -1318,7 +1318,7 @@ verify_orioledb(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
-		OIndexDescr *idx = descr->indices[i];
+		idx: &mut OIndexDescr = descr->indices[i];
 		bool		success;
 
 		o_tables_rel_lock_extended(&idx->oids, AccessExclusiveLock, true);
@@ -1354,10 +1354,10 @@ Datum
 orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 {
 	BTreeCompressStats stats;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	StringInfoData result;
-	ArrayType  *array;
-	int32	   *values;
+	array: &mut ArrayType;
+	values: &mut int32;
 	int			compression_lvl = PG_GETARG_INT16(0),
 				i,
 				j,
@@ -1426,8 +1426,8 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 	initStringInfo(&result);
 	for (i = 0; i <= descr->nIndices; i++)
 	{
-		BTreeDescr *td;
-		const char *treeName;
+		td: &mut BTreeDescr;
+		const treeName: &mut char;
 
 		if (i < descr->nIndices)
 		{
@@ -1496,8 +1496,8 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(cstring_to_text(result.data));
 }
 
-static void
-index_description(StringInfo buf, OIndexDescr *ct, bool primary, bool oids)
+fn
+index_description(StringInfo buf, ct: &mut OIndexDescr, bool primary, bool oids)
 {
 	int			nonLeafSize = ct->nonLeafTupdesc->natts;
 	int			leafSize = ct->leafTupdesc->natts;
@@ -1543,9 +1543,9 @@ orioledb_tbl_indices(PG_FUNCTION_ARGS)
 	bool		internal = false;
 	bool		oids = false;
 	Relation	rel;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	StringInfoData buf;
-	text	   *result;
+	result: &mut text;
 	int			i;
 
 	if (PG_NARGS() == 3)
@@ -1575,7 +1575,7 @@ orioledb_tbl_indices(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
-		OIndexDescr *ct = descr->indices[i];
+		ct: &mut OIndexDescr = descr->indices[i];
 		bool		primary = i == PrimaryIndexNumber;
 
 		index_description(&buf, ct, primary, oids);
@@ -1634,7 +1634,7 @@ fetch_index_descr_by_oid(Oid relid)
 	Relation	rel;
 	ORelOids	tblOids;
 	ORelOids	idxOids;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OIndexNumber ixnum;
 	bool		index = false;
 
@@ -1671,8 +1671,8 @@ fetch_index_descr_by_oid(Oid relid)
 	return descr->indices[ixnum];
 }
 
-static void
-add_page_stat(BTreeDescr *desc, Page p, ORelationStat *stat)
+fn
+add_page_stat(desc: &mut BTreeDescr, Page p, stat: &mut ORelationStat)
 {
 	int			level = PAGE_GET_LEVEL(p);
 
@@ -1688,8 +1688,8 @@ add_page_stat(BTreeDescr *desc, Page p, ORelationStat *stat)
 		stat->levels[level].vacated += PAGE_GET_N_VACATED(p);
 }
 
-static void
-tree_stat_walker(BTreeDescr *desc, ORelationStat *stat)
+fn
+tree_stat_walker(desc: &mut BTreeDescr, stat: &mut ORelationStat)
 {
 	OBTreeFindPageContext context;
 	int			level,
@@ -1748,13 +1748,13 @@ Datum
 orioledb_tree_stat(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
-	OIndexDescr *descr;
-	ORelationStat *stat;
+	descr: &mut OIndexDescr;
+	stat: &mut ORelationStat;
 	int			i;
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;

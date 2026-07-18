@@ -32,21 +32,21 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void btree_page_stopevent_params_internal(BTreeDescr *desc, Page p,
+fn btree_page_stopevent_params_internal(desc: &mut BTreeDescr, Page p,
 												 JsonbParseState **state);
 
-LWLockPadded *unique_locks;
+unique_locks: &mut LWLockPadded;
 int			num_unique_locks;
 
-void
-o_btree_init_unique_lwlocks(void)
+
+o_btree_init_unique_lwlocks()
 {
 	num_unique_locks = max_procs * 4;
 	unique_locks = GetNamedLWLockTranche("orioledb_unique_locks");
 }
 
-void
-o_btree_init(BTreeDescr *desc)
+
+o_btree_init(desc: &mut BTreeDescr)
 {
 	init_new_btree_page(desc, desc->rootInfo.rootPageBlkno,
 						O_BTREE_FLAGS_ROOT_INIT, 0, false);
@@ -66,10 +66,10 @@ static bool
 get_page_children(OInMemoryBlkno blkno, uint32 pageChangeCount,
 				  OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS],
 				  uint32 childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS],
-				  int *childPagesCount)
+				  childPagesCount: &mut int)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageDesc *desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 	BTreePageItemLocator loc;
 	int			ionum;
 
@@ -99,7 +99,7 @@ retry:
 	{
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 
 			if (DOWNLINK_IS_IN_IO(tuphdr->downlink))
 			{
@@ -124,11 +124,11 @@ retry:
 // Recursively sets O_BTREE_FLAG_PRE_CLEANUP to the given page and all its
 // children.
 //
-static void
+fn
 mark_page_pre_cleanup(OInMemoryBlkno blkno, uint32 pageChangeCount)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS];
 	uint32		childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS];
 	int			childPagesCount;
@@ -156,8 +156,8 @@ mark_page_pre_cleanup(OInMemoryBlkno blkno, uint32 pageChangeCount)
 //
 // Frees given page and all of its children recursively.
 //
-static void
-free_page(PagePool *pool, OInMemoryBlkno blkno, uint32 pageChangeCount)
+fn
+free_page(pool: &mut PagePool, OInMemoryBlkno blkno, uint32 pageChangeCount)
 {
 	OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS];
 	uint32		childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS];
@@ -187,10 +187,10 @@ free_page(PagePool *pool, OInMemoryBlkno blkno, uint32 pageChangeCount)
 	ppool_free_page(pool, blkno, true);
 }
 
-static inline void
-free_meta_page(PagePool *pool, OInMemoryBlkno metaPageBlkno)
+static inline 
+free_meta_page(pool: &mut PagePool, OInMemoryBlkno metaPageBlkno)
 {
-	BTreeMetaPage *meta_page;
+	meta_page: &mut BTreeMetaPage;
 	int			i,
 				j;
 
@@ -230,10 +230,10 @@ free_meta_page(PagePool *pool, OInMemoryBlkno metaPageBlkno)
 // Therefore walk_page() never gets in trouble trying to find parent page
 // using find_page().
 //
-void
+
 o_btree_cleanup_pages(OInMemoryBlkno rootPageBlkno, OInMemoryBlkno metaPageBlkno, uint32 rootPageChangeCount)
 {
-	PagePool   *pool = get_ppool_by_blkno(rootPageBlkno);
+	pool: &mut PagePool = get_ppool_by_blkno(rootPageBlkno);
 
 	Assert(OInMemoryBlknoIsValid(rootPageBlkno));
 	Assert(OInMemoryBlknoIsValid(metaPageBlkno));
@@ -245,8 +245,8 @@ o_btree_cleanup_pages(OInMemoryBlkno rootPageBlkno, OInMemoryBlkno metaPageBlkno
 	free_meta_page(pool, metaPageBlkno);
 }
 
-void
-o_btree_check_size_of_tuple(int len, char *relation_name, bool index)
+
+o_btree_check_size_of_tuple(int len, relation_name: &mut char, bool index)
 {
 	if (len > O_BTREE_MAX_TUPLE_SIZE)
 		ereport(ERROR,
@@ -259,9 +259,9 @@ o_btree_check_size_of_tuple(int len, char *relation_name, bool index)
 }
 
 ItemPointerData
-btree_ctid_get_and_inc(BTreeDescr *desc)
+btree_ctid_get_and_inc(desc: &mut BTreeDescr)
 {
-	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	ItemPointerData result;
 	uint64		ctid = pg_atomic_fetch_add_u64(&metaPageBlkno->ctid, 1);
 
@@ -274,10 +274,10 @@ btree_ctid_get_and_inc(BTreeDescr *desc)
 	return result;
 }
 
-void
-btree_ctid_update_if_needed(BTreeDescr *desc, ItemPointerData ctid)
+
+btree_ctid_update_if_needed(desc: &mut BTreeDescr, ItemPointerData ctid)
 {
-	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	uint64		old_ctid,
 				new_ctid;
 
@@ -296,9 +296,9 @@ btree_ctid_update_if_needed(BTreeDescr *desc, ItemPointerData ctid)
 }
 
 ItemPointerData
-btree_bridge_ctid_get_and_inc(BTreeDescr *desc, bool *overflow)
+btree_bridge_ctid_get_and_inc(desc: &mut BTreeDescr, overflow: &mut bool)
 {
-	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	ItemPointerData result;
 	uint64		ctid = pg_atomic_fetch_add_u64(&metaPageBlkno->bridge_ctid, 1);
 
@@ -318,13 +318,13 @@ btree_bridge_ctid_get_and_inc(BTreeDescr *desc, bool *overflow)
 }
 
 static inline OIndexDescr *
-o_get_tree_def(BTreeDescr *desc)
+o_get_tree_def(desc: &mut BTreeDescr)
 {
 	return desc->arg;
 }
 
-void
-btree_desc_stopevent_params_internal(BTreeDescr *desc, JsonbParseState **state)
+
+btree_desc_stopevent_params_internal(desc: &mut BTreeDescr, JsonbParseState **state)
 {
 	jsonb_push_int8_key(state, "datoid", desc->oids.datoid);
 	jsonb_push_int8_key(state, "reloid", desc->oids.reloid);
@@ -338,8 +338,8 @@ btree_desc_stopevent_params_internal(BTreeDescr *desc, JsonbParseState **state)
 		jsonb_push_string_key(state, "treeName", o_get_tree_def(desc)->name.data);
 }
 
-static void
-btree_page_stopevent_params_internal(BTreeDescr *desc, Page p,
+fn
+btree_page_stopevent_params_internal(desc: &mut BTreeDescr, Page p,
 									 JsonbParseState **state)
 {
 	jsonb_push_int8_key(state, "level", PAGE_GET_LEVEL(p));
@@ -351,22 +351,22 @@ btree_page_stopevent_params_internal(BTreeDescr *desc, Page p,
 		OTuple		hikey;
 
 		BTREE_PAGE_GET_HIKEY(hikey, p);
-		(void) o_btree_key_to_jsonb(desc, hikey, state);
+		() o_btree_key_to_jsonb(desc, hikey, state);
 	}
 	else
 	{
 		JsonbValue	jval;
 
 		jval.type = jbvNull;
-		(void) pushJsonbValue(state, WJB_VALUE, &jval);
+		() pushJsonbValue(state, WJB_VALUE, &jval);
 	}
 }
 
 Jsonb *
-btree_page_stopevent_params(BTreeDescr *desc, Page p)
+btree_page_stopevent_params(desc: &mut BTreeDescr, Page p)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
@@ -379,12 +379,12 @@ btree_page_stopevent_params(BTreeDescr *desc, Page p)
 }
 
 Jsonb *
-btree_downlink_stopevent_params(BTreeDescr *desc, Page p, BTreePageItemLocator *loc)
+btree_downlink_stopevent_params(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocator)
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
-	BTreeNonLeafTuphdr *internal_ptr;
+	internal_ptr: &mut BTreeNonLeafTuphdr;
 
 	internal_ptr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, loc);
 
@@ -402,14 +402,14 @@ btree_downlink_stopevent_params(BTreeDescr *desc, Page p, BTreePageItemLocator *
 		OTuple		key;
 
 		BTREE_PAGE_READ_INTERNAL_TUPLE(key, p, loc);
-		(void) o_btree_key_to_jsonb(desc, key, &state);
+		() o_btree_key_to_jsonb(desc, key, &state);
 	}
 	else
 	{
 		JsonbValue	jval;
 
 		jval.type = jbvNull;
-		(void) pushJsonbValue(&state, WJB_VALUE, &jval);
+		() pushJsonbValue(&state, WJB_VALUE, &jval);
 	}
 	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 

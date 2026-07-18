@@ -29,11 +29,11 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *type_cache = NULL;
+static type_cache: &mut OSysCache = NULL;
 
-static void o_type_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_type_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									Pointer arg);
-static void o_type_cache_free_entry(Pointer entry);
+fn o_type_cache_free_entry(Pointer entry);
 
 O_SYS_CACHE_FUNCS(type_cache, OType, 1);
 
@@ -55,12 +55,12 @@ O_SYS_CACHE_INIT_FUNC(type_cache)
 									fastcache, mcxt, &type_cache_funcs);
 }
 
-static void
-o_type_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_type_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	typetup;
 	Form_pg_type typeform;
-	OType	   *o_type = (OType *) *entry_ptr;
+	o_type: &mut OType = (OType *) *entry_ptr;
 	Oid			typeoid = DatumGetObjectId(key->keys[0]);
 
 	typetup = SearchSysCache1(TYPEOID, key->keys[0]);
@@ -105,10 +105,10 @@ o_type_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(typetup);
 }
 
-static void
+fn
 o_type_cache_free_entry(Pointer entry)
 {
-	OType	   *o_type = (OType *) entry;
+	o_type: &mut OType = (OType *) entry;
 
 	pfree(o_type);
 }
@@ -121,7 +121,7 @@ o_type_cache_search_htup(TupleDesc tupdesc, Oid typeoid)
 	HeapTuple	typetup = NULL;
 	Datum		values[Natts_pg_type] = {0};
 	bool		nulls[Natts_pg_type] = {0};
-	OType	   *o_type;
+	o_type: &mut OType;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);
@@ -166,11 +166,11 @@ o_type_cache_search_htup(TupleDesc tupdesc, Oid typeoid)
 }
 
 bool
-o_type_cache_get_typtype(Oid typeoid, char *typtype)
+o_type_cache_get_typtype(Oid typeoid, typtype: &mut char)
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
-	OType	   *o_type;
+	o_type: &mut OType;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);
@@ -188,7 +188,7 @@ o_type_cache_default_opclass(Oid typeoid, Oid am_id)
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
-	OType	   *o_type;
+	o_type: &mut OType;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);
@@ -200,13 +200,13 @@ o_type_cache_default_opclass(Oid typeoid, Oid am_id)
 		return o_type->default_hash_opclass;
 }
 
-void
-o_type_cache_fill_info(Oid typeoid, int16 *typlen, bool *typbyval,
-					   char *typalign, char *typstorage, Oid *typcollation)
+
+o_type_cache_fill_info(Oid typeoid, typlen: &mut int16, typbyval: &mut bool,
+					   typalign: &mut char, typstorage: &mut char, typcollation: &mut Oid)
 {
 	XLogRecPtr	cur_lsn;
 	Oid			datoid;
-	OType	   *o_type;
+	o_type: &mut OType;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);
@@ -227,11 +227,11 @@ o_type_cache_fill_info(Oid typeoid, int16 *typlen, bool *typbyval,
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_type_cache_tup_print(BTreeDescr *desc, StringInfo buf,
+
+o_type_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 					   OTuple tup, Pointer arg)
 {
-	OType	   *o_type = (OType *) tup.data;
+	o_type: &mut OType = (OType *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);

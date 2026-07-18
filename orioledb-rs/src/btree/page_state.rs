@@ -54,23 +54,23 @@ static OInMemoryBlkno myInProgressSplitPages[ORIOLEDB_MAX_DEPTH * 2];
 static int	numberOfMyLockedPages = 0;
 static int	numberOfMyInProgressSplitPages = 0;
 
-OPageWaiterShmemState *lockerStates = NULL;
+lockerStates: &mut OPageWaiterShmemState = NULL;
 
 #ifdef CHECK_PAGE_STATS
-static void o_check_btree_page_statistics(BTreeDescr *desc, Pointer p);
+fn o_check_btree_page_statistics(desc: &mut BTreeDescr, Pointer p);
 #endif
 
 #ifdef CHECK_PAGE_STRUCT
-static void o_check_page_struct(BTreeDescr *desc, Page p);
+fn o_check_page_struct(desc: &mut BTreeDescr, Page p);
 #endif
 
 Size
-page_state_shmem_needs(void)
+page_state_shmem_needs()
 {
 	return CACHELINEALIGN(sizeof(OPageWaiterShmemState) * max_procs);
 }
 
-void
+
 page_state_shmem_init(Pointer buf, bool found)
 {
 	Pointer		ptr = buf;
@@ -89,7 +89,7 @@ get_my_locked_page_index(OInMemoryBlkno blkno)
 	return -1;
 }
 
-static void
+fn
 my_locked_page_add(OInMemoryBlkno blkno, uint64 state)
 {
 	Assert(get_my_locked_page_index(blkno) < 0);
@@ -125,11 +125,11 @@ my_locked_page_get_state(OInMemoryBlkno blkno)
 static uint64
 lock_page_or_queue(OInMemoryBlkno blkno, uint32 pgprocnum)
 {
-	OPagePool  *ppool = (OPagePool *) get_ppool_by_blkno(blkno);
+	ppool: &mut OPagePool = (OPagePool *) get_ppool_by_blkno(blkno);
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 	uint64		state;
-	OPageWaiterShmemState *lockerState = &lockerStates[pgprocnum];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[pgprocnum];
 	bool		ucmUpdateTried = false;
 
 	Assert(pgprocnum < max_procs);
@@ -184,18 +184,18 @@ typedef enum
 } LockPageResult;
 
 static LockPageResult
-lock_page_or_queue_or_split_detect(BTreeDescr *desc, OInMemoryBlkno *blkno,
-								   uint32 *pageChangeCount, uint32 pgprocnum,
-								   PageImg *img, OTupleXactInfo xactInfo,
-								   OTuple tuple, uint64 *prevState,
-								   bool *keySerialized)
+lock_page_or_queue_or_split_detect(desc: &mut BTreeDescr, blkno: &mut OInMemoryBlkno,
+								   pageChangeCount: &mut uint32, uint32 pgprocnum,
+								   img: &mut PageImg, OTupleXactInfo xactInfo,
+								   OTuple tuple, prevState: &mut uint64,
+								   keySerialized: &mut bool)
 {
-	OPagePool  *ppool = (OPagePool *) get_ppool_by_blkno(*blkno);
+	ppool: &mut OPagePool = (OPagePool *) get_ppool_by_blkno(*blkno);
 	Page		p = O_GET_IN_MEMORY_PAGE(*blkno);
-	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
-	OrioleDBPageHeader *imgHeader = (OrioleDBPageHeader *) img->img;
+	header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
+	imgHeader: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) img->img;
 	uint64		state;
-	OPageWaiterShmemState *lockerState = &lockerStates[pgprocnum];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[pgprocnum];
 	bool		ucmUpdateTried = false;
 
 	Assert(pgprocnum < max_procs);
@@ -322,9 +322,9 @@ static uint64
 read_enabled_or_queue(OInMemoryBlkno blkno, uint32 pgprocnum)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 	uint64		state;
-	OPageWaiterShmemState *lockerState = &lockerStates[pgprocnum];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[pgprocnum];
 
 	state = pg_atomic_read_u64(&header->state);
 	while (true)
@@ -355,11 +355,11 @@ static uint64
 state_changed_or_queue(OInMemoryBlkno blkno, uint32 pgprocnum,
 					   uint64 oldState)
 {
-	OPagePool  *ppool = (OPagePool *) get_ppool_by_blkno(blkno);
+	ppool: &mut OPagePool = (OPagePool *) get_ppool_by_blkno(blkno);
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 	uint64		state;
-	OPageWaiterShmemState *lockerState = &lockerStates[pgprocnum];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[pgprocnum];
 	bool		ucmUpdateTried = false;
 
 	Assert(!O_PAGE_IS_LOCAL(blkno));
@@ -403,10 +403,10 @@ state_changed_or_queue(OInMemoryBlkno blkno, uint32 pgprocnum,
 // Place exclusive lock on the page.  Doesn't block readers before
 // page_block_reads() is called.
 //
-void
+
 lock_page(OInMemoryBlkno blkno)
 {
-	OPageWaiterShmemState *lockerState = &lockerStates[MYPROCNUMBER];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[MYPROCNUMBER];
 	uint64		prevState;
 	int			extraWaits = 0;
 
@@ -452,13 +452,13 @@ lock_page(OInMemoryBlkno blkno)
 // page_block_reads() is called.
 //
 OLockPageWithTupleResult
-lock_page_with_tuple(BTreeDescr *desc,
-					 OInMemoryBlkno *blkno, uint32 *pageChangeCount,
+lock_page_with_tuple(desc: &mut BTreeDescr,
+					 blkno: &mut OInMemoryBlkno, pageChangeCount: &mut uint32,
 					 OTupleXactInfo xactInfo, OTuple tuple)
 {
 	uint64		prevState;
 	int			extraWaits = 0;
-	OPageWaiterShmemState *lockerState = &lockerStates[MYPROCNUMBER];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[MYPROCNUMBER];
 	bool		keySerialized = false;
 	PageImg		img;
 
@@ -552,12 +552,12 @@ lock_page_with_tuple(BTreeDescr *desc,
 	return OLockPageWithTupleResultLocked;
 }
 
-void
+
 page_wait_for_read_enable(OInMemoryBlkno blkno)
 {
 	uint32		prevState;
 	int			extraWaits = 0;
-	OPageWaiterShmemState *lockerState = &lockerStates[MYPROCNUMBER];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[MYPROCNUMBER];
 
 	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
@@ -596,10 +596,10 @@ static uint32
 page_wait_for_changecount(OInMemoryBlkno blkno, uint32 state)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 	uint64		curState;
 	int			extraWaits = 0;
-	OPageWaiterShmemState *lockerState = &lockerStates[MYPROCNUMBER];
+	lockerState: &mut OPageWaiterShmemState = &lockerStates[MYPROCNUMBER];
 
 	while (true)
 	{
@@ -643,13 +643,13 @@ page_wait_for_changecount(OInMemoryBlkno blkno, uint32 state)
 }
 
 bool
-have_locked_pages(void)
+have_locked_pages()
 {
 	return (numberOfMyLockedPages > 0);
 }
 
 // Wait for a change of the page and lock it.
-void
+
 relock_page(OInMemoryBlkno blkno)
 {
 	uint64		state;
@@ -673,7 +673,7 @@ relock_page(OInMemoryBlkno blkno)
 bool
 try_lock_page(OInMemoryBlkno blkno)
 {
-	PagePool   *ppool = get_ppool_by_blkno(blkno);
+	ppool: &mut PagePool = get_ppool_by_blkno(blkno);
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	uint64		state;
 
@@ -699,7 +699,7 @@ try_lock_page(OInMemoryBlkno blkno)
 //
 // No existing callers.
 //
-void
+
 delare_page_as_locked(OInMemoryBlkno blkno)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -727,7 +727,7 @@ page_is_locked(OInMemoryBlkno blkno)
 //
 // Block reads on locked page to prepare it for the modification.
 //
-void
+
 page_block_reads(OInMemoryBlkno blkno)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -744,7 +744,7 @@ page_block_reads(OInMemoryBlkno blkno)
 // carries partial state across find_page calls).  No concurrency, so
 // a plain RMW on state is enough.
 //
-		OrioleDBPageHeader *hdr = (OrioleDBPageHeader *) p;
+		hdr: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 		uint64		old = pg_atomic_read_u64(&hdr->state);
 		uint64		newChangeCount = ((old & PAGE_STATE_CHANGE_COUNT_MASK) +
 									  PAGE_STATE_CHANGE_COUNT_ONE) &
@@ -776,7 +776,7 @@ page_block_reads(OInMemoryBlkno blkno)
 }
 
 int
-get_waiters_with_tuples(BTreeDescr *desc,
+get_waiters_with_tuples(desc: &mut BTreeDescr,
 						OInMemoryBlkno blkno,
 						int result[BTREE_PAGE_MAX_SPLIT_ITEMS])
 {
@@ -792,7 +792,7 @@ get_waiters_with_tuples(BTreeDescr *desc,
 
 	while (pgprocnum != PAGE_STATE_INVALID_PROCNO)
 	{
-		OPageWaiterShmemState *lockerState = &lockerStates[pgprocnum];
+		lockerState: &mut OPageWaiterShmemState = &lockerStates[pgprocnum];
 
 		if (lockerState->status == OPageWaitInsert &&
 			lockerState->pageChangeCount == O_PAGE_HEADER(p)->pageChangeCount &&
@@ -812,7 +812,7 @@ get_waiters_with_tuples(BTreeDescr *desc,
 	return count;
 }
 
-void
+
 mark_waiter_tuples_inserted(int procnums[BTREE_PAGE_MAX_SPLIT_ITEMS],
 							int count)
 {
@@ -828,7 +828,7 @@ mark_waiter_tuples_inserted(int procnums[BTREE_PAGE_MAX_SPLIT_ITEMS],
 //
 // Check page before unlocking.
 //
-static void
+fn
 unlock_check_page(OInMemoryBlkno blkno)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -839,8 +839,8 @@ unlock_check_page(OInMemoryBlkno blkno)
 #else
 	if (O_GET_IN_MEMORY_PAGEDESC(blkno)->type != oIndexInvalid)
 	{
-		BTreePageHeader *header = (BTreePageHeader *) p;
-		BTreePageChunkDesc *lastChunk = &header->chunkDesc[header->chunksCount - 1];
+		header: &mut BTreePageHeader = (BTreePageHeader *) p;
+		lastChunk: &mut BTreePageChunkDesc = &header->chunkDesc[header->chunksCount - 1];
 
 		if (SHORT_GET_LOCATION(lastChunk->shortLocation) > header->dataSize ||
 			header->dataSize > ORIOLEDB_BLCKSZ)
@@ -856,12 +856,12 @@ unlock_check_page(OInMemoryBlkno blkno)
 // XXX: index_oids_get_btree_descr() might expand a hash table under
 // critical section.
 //
-		OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+		page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 
 		if (O_PAGE_IS(p, LEAF) && page_desc->type != oIndexInvalid)
 		{
 			ORelOids	oids = page_desc->oids;
-			BTreeDescr *desc;
+			desc: &mut BTreeDescr;
 
 			if (!IS_SYS_TREE_OIDS(oids))
 				desc = index_oids_get_btree_descr(oids, page_desc->type);
@@ -881,7 +881,7 @@ unlock_check_page(OInMemoryBlkno blkno)
 
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
-			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
+			tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 
 			if (DOWNLINK_IS_ON_DISK(tuphdr->downlink))
 				on_disk++;
@@ -915,11 +915,11 @@ unlock_check_page(OInMemoryBlkno blkno)
 // from scratch (the latter is not possible, because we might already have
 // modified the list).
 //
-static void
+fn
 unlock_page_internal(OInMemoryBlkno blkno, bool split)
 {
 	Page		page = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageHeader *hdr = (OrioleDBPageHeader *) page;
+	hdr: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) page;
 
 	// Head of our private stack of waiters to wake once the page is unlocked
 	uint32		wakeListHead = PAGE_STATE_INVALID_PROCNO;
@@ -959,7 +959,7 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 		while (cur != prevTail) // stop before the node we patched during the
 // previous (failed) iteration
 		{
-			OPageWaiterShmemState *lock = &lockerStates[cur];
+			lock: &mut OPageWaiterShmemState = &lockerStates[cur];
 
 			bool		shouldWake =
 				lock->inserted ||
@@ -1001,7 +1001,7 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 // ----------------------------------------------------------------
 		if (exclusive != PAGE_STATE_INVALID_PROCNO && !exclusiveAlreadyWoken)
 		{
-			OPageWaiterShmemState *lock = &lockerStates[exclusive];
+			lock: &mut OPageWaiterShmemState = &lockerStates[exclusive];
 
 			exclusiveAlreadyWoken = true;
 
@@ -1078,9 +1078,9 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 	for (uint32 procno = wakeListHead;
 		 procno != PAGE_STATE_INVALID_PROCNO;)
 	{
-		OPageWaiterShmemState *lockState = &lockerStates[procno];
+		lockState: &mut OPageWaiterShmemState = &lockerStates[procno];
 		uint32		next;
-		PGPROC	   *proc = GetPGProcByNumber(procno);
+		proc: &mut PGPROC = GetPGProcByNumber(procno);
 
 		next = lockState->next;
 
@@ -1109,7 +1109,7 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 	Assert(actualWakeCount == expectedWakeCount);
 }
 
-void
+
 unlock_page(OInMemoryBlkno blkno)
 {
 	// Local pages do not need locking
@@ -1122,7 +1122,7 @@ unlock_page(OInMemoryBlkno blkno)
 //
 // Unlock the page after page split.  Page should be locked before.
 //
-void
+
 unlock_page_after_split(OInMemoryBlkno blkno)
 {
 	// Local pages do not need locking
@@ -1135,8 +1135,8 @@ unlock_page_after_split(OInMemoryBlkno blkno)
 //
 // Release all previously acquired page locks one-by-one.
 //
-void
-release_all_page_locks(void)
+
+release_all_page_locks()
 {
 	pg_write_barrier();
 
@@ -1150,7 +1150,7 @@ release_all_page_locks(void)
 //
 // Must be called within critical section.
 //
-void
+
 btree_register_inprogress_split(OInMemoryBlkno rightBlkno)
 {
 #ifdef USE_ASSERT_CHECKING
@@ -1169,7 +1169,7 @@ btree_register_inprogress_split(OInMemoryBlkno rightBlkno)
 //
 // Must be calles within critical section.
 //
-void
+
 btree_unregister_inprogress_split(OInMemoryBlkno rightBlkno)
 {
 	int			i;
@@ -1191,8 +1191,8 @@ btree_unregister_inprogress_split(OInMemoryBlkno rightBlkno)
 //
 // Marks all in-progress splits as incomplete.
 //
-void
-btree_mark_incomplete_splits(void)
+
+btree_mark_incomplete_splits()
 {
 	int			i;
 
@@ -1209,12 +1209,12 @@ btree_mark_incomplete_splits(void)
 //
 // It does not call modify_page if use_lock = false.
 //
-void
+
 btree_split_mark_finished(OInMemoryBlkno rightBlkno, bool use_lock, bool success)
 {
-	BTreePageHeader *leftHeader;
-	BTreePageHeader *rightHeader;
-	OrioleDBPageDesc *rightPageDesc = O_GET_IN_MEMORY_PAGEDESC(rightBlkno);
+	leftHeader: &mut BTreePageHeader;
+	rightHeader: &mut BTreePageHeader;
+	rightPageDesc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(rightBlkno);
 	OInMemoryBlkno leftBlkno;
 
 	// Local pages do not need locking
@@ -1280,15 +1280,15 @@ btree_split_mark_finished(OInMemoryBlkno rightBlkno, bool use_lock, bool success
 
 #ifdef CHECK_PAGE_STRUCT
 
-extern void log_btree(BTreeDescr *desc);
+extern  log_btree(desc: &mut BTreeDescr);
 
 //
 // Check if page has a consistent structure.
 //
-static void
-o_check_page_struct(BTreeDescr *desc, Page p)
+fn
+o_check_page_struct(desc: &mut BTreeDescr, Page p)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	int			i,
 				j,
 				itemsCount;
@@ -1303,8 +1303,8 @@ o_check_page_struct(BTreeDescr *desc, Page p)
 
 	for (i = 0; i < header->chunksCount; i++)
 	{
-		BTreePageChunkDesc *chunk = &header->chunkDesc[i];
-		BTreePageChunk *chunkData;
+		chunk: &mut BTreePageChunkDesc = &header->chunkDesc[i];
+		chunkData: &mut BTreePageChunk;
 		OTuple		chunkHikey;
 
 		if (O_PAGE_IS(p, RIGHTMOST) && i == header->chunksCount - 1)
@@ -1324,7 +1324,7 @@ o_check_page_struct(BTreeDescr *desc, Page p)
 
 		if (i > 0)
 		{
-			BTreePageChunkDesc *prevChunk = &header->chunkDesc[i - 1] PG_USED_FOR_ASSERTS_ONLY;
+			prevChunk: &mut BTreePageChunkDesc = &header->chunkDesc[i - 1] PG_USED_FOR_ASSERTS_ONLY;
 
 			Assert(chunk->shortLocation >= prevChunk->shortLocation);
 			Assert(chunk->offset >= prevChunk->offset);
@@ -1427,8 +1427,8 @@ o_check_page_struct(BTreeDescr *desc, Page p)
 // Check if precalculated number of vacated bytes for leaf pages and number
 // of disk downlinks for non-leaf pages is correct.
 //
-static void
-o_check_btree_page_statistics(BTreeDescr *desc, Pointer p)
+fn
+o_check_btree_page_statistics(desc: &mut BTreeDescr, Pointer p)
 {
 	if (O_PAGE_IS(p, LEAF))
 	{

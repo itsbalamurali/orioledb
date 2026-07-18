@@ -45,20 +45,20 @@ typedef struct OIndexBuildStackItem
 	int			keysize;
 } OIndexBuildStackItem;
 
-static bool put_item_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack,
+static bool put_item_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem,
 							  int level, OTuple tuple, int tuplesize,
 							  Pointer tupleheader, LocationIndex header_size,
-							  int *root_level, BTreeMetaPage *metaPage);
-static bool put_tuple_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack,
-							   OTuple tuple, int *root_level,
-							   BTreeMetaPage *metaPage);
-static bool put_downlink_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack,
+							  root_level: &mut int, metaPage: &mut BTreeMetaPage);
+static bool put_tuple_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem,
+							   OTuple tuple, root_level: &mut int,
+							   metaPage: &mut BTreeMetaPage);
+static bool put_downlink_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem,
 								  int level, uint64 downlink, OTuple key,
-								  int keysize, int *root_level,
-								  BTreeMetaPage *metaPage);
+								  int keysize, root_level: &mut int,
+								  metaPage: &mut BTreeMetaPage);
 
-static void
-stack_page_split(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
+fn
+stack_page_split(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int level,
 				 OTuple tuple, int tuplesize, Pointer tupleheader,
 				 LocationIndex header_size, Page new_page)
 {
@@ -133,10 +133,10 @@ stack_page_split(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 }
 
 static bool
-put_item_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
+put_item_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int level,
 				  OTuple tuple, int tuplesize, Pointer tupleheader,
-				  LocationIndex header_size, int *root_level,
-				  BTreeMetaPage *metaPage)
+				  LocationIndex header_size, root_level: &mut int,
+				  metaPage: &mut BTreeMetaPage)
 {
 	BTreeItemPageFitType fit;
 	Pointer		tuple_ptr;
@@ -173,9 +173,9 @@ put_item_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 		char		new_page[ORIOLEDB_BLCKSZ] = {0};
 		OFixedKey	key;
 		int			keysize;
-		BTreePageHeader *new_page_header = (BTreePageHeader *) new_page;
-		BTreePageHeader *header = (BTreePageHeader *) stack[level].img;
-		BTreePageHeader *parent_header = (BTreePageHeader *) stack[level + 1].img;
+		new_page_header: &mut BTreePageHeader = (BTreePageHeader *) new_page;
+		header: &mut BTreePageHeader = (BTreePageHeader *) stack[level].img;
+		parent_header: &mut BTreePageHeader = (BTreePageHeader *) stack[level + 1].img;
 
 		new_page_header->rightLink = InvalidRightLink;
 		new_page_header->csn = COMMITSEQNO_FROZEN;
@@ -256,9 +256,9 @@ put_item_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 }
 
 static bool
-put_downlink_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
+put_downlink_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int level,
 					  uint64 downlink, OTuple key, int keysize,
-					  int *root_level, BTreeMetaPage *metaPage)
+					  root_level: &mut int, metaPage: &mut BTreeMetaPage)
 {
 	BTreeNonLeafTuphdr internal_header = {0};
 	bool		result;
@@ -272,8 +272,8 @@ put_downlink_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 }
 
 static bool
-put_tuple_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack,
-				   OTuple tuple, int *root_level, BTreeMetaPage *metaPage)
+put_tuple_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem,
+				   OTuple tuple, root_level: &mut int, metaPage: &mut BTreeMetaPage)
 {
 	BTreeLeafTuphdr leaf_header = {0};
 	int			tuplesize;
@@ -287,24 +287,24 @@ put_tuple_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack,
 							 sizeof(leaf_header), root_level, metaPage);
 }
 
-void
-btree_write_index_data(BTreeDescr *desc, TupleDesc tupdesc,
-					   Tuplesortstate *sortstate,
+
+btree_write_index_data(desc: &mut BTreeDescr, TupleDesc tupdesc,
+					   sortstate: &mut Tuplesortstate,
 					   uint64 ctid, uint64 bridge_ctid,
-					   CheckpointFileHeader *file_header)
+					   file_header: &mut CheckpointFileHeader)
 {
 	OTuple		idx_tup;
-	OIndexBuildStackItem *stack;
+	stack: &mut OIndexBuildStackItem;
 	int			root_level = 0,
 				saved_root_level;
 	Page		root_page;
 	uint64		downlink;
-	BTreePageHeader *root_page_header;
+	root_page_header: &mut BTreePageHeader;
 	FileExtent	extent;
 	BTreeMetaPage metaPage = {0};
 	int			i;
-	Datum	   *values;
-	bool	   *isnull;
+	values: &mut Datum;
+	isnull: &mut bool;
 	uint32		chkpNum;
 
 	btree_open_smgr(desc);
@@ -405,12 +405,12 @@ btree_write_index_data(BTreeDescr *desc, TupleDesc tupdesc,
 }
 
 S3TaskLocation
-btree_write_file_header(BTreeDescr *desc, CheckpointFileHeader *file_header)
+btree_write_file_header(desc: &mut BTreeDescr, file_header: &mut CheckpointFileHeader)
 {
 	File		file;
 	uint32		checkpoint_number;
 	bool		checkpoint_concurrent;
-	char	   *filename;
+	filename: &mut char;
 	S3TaskLocation result = 0;
 
 	Assert(desc->storageType == BTreeStoragePersistence ||

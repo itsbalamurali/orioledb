@@ -31,19 +31,19 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void generic_toast_sort_add(ToastAPI *api, void *key, Pointer data,
-								   Size data_size, Tuplesortstate *sortstate,
-								   void *arg);
-static Pointer generic_toast_get(ToastAPI *api, void *key, Size data_size,
-								 OSnapshot *snapshot, void *arg);
-static Pointer o_toast_get(OTableDescr *descr,
+fn generic_toast_sort_add(api: &mut ToastAPI,  *key, Pointer data,
+								   Size data_size, sortstate: &mut Tuplesortstate,
+								    *arg);
+static Pointer generic_toast_get(api: &mut ToastAPI,  *key, Size data_size,
+								 snapshot: &mut OSnapshot,  *arg);
+static Pointer o_toast_get(descr: &mut OTableDescr,
 						   OTuple pk, uint16 attn, Size data_size,
-						   OSnapshot *snapshot);
+						   snapshot: &mut OSnapshot);
 
 typedef struct
 {
-	OIndexDescr *pk;
-	OIndexDescr *toast;
+	pk: &mut OIndexDescr;
+	toast: &mut OIndexDescr;
 	uint32		version;		// base table version
 } OTableToastArg;
 
@@ -56,23 +56,23 @@ typedef struct
 // creates table tuple which can be stored in TOAST BTree
 static OTuple o_create_toast_tuple(OToastKey tkey,
 								   Pointer data, Size data_length,
-								   OTableToastArg *arg);
+								   arg: &mut OTableToastArg);
 
 // creates index tuple which can be stored in TOAST BTree
-static OTuple o_create_toast_key(OToastKey tkey, OTableToastArg *arg);
+static OTuple o_create_toast_key(OToastKey tkey, arg: &mut OTableToastArg);
 
 //
 // prints TOAST table tuple (is_tuple = true)
 // or TOAST index tuple (is_tuple = false
 //
-static void toast_tuple_print(TupleDesc tupDesc, OTupleFixedFormatSpec *spec,
-							  FmgrInfo *outputFns, StringInfo buf, OTuple tup,
-							  Datum *values, bool *nulls, bool is_tuple,
+fn toast_tuple_print(TupleDesc tupDesc, spec: &mut OTupleFixedFormatSpec,
+							  outputFns: &mut FmgrInfo, StringInfo buf, OTuple tup,
+							  values: &mut Datum, nulls: &mut bool, bool is_tuple,
 							  bool printRowVersion);
 
 // No existing callers
-void
-o_toast_init_tupdescs(OIndexDescr *toast, TupleDesc ix_primary)
+
+o_toast_init_tupdescs(toast: &mut OIndexDescr, TupleDesc ix_primary)
 {
 	int			i,
 				pidx_natts = ix_primary->natts;
@@ -101,11 +101,11 @@ o_toast_init_tupdescs(OIndexDescr *toast, TupleDesc ix_primary)
 }
 
 int
-o_toast_cmp(BTreeDescr *desc,
-			void *p1, BTreeKeyType k1,
-			void *p2, BTreeKeyType k2)
+o_toast_cmp(desc: &mut BTreeDescr,
+			 *p1, BTreeKeyType k1,
+			 *p2, BTreeKeyType k2)
 {
-	OIndexDescr *toastd = (OIndexDescr *) desc->arg;
+	toastd: &mut OIndexDescr = (OIndexDescr *) desc->arg;
 	int			pkAttnum = toastd->nonLeafTupdesc->natts - TOAST_NON_LEAF_FIELDS_NUM;
 	int			i;
 	OTuple		pk1;
@@ -131,7 +131,7 @@ o_toast_cmp(BTreeDescr *desc,
 					v2;
 		bool		null1,
 					null2;
-		OIndexField *field = &toastd->fields[i];
+		field: &mut OIndexField = &toastd->fields[i];
 		int			cmp;
 
 		v1 = o_fastgetattr(pk1, i + 1, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null1);
@@ -195,7 +195,7 @@ o_toast_cmp(BTreeDescr *desc,
 }
 
 bool
-o_toast_needs_undo(BTreeDescr *desc, BTreeOperationType action,
+o_toast_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 				   OTuple oldTuple, OTupleXactInfo oldXactInfo, bool oldDeleted,
 				   OTuple newTuple, OXid newOxid)
 {
@@ -216,11 +216,11 @@ o_toast_needs_undo(BTreeDescr *desc, BTreeOperationType action,
 }
 
 struct varlena *
-o_detoast(struct varlena *attr)
+o_detoast(struct attr: &mut varlena)
 {
 	OToastExternal ote;
 	ORelOids	oids;
-	OTableDescr *descr;
+	descr: &mut OTableDescr;
 	OFixedKey	key;
 	OSnapshot	oSnapshot;
 
@@ -243,19 +243,19 @@ o_detoast(struct varlena *attr)
 }
 
 static BTreeDescr *
-tableGetBTreeDesc(void *arg)
+tableGetBTreeDesc( *arg)
 {
-	OIndexDescr *toast = ((OTableToastArg *) arg)->toast;
+	toast: &mut OIndexDescr = ((OTableToastArg *) arg)->toast;
 
 	return &toast->desc;
 }
 
 static uint32
-tableGetMaxChunkSize(void *key, void *arg)
+tableGetMaxChunkSize( *key,  *arg)
 {
-	OToastKey  *tkey = (OToastKey *) key;
-	OIndexDescr *toast = ((OTableToastArg *) arg)->toast;
-	OIndexDescr *primary = ((OTableToastArg *) arg)->pk;
+	tkey: &mut OToastKey = (OToastKey *) key;
+	toast: &mut OIndexDescr = ((OTableToastArg *) arg)->toast;
+	primary: &mut OIndexDescr = ((OTableToastArg *) arg)->pk;
 	Datum		values[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM];
 	bool		isnull[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM] = {false};
 	int			i,
@@ -284,18 +284,18 @@ tableGetMaxChunkSize(void *key, void *arg)
 	return MAXALIGN_DOWN(O_BTREE_MAX_TUPLE_SIZE * 3 - MAXALIGN(minTupleSize)) / 3 - minTupleSize - sizeof(LocationIndex);
 }
 
-static void
-tableUpdateKey(void *key, uint32 chunknum, void *arg)
+fn
+tableUpdateKey( *key, uint32 chunknum,  *arg)
 {
-	OToastKey  *tkey = (OToastKey *) key;
+	tkey: &mut OToastKey = (OToastKey *) key;
 
 	tkey->chunknum = chunknum;
 }
 
-static void *
-tableGetNextKey(void *key, void *arg)
+fn *
+tableGetNextKey( *key,  *arg)
 {
-	OToastKey  *tkey = (OToastKey *) key;
+	tkey: &mut OToastKey = (OToastKey *) key;
 	static OToastKey nextKey;
 
 	nextKey = *tkey;
@@ -306,9 +306,9 @@ tableGetNextKey(void *key, void *arg)
 }
 
 static OTuple
-tableCreateTuple(void *key, Pointer data, uint32 offset, uint32 chunknum, int length, void *arg)
+tableCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum, int length,  *arg)
 {
-	OToastKey  *tkey = (OToastKey *) key;
+	tkey: &mut OToastKey = (OToastKey *) key;
 	OTuple		result;
 
 	tkey->chunknum = chunknum;
@@ -322,9 +322,9 @@ tableCreateTuple(void *key, Pointer data, uint32 offset, uint32 chunknum, int le
 }
 
 static OTuple
-tableCreateKey(void *key, uint32 chunknum, void *arg)
+tableCreateKey( *key, uint32 chunknum,  *arg)
 {
-	OToastKey  *tkey = (OToastKey *) key;
+	tkey: &mut OToastKey = (OToastKey *) key;
 	OTuple		result;
 
 	tkey->chunknum = chunknum;
@@ -335,7 +335,7 @@ tableCreateKey(void *key, uint32 chunknum, void *arg)
 }
 
 static bytea *
-get_data(OIndexDescr *toast, OTuple tuple)
+get_data(toast: &mut OIndexDescr, OTuple tuple)
 {
 	int			natts = toast->leafTupdesc->natts;
 
@@ -343,17 +343,17 @@ get_data(OIndexDescr *toast, OTuple tuple)
 }
 
 static Pointer
-tableGetTupleData(OTuple tuple, void *arg)
+tableGetTupleData(OTuple tuple,  *arg)
 {
-	OIndexDescr *toast = ((OTableToastArg *) arg)->toast;
+	toast: &mut OIndexDescr = ((OTableToastArg *) arg)->toast;
 
 	return VARDATA_ANY(get_data(toast, tuple));
 }
 
 static uint32
-tableGetTupleChunknum(OTuple tuple, void *arg)
+tableGetTupleChunknum(OTuple tuple,  *arg)
 {
-	OIndexDescr *toast = ((OTableToastArg *) arg)->toast;
+	toast: &mut OIndexDescr = ((OTableToastArg *) arg)->toast;
 	bool		isnull;
 	Datum		result;
 
@@ -367,32 +367,32 @@ tableGetTupleChunknum(OTuple tuple, void *arg)
 }
 
 static uint32
-tableGetTupleDataSize(OTuple tuple, void *arg)
+tableGetTupleDataSize(OTuple tuple,  *arg)
 {
-	OIndexDescr *toast = ((OTableToastArg *) arg)->toast;
+	toast: &mut OIndexDescr = ((OTableToastArg *) arg)->toast;
 
 	return VARSIZE_ANY_EXHDR(get_data(toast, tuple));
 }
 
 static uint32
-tableGetBTreeVersion(void *arg)
+tableGetBTreeVersion( *arg)
 {
-	OIndexDescr *toast = ((OTableToastArg *) arg)->toast;
+	toast: &mut OIndexDescr = ((OTableToastArg *) arg)->toast;
 
 	return toast->version;
 }
 
 static uint32
-tableGetBaseBTreeVersion(void *arg)
+tableGetBaseBTreeVersion( *arg)
 {
 	return ((OTableToastArg *) arg)->version;
 }
 
 static TupleFetchCallbackResult
-tableVersionCallback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot, void *arg,
+tableVersionCallback(OTuple tuple, OXid tupOxid, oSnapshot: &mut OSnapshot,  *arg,
 					 bool oxidIsFinished)
 {
-	OToastKey  *key = (OToastKey *) arg;
+	key: &mut OToastKey = (OToastKey *) arg;
 
 	if (oxidIsFinished)
 		return OTupleFetchNext;
@@ -425,11 +425,11 @@ ToastAPI	tableToastAPI = {
 };
 
 bool
-generic_toast_insert_optional_wal(ToastAPI *api, void *key, Pointer data,
+generic_toast_insert_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 								  Size data_size, OXid oxid, CommitSeqNo csn,
-								  void *arg, bool wal)
+								   *arg, bool wal)
 {
-	BTreeDescr *desc = api->getBTreeDesc(arg);
+	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
 	uint32		max_length = api->getMaxChunkSize(key, arg);
 	uint32		offset = 0;
 	uint32		chunknum = 0;
@@ -497,17 +497,17 @@ generic_toast_insert_optional_wal(ToastAPI *api, void *key, Pointer data,
 // inserted).
 //
 bool
-generic_toast_insert(ToastAPI *api, void *key, Pointer data, Size data_size,
-					 OXid oxid, CommitSeqNo csn, void *arg)
+generic_toast_insert(api: &mut ToastAPI,  *key, Pointer data, Size data_size,
+					 OXid oxid, CommitSeqNo csn,  *arg)
 {
 	return generic_toast_insert_optional_wal(api, key, data, data_size, oxid,
 											 csn, arg, true);
 }
 
-static void
-generic_toast_sort_add(ToastAPI *api, void *key,
+fn
+generic_toast_sort_add(api: &mut ToastAPI,  *key,
 					   Pointer data, Size data_size,
-					   Tuplesortstate *sortstate, void *arg)
+					   sortstate: &mut Tuplesortstate,  *arg)
 {
 	uint32		max_length = api->getMaxChunkSize(key, arg);
 	uint32		offset = 0;
@@ -540,41 +540,41 @@ generic_toast_sort_add(ToastAPI *api, void *key,
 }
 
 static OBTreeModifyCallbackAction
-o_update_callback(BTreeDescr *descr,
-				  OTuple tup, OTuple *newtup, OXid oxid,
+o_update_callback(descr: &mut BTreeDescr,
+				  OTuple tup, newtup: &mut OTuple, OXid oxid,
 				  OTupleXactInfo xactInfo,
-				  UndoLocation location, RowLockMode *lock_mode,
-				  BTreeLocationHint *hint, void *arg)
+				  UndoLocation location, lock_mode: &mut RowLockMode,
+				  hint: &mut BTreeLocationHint,  *arg)
 {
 	return OBTreeCallbackActionUpdate;
 }
 
 static OBTreeModifyCallbackAction
-o_update_deleted_callback(BTreeDescr *descr,
-						  OTuple tup, OTuple *newtup, OXid oxid,
+o_update_deleted_callback(descr: &mut BTreeDescr,
+						  OTuple tup, newtup: &mut OTuple, OXid oxid,
 						  OTupleXactInfo xactInfo,
 						  BTreeLeafTupleDeletedStatus deleted,
-						  UndoLocation location, RowLockMode *lock_mode,
-						  BTreeLocationHint *hint, void *arg)
+						  UndoLocation location, lock_mode: &mut RowLockMode,
+						  hint: &mut BTreeLocationHint,  *arg)
 {
 	return OBTreeCallbackActionUpdate;
 }
 
 static OBTreeModifyCallbackAction
-o_delete_callback(BTreeDescr *descr,
-				  OTuple tup, OTuple *newtup, OXid oxid,
+o_delete_callback(descr: &mut BTreeDescr,
+				  OTuple tup, newtup: &mut OTuple, OXid oxid,
 				  OTupleXactInfo xactInfo, UndoLocation location,
-				  RowLockMode *lock_mode, BTreeLocationHint *hint, void *arg)
+				  lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,  *arg)
 {
 	return OBTreeCallbackActionDelete;
 }
 
 bool
-generic_toast_update_optional_wal(ToastAPI *api, void *key, Pointer data,
+generic_toast_update_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 								  Size data_size, OXid oxid, CommitSeqNo csn,
-								  void *arg, bool wal)
+								   *arg, bool wal)
 {
-	BTreeDescr *desc = api->getBTreeDesc(arg);
+	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
 	int			max_length = api->getMaxChunkSize(key, arg);
 	uint32		offset = 0,
 				length;
@@ -639,26 +639,26 @@ generic_toast_update_optional_wal(ToastAPI *api, void *key, Pointer data,
 // There might be tailing tuples.  We need to delete them.
 //
 	api->updateKey(key, chunknum, arg);
-	(void) generic_toast_delete_optional_wal(api, key, oxid, csn, arg, wal);
+	() generic_toast_delete_optional_wal(api, key, oxid, csn, arg, wal);
 
 	return success;
 }
 
 bool
-generic_toast_update(ToastAPI *api, void *key, Pointer data, Size data_size,
-					 OXid oxid, CommitSeqNo csn, void *arg)
+generic_toast_update(api: &mut ToastAPI,  *key, Pointer data, Size data_size,
+					 OXid oxid, CommitSeqNo csn,  *arg)
 {
 	return generic_toast_update_optional_wal(api, key, data, data_size, oxid,
 											 csn, arg, true);
 }
 
 bool
-generic_toast_delete_optional_wal(ToastAPI *api, void *key, OXid oxid,
-								  CommitSeqNo csn, void *arg, bool wal)
+generic_toast_delete_optional_wal(api: &mut ToastAPI,  *key, OXid oxid,
+								  CommitSeqNo csn,  *arg, bool wal)
 {
-	BTreeDescr *desc = api->getBTreeDesc(arg);
-	void	   *nextKey;
-	BTreeIterator *it;
+	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
+		   *nextKey;
+	it: &mut BTreeIterator;
 	bool		deleted = false;
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = NULL,
@@ -735,19 +735,19 @@ generic_toast_delete_optional_wal(ToastAPI *api, void *key, OXid oxid,
 }
 
 bool
-generic_toast_delete(ToastAPI *api, void *key, OXid oxid, CommitSeqNo csn,
-					 void *arg)
+generic_toast_delete(api: &mut ToastAPI,  *key, OXid oxid, CommitSeqNo csn,
+					  *arg)
 {
 	return generic_toast_delete_optional_wal(api, key, oxid, csn, arg, true);
 }
 
 static Pointer
-generic_toast_get(ToastAPI *api, void *key, Size data_size,
-				  OSnapshot *o_snapshot, void *arg)
+generic_toast_get(api: &mut ToastAPI,  *key, Size data_size,
+				  o_snapshot: &mut OSnapshot,  *arg)
 {
-	BTreeDescr *desc = api->getBTreeDesc(arg);
-	BTreeIterator *it;
-	void	   *nextKey;
+	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
+	it: &mut BTreeIterator;
+		   *nextKey;
 	int			max_length = api->getMaxChunkSize(key, arg);
 	int			actual_size;
 	Pointer		data;
@@ -757,7 +757,7 @@ generic_toast_get(ToastAPI *api, void *key, Size data_size,
 	it = o_btree_iterator_create(desc, key, BTreeKeyBound,
 								 o_snapshot, ForwardScanDirection);
 	if (api->fetchCallback)
-		o_btree_iterator_set_callback(it, api->fetchCallback, (void *) key);
+		o_btree_iterator_set_callback(it, api->fetchCallback, ( *) key);
 
 	data = palloc(data_size);
 	actual_size = 0;
@@ -811,13 +811,13 @@ generic_toast_get(ToastAPI *api, void *key, Size data_size,
 // generic_toast_get_any_with_callback and generic_toast_get_any_with_key
 //
 static Pointer
-generic_toast_get_any_common(ToastAPI *api,
+generic_toast_get_any_common(api: &mut ToastAPI,
 							 Pointer key,
-							 Size *data_size,
-							 OSnapshot *o_snapshot,
-							 void *arg,
-							 BTreeIterator *it,
-							 Pointer *found_key)
+							 data_size: &mut Size,
+							 o_snapshot: &mut OSnapshot,
+							  *arg,
+							 it: &mut BTreeIterator,
+							 found_key: &mut Pointer)
 {
 	Pointer		nextKey;
 	OTuple		tuple;
@@ -871,14 +871,14 @@ generic_toast_get_any_common(ToastAPI *api,
 // responsibility to free it.
 //
 Pointer
-generic_toast_get_any_with_callback(ToastAPI *api, Pointer key,
-									Size *data_size, OSnapshot *o_snapshot,
-									void *arg,
+generic_toast_get_any_with_callback(api: &mut ToastAPI, Pointer key,
+									data_size: &mut Size, o_snapshot: &mut OSnapshot,
+									 *arg,
 									TupleFetchCallback fetchCallback,
-									void *callback_arg)
+									 *callback_arg)
 {
-	BTreeDescr *desc = api->getBTreeDesc(arg);
-	BTreeIterator *it;
+	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
+	it: &mut BTreeIterator;
 	Pointer		data;
 
 	it = o_btree_iterator_create(desc, key, BTreeKeyBound,
@@ -903,17 +903,17 @@ generic_toast_get_any_with_callback(ToastAPI *api, Pointer key,
 // It's the caller's responsibility to free them.
 //
 Pointer
-generic_toast_get_any_with_key(ToastAPI *api, void *key, Size *data_size,
-							   OSnapshot *o_snapshot, void *arg, Pointer *found_key)
+generic_toast_get_any_with_key(api: &mut ToastAPI,  *key, data_size: &mut Size,
+							   o_snapshot: &mut OSnapshot,  *arg, found_key: &mut Pointer)
 {
-	BTreeDescr *desc = api->getBTreeDesc(arg);
-	BTreeIterator *it;
+	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
+	it: &mut BTreeIterator;
 	Pointer		data;
 
 	it = o_btree_iterator_create(desc, key, BTreeKeyBound,
 								 o_snapshot, ForwardScanDirection);
 	if (api->fetchCallback && found_key && *found_key)
-		o_btree_iterator_set_callback(it, api->fetchCallback, (void *) *found_key);
+		o_btree_iterator_set_callback(it, api->fetchCallback, ( *) *found_key);
 
 	data = generic_toast_get_any_common(api, key, data_size, o_snapshot, arg, it,
 										found_key);
@@ -931,14 +931,14 @@ generic_toast_get_any_with_key(ToastAPI *api, void *key, Size *data_size,
 // responsibility to free it.
 //
 Pointer
-generic_toast_get_any(ToastAPI *api, void *key, Size *data_size,
-					  OSnapshot *o_snapshot, void *arg)
+generic_toast_get_any(api: &mut ToastAPI,  *key, data_size: &mut Size,
+					  o_snapshot: &mut OSnapshot,  *arg)
 {
 	return generic_toast_get_any_with_key(api, key, data_size, o_snapshot, arg, NULL);
 }
 
 bool
-o_toast_insert(OTableDescr *descr, OTuple pk, uint16 attn,
+o_toast_insert(descr: &mut OTableDescr, OTuple pk, uint16 attn,
 			   Pointer data, Size data_size,
 			   OXid oxid, CommitSeqNo csn)
 {
@@ -960,10 +960,10 @@ o_toast_insert(OTableDescr *descr, OTuple pk, uint16 attn,
 	return result;
 }
 
-void
-o_toast_sort_add(OTableDescr *descr, OTuple pk, uint16 attn,
+
+o_toast_sort_add(descr: &mut OTableDescr, OTuple pk, uint16 attn,
 				 Pointer data, Size data_size,
-				 Tuplesortstate *sortstate)
+				 sortstate: &mut Tuplesortstate)
 {
 	OToastKey	tkey;
 	OTableToastArg arg = {GET_PRIMARY(descr), descr->toast, O_TABLE_INVALID_VERSION};
@@ -980,7 +980,7 @@ o_toast_sort_add(OTableDescr *descr, OTuple pk, uint16 attn,
 }
 
 bool
-o_toast_delete(OTableDescr *descr,
+o_toast_delete(descr: &mut OTableDescr,
 			   OTuple pk, uint16 attn,
 			   OXid oxid, CommitSeqNo csn)
 {
@@ -1003,9 +1003,9 @@ o_toast_delete(OTableDescr *descr,
 }
 
 static Pointer
-o_toast_get(OTableDescr *descr,
+o_toast_get(descr: &mut OTableDescr,
 			OTuple pk, uint16 attn,
-			Size data_size, OSnapshot *o_snapshot)
+			Size data_size, o_snapshot: &mut OSnapshot)
 {
 	OToastKey	tkey;
 	Pointer		result;
@@ -1025,14 +1025,14 @@ o_toast_get(OTableDescr *descr,
 
 static OTuple
 o_create_toast_tuple(OToastKey tkey, Pointer data_ptr, Size data_length,
-					 OTableToastArg *arg)
+					 arg: &mut OTableToastArg)
 {
 	Datum		key[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM];
 	bool		isnull[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM] = {false};
 	OTuple		result;
 	int			i,
 				natts;
-	bytea	   *data;
+	data: &mut bytea;
 
 	natts = arg->pk->nonLeafTupdesc->natts;
 	for (i = 0; i < natts; i++)
@@ -1062,7 +1062,7 @@ o_create_toast_tuple(OToastKey tkey, Pointer data_ptr, Size data_length,
 
 static OTuple
 o_create_toast_key(OToastKey tkey,
-				   OTableToastArg *arg)
+				   arg: &mut OTableToastArg)
 {
 	Datum		key[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM];
 	bool		isnull[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM] = {false};
@@ -1091,7 +1091,7 @@ o_create_toast_key(OToastKey tkey,
 }
 
 bool
-o_toast_equal(BTreeDescr *primary, Datum left, Datum right)
+o_toast_equal(primary: &mut BTreeDescr, Datum left, Datum right)
 {
 	OToastExternal left_ote,
 				right_ote;
@@ -1149,9 +1149,9 @@ o_toast_equal(BTreeDescr *primary, Datum left, Datum right)
 }
 
 Datum
-o_get_raw_value(Datum value, bool *free)
+o_get_raw_value(Datum value, free: &mut bool)
 {
-	struct varlena *tmp,
+	struct tmp: &mut varlena,
 			   *result;
 
 	result = (struct varlena *) DatumGetPointer(value);
@@ -1186,9 +1186,9 @@ o_get_raw_value(Datum value, bool *free)
 }
 
 Datum
-o_get_src_value(Datum value, bool *free)
+o_get_src_value(Datum value, free: &mut bool)
 {
-	struct varlena *result;
+	struct result: &mut varlena;
 
 	result = (struct varlena *) DatumGetPointer(value);
 	*free = false;
@@ -1211,33 +1211,33 @@ o_get_src_value(Datum value, bool *free)
 	return PointerGetDatum(result);
 }
 
-void
-o_toast_key_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+
+o_toast_key_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	TuplePrintOpaque *opaque = (TuplePrintOpaque *) arg;
+	opaque: &mut TuplePrintOpaque = (TuplePrintOpaque *) arg;
 
 	toast_tuple_print(opaque->keyDesc, opaque->keySpec, opaque->keyOutputFns,
 					  buf, tup, opaque->values, opaque->nulls, false, false);
 }
 
-void
-o_toast_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+
+o_toast_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	TuplePrintOpaque *opaque = (TuplePrintOpaque *) arg;
+	opaque: &mut TuplePrintOpaque = (TuplePrintOpaque *) arg;
 
 	toast_tuple_print(opaque->desc, opaque->spec, opaque->outputFns, buf,
 					  tup, opaque->values, opaque->nulls, true, opaque->printRowVersion);
 }
 
 Datum
-create_o_toast_external(OTableDescr *descr,
+create_o_toast_external(descr: &mut OTableDescr,
 						OTuple idx_tup,
 						AttrNumber attnum,
-						OToastValue *toasted,
+						toasted: &mut OToastValue,
 						CommitSeqNo csn)
 {
 	Pointer		result;
-	OIndexDescr *id = GET_PRIMARY(descr);
+	id: &mut OIndexDescr = GET_PRIMARY(descr);
 	OToastExternal ote;
 	uint32		tupSize = o_tuple_size(idx_tup, &id->nonLeafSpec);
 
@@ -1262,10 +1262,10 @@ create_o_toast_external(OTableDescr *descr,
 	return PointerGetDatum(result);
 }
 
-static void
-toast_tuple_print(TupleDesc tupDesc, OTupleFixedFormatSpec *spec,
-				  FmgrInfo *outputFns, StringInfo buf,
-				  OTuple tup, Datum *values, bool *nulls, bool is_tuple,
+fn
+toast_tuple_print(TupleDesc tupDesc, spec: &mut OTupleFixedFormatSpec,
+				  outputFns: &mut FmgrInfo, StringInfo buf,
+				  OTuple tup, values: &mut Datum, nulls: &mut bool, bool is_tuple,
 				  bool printRowVersion)
 {
 	int			attnum,

@@ -32,10 +32,10 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *range_cache = NULL;
+static range_cache: &mut OSysCache = NULL;
 
-static void o_range_cache_free_entry(Pointer entry);
-static void o_range_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_range_cache_free_entry(Pointer entry);
+fn o_range_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									 Pointer arg);
 
 O_SYS_CACHE_FUNCS(range_cache, ORange, 1);
@@ -58,12 +58,12 @@ O_SYS_CACHE_INIT_FUNC(range_cache)
 									 0, fastcache, mcxt, &range_cache_funcs);
 }
 
-static void
-o_range_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_range_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	rangetup;
 	Form_pg_range rangeform;
-	ORange	   *o_range = (ORange *) *entry_ptr;
+	o_range: &mut ORange = (ORange *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			rngtypid;
 
@@ -89,7 +89,7 @@ o_range_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(rangetup);
 }
 
-static void
+fn
 o_range_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
@@ -98,11 +98,11 @@ o_range_cache_free_entry(Pointer entry)
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_range_cache_tup_print(BTreeDescr *desc, StringInfo buf,
+
+o_range_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 						OTuple tup, Pointer arg)
 {
-	ORange	   *o_range = (ORange *) tup.data;
+	o_range: &mut ORange = (ORange *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);
@@ -120,7 +120,7 @@ o_range_cache_search_htup(TupleDesc tupdesc, Oid rngtypid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_range] = {0};
 	bool		nulls[Natts_pg_range] = {0};
-	ORange	   *o_range;
+	o_range: &mut ORange;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_range =
@@ -140,11 +140,11 @@ o_range_cache_search_htup(TupleDesc tupdesc, Oid rngtypid)
 	return result;
 }
 
-static OSysCache *multirange_cache = NULL;
+static multirange_cache: &mut OSysCache = NULL;
 
-static void o_multirange_cache_free_entry(Pointer entry);
-static void o_multirange_cache_fill_entry(Pointer *entry_ptr,
-										  OSysCacheKey *key,
+fn o_multirange_cache_free_entry(Pointer entry);
+fn o_multirange_cache_fill_entry(entry_ptr: &mut Pointer,
+										  key: &mut OSysCacheKey,
 										  Pointer arg);
 
 O_SYS_CACHE_FUNCS(multirange_cache, OMultiRange, 1);
@@ -165,13 +165,13 @@ O_SYS_CACHE_INIT_FUNC(multirange_cache)
 										  &multirange_cache_funcs);
 }
 
-static void
-o_multirange_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn
+o_multirange_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							  Pointer arg)
 {
 	HeapTuple	rangetup;
 	Form_pg_range rangeform;
-	OMultiRange *o_multirange = (OMultiRange *) *entry_ptr;
+	o_multirange: &mut OMultiRange = (OMultiRange *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			rngtypid;
 
@@ -195,17 +195,17 @@ o_multirange_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	ReleaseSysCache(rangetup);
 }
 
-static void
+fn
 o_multirange_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
 }
 
-void
-o_multirange_cache_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup,
+
+o_multirange_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup,
 							 Pointer arg)
 {
-	OMultiRange *o_multirange = (OMultiRange *) tup.data;
+	o_multirange: &mut OMultiRange = (OMultiRange *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);
@@ -220,7 +220,7 @@ o_multirange_cache_search_htup(TupleDesc tupdesc, Oid rngmultitypid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_range] = {0};
 	bool		nulls[Natts_pg_range] = {0};
-	OMultiRange *o_multirange;
+	o_multirange: &mut OMultiRange;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_multirange = o_multirange_cache_search(datoid, rngmultitypid, cur_lsn,

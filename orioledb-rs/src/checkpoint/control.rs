@@ -25,7 +25,7 @@ use pgrx::pg_sys;
 // Returns false if the control file doesn't exist.
 //
 bool
-get_checkpoint_control_data(CheckpointControl *control)
+get_checkpoint_control_data(control: &mut CheckpointControl)
 {
 	int			controlFile;
 	Size		readBytes;
@@ -73,8 +73,8 @@ get_checkpoint_control_data(CheckpointControl *control)
 // - Check CRC
 // - Check control parameters
 //
-void
-check_checkpoint_control(CheckpointControl *control)
+
+check_checkpoint_control(control: &mut CheckpointControl)
 {
 	pg_crc32c	crc;
 
@@ -120,8 +120,8 @@ check_checkpoint_control(CheckpointControl *control)
 //
 // Write checkpoint control file to the disk (and sync).
 //
-void
-write_checkpoint_control(CheckpointControl *control)
+
+write_checkpoint_control(control: &mut CheckpointControl)
 {
 	File		controlFile;
 	char		buffer[CHECKPOINT_CONTROL_FILE_SIZE];

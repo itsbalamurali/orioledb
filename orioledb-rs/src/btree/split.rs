@@ -25,10 +25,10 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-void
-make_split_items(BTreeDescr *desc, Page page,
-				 BTreeSplitItems *items,
-				 OffsetNumber *offset, Pointer tupleheader, OTuple tuple,
+
+make_split_items(desc: &mut BTreeDescr, Page page,
+				 items: &mut BTreeSplitItems,
+				 offset: &mut OffsetNumber, Pointer tupleheader, OTuple tuple,
 				 LocationIndex tuplesize, bool replace, CommitSeqNo csn)
 {
 	BTreePageItemLocator loc;
@@ -73,7 +73,7 @@ make_split_items(BTreeDescr *desc, Page page,
 //
 		if (leaf)
 		{
-			BTreeLeafTuphdr *tupHdr;
+			tupHdr: &mut BTreeLeafTuphdr;
 			OTuple		tup;
 			bool		finished;
 
@@ -111,13 +111,13 @@ make_split_items(BTreeDescr *desc, Page page,
 	items->leaf = O_PAGE_IS(page, LEAF);
 }
 
-void
-perform_page_compaction(BTreeDescr *desc, OInMemoryBlkno blkno,
-						BTreeSplitItems *items, bool needsUndo,
+
+perform_page_compaction(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
+						items: &mut BTreeSplitItems, bool needsUndo,
 						CommitSeqNo csn)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	UndoLocation undoLocation;
 	OFixedKey	hikey;
 	LocationIndex hikeySize;
@@ -180,7 +180,7 @@ perform_page_compaction(BTreeDescr *desc, OInMemoryBlkno blkno,
 // is sufficient instead of a page split.
 //
 bool
-split_items_fit_single_page(BTreeSplitItems *items)
+split_items_fit_single_page(items: &mut BTreeSplitItems)
 {
 	int			totalDataSize = 0;
 	int			hikeysEnd;
@@ -204,7 +204,7 @@ split_items_fit_single_page(BTreeSplitItems *items)
 // placing them onto the prospective left or right page (chosen by
 // targetLocation / spaceRatio, with overflowed sides forced opposite),
 // until the boundary settles at a single location.  Returns true and
-// writes that location through *splitLocation on success; returns false
+// writes that location splitLocation: &mut through on success; returns false
 // if no valid two-page split exists (first/last item doesn't fit its
 // page, or both sides exhaust simultaneously mid-loop).
 //
@@ -213,10 +213,10 @@ split_items_fit_single_page(BTreeSplitItems *items)
 // merge_waited_tuples() as a non-asserting dry-run) call this.
 //
 static bool
-btree_page_split_find_location(BTreeSplitItems *items,
+btree_page_split_find_location(items: &mut BTreeSplitItems,
 							   OffsetNumber targetLocation,
 							   float4 spaceRatio,
-							   OffsetNumber *splitLocation)
+							   splitLocation: &mut OffsetNumber)
 {
 	int			leftPageSpaceLeft,
 				rightPageSpaceLeft,
@@ -304,7 +304,7 @@ btree_page_split_find_location(BTreeSplitItems *items,
 // until this returns true.
 //
 bool
-btree_page_split_can_succeed(BTreeSplitItems *items)
+btree_page_split_can_succeed(items: &mut BTreeSplitItems)
 {
 	return btree_page_split_find_location(items, 0, 0.5f, NULL);
 }
@@ -318,10 +318,10 @@ btree_page_split_can_succeed(BTreeSplitItems *items)
 // sets the first tuple of right page to `*split_item`.
 //
 OffsetNumber
-btree_page_split_location(BTreeDescr *desc,
-						  BTreeSplitItems *items,
+btree_page_split_location(desc: &mut BTreeDescr,
+						  items: &mut BTreeSplitItems,
 						  OffsetNumber targetLocation, float4 spaceRatio,
-						  OTuple *split_item)
+						  split_item: &mut OTuple)
 {
 	OffsetNumber splitLocation;
 	bool		ok PG_USED_FOR_ASSERTS_ONLY;
@@ -343,12 +343,12 @@ btree_page_split_location(BTreeDescr *desc,
 }
 
 OffsetNumber
-btree_get_split_left_count(BTreeDescr *desc, Page page,
+btree_get_split_left_count(desc: &mut BTreeDescr, Page page,
 						   OffsetNumber offset, bool replace,
-						   BTreeSplitItems *items,
-						   OTuple *split_key, LocationIndex *split_key_len)
+						   items: &mut BTreeSplitItems,
+						   split_key: &mut OTuple, split_key_len: &mut LocationIndex)
 {
-	BTreePageHeader *header = (BTreePageHeader *) page;
+	header: &mut BTreePageHeader = (BTreePageHeader *) page;
 	OffsetNumber targetCount;
 	OffsetNumber result;
 	float4		spaceRatio;
@@ -430,17 +430,17 @@ btree_get_split_left_count(BTreeDescr *desc, Page page,
 // Returns OInvalidInMemoryBlkno if the page can not be split due to the fact that
 // it is under processing by the checkpointer worker.
 //
-void
-perform_page_split(BTreeDescr *desc, OInMemoryBlkno blkno,
+
+perform_page_split(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				   OInMemoryBlkno new_blkno,
-				   BTreeSplitItems *items,
+				   items: &mut BTreeSplitItems,
 				   OffsetNumber left_count,
 				   OTuple splitkey, LocationIndex splitkey_len,
 				   CommitSeqNo csn, UndoLocation undoLoc)
 {
 	Page		left_page = O_GET_IN_MEMORY_PAGE(blkno),
 				right_page = O_GET_IN_MEMORY_PAGE(new_blkno);
-	BTreePageHeader *left_header = (BTreePageHeader *) left_page,
+	left_header: &mut BTreePageHeader = (BTreePageHeader *) left_page,
 			   *right_header = (BTreePageHeader *) right_page;
 	bool		leaf = O_PAGE_IS(left_page, LEAF);
 	OTuple		hikey;

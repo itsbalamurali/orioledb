@@ -19,16 +19,16 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static ZSTD_CCtx *zstd_cctx = NULL;
-static ZSTD_DCtx *zstd_dctx = NULL;
+static zstd_cctx: &mut ZSTD_CCtx = NULL;
+static zstd_dctx: &mut ZSTD_DCtx = NULL;
 static size_t zstd_dst_size;
 static Pointer zstd_dst = NULL;
 
 //
 // Initializes compression context.
 //
-void
-o_compress_init(void)
+
+o_compress_init()
 {
 	zstd_cctx = ZSTD_createCCtx();
 	zstd_dctx = ZSTD_createDCtx();
@@ -50,7 +50,7 @@ o_compress_init(void)
 // Compresses a BTree page.
 //
 Pointer
-o_compress_page(Pointer page, size_t *size, OCompress lvl)
+o_compress_page(Pointer page, size: &mut size_t, OCompress lvl)
 {
 	VALGRIND_CHECK_MEM_IS_DEFINED(page, ORIOLEDB_BLCKSZ);
 	*size = ZSTD_compressCCtx(zstd_cctx,
@@ -70,7 +70,7 @@ o_compress_page(Pointer page, size_t *size, OCompress lvl)
 //
 // Decompresses a BTree page.
 //
-void
+
 o_decompress_page(Pointer src, size_t size, Pointer page)
 {
 	size_t		result;
@@ -96,8 +96,8 @@ o_compress_max_lvl()
 	return ZSTD_maxCLevel();
 }
 
-void
-validate_compress(OCompress compress, char *prefix)
+
+validate_compress(OCompress compress, prefix: &mut char)
 {
 	OCompress	max_compress = o_compress_max_lvl();
 

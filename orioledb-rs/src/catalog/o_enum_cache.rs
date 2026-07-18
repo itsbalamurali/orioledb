@@ -30,16 +30,16 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static OSysCache *enum_cache = NULL;
-static OSysCache *enumoid_cache = NULL;
+static enum_cache: &mut OSysCache = NULL;
+static enumoid_cache: &mut OSysCache = NULL;
 
-static void o_enum_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_enum_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									Pointer arg);
-static void o_enum_cache_free_entry(Pointer entry);
+fn o_enum_cache_free_entry(Pointer entry);
 
-static void o_enumoid_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_enumoid_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									   Pointer arg);
-static void o_enumoid_cache_free_entry(Pointer entry);
+fn o_enumoid_cache_free_entry(Pointer entry);
 
 // Copied from typecache.c
 typedef struct
@@ -52,7 +52,7 @@ typedef struct
 typedef struct TypeCacheEnumData
 {
 	Oid			bitmap_base;	// OID corresponding to bit 0 of bitmapset
-	Bitmapset  *sorted_values;	// Set of OIDs known to be in order
+	sorted_values: &mut Bitmapset;	// Set of OIDs known to be in order
 	int			num_values;		// total number of values in enum
 	EnumItem	enum_values[FLEXIBLE_ARRAY_MEMBER];
 } TypeCacheEnumData;
@@ -95,7 +95,7 @@ O_SYS_CACHE_INIT_FUNC(enumoid_cache)
 									   fastcache, mcxt, &enumoid_cache_funcs);
 }
 
-void
+
 o_enum_cache_add_all(Oid datoid, Oid enum_oid, XLogRecPtr insert_lsn)
 {
 	Relation	enum_rel;
@@ -126,12 +126,12 @@ o_enum_cache_add_all(Oid datoid, Oid enum_oid, XLogRecPtr insert_lsn)
 	table_close(enum_rel, AccessShareLock);
 }
 
-static void
-o_enum_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_enum_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	enumtup;
 	Form_pg_enum enumform;
-	OEnum	   *o_enum = (OEnum *) *entry_ptr;
+	o_enum: &mut OEnum = (OEnum *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			enumtypid;
 	Name		enumlabel;
@@ -163,12 +163,12 @@ o_enum_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(enumtup);
 }
 
-static void
-o_enumoid_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
+fn
+o_enumoid_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
 	HeapTuple	enumtup;
 	Form_pg_enum enumform;
-	OEnumOid   *o_enumoid = (OEnumOid *) *entry_ptr;
+	o_enumoid: &mut OEnumOid = (OEnumOid *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			enum_oid;
 
@@ -196,13 +196,13 @@ o_enumoid_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	ReleaseSysCache(enumtup);
 }
 
-static void
+fn
 o_enum_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
 }
 
-static void
+fn
 o_enumoid_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
@@ -211,12 +211,12 @@ o_enumoid_cache_free_entry(Pointer entry)
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_enum_cache_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup,
+
+o_enum_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup,
 					   Pointer arg)
 {
-	OSysCacheKey *key = (OSysCacheKey *) tup.data;
-	OEnumData  *o_enum_data;
+	key: &mut OSysCacheKey = (OSysCacheKey *) tup.data;
+	o_enum_data: &mut OEnumData;
 
 	o_enum_data = (OEnumData *) (tup.data + offsetof(OEnum, data) +
 								 key->common.dataLength);
@@ -230,22 +230,22 @@ o_enum_cache_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup,
 //
 // A tuple print function for o_print_btree_pages()
 //
-void
-o_enumoid_cache_tup_print(BTreeDescr *desc, StringInfo buf,
+
+o_enumoid_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 						  OTuple tup, Pointer arg)
 {
-	OEnumOid   *o_enumoid = (OEnumOid *) tup.data;
+	o_enumoid: &mut OEnumOid = (OEnumOid *) tup.data;
 
 	appendStringInfo(buf, "(");
 	o_sys_cache_key_print(desc, buf, tup, arg);
 	appendStringInfo(buf, ", %u)", o_enumoid->enumtypid);
 }
 
-void
+
 o_enum_cache_delete_all(Oid datoid, Oid enum_oid)
 {
-	BTreeDescr *td = get_sys_tree(enum_cache->sys_tree_num);
-	BTreeIterator *it;
+	td: &mut BTreeDescr = get_sys_tree(enum_cache->sys_tree_num);
+	it: &mut BTreeIterator;
 	OSysCacheKey2 key = {0};
 	OSysCacheBound bound = {.key = (OSysCacheKey *) &key,
 	.nkeys = 1};
@@ -262,8 +262,8 @@ o_enum_cache_delete_all(Oid datoid, Oid enum_oid)
 												 (Pointer) &bound,
 												 BTreeKeyBound, true,
 												 NULL);
-		OEnum	   *o_enum = (OEnum *) tup.data;
-		OEnumData  *o_enum_data;
+		o_enum: &mut OEnum = (OEnum *) tup.data;
+		o_enum_data: &mut OEnumData;
 
 		if (O_TUPLE_IS_NULL(tup))
 			break;
@@ -295,7 +295,7 @@ o_enumoid_cache_search_htup(TupleDesc tupdesc, Oid enum_oid)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_enum] = {0};
 	bool		nulls[Natts_pg_enum] = {0};
-	OEnumOid   *o_enumoid;
+	o_enumoid: &mut OEnumOid;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_enumoid = o_enumoid_cache_search(datoid, enum_oid, cur_lsn,
@@ -322,8 +322,8 @@ o_enum_cache_search_htup(TupleDesc tupdesc, Oid enumtypid, Name enumlabel)
 	HeapTuple	result = NULL;
 	Datum		values[Natts_pg_enum] = {0};
 	bool		nulls[Natts_pg_enum] = {0};
-	OEnum	   *o_enum;
-	OEnumData  *o_enum_data;
+	o_enum: &mut OEnum;
+	o_enum_data: &mut OEnumData;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_enum = o_enum_cache_search(datoid, enumtypid, NameGetDatum(enumlabel),
@@ -350,10 +350,10 @@ o_enum_cache_search_htup(TupleDesc tupdesc, Oid enumtypid, Name enumlabel)
 // qsort comparison function for OID-ordered EnumItems
 //
 static int
-enum_oid_cmp(const void *left, const void *right)
+enum_oid_cmp(left: &mut const, right: &mut const)
 {
-	const EnumItem *l = (const EnumItem *) left;
-	const EnumItem *r = (const EnumItem *) right;
+	const l: &mut EnumItem = (const EnumItem *) left;
+	const r: &mut EnumItem = (const EnumItem *) right;
 
 	if (l->enum_oid < r->enum_oid)
 		return -1;
@@ -366,20 +366,20 @@ enum_oid_cmp(const void *left, const void *right)
 //
 // Load (or re-load) the enumData member of the typcache entry.
 //
-void
-o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
+
+o_load_enum_cache_data_hook(tcache: &mut TypeCacheEntry)
 {
-	TypeCacheEnumData *enumdata;
-	BTreeDescr *td = get_sys_tree(enum_cache->sys_tree_num);
-	BTreeIterator *it;
+	enumdata: &mut TypeCacheEnumData;
+	td: &mut BTreeDescr = get_sys_tree(enum_cache->sys_tree_num);
+	it: &mut BTreeIterator;
 	OSysCacheKey2 key = {0};
 	OSysCacheBound bound = {.key = (OSysCacheKey *) &key,
 	.nkeys = 1};
-	EnumItem   *items;
+	items: &mut EnumItem;
 	int			numitems;
 	int			maxitems;
 	Oid			bitmap_base;
-	Bitmapset  *bitmap;
+	bitmap: &mut Bitmapset;
 	MemoryContext oldcxt;
 	int			bm_size,
 				start_pos;
@@ -414,8 +414,8 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 												 (Pointer) &bound,
 												 BTreeKeyBound, true,
 												 NULL);
-		OEnum	   *o_enum = (OEnum *) tup.data;
-		OEnumData  *o_enum_data;
+		o_enum: &mut OEnum = (OEnum *) tup.data;
+		o_enum_data: &mut OEnumData;
 
 		if (O_TUPLE_IS_NULL(tup))
 			break;
@@ -467,7 +467,7 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 		//
 // Identify longest sorted subsequence starting at start_pos
 //
-		Bitmapset  *this_bitmap = bms_make_singleton(0);
+		this_bitmap: &mut Bitmapset = bms_make_singleton(0);
 		int			this_bm_size = 1;
 		Oid			start_oid = items[start_pos].enum_oid;
 		float4		prev_order = items[start_pos].sort_order;

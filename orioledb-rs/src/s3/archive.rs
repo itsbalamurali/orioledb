@@ -27,14 +27,14 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	char	   *fileName;
+	fileName: &mut char;
 	S3TaskLocation location;
 } PreloadHashItem;
 
-static HTAB *preloadHash = NULL;
+static preloadHash: &mut HTAB = NULL;
 
 static uint32
-preload_item_hash(const void *key, Size keysize)
+preload_item_hash(key: &mut const, Size keysize)
 {
 	const char **filename = (const char **) key;
 
@@ -47,21 +47,21 @@ preload_item_hash(const void *key, Size keysize)
 // notification_match: match function to use with notification_hash
 //
 static int
-preload_item_match(const void *key1, const void *key2, Size keysize)
+preload_item_match(key1: &mut const, key2: &mut const, Size keysize)
 {
 	const char **f1 = (const char **) key1;
 	const char **f2 = (const char **) key2;
 	int			l1 = strlen(*f1),
 				l2 = strlen(*f2);
 
-	if (l1 == l2 && memcmp((void *) *f1, (void *) *f2, l1) == 0)
+	if (l1 == l2 && memcmp(( *) *f1, ( *) *f2, l1) == 0)
 		return 0;
 	else
 		return 1;
 }
 
-static void
-make_preload_hash(void)
+fn
+make_preload_hash()
 {
 	HASHCTL		hash_ctl;
 
@@ -78,11 +78,11 @@ make_preload_hash(void)
 					HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_CONTEXT);
 }
 
-static bool s3_archive_configured(ArchiveModuleState *state);
-static void s3_archive_preload_file(ArchiveModuleState *state,
-									const char *file, const char *path);
-static bool s3_archive_file(ArchiveModuleState *state,
-							const char *file, const char *path);
+static bool s3_archive_configured(state: &mut ArchiveModuleState);
+fn s3_archive_preload_file(state: &mut ArchiveModuleState,
+									const file: &mut char, const path: &mut char);
+static bool s3_archive_file(state: &mut ArchiveModuleState,
+							const file: &mut char, const path: &mut char);
 
 static const ArchiveModuleCallbacks s3_archive_callbacks = {
 	.check_configured_cb = s3_archive_configured,
@@ -96,7 +96,7 @@ static const ArchiveModuleCallbacks s3_archive_callbacks = {
 // Returns the module's archiving callbacks.
 //
 const ArchiveModuleCallbacks *
-_PG_archive_module_init(void)
+_PG_archive_module_init()
 {
 	if (!preloadHash)
 		make_preload_hash();
@@ -108,7 +108,7 @@ _PG_archive_module_init(void)
 // We only allow S3 archiving if we're in S3 mode.
 //
 static bool
-s3_archive_configured(ArchiveModuleState *state)
+s3_archive_configured(state: &mut ArchiveModuleState)
 {
 	return orioledb_s3_mode;
 }
@@ -118,12 +118,12 @@ s3_archive_configured(ArchiveModuleState *state)
 // return the result synchronously, and it works in dedicated archiving process.
 // So, no point to schedule this for S3 worker.  Make the S3 request right-away.
 //
-static void
-s3_archive_preload_file(ArchiveModuleState *state,
-						const char *file, const char *path)
+fn
+s3_archive_preload_file(state: &mut ArchiveModuleState,
+						const file: &mut char, const path: &mut char)
 {
 	bool		found;
-	PreloadHashItem *item;
+	item: &mut PreloadHashItem;
 
 	if (!orioledb_s3_mode)
 		return;
@@ -147,12 +147,12 @@ s3_archive_preload_file(ArchiveModuleState *state,
 // So, no point to schedule this for S3 worker.  Make the S3 request right-away.
 //
 static bool
-s3_archive_file(ArchiveModuleState *state,
-				const char *file, const char *path)
+s3_archive_file(state: &mut ArchiveModuleState,
+				const file: &mut char, const path: &mut char)
 {
 	S3TaskLocation location;
 	bool		found;
-	PreloadHashItem *item;
+	item: &mut PreloadHashItem;
 
 	if (!orioledb_s3_mode)
 		return false;

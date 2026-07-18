@@ -37,25 +37,25 @@ typedef struct
 	ArraySearchFunc func;
 } ArraySearchDesc;
 
-static ArraySearchDesc *find_array_search_desc_by_typeid(Oid typeid);
+static find_array_search_desc_by_typeid: &mut ArraySearchDesc(Oid typeid);
 
-static bool find_downlink_get_keys(BTreeDescr *desc,
-								   void *key, BTreeKeyType keyType,
-								   bool *inclusive, int numValues,
-								   Oid *types, Datum *values, uint8 *flags);
+static bool find_downlink_get_keys(desc: &mut BTreeDescr,
+								    *key, BTreeKeyType keyType,
+								   inclusive: &mut bool, int numValues,
+								   types: &mut Oid, values: &mut Datum, flags: &mut uint8);
 
-static void oid_array_search(Pointer p, int stride, int *lower,
-							 int *upper, Datum keyDatum, bool ascending);
-static void int4_array_search(Pointer p, int stride, int *lower,
-							  int *upper, Datum keyDatum, bool ascending);
-static void int8_array_search(Pointer p, int stride, int *lower,
-							  int *upper, Datum keyDatum, bool ascending);
-static void float4_array_search(Pointer p, int stride, int *lower,
-								int *upper, Datum keyDatum, bool ascending);
-static void float8_array_search(Pointer p, int stride, int *lower,
-								int *upper, Datum keyDatum, bool ascending);
-static void tid_array_search(Pointer p, int stride, int *lower,
-							 int *upper, Datum keyDatum, bool ascending);
+fn oid_array_search(Pointer p, int stride, lower: &mut int,
+							 upper: &mut int, Datum keyDatum, bool ascending);
+fn int4_array_search(Pointer p, int stride, lower: &mut int,
+							  upper: &mut int, Datum keyDatum, bool ascending);
+fn int8_array_search(Pointer p, int stride, lower: &mut int,
+							  upper: &mut int, Datum keyDatum, bool ascending);
+fn float4_array_search(Pointer p, int stride, lower: &mut int,
+								upper: &mut int, Datum keyDatum, bool ascending);
+fn float8_array_search(Pointer p, int stride, lower: &mut int,
+								upper: &mut int, Datum keyDatum, bool ascending);
+fn tid_array_search(Pointer p, int stride, lower: &mut int,
+							 upper: &mut int, Datum keyDatum, bool ascending);
 
 static ArraySearchDesc arraySearchDescs[] = {
 	{OIDOID, OID_BTREE_OPS_OID, sizeof(Oid), ALIGNOF_INT, oid_array_search},
@@ -68,16 +68,16 @@ static ArraySearchDesc arraySearchDescs[] = {
 
 //
 // Checks if the "fast path" the navigation can be applied to the given search
-// and fills *meta structure if so.
+// and meta: &mut fills structure if so.
 //
-void
-can_fastpath_find_downlink(OBTreeFindPageContext *context,
-						   void *key,
+
+can_fastpath_find_downlink(context: &mut OBTreeFindPageContext,
+						    *key,
 						   BTreeKeyType keyType,
-						   FastpathFindDownlinkMeta *meta)
+						   meta: &mut FastpathFindDownlinkMeta)
 {
-	BTreeDescr *desc = context->desc;
-	OIndexDescr *id;
+	desc: &mut BTreeDescr = context->desc;
+	id: &mut OIndexDescr;
 	Oid			types[FASTPATH_FIND_DOWNLINK_MAX_KEYS] = {InvalidOid};
 	int			i;
 	int			offset;
@@ -119,9 +119,9 @@ can_fastpath_find_downlink(OBTreeFindPageContext *context,
 	offset = 0;
 	for (i = 0; i < meta->numKeys; i++)
 	{
-		ArraySearchDesc *searchDesc = find_array_search_desc_by_typeid(
+		searchDesc: &mut ArraySearchDesc = find_array_search_desc_by_typeid(
 																	   TupleDescAttr(id->nonLeafTupdesc, i)->atttypid);
-		OIndexField *field = &id->fields[i];
+		field: &mut OIndexField = &id->fields[i];
 
 		//
 // The array-search routines compare raw datums, so they require the
@@ -185,14 +185,14 @@ find_array_search_desc_by_typeid(Oid typeid)
 // Decompose search key into values for the "fast path" tree navigation.
 //
 static bool
-find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
-					   bool *inclusive, int numValues, Oid *types,
-					   Datum *values, uint8 *flags)
+find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
+					   inclusive: &mut bool, int numValues, types: &mut Oid,
+					   values: &mut Datum, flags: &mut uint8)
 {
 	TupleDesc	tupdesc;
-	OTupleFixedFormatSpec *spec;
-	OIndexDescr *id;
-	OTuple	   *tuple;
+	spec: &mut OTupleFixedFormatSpec;
+	id: &mut OIndexDescr;
+	tuple: &mut OTuple;
 	int			i;
 
 	Assert(!IS_SYS_TREE_OIDS(desc->oids));
@@ -220,7 +220,7 @@ find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
 		keyType == BTreeKeyUniqueLowerBound ||
 		keyType == BTreeKeyUniqueUpperBound)
 	{
-		OBTreeKeyBound *bound = (OBTreeKeyBound *) key;
+		bound: &mut OBTreeKeyBound = (OBTreeKeyBound *) key;
 		int			num = Min(numValues, bound->nkeys);
 
 		for (i = 0; i < num; i++)
@@ -337,19 +337,19 @@ find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
 OBTreeFastPathFindResult
 fastpath_find_downlink(Pointer pagePtr,
 					   OInMemoryBlkno blkno,
-					   FastpathFindDownlinkMeta *meta,
-					   BTreePageItemLocator *loc,
+					   meta: &mut FastpathFindDownlinkMeta,
+					   loc: &mut BTreePageItemLocator,
 					   BTreeNonLeafTuphdr **tuphdrPtr)
 {
-	BTreePageHeader *imgHdr = (BTreePageHeader *) pagePtr;
-	BTreePageHeader *hdr = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
+	imgHdr: &mut BTreePageHeader = (BTreePageHeader *) pagePtr;
+	hdr: &mut BTreePageHeader = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
 	int			lower;
 	int			upper;
 	int			count;
 	int			i;
 	int			chunkIndex;
 	int			itemIndex;
-	BTreePageChunk *chunk;
+	chunk: &mut BTreePageChunk;
 	int			chunkSize,
 				chunkItemsCount;
 	Pointer		base;
@@ -512,11 +512,11 @@ fastpath_find_downlink(Pointer pagePtr,
 OBTreeFastPathFindResult
 fastpath_find_chunk(Pointer pagePtr,
 					OInMemoryBlkno blkno,
-					FastpathFindDownlinkMeta *meta,
-					int *chunkIndex)
+					meta: &mut FastpathFindDownlinkMeta,
+					chunkIndex: &mut int)
 {
-	BTreePageHeader *imgHdr = (BTreePageHeader *) pagePtr;
-	BTreePageHeader *hdr = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
+	imgHdr: &mut BTreePageHeader = (BTreePageHeader *) pagePtr;
+	hdr: &mut BTreePageHeader = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
 	int			i;
 	int			lower;
 	int			upper;
@@ -575,8 +575,8 @@ fastpath_find_chunk(Pointer pagePtr,
 // Find the given value in the fixed-stride array of integers.  The functions
 // below do the same for other datatypes.
 //
-static void
-int4_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
+fn
+int4_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				  bool ascending)
 {
 	int			i;
@@ -608,8 +608,8 @@ int4_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
 		*lower = *upper;
 }
 
-static void
-int8_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
+fn
+int8_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				  bool ascending)
 {
 	int			i;
@@ -641,8 +641,8 @@ int8_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
 		*lower = *upper;
 }
 
-static void
-oid_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
+fn
+oid_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				 bool ascending)
 {
 	int			i;
@@ -674,8 +674,8 @@ oid_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
 		*lower = *upper;
 }
 
-static void
-float4_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
+fn
+float4_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 					bool ascending)
 {
 	int			i;
@@ -708,8 +708,8 @@ float4_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatu
 		*lower = *upper;
 }
 
-static void
-float8_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
+fn
+float8_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 					bool ascending)
 {
 	int			i;
@@ -762,8 +762,8 @@ tid_cmp(ItemPointer arg1, ItemPointer arg2)
 		return 0;
 }
 
-static void
-tid_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
+fn
+tid_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				 bool ascending)
 {
 	int			i;

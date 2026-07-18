@@ -66,10 +66,10 @@ use pgrx::pg_sys;
 // the (len, off) B-tree.
 //
 FileExtent
-get_extent(BTreeDescr *desc, uint16 len)
+get_extent(desc: &mut BTreeDescr, uint16 len)
 {
-	BTreeMetaPage *metaPage = BTREE_GET_META(desc);
-	BTreeLeafTuphdr *header = NULL;
+	metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
+	header: &mut BTreeLeafTuphdr = NULL;
 	FreeTreeTuple tup,
 				deleted_tup,
 			   *cur_tup = NULL;
@@ -80,9 +80,9 @@ get_extent(BTreeDescr *desc, uint16 len)
 	bool		found = false,
 				end = false,
 				modify_result;
-	BTreePageItemLocator *loc;
-	BTreeDescr *len_off_tree = get_sys_tree(SYS_TREES_EXTENTS_LEN_OFF);
-	BTreeDescr *off_len_tree = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
+	loc: &mut BTreePageItemLocator;
+	len_off_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_LEN_OFF);
+	off_len_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
 	OTuple		tmpTup;
 
 	Assert(!orioledb_s3_mode);
@@ -205,7 +205,7 @@ get_extent(BTreeDescr *desc, uint16 len)
 	MARK_DIRTY(len_off_tree, context.items[context.index].blkno);
 
 	if (is_page_too_sparse(len_off_tree, p))
-		(void) btree_try_merge_and_unlock(len_off_tree,
+		() btree_try_merge_and_unlock(len_off_tree,
 										  context.items[context.index].blkno,
 										  false, false);
 	else
@@ -276,10 +276,10 @@ get_extent(BTreeDescr *desc, uint16 len)
 //
 // TODO: add hints support
 //
-void
-free_extent(BTreeDescr *desc, FileExtent extent)
+
+free_extent(desc: &mut BTreeDescr, FileExtent extent)
 {
-	BTreeIterator *it = NULL;
+	it: &mut BTreeIterator = NULL;
 	FreeTreeTuple tup,
 				right,
 				left,
@@ -289,8 +289,8 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 				merge_right,
 				merge_left,
 				inserted = false;
-	BTreeDescr *len_off_tree = get_sys_tree(SYS_TREES_EXTENTS_LEN_OFF);
-	BTreeDescr *off_len_tree = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
+	len_off_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_LEN_OFF);
+	off_len_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
 	OTuple		tmpTup;
 
 	enable_stopevents = false;
@@ -475,16 +475,16 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 //
 // Be careful, there are can be some intersections, see get_extent() algorithm.
 //
-void
-foreach_free_extent(BTreeDescr *desc, ForEachExtentCallback callback, void *arg)
+
+foreach_free_extent(desc: &mut BTreeDescr, ForEachExtentCallback callback,  *arg)
 {
-	BTreeIterator *it;
+	it: &mut BTreeIterator;
 	FreeTreeTuple from,
 				to,
 			   *cur;
 	FileExtent	cur_extent;
 	bool		old_enable_stopevents = enable_stopevents;
-	BTreeDescr *off_len_tree = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
+	off_len_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
 	OTuple		tmpTup;
 	OTuple		toTup;
 	OTuple		fromTup;
@@ -545,16 +545,16 @@ foreach_free_extent(BTreeDescr *desc, ForEachExtentCallback callback, void *arg)
 // Adds free extents from .tmp file to the trees.  Optionally removes the .tmp
 // file.
 //
-void
-add_free_extents_from_tmp(BTreeDescr *desc, bool remove)
+
+add_free_extents_from_tmp(desc: &mut BTreeDescr, bool remove)
 {
-	BTreeMetaPage *metaPage;
+	metaPage: &mut BTreeMetaPage;
 	File		file;
 	uint64		file_size;
-	char	   *filename,
+	filename: &mut char,
 				buf[ORIOLEDB_BLCKSZ];
 	uint32		chkp_num;
-	LWLock	   *metaLock;
+	metaLock: &mut LWLock;
 
 	o_btree_load_shmem(desc);
 	metaPage = BTREE_GET_META(desc);
@@ -591,7 +591,7 @@ add_free_extents_from_tmp(BTreeDescr *desc, bool remove)
 
 		while (true)
 		{
-			FileExtent *cur_off;
+			cur_off: &mut FileExtent;
 
 			buf_len = OFileRead(file, buf, ORIOLEDB_BLCKSZ, len, WAIT_EVENT_DATA_FILE_READ);
 
@@ -636,7 +636,7 @@ add_free_extents_from_tmp(BTreeDescr *desc, bool remove)
 // and free space map) private to the owning process.
 //
 bool
-btree_desc_is_local_temp(BTreeDescr *desc)
+btree_desc_is_local_temp(desc: &mut BTreeDescr)
 {
 	return desc->ppool == (PagePool *) &local_ppool;
 }
@@ -647,10 +647,10 @@ btree_desc_is_local_temp(BTreeDescr *desc)
 // The list is lazily allocated in TopMemoryContext so that it survives
 // across transaction boundaries for the lifetime of the descriptor.
 //
-void
-local_free_extents_push(BTreeDescr *desc, FileExtent extent)
+
+local_free_extents_push(desc: &mut BTreeDescr, FileExtent extent)
 {
-	BTreeLocalFreeExtents *list = desc->localFreeExtents;
+	list: &mut BTreeLocalFreeExtents = desc->localFreeExtents;
 
 	Assert(btree_desc_is_local_temp(desc));
 	Assert(FileExtentIsValid(extent));
@@ -681,12 +681,12 @@ local_free_extents_push(BTreeDescr *desc, FileExtent extent)
 //
 // Tries to take an extent of exactly `len` blocks from the backend-local
 // list.  Uses first-fit; if the matching item is longer than requested the
-// remainder is kept in place.  Returns true and fills *extent on success.
+// remainder is kept in place.  Returns true and extent: &mut fills on success.
 //
 bool
-local_free_extents_pop(BTreeDescr *desc, uint16 len, FileExtent *extent)
+local_free_extents_pop(desc: &mut BTreeDescr, uint16 len, extent: &mut FileExtent)
 {
-	BTreeLocalFreeExtents *list = desc->localFreeExtents;
+	list: &mut BTreeLocalFreeExtents = desc->localFreeExtents;
 	int			i;
 
 	Assert(btree_desc_is_local_temp(desc));
@@ -696,7 +696,7 @@ local_free_extents_pop(BTreeDescr *desc, uint16 len, FileExtent *extent)
 
 	for (i = 0; i < list->size; i++)
 	{
-		FileExtent *item = &list->items[i];
+		item: &mut FileExtent = &list->items[i];
 
 		if (item->len < len)
 			continue;
@@ -724,10 +724,10 @@ local_free_extents_pop(BTreeDescr *desc, uint16 len, FileExtent *extent)
 //
 // Releases memory held by the backend-local free extent list.
 //
-void
-local_free_extents_cleanup(BTreeDescr *desc)
+
+local_free_extents_cleanup(desc: &mut BTreeDescr)
 {
-	BTreeLocalFreeExtents *list = desc->localFreeExtents;
+	list: &mut BTreeLocalFreeExtents = desc->localFreeExtents;
 
 	if (list == NULL)
 		return;

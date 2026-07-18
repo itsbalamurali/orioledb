@@ -106,17 +106,17 @@ static bool xlog_ptr_committing_set = false;
 
 static LogicalXidCtx logicalXidContext = {InvalidTransactionId, false};
 
-static inline void
-reset_logical_xid_ctx(void)
+static inline 
+reset_logical_xid_ctx()
 {
 	logicalXidContext.xid = InvalidTransactionId;
 	logicalXidContext.useHeap = false;
 }
 
 static inline LogicalXidCtx *
-clone_logical_xid_ctx(void)
+clone_logical_xid_ctx()
 {
-	LogicalXidCtx *clone = (LogicalXidCtx *) palloc(sizeof(LogicalXidCtx));
+	clone: &mut LogicalXidCtx = (LogicalXidCtx *) palloc(sizeof(LogicalXidCtx));
 
 	Assert(clone);
 	memcpy(clone, &logicalXidContext, sizeof(LogicalXidCtx));
@@ -135,9 +135,9 @@ orioledb_get_current_heap_xid(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(GetCurrentTransactionIdIfAny());
 }
 
-static List *prevLogicalXids = NIL; // remember all xids on subxact's chain
+static prevLogicalXids: &mut List = NIL; // remember all xids on subxact's chain
 // for correct release
-static OXidMapItem *xidBuffer;
+static xidBuffer: &mut OXidMapItem;
 
 //
 // Per-page dirty bitmap for xidBuffer.  One bit per ORIOLEDB_BLCKSZ page
@@ -153,11 +153,11 @@ static OXidMapItem *xidBuffer;
 // after checkpoint cleared it) leaves the bit set so the next flush
 // catches the update; the worst case is one redundant page write.
 //
-static pg_atomic_uint32 *xidBufferDirty;
+static xidBufferDirty: &mut pg_atomic_uint32;
 
-XidMeta    *xid_meta;
+xid_meta: &mut XidMeta;
 
-static pg_atomic_uint32 *logicalXidsShmemMap;
+static logicalXidsShmemMap: &mut pg_atomic_uint32;
 
 // # slots covered by one o_buffers page in the xidmap.
 #define XID_SLOTS_PER_PAGE (ORIOLEDB_BLCKSZ / sizeof(OXidMapItem))
@@ -176,7 +176,7 @@ StaticAssertDecl(ORIOLEDB_BLCKSZ % sizeof(OXidMapItem) == 0,
 #define XID_BUFFER_PAGE_INDEX(oxid) \
 	(((oxid) % xid_circular_buffer_size) / XID_SLOTS_PER_PAGE)
 
-static inline void
+static inline 
 mark_xid_buffer_dirty(OXid oxid)
 {
 	uint32		page = XID_BUFFER_PAGE_INDEX(oxid);
@@ -226,7 +226,7 @@ xid_buffer_page_dirty(uint32 page)
 // tail still belongs to slots outside the range that may be actively
 // written.
 //
-static inline void
+static inline 
 clear_xid_dirty_range(OXid xmin, OXid xmax)
 {
 	OXid		fullStart,
@@ -267,11 +267,11 @@ static OBuffersDesc buffersDesc = {
 	.bufferCtlTrancheName = "xidBuffersCtlTranche"
 };
 
-static TransactionId acquire_logical_xid_wrapper(bool *isValidHeapXid);
-static void advance_global_xmin(OXid newXid);
+static TransactionId acquire_logical_xid_wrapper(isValidHeapXid: &mut bool);
+fn advance_global_xmin(OXid newXid);
 
 Size
-oxid_shmem_needs(void)
+oxid_shmem_needs()
 {
 	Size		size;
 
@@ -292,8 +292,8 @@ oxid_shmem_needs(void)
 #define NLOCKENTS() \
 	mul_size(max_locks_per_xact, add_size(MaxBackends, max_prepared_xacts))
 
-static HTAB *LockMethodLockHash;
-static HTAB *LockMethodProcLockHash;
+static LockMethodLockHash: &mut HTAB;
+static LockMethodProcLockHash: &mut HTAB;
 
 //
 // Compute the hash code associated with a PROCLOCKTAG.
@@ -307,9 +307,9 @@ static HTAB *LockMethodProcLockHash;
 // this with this specialized hash function.
 //
 static uint32
-proclock_hash(const void *key, Size keysize)
+proclock_hash(key: &mut const, Size keysize)
 {
-	const PROCLOCKTAG *proclocktag = (const PROCLOCKTAG *) key;
+	const proclocktag: &mut PROCLOCKTAG = (const PROCLOCKTAG *) key;
 	uint32		lockhash;
 	Datum		procptr;
 
@@ -334,8 +334,8 @@ proclock_hash(const void *key, Size keysize)
 //
 // Get access to lock system hashes in the shared memory.
 //
-static void
-init_lock_hashes(void)
+fn
+init_lock_hashes()
 {
 	HASHCTL		info;
 	long		init_table_size,
@@ -382,7 +382,7 @@ init_lock_hashes(void)
 										   HASH_ELEM | HASH_FUNCTION | HASH_PARTITION);
 }
 
-void
+
 oxid_init_shmem(Pointer ptr, bool found)
 {
 	xid_meta = (XidMeta *) ptr;
@@ -433,7 +433,7 @@ oxid_init_shmem(Pointer ptr, bool found)
 #define	MAX_N_TRIES (16)
 
 static TransactionId
-acquire_logical_xid(bool *isValidHeapXid)
+acquire_logical_xid(isValidHeapXid: &mut bool)
 {
 	TransactionId result,
 				sub;
@@ -510,8 +510,8 @@ acquire_logical_xid(bool *isValidHeapXid)
 	return result;
 }
 
-static void
-release_logical_xid(LogicalXidCtx *ctx)
+fn
+release_logical_xid(ctx: &mut LogicalXidCtx)
 {
 	uint32		itemsCount = 0,
 				mynum = 0;
@@ -532,7 +532,7 @@ release_logical_xid(LogicalXidCtx *ctx)
 }
 
 static TransactionId
-acquire_logical_xid_wrapper(bool *isValidHeapXid)
+acquire_logical_xid_wrapper(isValidHeapXid: &mut bool)
 {
 	TransactionId nextLogicalXid;
 	TransactionId heapXid;
@@ -556,8 +556,8 @@ acquire_logical_xid_wrapper(bool *isValidHeapXid)
 	return nextLogicalXid;
 }
 
-void
-assign_subtransaction_logical_xid(void)
+
+assign_subtransaction_logical_xid()
 {
 	TransactionId nextLogicalXid;
 	bool		isValidHeapXid = false;
@@ -580,11 +580,11 @@ assign_subtransaction_logical_xid(void)
 	logicalXidContext.useHeap = isValidHeapXid;
 }
 
-static void
-setup_prev_logical_xid_ctx(void)
+fn
+setup_prev_logical_xid_ctx()
 {
 	int			llen = 0;
-	LogicalXidCtx *ptr = NULL;
+	ptr: &mut LogicalXidCtx = NULL;
 
 	llen = list_length(prevLogicalXids);
 	if (llen > 0)
@@ -605,10 +605,10 @@ setup_prev_logical_xid_ctx(void)
 	}
 }
 
-void
+
 oxid_subxact_callback(
 					  SubXactEvent event, SubTransactionId mySubid,
-					  SubTransactionId parentSubid, void *arg)
+					  SubTransactionId parentSubid,  *arg)
 {
 	TransactionId heapXid;
 
@@ -685,7 +685,7 @@ oxid_subxact_callback(
 //
 // Set the csn value for particular oxid.
 //
-void
+
 set_oxid_csn(OXid oxid, CommitSeqNo csn)
 {
 	CommitSeqNo oldCsn;
@@ -730,7 +730,7 @@ set_oxid_csn(OXid oxid, CommitSeqNo csn)
 //
 // Set the csn value for particular oxid.
 //
-static void
+fn
 set_oxid_xlog_ptr_internal(OXid oxid, XLogRecPtr ptr)
 {
 	XLogRecPtr	oldPtr;
@@ -772,7 +772,7 @@ set_oxid_xlog_ptr_internal(OXid oxid, XLogRecPtr ptr)
 					sizeof(XLogRecPtr), false, false);
 }
 
-void
+
 set_oxid_xlog_ptr(OXid oxid, XLogRecPtr ptr)
 {
 	Assert(!XLOG_PTR_IS_SPECIAL(ptr));
@@ -784,8 +784,8 @@ set_oxid_xlog_ptr(OXid oxid, XLogRecPtr ptr)
 // Read csn of given xid from xidmap.
 // If getRawCsn is true outputs raw csn, otherwise clears COMMITSEQNO_RETAINED_FOR_REWIND flag.
 //
-static void
-map_oxid(OXid oxid, CommitSeqNo *outCsn, XLogRecPtr *outPtr, bool getRawCsn)
+fn
+map_oxid(OXid oxid, outCsn: &mut CommitSeqNo, outPtr: &mut XLogRecPtr, bool getRawCsn)
 {
 	OXidMapItem mapItem = {0};
 
@@ -843,7 +843,7 @@ map_oxid(OXid oxid, CommitSeqNo *outCsn, XLogRecPtr *outPtr, bool getRawCsn)
 		*outPtr = pg_atomic_read_u64(&mapItem.commitPtr);
 }
 
-void
+
 clear_rewind_oxid(OXid oxid)
 {
 	XLogRecPtr	xlogPtr;
@@ -863,7 +863,7 @@ csn_is_retained_for_rewind(CommitSeqNo csn)
 //
 // Write some data from circular buffer to o_buffers
 //
-static void
+fn
 write_xidsmap(OXid targetXmax)
 {
 	OXid		oxid,
@@ -934,7 +934,7 @@ write_xidsmap(OXid targetXmax)
 // usual.  A page whose bit is already clear was pushed straight to
 // disk by a checkpoint-time flush (flush_dirty_xidsmap_range), so its
 // on-disk copy is current; we still write it into the o_buffers cache
-// as *clean* rather than skipping it, so a stale partial copy an
+// clean: &mut as* rather than skipping it, so a stale partial copy an
 // earlier eviction may have left resident is refreshed before
 // writtenXmin advances past it.  Consume the bit for a fully covered
 // page (test-and-clear); only peek for a partial boundary page,
@@ -986,7 +986,7 @@ write_xidsmap(OXid targetXmax)
 // flush.
 //
 #define XID_FLUSH_BATCH_PAGES 128
-static void
+fn
 flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
 {
 	OXid		pageOxid,
@@ -1061,7 +1061,7 @@ flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
 //
 // Sync given range of xidmap with disk.
 //
-void
+
 fsync_xidmap_range(OXid xmin, OXid xmax, uint32 wait_event_info)
 {
 	flush_dirty_xidsmap_range(xmin, xmax);
@@ -1082,7 +1082,7 @@ wait_for_oxid(OXid oxid, bool errorOk)
 {
 	int			procnum;
 	CommitSeqNo csn;
-	XidVXidMapElement *vxidElem;
+	vxidElem: &mut XidVXidMapElement;
 	VirtualTransactionId vxid;
 	bool		result;
 
@@ -1124,10 +1124,10 @@ wait_for_oxid(OXid oxid, bool errorOk)
 //
 // No existing callers.
 //
-void
+
 oxid_notify(OXid oxid)
 {
-	PGPROC	   *proc;
+	proc: &mut PGPROC;
 	LOCKTAG		tag;
 	CommitSeqNo csn;
 	VirtualTransactionId vxid;
@@ -1162,7 +1162,7 @@ oxid_notify(OXid oxid)
 // specific backend.
 //
 		uint32		hashcode = LockTagHashCode(&(proc->waitLock->tag));
-		LWLock	   *partitionLock = LockHashPartitionLock(hashcode);
+		partitionLock: &mut LWLock = LockHashPartitionLock(hashcode);
 
 		//
 // No need to acquire the lock before check because the backend can be
@@ -1185,7 +1185,7 @@ oxid_notify(OXid oxid)
 // We use this just to avoid redundant calls of LockTagHashCode().
 //
 static inline uint32
-ProcLockHashCode(const PROCLOCKTAG *proclocktag, uint32 hashcode)
+ProcLockHashCode(const proclocktag: &mut PROCLOCKTAG, uint32 hashcode)
 {
 	uint32		lockhash = hashcode;
 	Datum		procptr;
@@ -1202,21 +1202,21 @@ ProcLockHashCode(const PROCLOCKTAG *proclocktag, uint32 hashcode)
 //
 // Notify oxid_notify_all() callers who are waiting for current process.
 //
-void
-oxid_notify_all(void)
+
+oxid_notify_all()
 {
-	PGPROC	   *proc;
+	proc: &mut PGPROC;
 	LOCKTAG		tag;
 	VirtualTransactionId vxid;
-	LWLock	   *partitionLock;
-	LOCK	   *lock;
-	PROCLOCK   *proclock;
+	partitionLock: &mut LWLock;
+	lock: &mut LOCK;
+	proclock: &mut PROCLOCK;
 	PROCLOCKTAG proclocktag;
 	uint32		hashcode;
 	uint32		proclock_hashcode;
-	List	   *procs = NIL;
-	ListCell   *lc;
-	dclist_head *waitQueue;
+	procs: &mut List = NIL;
+	lc: &mut ListCell;
+	waitQueue: &mut dclist_head;
 	dlist_iter	iter;
 
 	vxid.localTransactionId = MyProc->LXID;
@@ -1232,7 +1232,7 @@ oxid_notify_all(void)
 
 	// Find the lock object
 	lock = (LOCK *) hash_search_with_hash_value(LockMethodLockHash,
-												(void *) &tag,
+												( *) &tag,
 												hashcode,
 												HASH_FIND,
 												NULL);
@@ -1252,7 +1252,7 @@ oxid_notify_all(void)
 	proclock_hashcode = ProcLockHashCode(&proclocktag, hashcode);
 
 	proclock = (PROCLOCK *) hash_search_with_hash_value(LockMethodProcLockHash,
-														(void *) &proclocktag,
+														( *) &proclocktag,
 														proclock_hashcode,
 														HASH_FIND,
 														NULL);
@@ -1295,7 +1295,7 @@ oxid_notify_all(void)
 //
 // Loop over oProcData[] and update xid_meta accordingly.
 //
-static void
+fn
 advance_global_xmin(OXid newXid)
 {
 	OXid		globalXmin,
@@ -1420,7 +1420,7 @@ advance_global_xmin(OXid newXid)
 // to locks needed to prevent concurrent execution of the this function by
 // another process.
 //
-void
+
 advance_oxids(OXid new_xid)
 {
 	OXid		xid,
@@ -1466,7 +1466,7 @@ advance_oxids(OXid new_xid)
 // Get current OrioleDB xid (oxid).  Assign new oxid it's not done yet.
 //
 OXid
-get_current_oxid(void)
+get_current_oxid()
 {
 	if (OXidIsValid(recovery_oxid))
 		return recovery_oxid;
@@ -1474,7 +1474,7 @@ get_current_oxid(void)
 	if (!OXidIsValid(curOxid))
 	{
 		OXid		newOxid = pg_atomic_fetch_add_u64(&xid_meta->nextXid, 1);
-		XidVXidMapElement *vxidElem;
+		vxidElem: &mut XidVXidMapElement;
 		int			nestingLevel;
 
 		//
@@ -1544,15 +1544,15 @@ get_current_oxid(void)
 	return curOxid;
 }
 
-void
+
 set_current_oxid(OXid oxid)
 {
 	curOxid = oxid;
 
 }
 
-void
-set_current_logical_xid(LogicalXidCtx *in)
+
+set_current_logical_xid(in: &mut LogicalXidCtx)
 {
 	if (in)
 	{
@@ -1562,11 +1562,11 @@ set_current_logical_xid(LogicalXidCtx *in)
 	}
 }
 
-void
-parallel_worker_set_oxid(void)
+
+parallel_worker_set_oxid()
 {
-	XidVXidMapElement *vxidElem;
-	ODBProcData *leaderProcData;
+	vxidElem: &mut XidVXidMapElement;
+	leaderProcData: &mut ODBProcData;
 
 	Assert(MyProc->lockGroupLeader);
 
@@ -1576,15 +1576,15 @@ parallel_worker_set_oxid(void)
 	curOxid = vxidElem->oxid;
 }
 
-void
-reset_current_oxid(void)
+
+reset_current_oxid()
 {
 	curOxid = InvalidOXid;
 	reset_logical_xid_ctx();
 }
 
 OXid
-get_current_oxid_if_any(void)
+get_current_oxid_if_any()
 {
 	if (OXidIsValid(recovery_oxid))
 		return recovery_oxid;
@@ -1593,13 +1593,13 @@ get_current_oxid_if_any(void)
 }
 
 TransactionId
-get_current_logical_xid(void)
+get_current_logical_xid()
 {
 	return logicalXidContext.xid;
 }
 
-void
-get_current_logical_xid_ctx(LogicalXidCtx *output)
+
+get_current_logical_xid_ctx(output: &mut LogicalXidCtx)
 {
 	if (output)
 	{
@@ -1608,8 +1608,8 @@ get_current_logical_xid_ctx(LogicalXidCtx *output)
 	}
 }
 
-void
-current_oxid_precommit(void)
+
+current_oxid_precommit()
 {
 	if (!OXidIsValid(curOxid))
 		return;
@@ -1622,8 +1622,8 @@ current_oxid_precommit(void)
 	pg_write_barrier();
 }
 
-void
-current_oxid_xlog_precommit(void)
+
+current_oxid_xlog_precommit()
 {
 	if (!OXidIsValid(curOxid))
 		return;
@@ -1643,7 +1643,7 @@ current_oxid_xlog_precommit(void)
 	pg_write_barrier();
 }
 
-static void
+fn
 advance_run_xmin(OXid oxid)
 {
 	OXid		run_xmin;
@@ -1665,8 +1665,8 @@ advance_run_xmin(OXid oxid)
 	}
 }
 
-static void
-release_assigned_logical_xids(void)
+fn
+release_assigned_logical_xids()
 {
 	if (TransactionIdIsValid(logicalXidContext.xid))
 	{
@@ -1676,8 +1676,8 @@ release_assigned_logical_xids(void)
 
 	if (GET_CUR_PROCDATA()->autonomousNestingLevel == 0)
 	{
-		ListCell   *lc = NULL;
-		LogicalXidCtx *ptr = NULL;
+		lc: &mut ListCell = NULL;
+		ptr: &mut LogicalXidCtx = NULL;
 
 		foreach(lc, prevLogicalXids)
 		{
@@ -1693,10 +1693,10 @@ release_assigned_logical_xids(void)
 	}
 }
 
-void
+
 current_oxid_commit(CommitSeqNo csn)
 {
-	ODBProcData *my_proc_info = &oProcData[MYPROCNUMBER];
+	my_proc_info: &mut ODBProcData = &oProcData[MYPROCNUMBER];
 
 	if (!OXidIsValid(curOxid))
 		return;
@@ -1713,10 +1713,10 @@ current_oxid_commit(CommitSeqNo csn)
 	release_assigned_logical_xids();
 }
 
-void
-current_oxid_abort(void)
+
+current_oxid_abort()
 {
-	ODBProcData *my_proc_info = &oProcData[MYPROCNUMBER];
+	my_proc_info: &mut ODBProcData = &oProcData[MYPROCNUMBER];
 
 	if (!OXidIsValid(curOxid))
 		return;
@@ -1739,8 +1739,8 @@ current_oxid_abort(void)
 // that makes crash recovery resurrect the oxid and emit a spurious
 // deferred rollback.
 //
-		Jsonb	   *params;
-		JsonbParseState *state = NULL;
+		params: &mut Jsonb;
+		state: &mut JsonbParseState = NULL;
 
 		pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 		jsonb_push_int8_key(&state, "oxid", (int64) curOxid);
@@ -1774,8 +1774,8 @@ current_oxid_abort(void)
 // buffer size and may already hold someone else's data after run_xmin
 // advances.
 //
-void
-current_oxid_clear_committing(void)
+
+current_oxid_clear_committing()
 {
 	int			nestingLevel;
 
@@ -1885,9 +1885,9 @@ oxid_get_xlog_ptr(OXid oxid)
 // Gets csn for given oxid.  Wrapper over map_oxid_csn(), which loops
 // till "committing bit" is not set.
 //
-void
-oxid_match_snapshot(OXid oxid, OSnapshot *snapshot,
-					CommitSeqNo *outCsn, XLogRecPtr *outPtr)
+
+oxid_match_snapshot(OXid oxid, snapshot: &mut OSnapshot,
+					outCsn: &mut CommitSeqNo, outPtr: &mut XLogRecPtr)
 {
 	SpinDelayStatus status;
 
@@ -1942,8 +1942,8 @@ oxid_match_snapshot(OXid oxid, OSnapshot *snapshot,
 	finish_spin_delay(&status);
 }
 
-void
-fill_current_oxid_osnapshot_no_check(OXid *oxid, OSnapshot *snapshot)
+
+fill_current_oxid_osnapshot_no_check(oxid: &mut OXid, snapshot: &mut OSnapshot)
 {
 	if (ActiveSnapshotSet())
 	{
@@ -1964,8 +1964,8 @@ fill_current_oxid_osnapshot_no_check(OXid *oxid, OSnapshot *snapshot)
 	*oxid = get_current_oxid();
 }
 
-void
-fill_current_oxid_osnapshot(OXid *oxid, OSnapshot *snapshot)
+
+fill_current_oxid_osnapshot(oxid: &mut OXid, snapshot: &mut OSnapshot)
 {
 	o_check_isolation_level();
 	fill_current_oxid_osnapshot_no_check(oxid, snapshot);

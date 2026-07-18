@@ -27,18 +27,18 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static bool o_key_range_is_unbounded(OBTreeKeyRange *range, int attnum);
-static void o_fill_key_bounds(Datum v, Oid type,
-							  OBTreeValueBound *low, OBTreeValueBound *high,
-							  OIndexField *field);
+static bool o_key_range_is_unbounded(range: &mut OBTreeKeyRange, int attnum);
+fn o_fill_key_bounds(Datum v, Oid type,
+							  low: &mut OBTreeValueBound, high: &mut OBTreeValueBound,
+							  field: &mut OIndexField);
 
 static OBTreeValueBound *
-o_fill_row_key_bound(OBTreeKeyBound *bound,
+o_fill_row_key_bound(bound: &mut OBTreeKeyBound,
 					 bool first_subkey, bool last_subkey,
 					 AttrNumber subattnum, uint8 flags)
 {
-	OBtreeRowKeyBound *rowkey;
-	OBTreeValueBound *result;
+	rowkey: &mut OBtreeRowKeyBound;
+	result: &mut OBTreeValueBound;
 
 	if (first_subkey)
 	{
@@ -76,17 +76,17 @@ o_fill_row_key_bound(OBTreeKeyBound *bound,
 	return result;
 }
 
-void
-o_key_data_update_array_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
-								  int numberOfKeys, BTArrayKeyInfo *arrayKeys,
+
+o_key_data_update_array_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
+								  int numberOfKeys, arrayKeys: &mut BTArrayKeyInfo,
 								  int numPrefixExactKeys,
-								  int resultNKeys, OIndexField *fields)
+								  int resultNKeys, fields: &mut OIndexField)
 {
 	int			i;
 
 	for (i = 0; i < numberOfKeys; i++)
 	{
-		ScanKeyData *key = &keyData[i];
+		key: &mut ScanKeyData = &keyData[i];
 		AttrNumber	attnum = key->sk_attno - 1;
 
 		if ((key->sk_flags & SK_SEARCHARRAY) &&
@@ -104,10 +104,10 @@ o_key_data_update_array_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 }
 
 bool
-o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
-						int numberOfKeys, BTArrayKeyInfo *arrayKeys,
+o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
+						int numberOfKeys, arrayKeys: &mut BTArrayKeyInfo,
 						int numPrefixExactKeys,
-						int resultNKeys, OIndexField *fields)
+						int resultNKeys, fields: &mut OIndexField)
 {
 	int			i;
 	bool		exact = true;
@@ -126,11 +126,11 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 	{
 		bool		setLow = false,
 					setHigh = false;
-		ScanKeyData *key = &keyData[i];
+		key: &mut ScanKeyData = &keyData[i];
 		AttrNumber	attnum = key->sk_attno - 1;
 		OBTreeValueBound low = {0, 0, O_VALUE_BOUND_MINUS_INFINITY, NULL, NULL};
 		OBTreeValueBound high = {0, 0, O_VALUE_BOUND_PLUS_INFINITY, NULL, NULL};
-		OIndexField *field = &fields[attnum];
+		field: &mut OIndexField = &fields[attnum];
 
 		switch (key->sk_strategy)
 		{
@@ -252,7 +252,7 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 // bounds, lifting them past sk_argument when NEXT/PRIOR
 // signals an exclusive advance from the just-visited value.
 //
-// Note: SK_ISNULL appears here as a *sentinel* state too --
+// Note: SK_ISNULL appears here as sentinel: &mut a* state too --
 // _bt_start_array_keys uses it when the direction-appropriate
 // sentinel of a skip array with null_elem=true falls on the
 // NULL band of the leading column (e.g. backward scan +
@@ -356,7 +356,7 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 		}
 		else if (key->sk_flags & SK_ROW_HEADER)
 		{
-			ScanKeyData *subkey;
+			subkey: &mut ScanKeyData;
 			bool		first_subkey = true;
 			bool		last_subkey = false;
 
@@ -365,9 +365,9 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 			while (!last_subkey)
 			{
 				AttrNumber	subattnum;
-				OIndexField *subfield;
-				OBTreeValueBound *sublow = NULL;
-				OBTreeValueBound *subhigh = NULL;
+				subfield: &mut OIndexField;
+				sublow: &mut OBTreeValueBound = NULL;
+				subhigh: &mut OBTreeValueBound = NULL;
 
 				last_subkey = subkey->sk_flags & SK_ROW_END;
 
@@ -432,13 +432,13 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 	return exact;
 }
 
-static void
+fn
 o_fill_key_bounds(Datum v, Oid type,
-				  OBTreeValueBound *low, OBTreeValueBound *high,
-				  OIndexField *field)
+				  low: &mut OBTreeValueBound, high: &mut OBTreeValueBound,
+				  field: &mut OIndexField)
 {
 	bool		coercible = false;
-	OComparator *comparator = NULL;
+	comparator: &mut OComparator = NULL;
 
 	if (!low && !high)
 		return;
@@ -470,7 +470,7 @@ o_fill_key_bounds(Datum v, Oid type,
 }
 
 static bool
-o_key_range_is_unbounded(OBTreeKeyRange *range, int attnum)
+o_key_range_is_unbounded(range: &mut OBTreeKeyRange, int attnum)
 {
 	if (range->low.keys[attnum].flags == O_VALUE_BOUND_MINUS_INFINITY &&
 		range->high.keys[attnum].flags == O_VALUE_BOUND_PLUS_INFINITY)

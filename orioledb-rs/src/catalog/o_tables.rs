@@ -73,7 +73,7 @@ PG_FUNCTION_INFO_V1(orioledb_table_oids);
 typedef struct
 {
 	OTablesCallback callback;
-	void	   *arg;
+		   *arg;
 } OTablesForeachArg;
 
 typedef struct
@@ -95,7 +95,7 @@ typedef struct
 typedef struct
 {
 	Oid			datoid;
-	List	   *evicted;
+	evicted: &mut List;
 } OTablesEvictDBArg;
 
 typedef struct
@@ -119,30 +119,30 @@ typedef struct OTablesNumArg
 	int			result;
 } OTablesNumArg;
 
-static void o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, char *name, OTableField *field);
-static void o_tables_foreach_callback(ORelOids oids, void *arg);
-static void o_tables_drop_all_callback(ORelOids oids, void *arg);
-static void o_tables_truncate_unlogged_callback(OTable *o_table, void *arg);
-static void o_table_oids_array_callback(ORelOids oids, void *arg);
-static void o_tables_num_callback(ORelOids oids, void *arg);
-static inline void o_tables_rel_fill_locktag(LOCKTAG *tag, ORelOids *oids, int lockmode, bool checkpoint);
+fn o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, name: &mut char, field: &mut OTableField);
+fn o_tables_foreach_callback(ORelOids oids,  *arg);
+fn o_tables_drop_all_callback(ORelOids oids,  *arg);
+fn o_tables_truncate_unlogged_callback(o_table: &mut OTable,  *arg);
+fn o_table_oids_array_callback(ORelOids oids,  *arg);
+fn o_tables_num_callback(ORelOids oids,  *arg);
+static inline  o_tables_rel_fill_locktag(tag: &mut LOCKTAG, oids: &mut ORelOids, int lockmode, bool checkpoint);
 
 static BTreeDescr *
-oTablesGetBTreeDesc(void *arg)
+oTablesGetBTreeDesc( *arg)
 {
-	BTreeDescr *desc = (BTreeDescr *) arg;
+	desc: &mut BTreeDescr = (BTreeDescr *) arg;
 
 	return desc;
 }
 
 static uint32
-oTablesGetKeySize(void *arg)
+oTablesGetKeySize( *arg)
 {
 	return sizeof(OTableChunkKey);
 }
 
 static uint32
-oTablesGetMaxChunkSize(void *key, void *arg)
+oTablesGetMaxChunkSize( *key,  *arg)
 {
 	uint32		max_chunk_size;
 
@@ -151,18 +151,18 @@ oTablesGetMaxChunkSize(void *key, void *arg)
 	return max_chunk_size;
 }
 
-static void
-oTablesUpdateKey(void *key, uint32 chunknum, void *arg)
+fn
+oTablesUpdateKey( *key, uint32 chunknum,  *arg)
 {
-	OTableChunkKey *ckey = (OTableChunkKey *) key;
+	ckey: &mut OTableChunkKey = (OTableChunkKey *) key;
 
 	ckey->chunknum = chunknum;
 }
 
-static void *
-oTablesGetNextKey(void *key, void *arg)
+fn *
+oTablesGetNextKey( *key,  *arg)
 {
-	OTableChunkKey *ckey = (OTableChunkKey *) key;
+	ckey: &mut OTableChunkKey = (OTableChunkKey *) key;
 	static OTableChunkKey nextKey;
 
 	nextKey = *ckey;
@@ -173,11 +173,11 @@ oTablesGetNextKey(void *key, void *arg)
 }
 
 static OTuple
-oTablesCreateTuple(void *key, Pointer data, uint32 offset, uint32 chunknum,
-				   int length, void *arg)
+oTablesCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum,
+				   int length,  *arg)
 {
-	OTableChunkKey *ckey = (OTableChunkKey *) key;
-	OTableChunk *chunk;
+	ckey: &mut OTableChunkKey = (OTableChunkKey *) key;
+	chunk: &mut OTableChunk;
 	OTuple		result;
 
 	ckey->chunknum = chunknum;
@@ -194,10 +194,10 @@ oTablesCreateTuple(void *key, Pointer data, uint32 offset, uint32 chunknum,
 }
 
 static OTuple
-oTablesCreateKey(void *key, uint32 chunknum, void *arg)
+oTablesCreateKey( *key, uint32 chunknum,  *arg)
 {
-	OTableChunkKey *ckey = (OTableChunkKey *) key;
-	OTableChunkKey *ckey_copy;
+	ckey: &mut OTableChunkKey = (OTableChunkKey *) key;
+	ckey_copy: &mut OTableChunkKey;
 	OTuple		result;
 
 	ckey_copy = (OTableChunkKey *) palloc(sizeof(OTableChunkKey));
@@ -210,35 +210,35 @@ oTablesCreateKey(void *key, uint32 chunknum, void *arg)
 }
 
 static Pointer
-oTablesGetTupleData(OTuple tuple, void *arg)
+oTablesGetTupleData(OTuple tuple,  *arg)
 {
-	OTableChunk *chunk = (OTableChunk *) tuple.data;
+	chunk: &mut OTableChunk = (OTableChunk *) tuple.data;
 
 	return chunk->data;
 }
 
 static uint32
-oTablesGetTupleChunknum(OTuple tuple, void *arg)
+oTablesGetTupleChunknum(OTuple tuple,  *arg)
 {
-	OTableChunk *chunk = (OTableChunk *) tuple.data;
+	chunk: &mut OTableChunk = (OTableChunk *) tuple.data;
 
 	return chunk->key.chunknum;
 }
 
 static uint32
-oTablesGetTupleDataSize(OTuple tuple, void *arg)
+oTablesGetTupleDataSize(OTuple tuple,  *arg)
 {
-	OTableChunk *chunk = (OTableChunk *) tuple.data;
+	chunk: &mut OTableChunk = (OTableChunk *) tuple.data;
 
 	return chunk->dataLength;
 }
 
 static TupleFetchCallbackResult
-oTablesFetchCallback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
-					 void *arg, bool oxidIsFinished)
+oTablesFetchCallback(OTuple tuple, OXid tupOxid, oSnapshot: &mut OSnapshot,
+					  *arg, bool oxidIsFinished)
 {
-	OTableChunkKey *tupleKey = (OTableChunkKey *) tuple.data;
-	OTableChunkBoundKey *boundKey = (OTableChunkBoundKey *) arg;
+	tupleKey: &mut OTableChunkKey = (OTableChunkKey *) tuple.data;
+	boundKey: &mut OTableChunkBoundKey = (OTableChunkBoundKey *) arg;
 
 	if (ORelOidsIsEqual(tupleKey->oids, boundKey->key.oids))
 	{
@@ -300,17 +300,17 @@ static ToastAPI oTablesToastAPI = {
 	.fetchCallback = oTablesFetchCallback
 };
 
-static void
+fn
 o_tables_foreach_oids(OTablesOidsCallback callback,
-					  OSnapshot *oSnapshot,
-					  void *arg)
+					  oSnapshot: &mut OSnapshot,
+					   *arg)
 {
 	OTableChunkKey chunk_key;
 	ORelOids	oids = {0, 0, 0},
 				old_oids PG_USED_FOR_ASSERTS_ONLY;
-	BTreeIterator *it;
+	it: &mut BTreeIterator;
 	OTuple		tuple;
-	BTreeDescr *desc = get_sys_tree(SYS_TREES_O_TABLES);
+	desc: &mut BTreeDescr = get_sys_tree(SYS_TREES_O_TABLES);
 
 	chunk_key.oids = oids;
 	chunk_key.chunknum = 0;
@@ -323,7 +323,7 @@ o_tables_foreach_oids(OTablesOidsCallback callback,
 	old_oids = oids;
 	while (!O_TUPLE_IS_NULL(tuple))
 	{
-		OTableChunk *chunk = (OTableChunk *) tuple.data;
+		chunk: &mut OTableChunk = (OTableChunk *) tuple.data;
 
 		oids = chunk->key.oids;
 		Assert(ORelOidsIsValid(oids));
@@ -350,10 +350,10 @@ o_tables_foreach_oids(OTablesOidsCallback callback,
 //
 // It can be much more efficient.
 //
-static void
+fn
 o_tables_foreach(OTablesCallback callback,
-				 OSnapshot *oSnapshot,
-				 void *arg)
+				 oSnapshot: &mut OSnapshot,
+				  *arg)
 {
 	OTablesForeachArg foreach_arg;
 
@@ -364,28 +364,28 @@ o_tables_foreach(OTablesCallback callback,
 }
 
 static char *
-o_deparse_expression(char *expr_str, Oid relid)
+o_deparse_expression(expr_str: &mut char, Oid relid)
 {
 	Datum		expr;
-	text	   *expr_text = cstring_to_text(expr_str);
+	expr_text: &mut text = cstring_to_text(expr_str);
 
 	expr = DirectFunctionCall2(pg_get_expr, (Datum) expr_text,
 							   ObjectIdGetDatum(relid));
 	return TextDatumGetCString(expr);
 }
 
-void
-o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
+
+o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel)
 {
-	OTableIndex *index = &o_table->indices[ix_num];
-	ListCell   *index_expr_elem;
+	index: &mut OTableIndex = &o_table->indices[ix_num];
+	index_expr_elem: &mut ListCell;
 	int			ix_exprfield_num;
-	ListCell   *lc;
+	lc: &mut ListCell;
 	MemoryContext mcxt,
 				old_mcxt;
 	int			keyno;
 	Datum		datum;
-	oidvector  *indclass;
+	indclass: &mut oidvector;
 	bool		isnull;
 	int			i;
 
@@ -417,8 +417,8 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 	index->expressions = NIL;
 	foreach(lc, index_rel->rd_indexprs)
 	{
-		Expr	   *e = (Expr *) lfirst(lc);
-		Expr	   *node;
+		e: &mut Expr = (Expr *) lfirst(lc);
+		node: &mut Expr;
 
 		node = expression_planner(e);
 		index->expressions = lappend(index->expressions, node);
@@ -426,9 +426,9 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 	o_collect_funcexpr((Node *) index->expressions);
 	if (index->type == oIndexExclusion)
 	{
-		Oid		   *op_operators,
+		op_operators: &mut Oid,
 				   *op_procs;
-		uint16	   *op_strats;
+		op_strats: &mut uint16;
 
 		Assert(index_rel->rd_index->indisexclusion);
 		RelationGetExclusionInfo(index_rel, &op_operators, &op_procs, &op_strats);
@@ -452,8 +452,8 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 	for (keyno = 0; keyno < index->nfields; keyno++)
 	{
 		AttrNumber	attnum = index_rel->rd_index->indkey.values[keyno];
-		OTableIndexField *ix_field;
-		OTableField *exprField = NULL;
+		ix_field: &mut OTableIndexField;
+		exprField: &mut OTableField = NULL;
 
 		ix_field = &index->fields[keyno];
 		if (AttributeNumberIsValid(attnum))
@@ -464,7 +464,7 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 		else
 		{
 			// Expressional index
-			Node	   *indexkey;
+			indexkey: &mut Node;
 			HeapTuple	tuple;
 			Form_pg_type typeTup;
 			Oid			field_typeid;
@@ -519,9 +519,9 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 
 		if (keyno >= index->nkeyfields)
 		{
-			OTableIndex *primary = NULL;
+			primary: &mut OTableIndex = NULL;
 			bool		pk_member = false;
-			OTableIndexField *primary_field = NULL;
+			primary_field: &mut OTableIndexField = NULL;
 			int			pk_field;
 
 			if (o_table->has_primary)
@@ -566,7 +566,7 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 			int16		opt = index_rel->rd_indoption[keyno];
 			Oid			typid;
 			bool		hashable = true;
-			List	   *processed = NIL;
+			processed: &mut List = NIL;
 
 			if (AttributeNumberIsValid(attnum))
 			{
@@ -617,8 +617,8 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 	}
 }
 
-void
-o_table_resize_constr(OTable *o_table)
+
+o_table_resize_constr(o_table: &mut OTable)
 {
 	MemoryContext oldcxt;
 	MemoryContext tbl_cxt;
@@ -642,18 +642,18 @@ o_table_resize_constr(OTable *o_table)
 }
 
 Datum
-o_eval_default(OTable *o_table, Relation rel, Node *expr, TupleTableSlot *scantuple,
-			   bool byval, int16 typlen, bool *isNull)
+o_eval_default(o_table: &mut OTable, Relation rel, expr: &mut Node, scantuple: &mut TupleTableSlot,
+			   bool byval, int16 typlen, isNull: &mut bool)
 {
 	MemoryContext oldcxt;
 	MemoryContext tbl_cxt = OGetTableContext(o_table);
 	Datum		new_val;
-	Expr	   *expr2;
-	ParseNamespaceItem *nsitem;
-	ParseState *pstate;
-	EState	   *estate = NULL;
-	ExprContext *econtext;
-	ExprState  *exprState;
+	expr2: &mut Expr;
+	nsitem: &mut ParseNamespaceItem;
+	pstate: &mut ParseState;
+	estate: &mut EState = NULL;
+	econtext: &mut ExprContext;
+	exprState: &mut ExprState;
 	Datum		result = 0;
 
 	if (!expr)
@@ -688,15 +688,15 @@ o_eval_default(OTable *o_table, Relation rel, Node *expr, TupleTableSlot *scantu
 	return result;
 }
 
-void
-o_table_fill_constr(OTable *o_table, Relation rel, int fieldnum,
-					OTableField *old_field, OTableField *field)
+
+o_table_fill_constr(o_table: &mut OTable, Relation rel, int fieldnum,
+					old_field: &mut OTableField, field: &mut OTableField)
 {
 	MemoryContext oldcxt;
 	MemoryContext tbl_cxt = OGetTableContext(o_table);
 	AttrMissing attrmiss_temp;
-	Node	   *defaultexpr;
-	AttrMissing *attrmiss = NULL;
+	defaultexpr: &mut Node;
+	attrmiss: &mut AttrMissing = NULL;
 	bool		missingIsNull = true;
 	bool		has_domain_constraints = false;
 
@@ -740,8 +740,8 @@ o_table_fill_constr(OTable *o_table, Relation rel, int fieldnum,
 	MemoryContextSwitchTo(oldcxt);
 }
 
-void
-orioledb_attr_to_field(OTableField *field, Form_pg_attribute attr)
+
+orioledb_attr_to_field(field: &mut OTableField, Form_pg_attribute attr)
 {
 	strlcpy(NameStr(field->name), NameStr(attr->attname), NAMEDATALEN);
 	field->typid = attr->atttypid;
@@ -764,12 +764,12 @@ OTable *
 o_table_tableam_create(ORelOids oids, TupleDesc tupdesc, char relpersistence,
 					   uint8 fillfactor, Oid tablespace, bool bridging)
 {
-	OTable	   *o_table;
+	o_table: &mut OTable;
 	int			i;
 	Oid			hash_opclass;
 	Oid			hash_opfamily;
-	char	   *prefix;
-	char	   *db_prefix;
+	prefix: &mut char;
+	db_prefix: &mut char;
 
 	if (tablespace == 0)
 		tablespace = MyDatabaseTableSpace;
@@ -815,7 +815,7 @@ o_table_tableam_create(ORelOids oids, TupleDesc tupdesc, char relpersistence,
 
 	for (i = 0; i < tupdesc->natts; i++)
 	{
-		OTableField *field = &o_table->fields[i];
+		field: &mut OTableField = &o_table->fields[i];
 
 		orioledb_attr_to_field(field, TupleDescAttr(tupdesc, i));
 		orioledb_save_collation(field->collation);
@@ -854,8 +854,8 @@ o_tables_get_builtin_field(Oid type)
 //
 // We hold data of some types itself because they used inside o_tables.
 //
-void
-o_tables_tupdesc_init_builtin(TupleDesc desc, AttrNumber att_num, char *name, Oid type)
+
+o_tables_tupdesc_init_builtin(TupleDesc desc, AttrNumber att_num, name: &mut char, Oid type)
 {
 	o_table_tupdesc_init_entry(desc, att_num, name, o_tables_get_builtin_field(type));
 }
@@ -864,9 +864,9 @@ o_tables_tupdesc_init_builtin(TupleDesc desc, AttrNumber att_num, char *name, Oi
 // Returns tuple descriptor made from array
 //
 TupleDesc
-o_table_fields_make_tupdesc(OTableField *fields, int nfields)
+o_table_fields_make_tupdesc(fields: &mut OTableField, int nfields)
 {
-	OTableField *field;
+	field: &mut OTableField;
 	TupleDesc	tupdesc = CreateTemplateTupleDesc(nfields);
 	int			i;
 
@@ -878,8 +878,8 @@ o_table_fields_make_tupdesc(OTableField *fields, int nfields)
 	return tupdesc;
 }
 
-void
-o_tupdesc_load_constr(TupleDesc tupdesc, OTable *o_table, OIndexDescr *descr)
+
+o_tupdesc_load_constr(TupleDesc tupdesc, o_table: &mut OTable, descr: &mut OIndexDescr)
 {
 	MemoryContext oldcxt;
 	MemoryContext idx_cxt;
@@ -904,8 +904,8 @@ o_tupdesc_load_constr(TupleDesc tupdesc, OTable *o_table, OIndexDescr *descr)
 
 	for (i = 0; i < o_table->nfields; i++)
 	{
-		OTableField *field = &o_table->fields[i];
-		AttrMissing *tupdesc_miss = &tupdesc->constr->missing[i + fields_start];
+		field: &mut OTableField = &o_table->fields[i];
+		tupdesc_miss: &mut AttrMissing = &tupdesc->constr->missing[i + fields_start];
 
 		tupdesc_miss->am_present = o_table->missing[i].am_present;
 
@@ -919,7 +919,7 @@ o_tupdesc_load_constr(TupleDesc tupdesc, OTable *o_table, OIndexDescr *descr)
 
 	if (o_table->index_bridging)
 	{
-		AttrMissing *tupdesc_miss = &tupdesc->constr->missing[fields_start - 1];
+		tupdesc_miss: &mut AttrMissing = &tupdesc->constr->missing[fields_start - 1];
 
 		tupdesc_miss->am_present = false;
 		tupdesc_miss->am_value = 0;
@@ -928,7 +928,7 @@ o_tupdesc_load_constr(TupleDesc tupdesc, OTable *o_table, OIndexDescr *descr)
 }
 
 TupleDesc
-o_table_tupdesc(OTable *o_table)
+o_table_tupdesc(o_table: &mut OTable)
 {
 	TupleDesc	tupdesc;
 
@@ -955,10 +955,10 @@ o_table_tupdesc(OTable *o_table)
 }
 
 static int
-index_keys_cmp(const void *p1, const void *p2)
+index_keys_cmp(p1: &mut const, p2: &mut const)
 {
-	const OTableIndexOidsKey *key1 = (const OTableIndexOidsKey *) p1;
-	const OTableIndexOidsKey *key2 = (const OTableIndexOidsKey *) p2;
+	const key1: &mut OTableIndexOidsKey = (const OTableIndexOidsKey *) p1;
+	const key2: &mut OTableIndexOidsKey = (const OTableIndexOidsKey *) p2;
 
 	if (key1->type < key2->type)
 		return -1;
@@ -984,9 +984,9 @@ index_keys_cmp(const void *p1, const void *p2)
 }
 
 static OTableIndexOidsKey *
-o_table_make_index_oids_keys(OTable *table, int *num)
+o_table_make_index_oids_keys(table: &mut OTable, num: &mut int)
 {
-	OTableIndexOidsKey *keys;
+	keys: &mut OTableIndexOidsKey;
 	int			keys_num = 0;
 	int			i;
 
@@ -1041,9 +1041,9 @@ o_table_make_index_oids_keys(OTable *table, int *num)
 // Array is allocated in CurTransactionContext.
 //
 OIndexKey *
-o_table_make_index_keys(OTable *table, int *num)
+o_table_make_index_keys(table: &mut OTable, num: &mut int)
 {
-	OIndexKey  *trees;
+	trees: &mut OIndexKey;
 	int			trees_num;
 	int			i;
 
@@ -1087,12 +1087,12 @@ o_table_make_index_keys(OTable *table, int *num)
 //
 // Updates SYS_TREES_O_INDICES.
 //
-static void
-o_tables_oids_indexes(OTable *old_table, OTable *new_table,
+fn
+o_tables_oids_indexes(old_table: &mut OTable, new_table: &mut OTable,
 					  OXid oxid, CommitSeqNo csn)
 {
-	OTableIndexOidsKey *old_keys = NULL;
-	OTableIndexOidsKey *new_keys = NULL;
+	old_keys: &mut OTableIndexOidsKey = NULL;
+	new_keys: &mut OTableIndexOidsKey = NULL;
 	int			old_keys_num = 0,
 				new_keys_num = 0,
 				i = 0,
@@ -1187,10 +1187,10 @@ OTable *
 o_tables_drop_by_oids(ORelOids oids, OXid oxid, CommitSeqNo csn)
 {
 	OTableChunkKey key;
-	OTable	   *table = NULL;
+	table: &mut OTable = NULL;
 	bool		result = false,
 				any_wal = false;
-	BTreeDescr *sys_tree = NULL;
+	sys_tree: &mut BTreeDescr = NULL;
 
 	key.oids = oids;
 	key.chunknum = 0;
@@ -1227,7 +1227,7 @@ o_tables_drop_by_oids(ORelOids oids, OXid oxid, CommitSeqNo csn)
 	}
 }
 
-void
+
 o_tables_drop_all(OXid oxid, CommitSeqNo csn, Oid database_id)
 {
 	OTablesDropAllArg arg;
@@ -1240,10 +1240,10 @@ o_tables_drop_all(OXid oxid, CommitSeqNo csn, Oid database_id)
 						  &o_non_deleted_snapshot, &arg);
 }
 
-static void
-o_tables_move_all_callback(OTable *o_table, void *arg)
+fn
+o_tables_move_all_callback(o_table: &mut OTable,  *arg)
 {
-	OTablesMoveAllArg *move_arg = (OTablesMoveAllArg *) arg;
+	move_arg: &mut OTablesMoveAllArg = (OTablesMoveAllArg *) arg;
 	int			ctid_idx_off = o_table->has_primary ? 0 : 1;
 	bool		table_moved = false;
 
@@ -1274,7 +1274,7 @@ o_tables_move_all_callback(OTable *o_table, void *arg)
 
 	for (int ixnum = 0; ixnum < o_table->nindices; ixnum++)
 	{
-		OTableIndex *ix_table;
+		ix_table: &mut OTableIndex;
 
 		ix_table = &o_table->indices[ixnum];
 		if (ix_table->tablespace != move_arg->old_tablespace)
@@ -1291,7 +1291,7 @@ o_tables_move_all_callback(OTable *o_table, void *arg)
 	o_tables_after_update(o_table, move_arg->oxid, move_arg->csn);
 }
 
-void
+
 o_tables_move_all(OXid oxid, CommitSeqNo csn, Oid database_id, Oid old_tspcoid, Oid new_tspcoid)
 {
 	OTablesMoveAllArg arg;
@@ -1307,12 +1307,12 @@ o_tables_move_all(OXid oxid, CommitSeqNo csn, Oid database_id, Oid old_tspcoid, 
 					 &o_non_deleted_snapshot, &arg);
 }
 
-static void
-o_tables_evict_callback(OTable *o_table, void *arg)
+fn
+o_tables_evict_callback(o_table: &mut OTable,  *arg)
 {
-	OTablesEvictDBArg *args = (OTablesEvictDBArg *) arg;
-	OTableDescr *descr;
-	BTreeDescr *td;
+	args: &mut OTablesEvictDBArg = (OTablesEvictDBArg *) arg;
+	descr: &mut OTableDescr;
+	td: &mut BTreeDescr;
 
 	if (args->datoid != o_table->oids.datoid)
 		return;
@@ -1340,7 +1340,7 @@ o_tables_evict_callback(OTable *o_table, void *arg)
 	o_invalidate_descrs(descr->oids.datoid, descr->oids.reloid, descr->oids.reloid);
 }
 
-void
+
 o_tables_evict(Oid datoid, List **evicted)
 {
 	OTablesEvictDBArg arg;
@@ -1351,7 +1351,7 @@ o_tables_evict(Oid datoid, List **evicted)
 	*evicted = arg.evicted;
 }
 
-void
+
 o_tables_truncate_all_unlogged()
 {
 	OTablesDropAllArg arg;
@@ -1368,13 +1368,13 @@ o_tables_truncate_all_unlogged()
 }
 
 bool
-o_tables_add(OTable *table, OXid oxid, CommitSeqNo csn)
+o_tables_add(table: &mut OTable, OXid oxid, CommitSeqNo csn)
 {
 	OTableChunkKey key;
 	bool		result;
 	Pointer		data;
 	int			len;
-	BTreeDescr *sys_tree;
+	sys_tree: &mut BTreeDescr;
 
 	key.oids = table->oids;
 	key.chunknum = 0;
@@ -1413,10 +1413,10 @@ o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 	for (retry = 0;; retry++)
 	{
 		OTableChunkBoundKey boundKey;
-		OTableChunkBoundKey *found_key = NULL;
+		found_key: &mut OTableChunkBoundKey = NULL;
 		Pointer		result;
 		Size		dataLength;
-		OTable	   *oTable;
+		oTable: &mut OTable;
 
 		boundKey.key = key;
 		boundKey.oxid = InvalidOXid;
@@ -1497,8 +1497,8 @@ o_tables_num(Oid datoid)
 	return num_arg.result;
 }
 
-void
-o_table_free(OTable *table)
+
+o_table_free(table: &mut OTable)
 {
 	int			i;
 
@@ -1515,14 +1515,14 @@ o_table_free(OTable *table)
 }
 
 bool
-o_tables_update(OTable *table, OXid oxid, CommitSeqNo csn)
+o_tables_update(table: &mut OTable, OXid oxid, CommitSeqNo csn)
 {
 	OTableChunkKey key;
-	OTable	   *old_table;
+	old_table: &mut OTable;
 	bool		result;
 	Pointer		data;
 	int			len;
-	BTreeDescr *sys_tree;
+	sys_tree: &mut BTreeDescr;
 
 	key.oids = table->oids;
 	key.chunknum = 0;
@@ -1544,8 +1544,8 @@ o_tables_update(OTable *table, OXid oxid, CommitSeqNo csn)
 	return result;
 }
 
-void
-o_tables_after_update(OTable *o_table, OXid oxid, CommitSeqNo csn)
+
+o_tables_after_update(o_table: &mut OTable, OXid oxid, CommitSeqNo csn)
 {
 	//
 // @NOTE o_indices_update(o_table, PrimaryIndexNumber, oxid, csn); moved
@@ -1570,8 +1570,8 @@ o_tables_after_update(OTable *o_table, OXid oxid, CommitSeqNo csn)
 }
 
 bool
-o_tables_rel_try_lock_extended(ORelOids *oids, int lockmode,
-							   bool *nested, bool checkpoint)
+o_tables_rel_try_lock_extended(oids: &mut ORelOids, int lockmode,
+							   nested: &mut bool, bool checkpoint)
 {
 	LOCKTAG		locktag;
 	LockAcquireResult result;
@@ -1594,8 +1594,8 @@ o_tables_rel_try_lock_extended(ORelOids *oids, int lockmode,
 	return false;
 }
 
-void
-o_tables_rel_lock_extended(ORelOids *oids, int lockmode, bool checkpoint)
+
+o_tables_rel_lock_extended(oids: &mut ORelOids, int lockmode, bool checkpoint)
 {
 	LOCKTAG		locktag;
 
@@ -1608,8 +1608,8 @@ o_tables_rel_lock_extended(ORelOids *oids, int lockmode, bool checkpoint)
 	AcceptInvalidationMessages();
 }
 
-void
-o_tables_rel_lock_extended_no_inval(ORelOids *oids, int lockmode,
+
+o_tables_rel_lock_extended_no_inval(oids: &mut ORelOids, int lockmode,
 									bool checkpoint)
 {
 	LOCKTAG		locktag;
@@ -1622,8 +1622,8 @@ o_tables_rel_lock_extended_no_inval(ORelOids *oids, int lockmode,
 	LockAcquire(&locktag, lockmode, false, false);
 }
 
-void
-o_tables_rel_lock_exclusive_no_inval_no_log(ORelOids *oids)
+
+o_tables_rel_lock_exclusive_no_inval_no_log(oids: &mut ORelOids)
 {
 	LOCKTAG		locktag;
 
@@ -1633,8 +1633,8 @@ o_tables_rel_lock_exclusive_no_inval_no_log(ORelOids *oids)
 	LockAcquire(&locktag, AccessExclusiveLock, false, false);
 }
 
-void
-o_tables_rel_unlock_extended(ORelOids *oids, int lockmode, bool checkpoint)
+
+o_tables_rel_unlock_extended(oids: &mut ORelOids, int lockmode, bool checkpoint)
 {
 	LOCKTAG		locktag;
 
@@ -1662,11 +1662,11 @@ o_get_type_name(Oid typid, int32 typmod)
 static text *
 describe_table(ORelOids oids)
 {
-	OTable	   *table;
+	table: &mut OTable;
 	StringInfoData buf,
 				format,
 				title;
-	char	   *column_str = "Column",
+	column_str: &mut char = "Column",
 			   *type_str = "Type",
 			   *collation_str = "Collation";
 	int			i,
@@ -1683,9 +1683,9 @@ describe_table(ORelOids oids)
 	max_collation_str = strlen(collation_str);
 	for (i = 0; i < table->nfields; i++)
 	{
-		OTableField *field = &table->fields[i];
-		char	   *typename = o_get_type_name(field->typid, field->typmod);
-		char	   *colname = get_collation_name(field->collation);
+		field: &mut OTableField = &table->fields[i];
+		typename: &mut char = o_get_type_name(field->typid, field->typmod);
+		colname: &mut char = get_collation_name(field->collation);
 
 		if (max_column_str < strlen(NameStr(field->name)))
 			max_column_str = strlen(NameStr(field->name));
@@ -1720,9 +1720,9 @@ describe_table(ORelOids oids)
 
 	for (i = 0; i < table->nfields; i++)
 	{
-		OTableField *field = &table->fields[i];
-		char	   *typename = o_get_type_name(field->typid, field->typmod);
-		char	   *colname = get_collation_name(field->collation);
+		field: &mut OTableField = &table->fields[i];
+		typename: &mut char = o_get_type_name(field->typid, field->typmod);
+		colname: &mut char = get_collation_name(field->collation);
 
 		appendStringInfo(&buf, format.data,
 						 NameStr(field->name),
@@ -1732,7 +1732,7 @@ describe_table(ORelOids oids)
 						 field->droped ? "true" : "false");
 		if (orioledb_table_description_compress)
 		{
-			const char *compression = "";
+			const compression: &mut char = "";
 
 			if (CompressionMethodIsValid(field->compression))
 				compression = GetCompressionMethodName(field->compression);
@@ -1775,9 +1775,9 @@ orioledb_table_description(PG_FUNCTION_ARGS)
 Datum
 orioledb_table_oids(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 
@@ -1801,11 +1801,11 @@ orioledb_table_oids(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
-static void
-o_tables_foreach_callback(ORelOids oids, void *arg)
+fn
+o_tables_foreach_callback(ORelOids oids,  *arg)
 {
-	OTablesForeachArg *foreach_arg = (OTablesForeachArg *) arg;
-	OTable	   *table;
+	foreach_arg: &mut OTablesForeachArg = (OTablesForeachArg *) arg;
+	table: &mut OTable;
 
 	Assert(ORelOidsIsValid(oids));
 
@@ -1817,20 +1817,20 @@ o_tables_foreach_callback(ORelOids oids, void *arg)
 	}
 }
 
-static void
-o_tables_drop_all_callback(ORelOids oids, void *arg)
+fn
+o_tables_drop_all_callback(ORelOids oids,  *arg)
 {
-	OTablesDropAllArg *drop_arg = (OTablesDropAllArg *) arg;
+	drop_arg: &mut OTablesDropAllArg = (OTablesDropAllArg *) arg;
 
 	if (drop_arg->datoid == oids.datoid)
 	{
-		OTable	   *table;
+		table: &mut OTable;
 
 		table = o_tables_drop_by_oids(oids, drop_arg->oxid, drop_arg->csn);
 
 		if (table)
 		{
-			OIndexKey  *trees;
+			trees: &mut OIndexKey;
 			int			numTrees;
 
 			trees = o_table_make_index_keys(table, &numTrees);
@@ -1841,8 +1841,8 @@ o_tables_drop_all_callback(ORelOids oids, void *arg)
 	}
 }
 
-static void
-o_tables_truncate_unlogged_callback(OTable *o_table, void *arg)
+fn
+o_tables_truncate_unlogged_callback(o_table: &mut OTable,  *arg)
 {
 	if (o_table->persistence == RELPERSISTENCE_UNLOGGED)
 	{
@@ -1851,10 +1851,10 @@ o_tables_truncate_unlogged_callback(OTable *o_table, void *arg)
 	}
 }
 
-static void
-o_table_oids_array_callback(ORelOids oids, void *arg)
+fn
+o_table_oids_array_callback(ORelOids oids,  *arg)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) arg;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) arg;
 	Datum		values[3];
 	bool		nulls[3] = {false};
 
@@ -1864,10 +1864,10 @@ o_table_oids_array_callback(ORelOids oids, void *arg)
 	tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc, values, nulls);
 }
 
-static void
-o_tables_num_callback(ORelOids oids, void *arg)
+fn
+o_tables_num_callback(ORelOids oids,  *arg)
 {
-	OTablesNumArg *num_arg = (OTablesNumArg *) arg;
+	num_arg: &mut OTablesNumArg = (OTablesNumArg *) arg;
 
 	if (oids.datoid == num_arg->datoid)
 		num_arg->result++;
@@ -1875,7 +1875,7 @@ o_tables_num_callback(ORelOids oids, void *arg)
 
 // No existing callers
 OTableField *
-o_table_field_by_name(OTable *table, const char *name)
+o_table_field_by_name(table: &mut OTable, const name: &mut char)
 {
 	int			i;
 
@@ -1893,9 +1893,9 @@ o_table_field_by_name(OTable *table, const char *name)
 //
 // Copy of TupleDescInitEntry() without SysCache usage.
 //
-static void
-o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, char *name,
-						   OTableField *field)
+fn
+o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, name: &mut char,
+						   field: &mut OTableField)
 {
 	Form_pg_attribute att;
 
@@ -1958,8 +1958,8 @@ o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, char *name,
 #endif
 }
 
-static inline void
-o_tables_rel_fill_locktag(LOCKTAG *tag, ORelOids *oids, int lockmode, bool checkpoint)
+static inline 
+o_tables_rel_fill_locktag(tag: &mut LOCKTAG, oids: &mut ORelOids, int lockmode, bool checkpoint)
 {
 	Oid			datoid = checkpoint ? (oids->datoid | CHECKPOINT_LOCK_BIT) : oids->datoid;
 
@@ -1971,8 +1971,8 @@ o_tables_rel_fill_locktag(LOCKTAG *tag, ORelOids *oids, int lockmode, bool check
 		tag->locktag_type = LOCKTAG_USERLOCK;
 }
 
-static void
-serialize_o_table_index(OTableIndex *o_table_index, StringInfo str)
+fn
+serialize_o_table_index(o_table_index: &mut OTableIndex, StringInfo str)
 {
 	appendBinaryStringInfo(str, (Pointer) o_table_index,
 						   offsetof(OTableIndex, exprfields));
@@ -1989,7 +1989,7 @@ serialize_o_table_index(OTableIndex *o_table_index, StringInfo str)
 }
 
 Pointer
-serialize_o_table(OTable *o_table, int *size)
+serialize_o_table(o_table: &mut OTable, size: &mut int)
 {
 	StringInfoData str;
 	int			i;
@@ -2042,7 +2042,7 @@ serialize_o_table(OTable *o_table, int *size)
 // Returns false if the data is truncated (missing toast chunks).
 //
 static bool
-deserialize_o_table_index(OTableIndex *o_table_index, Pointer *ptr,
+deserialize_o_table_index(o_table_index: &mut OTableIndex, ptr: &mut Pointer,
 						  Pointer data, Size length, uint16 data_version)
 {
 	int			len;
@@ -2131,12 +2131,12 @@ deserialize_o_table_index(OTableIndex *o_table_index, Pointer *ptr,
 // caller can bail out gracefully instead of crashing.
 //
 static bool
-datumRestoreSafe(char **start_address, bool *isnull, Datum *result,
+datumRestoreSafe(char **start_address, isnull: &mut bool, result: &mut Datum,
 				 Pointer data, Size length)
 {
 	int			header;
-	void	   *d;
-	char	   *ptr = *start_address;
+		   *d;
+	ptr: &mut char = *start_address;
 
 	// Need at least sizeof(int) for the header word.
 	if ((ptr - data) + (int) sizeof(int) > length)
@@ -2192,7 +2192,7 @@ OTable *
 deserialize_o_table(Pointer data, Size length)
 {
 	Pointer		ptr = data;
-	OTable	   *o_table;
+	o_table: &mut OTable;
 	int			len;
 	int			i;
 	MemoryContext oldcxt;
@@ -2246,7 +2246,7 @@ deserialize_o_table(Pointer data, Size length)
 
 	for (i = 0; i < o_table->nfields; i++)
 	{
-		AttrMissing *miss = &o_table->missing[i];
+		miss: &mut AttrMissing = &o_table->missing[i];
 		bool		isnull;
 
 		if ((ptr - data) + (int) sizeof(bool) > length)
@@ -2283,12 +2283,12 @@ deserialize_o_table(Pointer data, Size length)
 	return o_table;
 }
 
-static void
-o_tables_drop_columns_with_type_callback(OTable *o_table, void *arg)
+fn
+o_tables_drop_columns_with_type_callback(o_table: &mut OTable,  *arg)
 {
 	int			i;
 	bool		updated = false;
-	OTablesDropAllWithTypeArg *drop_arg = (OTablesDropAllWithTypeArg *) arg;
+	drop_arg: &mut OTablesDropAllWithTypeArg = (OTablesDropAllWithTypeArg *) arg;
 
 	// Ignore search for rows of own class in table and base types
 	if (drop_arg->type_data->typtype == TYPTYPE_BASE ||
@@ -2299,7 +2299,7 @@ o_tables_drop_columns_with_type_callback(OTable *o_table, void *arg)
 	// Drop columns containing type
 	for (i = 0; i < o_table->nfields; i++)
 	{
-		OTableField *o_field = &o_table->fields[i];
+		o_field: &mut OTableField = &o_table->fields[i];
 
 		if (drop_arg->type_oid == o_field->typid && !o_field->droped)
 		{
@@ -2319,7 +2319,7 @@ o_tables_drop_columns_with_type_callback(OTable *o_table, void *arg)
 //
 // Drops all columns of a specific type
 //
-void
+
 o_tables_drop_columns_by_type(OXid oxid, CommitSeqNo csn, Oid type_oid)
 {
 	OTablesDropAllWithTypeArg arg;
@@ -2340,8 +2340,8 @@ o_tables_drop_columns_by_type(OXid oxid, CommitSeqNo csn, Oid type_oid)
 					 &o_in_progress_snapshot, &arg);
 }
 
-void
-o_table_fill_oids(OTable *oTable, Relation rel, const RelFileNode *newrnode, bool drop_pkey)
+
+o_table_fill_oids(oTable: &mut OTable, Relation rel, const newrnode: &mut RelFileNode, bool drop_pkey)
 {
 	Relation	toastRel,
 				indexRel;
@@ -2388,8 +2388,8 @@ o_table_fill_oids(OTable *oTable, Relation rel, const RelFileNode *newrnode, boo
 
 static int	recovery_num_o_tables_meta_locks = 0;
 
-void
-o_tables_meta_lock(void)
+
+o_tables_meta_lock()
 {
 	if (!is_recovery_process())
 	{
@@ -2397,7 +2397,7 @@ o_tables_meta_lock(void)
 		LWLockAcquire(&checkpoint_state->oTablesMetaLock, LW_SHARED);
 
 		// Make sure we've acquired oxid
-		(void) get_current_oxid();
+		() get_current_oxid();
 		add_o_tables_meta_lock_wal_record();
 	}
 	else
@@ -2407,8 +2407,8 @@ o_tables_meta_lock(void)
 	}
 }
 
-void
-o_tables_meta_lock_no_wal(void)
+
+o_tables_meta_lock_no_wal()
 {
 	if (!is_recovery_process())
 	{
@@ -2425,13 +2425,13 @@ o_tables_meta_lock_no_wal(void)
 // Release oTablesMetaLock and WAL-log the information required to replay
 // DDL changes.
 //
-void
+
 o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 {
 	if (!is_recovery_process())
 	{
 		add_o_tables_meta_unlock_wal_record(oids, oldRelnode);
-		(void) flush_local_wal(false, false);
+		() flush_local_wal(false, false);
 
 		LWLockRelease(&checkpoint_state->oTablesMetaLock);
 	}
@@ -2442,8 +2442,8 @@ o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 	}
 }
 
-void
-o_tables_meta_unlock_no_wal(void)
+
+o_tables_meta_unlock_no_wal()
 {
 	if (!is_recovery_process())
 	{

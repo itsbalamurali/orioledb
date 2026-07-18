@@ -25,15 +25,15 @@ use pgrx::pg_sys;
 
 bool		skip_ucm = false;
 
-static int	init_ucm_non_leaf_recursive(UsageCountMap *map, int i);
-static void ucm_inc_recursive(UsageCountMap *map, int i, int prev, int next);
-static bool ucm_check_recursive(UsageCountMap *map, int i);
+static int	init_ucm_non_leaf_recursive(map: &mut UsageCountMap, int i);
+fn ucm_inc_recursive(map: &mut UsageCountMap, int i, int prev, int next);
+static bool ucm_check_recursive(map: &mut UsageCountMap, int i);
 
 //
 // Estimate shaed memory space for UCM data structure.
 //
 Size
-estimate_ucm_space(UsageCountMap *map, OInMemoryBlkno offset, OInMemoryBlkno size)
+estimate_ucm_space(map: &mut UsageCountMap, OInMemoryBlkno offset, OInMemoryBlkno size)
 {
 	int			n_leaf_groups;
 	int			n_leaf_vars;
@@ -83,7 +83,7 @@ get_value_frame(uint32 value)
 }
 
 static int
-init_ucm_non_leaf_recursive(UsageCountMap *map, int i)
+init_ucm_non_leaf_recursive(map: &mut UsageCountMap, int i)
 {
 	if (i < map->nonLeaf)
 	{
@@ -111,8 +111,8 @@ init_ucm_non_leaf_recursive(UsageCountMap *map, int i)
 //
 // Initialize UCM shared memory.
 //
-void
-init_ucm(UsageCountMap *map, Pointer ptr, bool found)
+
+init_ucm(map: &mut UsageCountMap, Pointer ptr, bool found)
 {
 	int			i;
 	OInMemoryBlkno blkno;
@@ -146,8 +146,8 @@ init_ucm(UsageCountMap *map, Pointer ptr, bool found)
 //
 // Worker function, which recursively increments value of ucm map.
 //
-static void
-ucm_inc_recursive(UsageCountMap *map, int i, int32 prev, int32 next)
+fn
+ucm_inc_recursive(map: &mut UsageCountMap, int i, int32 prev, int32 next)
 {
 	uint32		val,
 				new_val,
@@ -210,14 +210,14 @@ ucm_inc_recursive(UsageCountMap *map, int i, int32 prev, int32 next)
 						  ((val & next_mask) == 0) ? next : UCM_INVALID_LEVEL);
 }
 
-void
-ucm_inc(UsageCountMap *map, OInMemoryBlkno blkno, int prev, int next)
+
+ucm_inc(map: &mut UsageCountMap, OInMemoryBlkno blkno, int prev, int next)
 {
 	ucm_inc_recursive(map, map->nonLeaf + blkno / UCM_BRANCH_FACTOR, prev, next);
 }
 
-static void
-page_inc_usage_count_internal(UsageCountMap *map, OInMemoryBlkno blkno,
+fn
+page_inc_usage_count_internal(map: &mut UsageCountMap, OInMemoryBlkno blkno,
 							  uint64 state)
 {
 	uint32		epoch = pg_atomic_read_u32(map->epoch),
@@ -243,11 +243,11 @@ page_inc_usage_count_internal(UsageCountMap *map, OInMemoryBlkno blkno,
 	}
 }
 
-void
-page_inc_usage_count(UsageCountMap *map, OInMemoryBlkno blkno)
+
+page_inc_usage_count(map: &mut UsageCountMap, OInMemoryBlkno blkno)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 	uint64		state = pg_atomic_read_u64(&header->state);
 	uint32		usageCount = O_PAGE_STATE_GET_USAGE_COUNT(state);
 
@@ -259,11 +259,11 @@ page_inc_usage_count(UsageCountMap *map, OInMemoryBlkno blkno)
 	page_inc_usage_count_internal(map, blkno, state);
 }
 
-void
-page_change_usage_count(UsageCountMap *map, OInMemoryBlkno blkno, uint32 usageCount)
+
+page_change_usage_count(map: &mut UsageCountMap, OInMemoryBlkno blkno, uint32 usageCount)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 	uint64		state = pg_atomic_read_u64(&header->state);
 
 	while (true)
@@ -277,7 +277,7 @@ page_change_usage_count(UsageCountMap *map, OInMemoryBlkno blkno, uint32 usageCo
 }
 
 static bool
-page_try_change_usage_count(UsageCountMap *map, OInMemoryBlkno blkno,
+page_try_change_usage_count(map: &mut UsageCountMap, OInMemoryBlkno blkno,
 							uint64 oldState, uint32 newUsageCount)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -298,7 +298,7 @@ page_try_change_usage_count(UsageCountMap *map, OInMemoryBlkno blkno,
 }
 
 static bool
-ucm_check_recursive(UsageCountMap *map, int i)
+ucm_check_recursive(map: &mut UsageCountMap, int i)
 {
 	if (i < map->nonLeaf)
 	{
@@ -371,7 +371,7 @@ ucm_check_recursive(UsageCountMap *map, int i)
 }
 
 bool
-ucm_check_map(UsageCountMap *map)
+ucm_check_map(map: &mut UsageCountMap)
 {
 	bool		result = true;
 	int			i;
@@ -383,7 +383,7 @@ ucm_check_map(UsageCountMap *map)
 }
 
 bool
-ucm_epoch_needs_shift(UsageCountMap *map)
+ucm_epoch_needs_shift(map: &mut UsageCountMap)
 {
 	uint32		mask,
 				epoch;
@@ -406,8 +406,8 @@ ucm_epoch_needs_shift(UsageCountMap *map)
 	return true;
 }
 
-void
-ucm_epoch_shift(UsageCountMap *map)
+
+ucm_epoch_shift(map: &mut UsageCountMap)
 {
 	uint32		epoch,
 				next_epoch;
@@ -421,7 +421,7 @@ ucm_epoch_shift(UsageCountMap *map)
 }
 
 OInMemoryBlkno
-ucm_next_blkno(UsageCountMap *map, OInMemoryBlkno init_blkno,
+ucm_next_blkno(map: &mut UsageCountMap, OInMemoryBlkno init_blkno,
 			   uint32 mask_src)
 {
 	int64		location;
@@ -458,7 +458,7 @@ retry:
 		if (factor == 1 && location < map->size)
 		{
 			// Work with pages themselves
-			OrioleDBPageHeader *header = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(location + map->offset);
+			header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(location + map->offset);
 			uint64		state;
 			uint32		usageCount;
 
@@ -524,7 +524,7 @@ retry:
 }
 
 OInMemoryBlkno
-ucm_occupy_free_page(UsageCountMap *map)
+ucm_occupy_free_page(map: &mut UsageCountMap)
 {
 	int64		location;
 	int64		i;
@@ -548,7 +548,7 @@ ucm_occupy_free_page(UsageCountMap *map)
 		{
 			// Work with pages themselves
 			OInMemoryBlkno blkno = location + map->offset;
-			OrioleDBPageHeader *header = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
+			header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
 			uint64		state;
 
 			state = pg_atomic_read_u64(&header->state);

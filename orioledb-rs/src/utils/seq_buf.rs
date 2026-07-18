@@ -56,21 +56,21 @@ use pgrx::pg_sys;
 //
 // this functions returns true if success
 //
-static bool seq_buf_tag_eq(SeqBufTag *t1, SeqBufTag *t2);
-static bool seq_buf_check_open_file(SeqBufDescPrivate *seqBufPrivate);
-static bool seq_buf_switch_page(SeqBufDescPrivate *seqBufPrivate);
-static inline bool seq_buf_rw(SeqBufDescPrivate *seqBufPrivate,
-							  char *data, Size data_size, bool write);
-static bool seq_buf_read_pages(SeqBufDescPrivate *seqBufPrivate,
-							   SeqBufDescShared *shared, int header_off, off_t evicted_off);
+static bool seq_buf_tag_eq(t1: &mut SeqBufTag, t2: &mut SeqBufTag);
+static bool seq_buf_check_open_file(seqBufPrivate: &mut SeqBufDescPrivate);
+static bool seq_buf_switch_page(seqBufPrivate: &mut SeqBufDescPrivate);
+static inline bool seq_buf_rw(seqBufPrivate: &mut SeqBufDescPrivate,
+							  data: &mut char, Size data_size, bool write);
+static bool seq_buf_read_pages(seqBufPrivate: &mut SeqBufDescPrivate,
+							   shared: &mut SeqBufDescShared, int header_off, off_t evicted_off);
 
 //
 // Initialize sequential buffered access to given file.
 //
 bool
-init_seq_buf(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
-			 SeqBufTag *tag, bool write, bool init_shared,
-			 int skip_len, EvictedSeqBufData *evicted)
+init_seq_buf(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDescShared,
+			 tag: &mut SeqBufTag, bool write, bool init_shared,
+			 int skip_len, evicted: &mut EvictedSeqBufData)
 {
 	bool		evicted_used = evicted != NULL;
 	bool		ok = true;
@@ -100,7 +100,7 @@ init_seq_buf(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
 
 		for (i = 0; i < 2; i++)
 		{
-			OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(shared->pages[i]);
+			page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(shared->pages[i]);
 
 			ORelOidsSetInvalid(page_desc->oids);
 			page_desc->type = oIndexInvalid;
@@ -129,11 +129,11 @@ init_seq_buf(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
 }
 
 char *
-get_seq_buf_filename(SeqBufTag *tag)
+get_seq_buf_filename(tag: &mut SeqBufTag)
 {
-	char	   *result;
-	char	   *typename;
-	char	   *db_prefix;
+	result: &mut char;
+	typename: &mut char;
+	db_prefix: &mut char;
 
 	o_get_prefixes_for_tablespace(tag->key.oids.datoid, tag->key.tablespace,
 								  NULL, &db_prefix);
@@ -154,7 +154,7 @@ get_seq_buf_filename(SeqBufTag *tag)
 }
 
 static bool
-seq_buf_tag_eq(SeqBufTag *t1, SeqBufTag *t2)
+seq_buf_tag_eq(t1: &mut SeqBufTag, t2: &mut SeqBufTag)
 {
 	//
 // Tablespace is intentionally omitted: (datoid, relnode) already uniquely
@@ -173,15 +173,15 @@ seq_buf_tag_eq(SeqBufTag *t1, SeqBufTag *t2)
 // Open underlying file.
 //
 static bool
-seq_buf_check_open_file(SeqBufDescPrivate *seqBufPrivate)
+seq_buf_check_open_file(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	SeqBufTag	old_tag = seqBufPrivate->tag;
 	int			flags;
 
 	while (true)
 	{
-		char	   *filename;
+		filename: &mut char;
 		bool		file_exists = seqBufPrivate->file > 0;
 
 		if (file_exists)
@@ -227,8 +227,8 @@ seq_buf_check_open_file(SeqBufDescPrivate *seqBufPrivate)
 	return true;
 }
 
-void
-seq_buf_close_file(SeqBufDescPrivate *seqBufPrivate)
+
+seq_buf_close_file(seqBufPrivate: &mut SeqBufDescPrivate)
 {
 	if (seqBufPrivate->file > 0)
 	{
@@ -238,7 +238,7 @@ seq_buf_close_file(SeqBufDescPrivate *seqBufPrivate)
 }
 
 static bool
-seq_buf_wait_prev_page(SeqBufDescShared *shared)
+seq_buf_wait_prev_page(shared: &mut SeqBufDescShared)
 {
 	SpinDelayStatus status;
 
@@ -257,9 +257,9 @@ seq_buf_wait_prev_page(SeqBufDescShared *shared)
 }
 
 static bool
-seq_buf_finish_prev_page(SeqBufDescPrivate *seqBufPrivate)
+seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	off_t		offset;
 
 	if (seqBufPrivate->write)
@@ -342,9 +342,9 @@ seq_buf_finish_prev_page(SeqBufDescPrivate *seqBufPrivate)
 // Private->shared should be locked. Call unlocks seqBufPrivate->shared.
 //
 static bool
-seq_buf_switch_page(SeqBufDescPrivate *seqBufPrivate)
+seq_buf_switch_page(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	uint32		filePageNum = shared->filePageNum;
 	SeqBufPrevPageState resultState;
 
@@ -406,9 +406,9 @@ seq_buf_switch_page(SeqBufDescPrivate *seqBufPrivate)
 // Private function which reads/writes data from/to sequential file.
 //
 static inline bool
-seq_buf_rw(SeqBufDescPrivate *seqBufPrivate, char *data, Size data_size, bool write)
+seq_buf_rw(seqBufPrivate: &mut SeqBufDescPrivate, data: &mut char, Size data_size, bool write)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	Page		page;
 	bool		switched;
 
@@ -441,7 +441,7 @@ seq_buf_rw(SeqBufDescPrivate *seqBufPrivate, char *data, Size data_size, bool wr
 // Returns true if success.
 //
 bool
-seq_buf_write_u32(SeqBufDescPrivate *seqBufPrivate, uint32 offset)
+seq_buf_write_u32(seqBufPrivate: &mut SeqBufDescPrivate, uint32 offset)
 {
 	Assert((SEQBUF_CHUNK_SIZE % sizeof(FileExtent)) == 0);
 	return seq_buf_rw(seqBufPrivate, (char *) &offset, sizeof(uint32), true);
@@ -452,7 +452,7 @@ seq_buf_write_u32(SeqBufDescPrivate *seqBufPrivate, uint32 offset)
 // Returns true if success.
 //
 bool
-seq_buf_write_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent extent)
+seq_buf_write_file_extent(seqBufPrivate: &mut SeqBufDescPrivate, FileExtent extent)
 {
 	Assert((SEQBUF_CHUNK_SIZE % sizeof(FileExtent)) == 0);
 	return seq_buf_rw(seqBufPrivate, (char *) &extent, sizeof(FileExtent), true);
@@ -463,7 +463,7 @@ seq_buf_write_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent extent)
 // Returns true if success.
 //
 bool
-seq_buf_read_u32(SeqBufDescPrivate *seqBufPrivate, uint32 *ptr)
+seq_buf_read_u32(seqBufPrivate: &mut SeqBufDescPrivate, ptr: &mut uint32)
 {
 	return seq_buf_rw(seqBufPrivate, (char *) ptr, sizeof(uint32), false);
 }
@@ -473,7 +473,7 @@ seq_buf_read_u32(SeqBufDescPrivate *seqBufPrivate, uint32 *ptr)
 // Returns true if success.
 //
 bool
-seq_buf_read_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent *extent)
+seq_buf_read_file_extent(seqBufPrivate: &mut SeqBufDescPrivate, extent: &mut FileExtent)
 {
 	Assert((SEQBUF_CHUNK_SIZE % sizeof(FileExtent)) == 0);
 	return seq_buf_rw(seqBufPrivate, (char *) extent, sizeof(FileExtent), false);
@@ -483,9 +483,9 @@ seq_buf_read_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent *extent)
 // Finalize work with sequential file.
 //
 uint64
-seq_buf_finalize(SeqBufDescPrivate *seqBufPrivate)
+seq_buf_finalize(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	off_t		result;
 
 	SpinLockAcquire(&shared->lock);
@@ -555,15 +555,15 @@ seq_buf_finalize(SeqBufDescPrivate *seqBufPrivate)
 // valid on write-mode seq_bufs.
 //
 Size
-seq_buf_max_pending_data_size(void)
+seq_buf_max_pending_data_size()
 {
 	return SEQBUF_CHUNK_SIZE;
 }
 
 Size
-seq_buf_snapshot_pending_data(SeqBufDescPrivate *seqBufPrivate, char *buf)
+seq_buf_snapshot_pending_data(seqBufPrivate: &mut SeqBufDescPrivate, buf: &mut char)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	Page		page;
 	Size		len;
 
@@ -602,9 +602,9 @@ seq_buf_snapshot_pending_data(SeqBufDescPrivate *seqBufPrivate, char *buf)
 // Get current offset in the file.
 //
 uint64
-seq_buf_get_offset(SeqBufDescPrivate *seqBufPrivate)
+seq_buf_get_offset(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	uint64		offset;
 
 	SpinLockAcquire(&shared->lock);
@@ -619,10 +619,10 @@ seq_buf_get_offset(SeqBufDescPrivate *seqBufPrivate)
 // Try to replace sequential file with newer one.
 //
 SeqBufReplaceResult
-seq_buf_try_replace(SeqBufDescPrivate *seqBufPrivate, SeqBufTag *tag,
-					pg_atomic_uint64 *size, Size data_size)
+seq_buf_try_replace(seqBufPrivate: &mut SeqBufDescPrivate, tag: &mut SeqBufTag,
+					size: &mut pg_atomic_uint64, Size data_size)
 {
-	SeqBufDescShared *shared = seqBufPrivate->shared;
+	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
 	off_t		len;
 	SeqBufTag	old_tag = {0};
 
@@ -686,7 +686,7 @@ seq_buf_try_replace(SeqBufDescPrivate *seqBufPrivate, SeqBufTag *tag,
 }
 
 static bool
-seq_buf_read_pages(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
+seq_buf_read_pages(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDescShared,
 				   int header_off, off_t evicted_off)
 {
 	char		buf_first[ORIOLEDB_BLCKSZ];
@@ -762,9 +762,9 @@ seq_buf_read_pages(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
 }
 
 static inline char *
-seq_buf_filename_if_exist(SeqBufTag *tag)
+seq_buf_filename_if_exist(tag: &mut SeqBufTag)
 {
-	char	   *filename;
+	filename: &mut char;
 	struct stat not_used;
 
 	filename = get_seq_buf_filename(tag);
@@ -775,9 +775,9 @@ seq_buf_filename_if_exist(SeqBufTag *tag)
 }
 
 bool
-seq_buf_file_exist(SeqBufTag *tag)
+seq_buf_file_exist(tag: &mut SeqBufTag)
 {
-	char	   *filename;
+	filename: &mut char;
 
 	if ((filename = seq_buf_filename_if_exist(tag)) == NULL)
 		return false;
@@ -787,9 +787,9 @@ seq_buf_file_exist(SeqBufTag *tag)
 }
 
 bool
-seq_buf_remove_file(SeqBufTag *tag)
+seq_buf_remove_file(tag: &mut SeqBufTag)
 {
-	char	   *filename;
+	filename: &mut char;
 
 	if ((filename = seq_buf_filename_if_exist(tag)) == NULL)
 		return false;

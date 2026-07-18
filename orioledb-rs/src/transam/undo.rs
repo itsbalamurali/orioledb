@@ -50,12 +50,12 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static const char *get_undo_type_name(UndoLogType undoType);
-static void write_shared_undo_locations(UndoStackSharedLocations *to, UndoStackLocations *from);
-static void o_add_rewind_relfilenode_undo_item(RelFileNode *onCommit,
-											   RelFileNode *onAbort,
+static const get_undo_type_name: &mut char(UndoLogType undoType);
+fn write_shared_undo_locations(to: &mut UndoStackSharedLocations, from: &mut UndoStackLocations);
+fn o_add_rewind_relfilenode_undo_item(onCommit: &mut RelFileNode,
+											   onAbort: &mut RelFileNode,
 											   int nOnCommit, int nOnAbort);
-static void reset_command_undo_locations(void);
+fn reset_command_undo_locations();
 
 PG_FUNCTION_INFO_V1(orioledb_read_sys_xid_undo_location);
 PG_FUNCTION_INFO_V1(orioledb_insert_sys_xid_undo_location);
@@ -66,7 +66,7 @@ PG_FUNCTION_INFO_V1(orioledb_get_proc_retain_undo_locations);
 #define GET_UNDO_REC(undoType, loc) (o_undo_buffers[(int) (undoType)] + \
 	(loc) % o_undo_circular_sizes[(int) (undoType)])
 
-static int	undoLocCmp(const pairingheap_node *a, const pairingheap_node *b, void *arg);
+static int	undoLocCmp(const a: &mut pairingheap_node, const b: &mut pairingheap_node,  *arg);
 
 static pairingheap retainUndoLocHeaps[(int) UndoLogsCount] =
 {
@@ -85,21 +85,21 @@ static pairingheap retainUndoLocHeaps[(int) UndoLogsCount] =
 static SubTransactionId minParentSubId = InvalidSubTransactionId;
 static XLogRecPtr xidless_commit_lsn = InvalidXLogRecPtr;
 
-typedef void (*UndoCallback) (UndoLogType undoType, UndoLocation location,
-							  UndoStackItem *item, OXid oxid,
+typedef  (*UndoCallback) (UndoLogType undoType, UndoLocation location,
+							  item: &mut UndoStackItem, OXid oxid,
 							  OUndoCallbackStage stage,
 							  bool changeCountsValid);
 
-static void init_undo_meta(UndoMeta *meta, bool found);
+fn init_undo_meta(meta: &mut UndoMeta, bool found);
 static bool undo_write_internal(UndoLogType undoType, UndoLocation location,
 								Size size, Pointer buf, bool must_exist);
-static void o_stub_item_callback(UndoLogType undoType, UndoLocation location,
-								 UndoStackItem *baseItem,
+fn o_stub_item_callback(UndoLogType undoType, UndoLocation location,
+								 baseItem: &mut UndoStackItem,
 								 OXid oxid, OUndoCallbackStage stage,
 								 bool changeCountsValid);
-static void o_rewind_relfilenode_item_callback(UndoLogType undoType,
+fn o_rewind_relfilenode_item_callback(UndoLogType undoType,
 											   UndoLocation location,
-											   UndoStackItem *baseItem,
+											   baseItem: &mut UndoStackItem,
 											   OXid oxid,
 											   OUndoCallbackStage stage,
 											   bool changeCountsValid);
@@ -177,7 +177,7 @@ static UndoItemTypeDescr undoItemTypeDescrs[] = {
 
 PG_FUNCTION_INFO_V1(orioledb_has_retained_undo);
 
-static UndoMeta *undo_metas = NULL;
+static undo_metas: &mut UndoMeta = NULL;
 static Pointer o_undo_buffers[(int) UndoLogsCount] =
 {
 	NULL
@@ -200,7 +200,7 @@ static Size o_undo_circular_sizes[(int) UndoLogsCount] =
 // bit after the checkpointer cleared it) leaves the bit set, so the next
 // flush catches the update; worst case is one redundant page write.
 //
-static pg_atomic_uint32 *o_undo_dirty_bitmaps[(int) UndoLogsCount] =
+static o_undo_dirty_bitmaps: &mut pg_atomic_uint32[(int) UndoLogsCount] =
 {
 	NULL
 };
@@ -217,7 +217,7 @@ static Size o_undo_dirty_words[(int) UndoLogsCount] =
 #define UNDO_PAGE_INDEX(undoType, location) \
 	(((location) % o_undo_circular_sizes[(int) (undoType)]) / ORIOLEDB_BLCKSZ)
 
-static inline void
+static inline 
 mark_undo_page_dirty(UndoLogType undoType, uint32 page)
 {
 	uint32		mask = 1U << (page % 32);
@@ -235,7 +235,7 @@ mark_undo_page_dirty(UndoLogType undoType, uint32 page)
 // as dirty.  Most records sit within a single page; cross-page writes are
 // rare but still possible at the boundary, so handle both.
 //
-static inline void
+static inline 
 mark_undo_range_dirty(UndoLogType undoType, UndoLocation location, Size size)
 {
 	UndoLocation end = location + size;
@@ -278,7 +278,7 @@ undo_page_dirty(UndoLogType undoType, uint32 page)
 			& mask) != 0;
 }
 
-PendingTruncatesMeta *pending_truncates_meta;
+pending_truncates_meta: &mut PendingTruncatesMeta;
 
 UndoLocation curRetainUndoLocations[(int) UndoLogsCount] =
 {
@@ -299,7 +299,7 @@ static OBuffersDesc undoBuffersDesc =
 	.bufferCtlTrancheName = "undoBuffersCtlTranche"
 };
 
-static void wait_for_reserved_location(UndoLogType undoType,
+fn wait_for_reserved_location(UndoLogType undoType,
 									   UndoLocation undoLocationToWait);
 
 //
@@ -307,7 +307,7 @@ static void wait_for_reserved_location(UndoLogType undoType,
 // Valid xidless_commit_lsn is never changed at repeated calls.
 //
 static XLogRecPtr
-assign_xidless_commit_lsn(OXid oxid, bool *wrote_xlog)
+assign_xidless_commit_lsn(OXid oxid, wrote_xlog: &mut bool)
 {
 	Assert(OXidIsValid(oxid));
 
@@ -331,7 +331,7 @@ assign_xidless_commit_lsn(OXid oxid, bool *wrote_xlog)
 // stay invisible to this hook.
 //
 XLogRecPtr
-orioledb_get_xidless_commit_lsn(bool *wrote_xlog)
+orioledb_get_xidless_commit_lsn(wrote_xlog: &mut bool)
 {
 	OXid		oxid = get_current_oxid_if_any();
 
@@ -361,7 +361,7 @@ typedef struct
 } CommandIdInfo;
 
 static CommandIdInfo commandInfosStatic[16];
-static CommandIdInfo *commandInfos = commandInfosStatic;
+static commandInfos: &mut CommandIdInfo = commandInfosStatic;
 static int	commandIndex = -1,
 			commandInfosLength = lengthof(commandInfosStatic);
 static CommandId currentCommandId;
@@ -390,7 +390,7 @@ static CachedReplicationRetainUndoTuple cachedReplicationRetainUndoTuple =
 };
 
 Size
-undo_shmem_needs(void)
+undo_shmem_needs()
 {
 	Size		size;
 	double		regular_row_undo_circular_buffer_fraction;
@@ -436,7 +436,7 @@ undo_shmem_needs(void)
 	return size;
 }
 
-void
+
 undo_shmem_init(Pointer buf, bool found)
 {
 	Pointer		ptr = buf;
@@ -490,8 +490,8 @@ undo_shmem_init(Pointer buf, bool found)
 						  "OPendingTruncatesTranche");
 }
 
-static void
-init_undo_meta(UndoMeta *meta, bool found)
+fn
+init_undo_meta(meta: &mut UndoMeta, bool found)
 {
 	if (!found)
 	{
@@ -514,7 +514,7 @@ init_undo_meta(UndoMeta *meta, bool found)
 static UndoItemTypeDescr *
 item_type_get_descr(UndoItemType type)
 {
-	UndoItemTypeDescr *result;
+	result: &mut UndoItemTypeDescr;
 
 	Assert((int) type >= 1 && (int) type <= sizeof(undoItemTypeDescrs) / sizeof(undoItemTypeDescrs[0]));
 
@@ -554,7 +554,7 @@ get_undo_type_name(UndoLogType undoType)
 // but doesn't release minUndoLocationsMutex. Releasing this mutex should be
 // done by a caller.
 //
-void
+
 update_min_undo_locations(UndoLogType undoType,
 						  bool undoEviction, bool do_cleanup)
 {
@@ -568,7 +568,7 @@ update_min_undo_locations(UndoLogType undoType,
 				newCheckpointStartLocation = InvalidUndoLocation,
 				newCheckpointEndLocation = InvalidUndoLocation;
 	int			i;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 	UndoLocation replicationCatalogUndoRetainLocation = InvalidUndoLocation;
 
 	Assert(!undoEviction || !do_cleanup);
@@ -731,8 +731,8 @@ update_min_undo_locations(UndoLogType undoType,
 //
 // Guarantees that concurrent update_min_undo_locations() finishes.
 //
-static void
-wait_for_even_min_undo_locations_changecount(UndoMeta *meta)
+fn
+wait_for_even_min_undo_locations_changecount(meta: &mut UndoMeta)
 {
 	SpinDelayStatus status;
 
@@ -748,8 +748,8 @@ wait_for_even_min_undo_locations_changecount(UndoMeta *meta)
 //
 // Guarantees that concurrent update_min_undo_locations() finishes.
 //
-static void
-wait_for_even_write_in_progress_changecount(UndoMeta *meta)
+fn
+wait_for_even_write_in_progress_changecount(meta: &mut UndoMeta)
 {
 	SpinDelayStatus status;
 
@@ -768,9 +768,9 @@ wait_for_even_write_in_progress_changecount(UndoMeta *meta)
 // less than xmin from the mapping.
 //
 static UndoLocation
-read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted, bool nocheck)
+read_replication_catalog_retain_undo_location(TransactionId xmin, ndeleted: &mut int, bool nocheck)
 {
-	BTreeDescr *td = get_sys_tree(SYS_TREES_CATALOG_XID_UNDO_LOCATION);
+	td: &mut BTreeDescr = get_sys_tree(SYS_TREES_CATALOG_XID_UNDO_LOCATION);
 	OTuple		keyTuple;
 	OTuple		tuple;
 	OBTreeFindPageContext context;
@@ -826,7 +826,7 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 
 	while (true)
 	{
-		OBtreePageFindItem *item;
+		item: &mut OBtreePageFindItem;
 		Page		p;
 
 		if (!have_page)
@@ -912,7 +912,7 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 }
 
 UndoLocation
-get_current_replication_catalog_retain_undo_location(void)
+get_current_replication_catalog_retain_undo_location()
 {
 	TransactionId xmin;
 	TransactionId catalog_xmin;
@@ -941,7 +941,7 @@ get_current_replication_catalog_retain_undo_location(void)
 // Insert the item into SYS_TREES_CATALOG_XID_UNDO_LOCATION. If item with this xid exists
 // update it only if this update decreases undoLocation. Skip otherwise.
 //
-static void
+fn
 insert_replication_catalog_retain_undo_location(TransactionId xid, UndoLocation undoLocation, bool nocheck)
 {
 	TransactionId key = xid;
@@ -1054,14 +1054,14 @@ orioledb_insert_sys_xid_undo_location(PG_FUNCTION_ARGS)
 // Both can be set by another process via add_new_undo_stack_item_to_process()
 // during the group insert optimization.
 //
-static void
+fn
 set_my_reserved_location(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 	UndoLocation lastUsedLocation;
 	bool		overwriteTransactionRetainUndoLoc;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
-	UndoRetainSharedLocations *shared = &curProcData->undoRetainLocations[undoType];
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
+	shared: &mut UndoRetainSharedLocations = &curProcData->undoRetainLocations[undoType];
 
 	Assert(!UndoLocationIsValid(pg_atomic_read_u64(&shared->reservedUndoLocation)));
 
@@ -1113,10 +1113,10 @@ set_my_reserved_location(UndoLogType undoType)
 UndoLocation
 set_my_snapshot_retain_location(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 	UndoLocation curSnapshotRetainUndoLocation,
 				retainUndoLocation;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 	while (true)
 	{
@@ -1143,16 +1143,16 @@ set_my_snapshot_retain_location(UndoLogType undoType)
 	return retainUndoLocation;
 }
 
-void
+
 clear_my_snapshot_retain_location(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 
 	pg_atomic_write_u64(&curProcData->undoRetainLocations[undoType].snapshotRetainUndoLocation,
 						InvalidUndoLocation);
 }
 
-static void
+fn
 wait_for_reserved_location(UndoLogType undoType,
 						   UndoLocation undoLocationToWait)
 {
@@ -1190,15 +1190,15 @@ typedef struct
 	Size		length;
 } UndoItemBuf;
 
-static void
-init_undo_item_buf(UndoItemBuf *buf)
+fn
+init_undo_item_buf(buf: &mut UndoItemBuf)
 {
 	buf->data = buf->staticData;
 	buf->length = UNDO_ITEM_BUF_SIZE;
 }
 
 static UndoStackItem *
-undo_item_buf_read_item(UndoItemBuf *buf,
+undo_item_buf_read_item(buf: &mut UndoItemBuf,
 						UndoLogType undoType,
 						UndoLocation location)
 {
@@ -1206,8 +1206,8 @@ undo_item_buf_read_item(UndoItemBuf *buf,
 
 	if (!UNDO_REC_EXISTS(undoType, location))
 	{
-		UndoMeta   *undoMeta = get_undo_meta_by_type(undoType);
-		ODBProcData *curProcData = GET_CUR_PROCDATA();
+		undoMeta: &mut UndoMeta = get_undo_meta_by_type(undoType);
+		curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 
 		elog(PANIC,
 			 "undo_item_buf_read_item(): read of unexisting undo record with "
@@ -1251,8 +1251,8 @@ undo_item_buf_read_item(UndoItemBuf *buf,
 	return (UndoStackItem *) buf->data;
 }
 
-static void
-free_undo_item_buf(UndoItemBuf *buf)
+fn
+free_undo_item_buf(buf: &mut UndoItemBuf)
 {
 	if (buf->data != buf->staticData)
 		pfree(buf->data);
@@ -1262,8 +1262,8 @@ static UndoLocation
 o_add_branch_undo_item(UndoLogType undoType, UndoLocation newLocation)
 {
 	UndoLocation location;
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
-	BranchUndoStackItem *item;
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	item: &mut BranchUndoStackItem;
 	LocationIndex size;
 
 	size = sizeof(BranchUndoStackItem);
@@ -1289,12 +1289,12 @@ o_add_branch_undo_item(UndoLogType undoType, UndoLocation newLocation)
 //
 static UndoLocation
 walk_undo_range(UndoLogType undoType,
-				UndoLocation location, UndoLocation toLoc, UndoItemBuf *buf,
-				OXid oxid, OUndoCallbackStage stage, UndoLocation *onCommitLocation,
+				UndoLocation location, UndoLocation toLoc, buf: &mut UndoItemBuf,
+				OXid oxid, OUndoCallbackStage stage, onCommitLocation: &mut UndoLocation,
 				bool changeCountsValid)
 {
-	UndoStackItem *item;
-	UndoItemTypeDescr *descr;
+	item: &mut UndoStackItem;
+	descr: &mut UndoItemTypeDescr;
 
 	while (UndoLocationIsValid(location) && (location > toLoc || !UndoLocationIsValid(toLoc)))
 	{
@@ -1309,7 +1309,7 @@ walk_undo_range(UndoLogType undoType,
 //
 		if (onCommitLocation && *onCommitLocation == location)
 		{
-			OnCommitUndoStackItem *fItem = (OnCommitUndoStackItem *) item;
+			fItem: &mut OnCommitUndoStackItem = (OnCommitUndoStackItem *) item;
 
 			*onCommitLocation = fItem->onCommitLocation;
 		}
@@ -1320,7 +1320,7 @@ walk_undo_range(UndoLogType undoType,
 //
 		if (stage != OUndoCallbackStageAbort)
 		{
-			OnCommitUndoStackItem *fItem = (OnCommitUndoStackItem *) item;
+			fItem: &mut OnCommitUndoStackItem = (OnCommitUndoStackItem *) item;
 
 			location = fItem->onCommitLocation;
 		}
@@ -1337,7 +1337,7 @@ UndoLocation
 walk_undo_range_with_buf(UndoLogType undoType,
 						 UndoLocation location, UndoLocation toLoc,
 						 OXid oxid, OUndoCallbackStage stage,
-						 UndoLocation *onCommitLocation,
+						 onCommitLocation: &mut UndoLocation,
 						 bool changeCountsValid)
 {
 	UndoItemBuf buf;
@@ -1356,12 +1356,12 @@ walk_undo_range_with_buf(UndoLogType undoType,
 // aborted.  This is used during recovery: despite some parts of chain are
 // already aborted, checkpointed items could still reference them.
 //
-void
+
 apply_undo_branches(UndoLogType undoType, OXid oxid)
 {
 	UndoItemBuf buf;
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
-	BranchUndoStackItem *item;
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	item: &mut BranchUndoStackItem;
 	UndoLocation location;
 
 	init_undo_item_buf(&buf);
@@ -1382,20 +1382,20 @@ apply_undo_branches(UndoLogType undoType, OXid oxid)
 // Walk transaction undo stack chain during (sub)transaction abort or
 // transaction commit.
 //
-static void
+fn
 walk_undo_stack(UndoLogType undoType, OXid oxid,
-				UndoStackLocations *toLocation, bool abortTrx,
+				toLocation: &mut UndoStackLocations, bool abortTrx,
 				bool changeCountsValid)
 {
 	UndoLocation location,
 				newOnCommitLocation;
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
 
 	if (STOPEVENTS_ENABLED())
 	{
-		Jsonb	   *params;
-		JsonbParseState *state = NULL;
+		params: &mut Jsonb;
+		state: &mut JsonbParseState = NULL;
 
 		pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 		jsonb_push_bool_key(&state, "commit", !abortTrx);
@@ -1464,17 +1464,17 @@ walk_undo_stack(UndoLogType undoType, OXid oxid,
 	LWLockRelease(&curProcData->undoStackLocationsFlushLock);
 }
 
-void
-apply_undo_stack(UndoLogType undoType, OXid oxid, UndoStackLocations *toLocation,
+
+apply_undo_stack(UndoLogType undoType, OXid oxid, toLocation: &mut UndoStackLocations,
 				 bool changeCountsValid)
 {
 	walk_undo_stack(undoType, oxid, toLocation, true, changeCountsValid);
 }
 
-void
+
 precommit_undo_stack(UndoLogType undoType, OXid oxid, bool changeCountsValid)
 {
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
 	UndoLocation location;
 
 	location = pg_atomic_read_u64(&sharedLocations->onCommitLocation);
@@ -1483,7 +1483,7 @@ precommit_undo_stack(UndoLogType undoType, OXid oxid, bool changeCountsValid)
 							 changeCountsValid);
 }
 
-void
+
 on_commit_undo_stack(UndoLogType undoType, OXid oxid, bool changeCountsValid)
 {
 	walk_undo_stack(undoType, oxid, NULL, false, changeCountsValid);
@@ -1492,13 +1492,13 @@ on_commit_undo_stack(UndoLogType undoType, OXid oxid, bool changeCountsValid)
 bool
 undo_type_has_retained_location(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 
 	return UndoLocationIsValid(pg_atomic_read_u64(&curProcData->undoRetainLocations[(int) undoType].transactionUndoRetainLocation));
 }
 
 bool
-have_retained_undo_location(void)
+have_retained_undo_location()
 {
 	int			i;
 
@@ -1514,7 +1514,7 @@ have_retained_undo_location(void)
 UndoLocation
 get_snapshot_retained_undo_location(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 
 	Assert(undoType != UndoLogNone);
 
@@ -1533,10 +1533,10 @@ get_snapshot_retained_undo_location(UndoLogType undoType)
 // location is cleared, a subsequent set_my_reserved_location() will hit an
 // assertion failure.
 //
-void
+
 free_retained_undo_location(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 
 	Assert(pg_atomic_read_u64(&curProcData->undoRetainLocations[(int) undoType].reservedUndoLocation) == InvalidUndoLocation);
 	pg_atomic_write_u64(&curProcData->undoRetainLocations[(int) undoType].transactionUndoRetainLocation, InvalidUndoLocation);
@@ -1545,10 +1545,10 @@ free_retained_undo_location(UndoLogType undoType)
 
 static bool
 check_reserved_undo_location(UndoLogType undoType, UndoLocation location,
-							 uint64 *minProcReservedLocation,
+							 minProcReservedLocation: &mut uint64,
 							 bool waitForUndoLocation)
 {
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 	*minProcReservedLocation = pg_atomic_read_u64(&meta->minProcReservedLocation);
 	while (location > *minProcReservedLocation + o_undo_circular_sizes[(int) undoType])
@@ -1569,8 +1569,8 @@ check_reserved_undo_location(UndoLogType undoType, UndoLocation location,
 	return true;
 }
 
-static void
-write_undo_range(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
+fn
+write_undo_range(desc: &mut OBuffersDesc, Pointer buf, UndoLogType undoType,
 				 UndoLocation minLoc, UndoLocation maxLoc)
 {
 	if (maxLoc > minLoc)
@@ -1586,8 +1586,8 @@ write_undo_range(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
 // an earlier eviction could be read back after writtenLocation advances past
 // it.
 //
-static void
-write_undo_range_clean(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
+fn
+write_undo_range_clean(desc: &mut OBuffersDesc, Pointer buf, UndoLogType undoType,
 					   UndoLocation minLoc, UndoLocation maxLoc)
 {
 	if (maxLoc > minLoc)
@@ -1595,8 +1595,8 @@ write_undo_range_clean(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
 						false, true);
 }
 
-static void
-read_undo_range(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
+fn
+read_undo_range(desc: &mut OBuffersDesc, Pointer buf, UndoLogType undoType,
 				UndoLocation minLoc, UndoLocation maxLoc)
 {
 	Assert(maxLoc > minLoc);
@@ -1604,7 +1604,7 @@ read_undo_range(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
 }
 
 static bool
-write_undo_range_if_exists(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
+write_undo_range_if_exists(desc: &mut OBuffersDesc, Pointer buf, UndoLogType undoType,
 						   UndoLocation minLoc, UndoLocation maxLoc)
 {
 	if (maxLoc > minLoc)
@@ -1614,7 +1614,7 @@ write_undo_range_if_exists(OBuffersDesc *desc, Pointer buf, UndoLogType undoType
 }
 
 static bool
-read_undo_range_if_exists(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
+read_undo_range_if_exists(desc: &mut OBuffersDesc, Pointer buf, UndoLogType undoType,
 						  UndoLocation minLoc, UndoLocation maxLoc)
 {
 	Assert(maxLoc > minLoc);
@@ -1644,11 +1644,11 @@ read_undo_range_if_exists(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
 // progress instead of stalling for the whole flush.
 //
 #define UNDO_FLUSH_BATCH_PAGES 128
-static void
+fn
 flush_dirty_undo_range(UndoLogType undoType,
 					   UndoLocation fromLoc, UndoLocation toLoc)
 {
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 	Pointer		circularBuffer = o_undo_buffers[(int) undoType];
 	Size		circularBufferSize = o_undo_circular_sizes[(int) undoType];
 	UndoLocation pageLoc,
@@ -1722,7 +1722,7 @@ flush_dirty_undo_range(UndoLogType undoType,
 //
 // Evict some part of undo to the disk.
 //
-void
+
 evict_undo_to_disk(UndoLogType undoType,
 				   UndoLocation targetUndoLocation,
 				   UndoLocation minProcReservedLocation,
@@ -1731,7 +1731,7 @@ evict_undo_to_disk(UndoLogType undoType,
 	UndoLocation retainUndoLocation,
 				writtenLocation,
 				tmpLocation;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 	Pointer		circularBuffer = o_undo_buffers[(int) undoType];
 	Size		circularBufferSize = o_undo_circular_sizes[(int) undoType];
 
@@ -1749,7 +1749,7 @@ evict_undo_to_disk(UndoLogType undoType,
 
 	update_min_undo_locations(undoType, true, false);
 
-	(void) check_reserved_undo_location(undoType, minProcReservedLocation,
+	() check_reserved_undo_location(undoType, minProcReservedLocation,
 										&tmpLocation, true);
 
 	retainUndoLocation = pg_atomic_read_u64(enable_rewind ? &meta->minRewindRetainLocation : &meta->minProcRetainLocation);
@@ -1799,7 +1799,7 @@ evict_undo_to_disk(UndoLogType undoType,
 // whose dirty bit is set is written to o_buffers dirty as usual.  A page
 // whose bit is already clear was pushed straight to disk by a
 // checkpoint-time flush (flush_dirty_undo_range), so its on-disk copy is
-// current; we still write it into the o_buffers cache as *clean* rather
+// current; we still write it into the o_buffers cache clean: &mut as* rather
 // than skipping it, so that a stale partial copy an earlier eviction may
 // have left resident is refreshed to the ring's current bytes before
 // writtenLocation advances past it (otherwise a later read could return
@@ -1859,9 +1859,9 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 {
 	UndoLocation location;
 	uint64		minProcReservedLocation;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 	Size		circularBufferSize = o_undo_circular_sizes[(int) undoType];
-	ODBProcData *curProcData PG_USED_FOR_ASSERTS_ONLY = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData PG_USED_FOR_ASSERTS_ONLY = GET_CUR_PROCDATA();
 
 	Assert(!waitForUndoLocation || !have_locked_pages());
 	Assert(undoType != UndoLogNone);
@@ -1975,7 +1975,7 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 // "Owns" undo size reserved by another process.  That process is intended to
 // call giveup_reserved_undo_size().
 //
-void
+
 steal_reserved_undo_size(UndoLogType undoType, Size size)
 {
 	Assert(undoType != UndoLogNone);
@@ -1987,10 +1987,10 @@ steal_reserved_undo_size(UndoLogType undoType, Size size)
 // "Forgets" reserved by this process, because another process calls
 // steal_reserved_undo_size().
 //
-void
+
 giveup_reserved_undo_size(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 
 	Assert(undoType != UndoLogNone);
 
@@ -1999,16 +1999,16 @@ giveup_reserved_undo_size(UndoLogType undoType)
 						InvalidUndoLocation);
 }
 
-void
+
 fsync_undo_range(UndoLogType undoType,
 				 UndoLocation fromLoc, UndoLocation toLoc,
 				 uint32 wait_event_info)
 {
 	UndoLocation minProcReservedLocation;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 	UndoLocation writtenLocation;
 
-	(void) check_reserved_undo_location(undoType,
+	() check_reserved_undo_location(undoType,
 										toLoc + o_undo_circular_sizes[(int) undoType],
 										&minProcReservedLocation,
 										true);
@@ -2035,9 +2035,9 @@ fsync_undo_range(UndoLogType undoType,
 }
 
 Pointer
-get_undo_record(UndoLogType undoType, UndoLocation *undoLocation, Size size)
+get_undo_record(UndoLogType undoType, undoLocation: &mut UndoLocation, Size size)
 {
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 	Size		circularBufferSize = o_undo_circular_sizes[(int) undoType];
 
 	Assert(size == MAXALIGN(size) && size <= O_MAX_UNDO_RECORD_SIZE);
@@ -2086,7 +2086,7 @@ get_undo_record(UndoLogType undoType, UndoLocation *undoLocation, Size size)
 }
 
 Pointer
-get_undo_record_unreserved(UndoLogType type, UndoLocation *undoLocation, Size size)
+get_undo_record_unreserved(UndoLogType type, undoLocation: &mut UndoLocation, Size size)
 {
 	Assert(size == MAXALIGN(size));
 	Assert(reserved_undo_sizes[(int) type] == 0);
@@ -2095,11 +2095,11 @@ get_undo_record_unreserved(UndoLogType type, UndoLocation *undoLocation, Size si
 	return get_undo_record(type, undoLocation, size);
 }
 
-void
+
 release_undo_size(UndoLogType undoType)
 {
-	ODBProcData *curProcData PG_USED_FOR_ASSERTS_ONLY = GET_CUR_PROCDATA();
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	curProcData: &mut ODBProcData PG_USED_FOR_ASSERTS_ONLY = GET_CUR_PROCDATA();
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 	Assert(undoType != UndoLogNone);
 	Assert(pg_atomic_read_u64(&curProcData->undoRetainLocations[(int) undoType].reservedUndoLocation) == InvalidUndoLocation);
@@ -2119,28 +2119,28 @@ get_reserved_undo_size(UndoLogType undoType)
 	return reserved_undo_sizes[(int) undoType];
 }
 
-void
+
 release_reserved_undo_location(UndoLogType undoType)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 
 	pg_atomic_write_u64(&curProcData->undoRetainLocations[(int) undoType].reservedUndoLocation,
 						InvalidUndoLocation);
 }
 
-void
+
 add_new_undo_stack_item(UndoLogType undoType, UndoLocation location)
 {
-	UndoStackItem *item = (UndoStackItem *) GET_UNDO_REC(undoType, location);
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
-	UndoItemTypeDescr *descr = item_type_get_descr(item->type);
+	item: &mut UndoStackItem = (UndoStackItem *) GET_UNDO_REC(undoType, location);
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	descr: &mut UndoItemTypeDescr = item_type_get_descr(item->type);
 
 	item->prev = pg_atomic_read_u64(&sharedLocations->location);
 	pg_atomic_write_u64(&sharedLocations->location, location);
 
 	if (descr->callOnCommit)
 	{
-		OnCommitUndoStackItem *fItem = (OnCommitUndoStackItem *) item;
+		fItem: &mut OnCommitUndoStackItem = (OnCommitUndoStackItem *) item;
 
 		fItem->onCommitLocation = pg_atomic_read_u64(&sharedLocations->onCommitLocation);
 		pg_atomic_write_u64(&sharedLocations->onCommitLocation, location);
@@ -2169,15 +2169,15 @@ add_new_undo_stack_item(UndoLogType undoType, UndoLocation location)
 // wasn't set yet, so that the undo data is retained until the target
 // process's transaction completes.
 //
-void
+
 add_new_undo_stack_item_to_process(UndoLogType undoType,
 								   UndoLocation location,
 								   int pgprocno,
 								   int autonomousNestingLevel)
 {
-	UndoStackItem *item = (UndoStackItem *) GET_UNDO_REC(undoType, location);
-	UndoStackSharedLocations *sharedLocations;
-	UndoItemTypeDescr *descr PG_USED_FOR_ASSERTS_ONLY = item_type_get_descr(item->type);
+	item: &mut UndoStackItem = (UndoStackItem *) GET_UNDO_REC(undoType, location);
+	sharedLocations: &mut UndoStackSharedLocations;
+	descr: &mut UndoItemTypeDescr PG_USED_FOR_ASSERTS_ONLY = item_type_get_descr(item->type);
 
 	Assert(!descr->callOnCommit);
 
@@ -2197,7 +2197,7 @@ get_subxact_undo_location(UndoLogType undoType)
 {
 	if (undoType != UndoLogNone)
 	{
-		UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+		sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
 
 		return pg_atomic_read_u64(&sharedLocations->subxactLocation);
 	}
@@ -2207,8 +2207,8 @@ get_subxact_undo_location(UndoLogType undoType)
 	}
 }
 
-void
-read_shared_undo_locations(UndoStackLocations *to, UndoStackSharedLocations *from)
+
+read_shared_undo_locations(to: &mut UndoStackLocations, from: &mut UndoStackSharedLocations)
 {
 	ASAN_UNPOISON_MEMORY_REGION(to, sizeof(*to));
 	to->location = pg_atomic_read_u64(&from->location);
@@ -2217,8 +2217,8 @@ read_shared_undo_locations(UndoStackLocations *to, UndoStackSharedLocations *fro
 	to->onCommitLocation = pg_atomic_read_u64(&from->onCommitLocation);
 }
 
-static void
-write_shared_undo_locations(UndoStackSharedLocations *to, UndoStackLocations *from)
+fn
+write_shared_undo_locations(to: &mut UndoStackSharedLocations, from: &mut UndoStackLocations)
 {
 	ASAN_UNPOISON_MEMORY_REGION(from, sizeof(*from));
 	pg_atomic_write_u64(&to->location, from->location);
@@ -2227,24 +2227,24 @@ write_shared_undo_locations(UndoStackSharedLocations *to, UndoStackLocations *fr
 	pg_atomic_write_u64(&to->onCommitLocation, from->onCommitLocation);
 }
 
-void
-get_cur_undo_locations(UndoStackLocations *locations, UndoLogType undoType)
+
+get_cur_undo_locations(locations: &mut UndoStackLocations, UndoLogType undoType)
 {
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
 
 	read_shared_undo_locations(locations, sharedLocations);
 }
 
-void
+
 set_cur_undo_locations(UndoLogType undoType, UndoStackLocations locations)
 {
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
 
 	write_shared_undo_locations(sharedLocations, &locations);
 }
 
-void
-reset_cur_undo_locations(void)
+
+reset_cur_undo_locations()
 {
 	UndoStackLocations location = {InvalidUndoLocation, InvalidUndoLocation, InvalidUndoLocation, InvalidUndoLocation};
 	int			i;
@@ -2256,11 +2256,11 @@ reset_cur_undo_locations(void)
 #define RetainUndoLocationPHNodeGetSnapshot(location, undoType) \
 	(Snapshot) ((Pointer) (location) - offsetof(SnapshotData, undoRegularRowLocationPhNode) - sizeof(RetainUndoLocationPHNode) * (int) (undoType))
 
-void
-orioledb_reset_xmin_hook(void)
+
+orioledb_reset_xmin_hook()
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
-	RetainUndoLocationPHNode *location;
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
+	location: &mut RetainUndoLocationPHNode;
 	OXid		xmin = InvalidOXid;
 	int			i;
 
@@ -2293,10 +2293,10 @@ orioledb_reset_xmin_hook(void)
 		pg_atomic_write_u64(&curProcData->xmin, xmin);
 }
 
-static void
-rewind_handle_pending_deletes(void)
+fn
+rewind_handle_pending_deletes()
 {
-	RelFileNode *onCommitRels,
+	onCommitRels: &mut RelFileNode,
 			   *onAbortRels;
 	int			nOnCommitRels,
 				nOnAbortRels;
@@ -2317,17 +2317,17 @@ rewind_handle_pending_deletes(void)
 	PostPrepare_smgr();
 }
 
-void
-undo_xact_callback(XactEvent event, void *arg)
+
+undo_xact_callback(XactEvent event,  *arg)
 {
 	OXid		oxid = get_current_oxid_if_any();
 	CommitSeqNo csn;
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 	bool		isParallelWorker;
 	int			i;
 	TransactionId xid1 = InvalidTransactionId;
 	int			nsubxids = 0;
-	TransactionId *subxids = NULL;
+	subxids: &mut TransactionId = NULL;
 	TransactionId heapXid;
 	XLogRecPtr	flushPos;
 	LogicalXidCtx logicalXidContext;
@@ -2632,7 +2632,7 @@ undo_xact_callback(XactEvent event, void *arg)
 
 		for (i = 0; i < OPagePoolTypesCount; i++)
 		{
-			PagePool   *pool = get_ppool((OPagePoolType) i);
+			pool: &mut PagePool = get_ppool((OPagePoolType) i);
 
 			ppool_release_reserved(pool, PPOOL_RESERVE_MASK_ALL);
 		}
@@ -2645,11 +2645,11 @@ undo_xact_callback(XactEvent event, void *arg)
 		parallel_worker_set_oxid();
 }
 
-void
+
 add_subxact_undo_item(SubTransactionId parentSubid)
 {
-	SubXactUndoStackItem *item;
-	UndoStackSharedLocations *sharedLocations;
+	item: &mut SubXactUndoStackItem;
+	sharedLocations: &mut UndoStackSharedLocations;
 	UndoLocation location;
 	Size		size;
 	int			i;
@@ -2681,10 +2681,10 @@ add_subxact_undo_item(SubTransactionId parentSubid)
 static bool
 search_for_undo_sub_location(UndoLogType undoType,
 							 UndoStackKind kind, UndoLocation location,
-							 UndoItemBuf *buf, SubTransactionId parentSubid,
-							 UndoLocation *toLoc, UndoLocation *toSubLoc)
+							 buf: &mut UndoItemBuf, SubTransactionId parentSubid,
+							 toLoc: &mut UndoLocation, toSubLoc: &mut UndoLocation)
 {
-	SubXactUndoStackItem *item;
+	item: &mut SubXactUndoStackItem;
 
 	Assert(undoType != UndoLogRegularPageLevel);
 
@@ -2741,11 +2741,11 @@ search_for_undo_sub_location(UndoLogType undoType,
 	}
 }
 
-static void
+fn
 update_subxact_undo_location(UndoLogType undoType, UndoLocation subxactLocation)
 {
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
-	UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
+	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
 
 	LWLockAcquire(&curProcData->undoStackLocationsFlushLock, LW_EXCLUSIVE);
 
@@ -2754,13 +2754,13 @@ update_subxact_undo_location(UndoLogType undoType, UndoLocation subxactLocation)
 	LWLockRelease(&curProcData->undoStackLocationsFlushLock);
 }
 
-void
+
 rollback_to_savepoint(UndoLogType undoType, UndoStackKind kind,
 					  SubTransactionId parentSubid, bool changeCountsValid)
 {
 	UndoStackLocations toLoc;
 	UndoLocation location;
-	UndoStackSharedLocations *sharedLocations;
+	sharedLocations: &mut UndoStackSharedLocations;
 	UndoItemBuf buf;
 	OXid		oxid;
 	bool		applyResult;
@@ -2793,12 +2793,12 @@ rollback_to_savepoint(UndoLogType undoType, UndoStackKind kind,
 	update_subxact_undo_location(undoType, toLoc.subxactLocation);
 }
 
-static void
+fn
 update_subxact_undo_location_on_commit(SubTransactionId parentSubid)
 {
 	UndoStackLocations toLoc;
 	UndoLocation location;
-	UndoStackSharedLocations *sharedLocations;
+	sharedLocations: &mut UndoStackSharedLocations;
 	UndoItemBuf buf;
 	int			i;
 
@@ -2820,9 +2820,9 @@ update_subxact_undo_location_on_commit(SubTransactionId parentSubid)
 	}
 }
 
-void
+
 undo_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
-					  SubTransactionId parentSubid, void *arg)
+					  SubTransactionId parentSubid,  *arg)
 {
 	TransactionId prentLogicalXid;
 	int			i;
@@ -2840,7 +2840,7 @@ undo_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 
 			if (have_retained_undo_location())
 			{
-				(void) get_current_oxid();
+				() get_current_oxid();
 				add_subxact_undo_item(parentSubid);
 				prentLogicalXid = GetTopTransactionId();
 				assign_subtransaction_logical_xid();
@@ -2862,7 +2862,7 @@ undo_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 
 			if (have_retained_undo_location())
 			{
-				(void) get_current_oxid();
+				() get_current_oxid();
 				for (i = 0; i < (int) UndoLogsCount; i++)
 					rollback_to_savepoint((UndoLogType) i, UndoStackFull,
 										  parentSubid, true);
@@ -2937,8 +2937,8 @@ orioledb_has_retained_undo(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(result);
 }
 
-void
-start_autonomous_transaction(OAutonomousTxState *state)
+
+start_autonomous_transaction(state: &mut OAutonomousTxState)
 {
 	int			i;
 
@@ -2961,8 +2961,8 @@ start_autonomous_transaction(OAutonomousTxState *state)
 	GET_CUR_PROCDATA()->autonomousNestingLevel++;
 }
 
-void
-abort_autonomous_transaction(OAutonomousTxState *state)
+
+abort_autonomous_transaction(state: &mut OAutonomousTxState)
 {
 	OXid		oxid = get_current_oxid_if_any();
 
@@ -2993,8 +2993,8 @@ abort_autonomous_transaction(OAutonomousTxState *state)
 	set_local_wal_has_material_changes(state->local_wal_has_material_changes);
 }
 
-void
-finish_autonomous_transaction(OAutonomousTxState *state)
+
+finish_autonomous_transaction(state: &mut OAutonomousTxState)
 {
 	OXid		oxid = get_current_oxid_if_any();
 
@@ -3042,11 +3042,11 @@ finish_autonomous_transaction(OAutonomousTxState *state)
 	set_local_wal_has_material_changes(state->local_wal_has_material_changes);
 }
 
-void
+
 undo_read(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 {
 	UndoLocation writtenLocation;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 	writtenLocation = pg_atomic_read_u64(&meta->writtenLocation);
 
@@ -3084,7 +3084,7 @@ bool
 undo_read_if_exists(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 {
 	UndoLocation writtenLocation;
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 	if (!UNDO_REC_EXISTS(undoType, location))
 		return false;
@@ -3133,7 +3133,7 @@ undo_read_if_exists(UndoLogType undoType, UndoLocation location, Size size, Poin
 //
 // Write buffer to the given undo location.
 //
-void
+
 undo_write(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 {
 	undo_write_internal(undoType, location, size, buf, true);
@@ -3156,9 +3156,9 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 {
 	UndoLocation writeInProgressLocation,
 				memoryUndoLocation;
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
-	UndoRetainSharedLocations *sharedLocations = &curProcData->undoRetainLocations[(int) undoType];
-	UndoMeta   *meta = get_undo_meta_by_type(undoType);
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
+	sharedLocations: &mut UndoRetainSharedLocations = &curProcData->undoRetainLocations[(int) undoType];
+	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 #ifdef USE_ASSERT_CHECKING
 	if (must_exist)
@@ -3254,10 +3254,10 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 // top.
 //
 static int
-undoLocCmp(const pairingheap_node *a, const pairingheap_node *b, void *arg)
+undoLocCmp(const a: &mut pairingheap_node, const b: &mut pairingheap_node,  *arg)
 {
-	const RetainUndoLocationPHNode *aloc = pairingheap_const_container(RetainUndoLocationPHNode, ph_node, a);
-	const RetainUndoLocationPHNode *bloc = pairingheap_const_container(RetainUndoLocationPHNode, ph_node, b);
+	const aloc: &mut RetainUndoLocationPHNode = pairingheap_const_container(RetainUndoLocationPHNode, ph_node, a);
+	const bloc: &mut RetainUndoLocationPHNode = pairingheap_const_container(RetainUndoLocationPHNode, ph_node, b);
 
 	if (aloc->undoLocation < bloc->undoLocation)
 		return 1;
@@ -3267,7 +3267,7 @@ undoLocCmp(const pairingheap_node *a, const pairingheap_node *b, void *arg)
 		return 0;
 }
 
-void
+
 undo_snapshot_register_hook(Snapshot snapshot)
 {
 	pairingheap_add(&retainUndoLocHeaps[UndoLogRegular], &snapshot->undoRegularRowLocationPhNode.ph_node);
@@ -3275,7 +3275,7 @@ undo_snapshot_register_hook(Snapshot snapshot)
 	pairingheap_add(&retainUndoLocHeaps[UndoLogSystem], &snapshot->undoSystemLocationPhNode.ph_node);
 }
 
-void
+
 undo_snapshot_deregister_hook(Snapshot snapshot)
 {
 	//
@@ -3294,14 +3294,14 @@ undo_snapshot_deregister_hook(Snapshot snapshot)
 		pairingheap_remove(&retainUndoLocHeaps[UndoLogSystem], &snapshot->undoSystemLocationPhNode.ph_node);
 }
 
-void
+
 orioledb_snapshot_hook(Snapshot snapshot)
 {
 	UndoLocation lastUsedLocation,
 				lastUsedUndoLocationWhenUpdatedMinLocation;
 	OXid		curXmin,
 				xmin;
-	ODBProcData *curProcData = GET_CUR_PROCDATA();
+	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
 	int			i;
 
 	//
@@ -3318,7 +3318,7 @@ orioledb_snapshot_hook(Snapshot snapshot)
 	for (i = 0; i < (int) UndoLogsCount; i++)
 	{
 		UndoLogType undoType = (UndoLogType) i;
-		UndoMeta   *meta = get_undo_meta_by_type(undoType);
+		meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 		lastUsedLocation = pg_atomic_read_u64(&meta->lastUsedLocation);
 		lastUsedUndoLocationWhenUpdatedMinLocation = pg_atomic_read_u64(&meta->lastUsedUndoLocationWhenUpdatedMinLocation);
@@ -3345,17 +3345,17 @@ orioledb_snapshot_hook(Snapshot snapshot)
 	snapshot->csnSnapshotData.xmin = xmin;
 }
 
-static void
+fn
 o_stub_item_callback(UndoLogType undoType, UndoLocation location,
-					 UndoStackItem *baseItem, OXid oxid,
+					 baseItem: &mut UndoStackItem, OXid oxid,
 					 OUndoCallbackStage stage, bool changeCountsValid)
 {
 	Assert(stage == OUndoCallbackStageAbort);
 	return;
 }
 
-static void
-reset_command_undo_locations(void)
+fn
+reset_command_undo_locations()
 {
 	commandIndex = -1;
 	if (commandInfos != commandInfosStatic)
@@ -3401,7 +3401,7 @@ undo_location_get_command(UndoLocation location)
 }
 
 UndoLocation
-current_command_get_undo_location(void)
+current_command_get_undo_location()
 {
 	CommandId	cid = o_get_current_command();
 
@@ -3409,7 +3409,7 @@ current_command_get_undo_location(void)
 	{
 		UndoLocation loc;
 
-		(void) get_undo_record(UndoLogRegular, &loc, MAXIMUM_ALIGNOF);
+		() get_undo_record(UndoLogRegular, &loc, MAXIMUM_ALIGNOF);
 		release_reserved_undo_location(UndoLogRegular);
 		update_command_undo_location(cid, loc);
 	}
@@ -3418,7 +3418,7 @@ current_command_get_undo_location(void)
 	return commandInfos[commandIndex].undoLocation;
 }
 
-void
+
 update_command_undo_location(CommandId commandId, UndoLocation undoLocation)
 {
 	if (commandIndex < 0 || commandInfos[commandIndex].cid != commandId)
@@ -3445,26 +3445,26 @@ update_command_undo_location(CommandId commandId, UndoLocation undoLocation)
 	}
 }
 
-void
+
 o_set_current_command(CommandId commandId)
 {
 	currentCommandId = commandId;
 }
 
 CommandId
-o_get_current_command(void)
+o_get_current_command()
 {
 	return currentCommandId;
 }
 
-static void
+fn
 o_rewind_relfilenode_item_callback(UndoLogType undoType,
 								   UndoLocation location,
-								   UndoStackItem *baseItem,
+								   baseItem: &mut UndoStackItem,
 								   OXid oxid, OUndoCallbackStage stage,
 								   bool changeCountsValid)
 {
-	RewindRelFileNodeUndoStackItem *item = (RewindRelFileNodeUndoStackItem *) baseItem;
+	item: &mut RewindRelFileNodeUndoStackItem = (RewindRelFileNodeUndoStackItem *) baseItem;
 
 	if (stage == OUndoCallbackStagePreCommit)
 		return;
@@ -3478,13 +3478,13 @@ o_rewind_relfilenode_item_callback(UndoLogType undoType,
 		DropRelationFiles(&item->rels[item->nCommitRels], item->nAbortRels, false);
 }
 
-static void
-o_add_rewind_relfilenode_undo_item(RelFileNode *onCommit, RelFileNode *onAbort,
+fn
+o_add_rewind_relfilenode_undo_item(onCommit: &mut RelFileNode, onAbort: &mut RelFileNode,
 								   int nOnCommit, int nOnAbort)
 {
 	LocationIndex size;
 	UndoLocation location;
-	RewindRelFileNodeUndoStackItem *item;
+	item: &mut RewindRelFileNodeUndoStackItem;
 	int			stepItemsCapacity = (O_MAX_UNDO_RECORD_SIZE - offsetof(RewindRelFileNodeUndoStackItem, rels)) / sizeof(RelFileNode);
 
 	Assert(nOnCommit >= 0 && nOnAbort >= 0);
@@ -3528,9 +3528,9 @@ o_add_rewind_relfilenode_undo_item(RelFileNode *onCommit, RelFileNode *onAbort,
 Datum
 orioledb_undo_size(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	struct dirent *direntry;
-	DIR		   *dirdesc;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	struct direntry: &mut dirent;
+	dirdesc: &mut DIR;
 	char		filename[MAXPGPATH * 2];
 	const char	path[15] = "orioledb_undo";
 	int64		totalsize[UndoLogsCount];
@@ -3610,8 +3610,8 @@ orioledb_get_undo_meta(PG_FUNCTION_ARGS)
 	Datum		values[UNDO_META_NATTS];
 	bool		nulls[UNDO_META_NATTS];
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	tupstore: &mut Tuplestorestate;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 	int			i;
@@ -3633,7 +3633,7 @@ orioledb_get_undo_meta(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 	{
-		UndoMeta   *meta = get_undo_meta_by_type((UndoLogType) i);
+		meta: &mut UndoMeta = get_undo_meta_by_type((UndoLogType) i);
 
 		update_min_undo_locations((UndoLogType) i, false, true);
 
@@ -3667,8 +3667,8 @@ orioledb_get_proc_retain_undo_locations(PG_FUNCTION_ARGS)
 	Datum		values[PROC_RETAIN_NATTS];
 	bool		nulls[PROC_RETAIN_NATTS];
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	tupstore: &mut Tuplestorestate;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 	int			i,
@@ -3691,7 +3691,7 @@ orioledb_get_proc_retain_undo_locations(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < max_procs; i++)
 	{
-		PGPROC	   *proc = GetPGProcByNumber(i);
+		proc: &mut PGPROC = GetPGProcByNumber(i);
 
 		for (j = 0; j < (int) UndoLogsCount; j++)
 		{

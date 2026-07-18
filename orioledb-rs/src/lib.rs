@@ -65,7 +65,6 @@ use crate::utils::ucm;
 use crate::workers::bgwriter;
 use pgrx::pg_sys;
 
-
 // Main file: setup shared memory, hooks and other general-purpose
 // routines.
 //
@@ -85,9 +84,9 @@ static Size catalog_buffers_count;
 static Size main_buffers_offset;
 
 Pointer		o_shared_buffers = NULL;
-OrioleDBPageDesc *page_descs = NULL;
-Page	   *local_ppool_pages = NULL;
-OrioleDBPageDesc *local_ppool_page_descs = NULL;
+page_descs: &mut OrioleDBPageDesc = NULL;
+local_ppool_pages: &mut Page = NULL;
+local_ppool_page_descs: &mut OrioleDBPageDesc = NULL;
 
 // Custom GUC variables
 int			orioledb_serializable_mode = O_SERIALIZABLE_TABLE_LOCK;
@@ -124,7 +123,7 @@ bool		debug_disable_bgwriter = false;
 bool		use_mmap = false;
 bool		use_device = false;
 bool		orioledb_use_sparse_files = false;
-char	   *device_filename = NULL;
+device_filename: &mut char = NULL;
 Pointer		mmap_data = NULL;
 int			device_fd;
 int			device_length_guc = 0;
@@ -132,31 +131,31 @@ Size		device_length = 0;
 double		o_checkpoint_completion_ratio;
 int			bgwriter_num_workers = 1;
 int			max_io_concurrency = 0;
-ODBProcData *oProcData;
+oProcData: &mut ODBProcData;
 int			default_compress = InvalidOCompress;
 int			default_primary_compress = InvalidOCompress;
 int			default_toast_compress = InvalidOCompress;
 bool		orioledb_table_description_compress = false;
-char	   *max_bridge_ctid_string = NULL;
+max_bridge_ctid_string: &mut char = NULL;
 BlockNumber max_bridge_ctid_blkno = 0;
 bool		orioledb_s3_mode = false;
 int			s3_num_workers = 3;
 int			s3_desired_size = 10000;
 int			s3_queue_size_guc;
-char	   *s3_host = NULL;
+s3_host: &mut char = NULL;
 bool		s3_use_https = true;
-char	   *s3_region = NULL;
-char	   *s3_prefix = NULL;
-char	   *s3_accesskey = NULL;
-char	   *s3_secretkey = NULL;
-char	   *s3_cainfo = NULL;
+s3_region: &mut char = NULL;
+s3_prefix: &mut char = NULL;
+s3_accesskey: &mut char = NULL;
+s3_secretkey: &mut char = NULL;
+s3_cainfo: &mut char = NULL;
 bool		enable_rewind = false;
 int			rewind_max_time = 0;
 int			rewind_max_transactions = 0;
 int			logical_xid_buffers_guc = 64;
 bool		orioledb_strict_mode = false;
 XLogRecPtr	replay_until_lsn = InvalidXLogRecPtr;
-static char *replay_until_lsn_string;
+static replay_until_lsn_string: &mut char;
 
 // For page eviction/read checkpoint test only
 uint32		min_read_page_checkpoint = UINT32_MAX;
@@ -164,7 +163,7 @@ uint32		max_read_page_checkpoint = 0;
 
 // Previous values of hooks to chain call them
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
-static void (*prev_shmem_request_hook) (void) = NULL;
+fn (*prev_shmem_request_hook) () = NULL;
 static base_init_startup_hook_type prev_base_init_startup_hook = NULL;
 static get_relation_info_hook_type prev_get_relation_info_hook = NULL;
 database_size_hook_type prev_database_size_hook = NULL;
@@ -175,7 +174,7 @@ static skip_tree_height_hook_type prev_skip_tree_height_hook = NULL;
 #endif
 
 CheckPoint_hook_type next_CheckPoint_hook = NULL;
-static bool o_newlocale_from_collation(void);
+static bool o_newlocale_from_collation();
 
 //
 // Temporary memory context for BTree operations. Helps us to avoid
@@ -194,16 +193,16 @@ LocalPagePool local_ppool;
 
 static size_t page_pools_size[OPagePoolTypesCount];
 
-static void o_base_init_startup_hook(void);
-static Size o_proc_shmem_needs(void);
-static void o_proc_shmem_init(Pointer ptr, bool found);
-static Size ppools_shmem_needs(void);
-static void ppools_shmem_init(Pointer ptr, bool found);
+fn o_base_init_startup_hook();
+static Size o_proc_shmem_needs();
+fn o_proc_shmem_init(Pointer ptr, bool found);
+static Size ppools_shmem_needs();
+fn ppools_shmem_init(Pointer ptr, bool found);
 
 typedef struct
 {
-	Size		(*shmem_size) (void);
-	void		(*shmem_init) (Pointer ptr, bool found);
+	Size		(*shmem_size) ();
+			(*shmem_init) (Pointer ptr, bool found);
 } ShmemItem;
 
 //
@@ -228,24 +227,24 @@ static ShmemItem shmemItems[] = {
 	{rewind_shmem_needs, rewind_init_shmem}
 };
 
-static Size orioledb_memsize(void);
-static void orioledb_shmem_request(void);
-static void orioledb_shmem_startup(void);
-static void orioledb_AcceptInvalidationMessagesHook(void);
-static void orioledb_usercache_hook(Datum arg, Oid arg1, Oid arg2, Oid arg3);
-static void orioledb_error_cleanup_hook(void);
-static void orioledb_get_relation_info_hook(PlannerInfo *root,
+static Size orioledb_memsize();
+fn orioledb_shmem_request();
+fn orioledb_shmem_startup();
+fn orioledb_AcceptInvalidationMessagesHook();
+fn orioledb_usercache_hook(Datum arg, Oid arg1, Oid arg2, Oid arg3);
+fn orioledb_error_cleanup_hook();
+fn orioledb_get_relation_info_hook(root: &mut PlannerInfo,
 											Oid relationObjectId,
 											bool inhparent,
-											RelOptInfo *rel);
+											rel: &mut RelOptInfo);
 #if PG_VERSION_NUM < 180000
 static bool orioledb_skip_tree_height_hook(Relation indexRelation);
 #endif
-static void orioledb_get_running_transactions_extension(RunningTransactionsExtension *extension);
-static void orioledb_wait_snapshot(RunningTransactionsExtension *extension);
+fn orioledb_get_running_transactions_extension(extension: &mut RunningTransactionsExtension);
+fn orioledb_wait_snapshot(extension: &mut RunningTransactionsExtension);
 
-static bool check_debug_max_bridge_ctid(char **newval, void **extra, GucSource source);
-static void assign_debug_max_bridge_ctid(const char *newval, void *extra);
+static bool check_debug_max_bridge_ctid(char **newval,  **extra, GucSource source);
+fn assign_debug_max_bridge_ctid(const newval: &mut char,  *extra);
 
 PG_FUNCTION_INFO_V1(orioledb_page_stats);
 PG_FUNCTION_INFO_V1(orioledb_print_pool_pages);
@@ -263,7 +262,7 @@ typedef struct WalDescCtx
 } WalDescCtx;
 
 static WalParseResult
-wal_desc_check_version(const WalReaderState *r)
+wal_desc_check_version(const r: &mut WalReaderState)
 {
 	Assert(r);
 
@@ -277,9 +276,9 @@ wal_desc_check_version(const WalReaderState *r)
 }
 
 static WalParseResult
-wal_desc_on_record(WalReaderState *r, WalRecord *rec)
+wal_desc_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 {
-	WalDescCtx *ctx = (WalDescCtx *) r->ctx;
+	ctx: &mut WalDescCtx = (WalDescCtx *) r->ctx;
 
 	Assert(ctx);
 	Assert(rec);
@@ -336,8 +335,8 @@ wal_desc_on_record(WalReaderState *r, WalRecord *rec)
 }
 #endif
 
-static void
-orioledb_rm_desc(StringInfo buf, XLogReaderState *record)
+fn
+orioledb_rm_desc(StringInfo buf, record: &mut XLogReaderState)
 {
 #ifdef IS_DEV
 	Pointer		startPtr = (Pointer) XLogRecGetData(record);
@@ -371,14 +370,14 @@ orioledb_rm_identify(uint8 info)
 	return "OrioleDB WAL container";
 }
 
-static void
-o_recovery_shutdown_hook(void)
+fn
+o_recovery_shutdown_hook()
 {
 	o_recovery_finish_hook(false);
 }
 
-static void
-o_recovery_cleanup(void)
+fn
+o_recovery_cleanup()
 {
 	o_recovery_finish_hook(true);
 }
@@ -400,7 +399,7 @@ static RmgrData rmgr =
 // on certain systems. Refuse to enable rewind on those systems.
 //
 static bool
-orioledb_enable_rewind_check_hook(bool *newval, void **extra, GucSource source)
+orioledb_enable_rewind_check_hook(newval: &mut bool,  **extra, GucSource source)
 {
 #if defined(WIN32)
 	if (*newval)
@@ -425,12 +424,12 @@ orioledb_enable_rewind_check_hook(bool *newval, void **extra, GucSource source)
 // GUC check_hook for orioledb.replay_until_lsn
 //
 static bool
-orioledb_replay_until_lsn_check_hook(char **newval, void **extra, GucSource source)
+orioledb_replay_until_lsn_check_hook(char **newval,  **extra, GucSource source)
 {
 	if (strcmp(*newval, "") != 0)
 	{
 		XLogRecPtr	lsn;
-		XLogRecPtr *myextra;
+		myextra: &mut XLogRecPtr;
 		bool		have_error = false;
 
 		lsn = pg_lsn_in_internal(*newval, &have_error);
@@ -439,20 +438,20 @@ orioledb_replay_until_lsn_check_hook(char **newval, void **extra, GucSource sour
 
 		myextra = (XLogRecPtr *) guc_malloc(ERROR, sizeof(XLogRecPtr));
 		*myextra = lsn;
-		*extra = (void *) myextra;
+		*extra = ( *) myextra;
 	}
 	return true;
 }
 
-static void
-orioledb_replay_until_lsn_assign_hook(const char *newval, void *extra)
+fn
+orioledb_replay_until_lsn_assign_hook(const newval: &mut char,  *extra)
 {
 	if (newval && strcmp(newval, "") != 0)
 		replay_until_lsn = *((XLogRecPtr *) extra);
 }
 
-void
-_PG_init(void)
+
+_PG_init()
 {
 	Size		main_buffers_count;
 	int			i;
@@ -1218,8 +1217,8 @@ _PG_init(void)
 
 	if (orioledb_s3_mode)
 	{
-		const char *check_errmsg = NULL;
-		const char *check_errdetail = NULL;
+		const check_errmsg: &mut char = NULL;
+		const check_errdetail: &mut char = NULL;
 
 		s3_put_lock_file();
 		if (!s3_check_control(&check_errmsg, &check_errdetail))
@@ -1303,8 +1302,8 @@ _PG_init(void)
 	stopevents_make_cxt();
 }
 
-static void
-o_base_init_startup_hook(void)
+fn
+o_base_init_startup_hook()
 {
 	if (MyBackendType == B_STARTUP)
 	{
@@ -1324,12 +1323,12 @@ o_base_init_startup_hook(void)
 }
 
 static Size
-o_proc_shmem_needs(void)
+o_proc_shmem_needs()
 {
 	return mul_size(max_procs, sizeof(ODBProcData));
 }
 
-static void
+fn
 o_proc_shmem_init(Pointer ptr, bool found)
 {
 	oProcData = (ODBProcData *) ptr;
@@ -1372,7 +1371,7 @@ o_proc_shmem_init(Pointer ptr, bool found)
 }
 
 static Size
-ppools_shmem_needs(void)
+ppools_shmem_needs()
 {
 	Size		size = 0;
 	int			i;
@@ -1384,7 +1383,7 @@ ppools_shmem_needs(void)
 	return size;
 }
 
-static void
+fn
 ppools_shmem_init(Pointer ptr, bool found)
 {
 	int64		i;
@@ -1407,7 +1406,7 @@ ppools_shmem_init(Pointer ptr, bool found)
 		for (i = 0; i < orioledb_buffers_count; i++)
 		{
 			Page		p = O_GET_IN_MEMORY_PAGE(i);
-			OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+			header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
 
 			pg_atomic_init_u64(&(O_PAGE_HEADER(p)->state), O_PAGE_STATE_SET_USAGE_COUNT(PAGE_STATE_INVALID_PROCNO, UCM_FREE_PAGES_LEVEL));
 			header->pageChangeCount = 0;
@@ -1424,7 +1423,7 @@ ppools_shmem_init(Pointer ptr, bool found)
 // Estimate amount of shared memory required by OrioleDB extension.
 //
 static Size
-orioledb_memsize(void)
+orioledb_memsize()
 {
 	Size		size = 0;
 	int			i,
@@ -1436,7 +1435,7 @@ orioledb_memsize(void)
 	return size;
 }
 
-static void
+fn
 orioledb_on_shmem_exit(int code, Datum arg)
 {
 	if (MyProc)
@@ -1449,8 +1448,8 @@ orioledb_on_shmem_exit(int code, Datum arg)
 //
 // Request for shared memory and lwlocks
 //
-static void
-orioledb_shmem_request(void)
+fn
+orioledb_shmem_request()
 {
 	if (prev_shmem_request_hook)
 		prev_shmem_request_hook();
@@ -1464,8 +1463,8 @@ orioledb_shmem_request(void)
 // Initialize OrioleDB's shared memory.  Called on database instanse start
 // or restart.
 //
-static void
-orioledb_shmem_startup(void)
+fn
+orioledb_shmem_startup()
 {
 	Pointer		ptr;
 	bool		found;
@@ -1503,8 +1502,8 @@ orioledb_shmem_startup(void)
 	shared_segment_initialized = true;
 }
 
-void
-o_page_desc_init(OrioleDBPageDesc *desc)
+
+o_page_desc_init(desc: &mut OrioleDBPageDesc)
 {
 	desc->fileExtent.len = InvalidFileExtentLen;
 	desc->fileExtent.off = InvalidFileExtentOff;
@@ -1515,7 +1514,7 @@ o_page_desc_init(OrioleDBPageDesc *desc)
 }
 
 uint64
-orioledb_device_alloc(struct BTreeDescr *descr, uint32 size)
+orioledb_device_alloc(struct descr: &mut BTreeDescr, uint32 size)
 {
 	uint64		result;
 
@@ -1527,8 +1526,8 @@ orioledb_device_alloc(struct BTreeDescr *descr, uint32 size)
 	return result;
 }
 
-void
-orioledb_check_shmem(void)
+
+orioledb_check_shmem()
 {
 	if (!shared_segment_initialized)
 		ereport(ERROR,
@@ -1545,9 +1544,9 @@ orioledb_check_shmem(void)
 // -1 if trouble accessing directory (errno reflects the error)
 //
 static int
-o_check_dir(const char *dir)
+o_check_dir(const dir: &mut char)
 {
-	DIR		   *chkdir;
+	chkdir: &mut DIR;
 
 	chkdir = opendir(dir);
 	if (chkdir == NULL)
@@ -1563,10 +1562,10 @@ o_check_dir(const char *dir)
 // Verify that the given directory exists. If it does not exist, it is created.
 //
 // TODO: Add some kind of caching for calling mkdir
-void
-o_verify_dir_exists_or_create(char *dirname, bool *created, bool *found)
+
+o_verify_dir_exists_or_create(dirname: &mut char, created: &mut bool, found: &mut bool)
 {
-	const char *errstr;
+	const errstr: &mut char;
 
 	switch (o_check_dir(dirname))
 	{
@@ -1618,9 +1617,9 @@ orioledb_page_stats(PG_FUNCTION_ARGS)
 	Datum		values[5];
 	bool		nulls[5];
 	int			i;
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 
@@ -1676,9 +1675,9 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 				end_blkno;
 	Datum		values[7];
 	bool		nulls[7];
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
 	int32		ppool_arg = OPagePoolMain;
@@ -1735,8 +1734,8 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 
 	for (blkno = start_blkno; blkno < end_blkno; blkno++)
 	{
-		OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-		OrioleDBPageHeader *header = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
+		page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+		header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
 		uint64		state;
 
 		MemSet(nulls, 0, sizeof(nulls));
@@ -1752,7 +1751,7 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 
 			if (rel)
 			{
-				char	   *relname = RelationGetRelationName(rel);
+				relname: &mut char = RelationGetRelationName(rel);
 
 				values[1] = PointerGetDatum(cstring_to_text(relname));
 				relation_close(rel, AccessShareLock);
@@ -1823,8 +1822,8 @@ orioledb_ucm_check(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(result);
 }
 
-static void
-orioledb_AcceptInvalidationMessagesHook(void)
+fn
+orioledb_AcceptInvalidationMessagesHook()
 {
 	if (prev_AcceptInvalidationMessagesHook)
 		prev_AcceptInvalidationMessagesHook();
@@ -1832,13 +1831,13 @@ orioledb_AcceptInvalidationMessagesHook(void)
 	o_replay_saved_inval_messages();
 }
 
-static void
+fn
 orioledb_usercache_hook(Datum arg, Oid arg1, Oid arg2, Oid arg3)
 {
 	o_invalidate_descrs(arg1, arg2, arg3);
 }
 
-void
+
 o_invalidate_oids(ORelOids oids)
 {
 	SharedInvalidationMessage msg;
@@ -1907,7 +1906,7 @@ get_ppool_by_blkno(OInMemoryBlkno blkno)
 // Returns count of all dirty pages (sum of dirty pages for all page pools).
 //
 OInMemoryBlkno
-get_dirty_pages_count_sum(void)
+get_dirty_pages_count_sum()
 {
 	OInMemoryBlkno result = 0;
 	int			i;
@@ -1918,8 +1917,8 @@ get_dirty_pages_count_sum(void)
 	return result;
 }
 
-void
-jsonb_push_key(JsonbParseState **state, char *key)
+
+jsonb_push_key(JsonbParseState **state, key: &mut char)
 {
 	JsonbValue	jval;
 
@@ -1928,11 +1927,11 @@ jsonb_push_key(JsonbParseState **state, char *key)
 	jval.type = jbvString;
 	jval.val.string.len = strlen(key);
 	jval.val.string.val = key;
-	(void) pushJsonbValue(state, WJB_KEY, &jval);
+	() pushJsonbValue(state, WJB_KEY, &jval);
 }
 
-void
-jsonb_push_int8_key(JsonbParseState **state, char *key, int64 value)
+
+jsonb_push_int8_key(JsonbParseState **state, key: &mut char, int64 value)
 {
 	JsonbValue	jval;
 
@@ -1942,24 +1941,24 @@ jsonb_push_int8_key(JsonbParseState **state, char *key, int64 value)
 
 	jval.type = jbvNumeric;
 	jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(int8_numeric, Int64GetDatum(value)));
-	(void) pushJsonbValue(state, WJB_VALUE, &jval);
+	() pushJsonbValue(state, WJB_VALUE, &jval);
 
 }
 
-void
-jsonb_push_null_key(JsonbParseState **state, char *key)
+
+jsonb_push_null_key(JsonbParseState **state, key: &mut char)
 {
 	JsonbValue	jval;
 
 	jsonb_push_key(state, key);
 
 	jval.type = jbvNull;
-	(void) pushJsonbValue(state, WJB_VALUE, &jval);
+	() pushJsonbValue(state, WJB_VALUE, &jval);
 
 }
 
-void
-jsonb_push_bool_key(JsonbParseState **state, char *key, bool value)
+
+jsonb_push_bool_key(JsonbParseState **state, key: &mut char, bool value)
 {
 	JsonbValue	jval;
 
@@ -1969,13 +1968,13 @@ jsonb_push_bool_key(JsonbParseState **state, char *key, bool value)
 
 	jval.type = jbvBool;
 	jval.val.boolean = value;
-	(void) pushJsonbValue(state, WJB_VALUE, &jval);
+	() pushJsonbValue(state, WJB_VALUE, &jval);
 
 }
 
-void
-jsonb_push_string_key(JsonbParseState **state, const char *key,
-					  const char *value)
+
+jsonb_push_string_key(JsonbParseState **state, const key: &mut char,
+					  const value: &mut char)
 {
 	JsonbValue	jval;
 
@@ -1985,11 +1984,11 @@ jsonb_push_string_key(JsonbParseState **state, const char *key,
 	jval.type = jbvString;
 	jval.val.string.len = strlen(value);
 	jval.val.string.val = (char *) value;
-	(void) pushJsonbValue(state, WJB_VALUE, &jval);
+	() pushJsonbValue(state, WJB_VALUE, &jval);
 }
 
-static void
-orioledb_error_cleanup_hook(void)
+fn
+orioledb_error_cleanup_hook()
 {
 	int			i;
 
@@ -2012,11 +2011,11 @@ orioledb_error_cleanup_hook(void)
 	reset_saving_inval_messages();
 }
 
-static void
-orioledb_get_relation_info_hook(PlannerInfo *root,
+fn
+orioledb_get_relation_info_hook(root: &mut PlannerInfo,
 								Oid relationObjectId,
 								bool inhparent,
-								RelOptInfo *rel)
+								rel: &mut RelOptInfo)
 {
 	Relation	relation;
 
@@ -2031,9 +2030,9 @@ orioledb_get_relation_info_hook(PlannerInfo *root,
 
 		if (relation->rd_rel->relhasindex)
 		{
-			ListCell   *lc;
-			OTableDescr *descr = relation_get_descr(relation);
-			OIndexDescr *primary;
+			lc: &mut ListCell;
+			descr: &mut OTableDescr = relation_get_descr(relation);
+			primary: &mut OIndexDescr;
 
 			if (descr)
 			{
@@ -2041,14 +2040,14 @@ orioledb_get_relation_info_hook(PlannerInfo *root,
 
 				foreach(lc, rel->indexlist)
 				{
-					IndexOptInfo *info = lfirst_node(IndexOptInfo, lc);
+					info: &mut IndexOptInfo = lfirst_node(IndexOptInfo, lc);
 					bool		hasbitmap;
 					OIndexNumber ix_num;
-					OIndexDescr *index_descr = NULL;
+					index_descr: &mut OIndexDescr = NULL;
 					OInMemoryBlkno rootPageBlkno;
 					Page		root_page;
 					Relation	index;
-					OBTOptions *options;
+					options: &mut OBTOptions;
 
 					index = index_open(info->indexoid, AccessShareLock);
 
@@ -2126,8 +2125,8 @@ orioledb_skip_tree_height_hook(Relation indexRelation)
 }
 #endif
 
-static void
-orioledb_get_running_transactions_extension(RunningTransactionsExtension *extension)
+fn
+orioledb_get_running_transactions_extension(extension: &mut RunningTransactionsExtension)
 {
 	extension->csn = pg_atomic_read_u64(&TRANSAM_VARIABLES->nextCommitSeqNo);
 	extension->runXmin = pg_atomic_read_u64(&xid_meta->runXmin);
@@ -2137,8 +2136,8 @@ orioledb_get_running_transactions_extension(RunningTransactionsExtension *extens
 	extension->nextXid = pg_atomic_read_u64(&xid_meta->nextXid);
 }
 
-static void
-orioledb_wait_snapshot(RunningTransactionsExtension *extension)
+fn
+orioledb_wait_snapshot(extension: &mut RunningTransactionsExtension)
 {
 	OXid		oxid;
 
@@ -2181,13 +2180,13 @@ is_bump_memory_context(MemoryContext mcxt)
 }
 
 static bool
-check_debug_max_bridge_ctid(char **newval, void **extra, GucSource source)
+check_debug_max_bridge_ctid(char **newval,  **extra, GucSource source)
 {
 	if (strcmp(*newval, "") != 0)
 	{
-		BlockNumber *myextra;
+		myextra: &mut BlockNumber;
 		BlockNumber blockNumber;
-		char	   *badp;
+		badp: &mut char;
 		unsigned long cvt;
 
 		errno = 0;
@@ -2216,13 +2215,13 @@ check_debug_max_bridge_ctid(char **newval, void **extra, GucSource source)
 
 		myextra = (BlockNumber *) guc_malloc(ERROR, sizeof(BlockNumber));
 		*myextra = blockNumber;
-		*extra = (void *) myextra;
+		*extra = ( *) myextra;
 	}
 	return true;
 }
 
-static void
-assign_debug_max_bridge_ctid(const char *newval, void *extra)
+fn
+assign_debug_max_bridge_ctid(const newval: &mut char,  *extra)
 {
 	if (newval && strcmp(newval, "") != 0)
 		max_bridge_ctid_blkno = *((BlockNumber *) extra);

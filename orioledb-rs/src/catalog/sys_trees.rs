@@ -38,17 +38,17 @@ typedef struct
 typedef struct
 {
 	int			keyLength;
-	int			(*keyLengthFunc) (BTreeDescr *desc, OTuple tuple);
+	int			(*keyLengthFunc) (desc: &mut BTreeDescr, OTuple tuple);
 	OBTreeKeyCmp cmpFunc;
 	int			tupleLength;
-	int			(*tupleLengthFunc) (BTreeDescr *desc, OTuple tuple);
-	JsonbValue *(*keyToJsonb) (BTreeDescr *desc, OTuple key, JsonbParseState **state);
+	int			(*tupleLengthFunc) (desc: &mut BTreeDescr, OTuple tuple);
+	JsonbValue *(*keyToJsonb) (desc: &mut BTreeDescr, OTuple key, JsonbParseState **state);
 	PrintFunc	keyPrint;
 	PrintFunc	tupPrint;
 	OPagePoolType poolType;
 	UndoLogType undoLogType;
 	BTreeStorageType storageType;
-	bool		(*needs_undo) (BTreeDescr *desc, BTreeOperationType action,
+	bool		(*needs_undo) (desc: &mut BTreeDescr, BTreeOperationType action,
 							   OTuple oldTuple, OTupleXactInfo oldXactInfo, bool oldDeleted,
 							   OTuple newTuple, OXid newOxid);
 	Pointer		extra;
@@ -61,74 +61,74 @@ typedef struct
 	bool		initialized;
 } SysTreeDescr;
 
-static void sys_tree_init_if_needed(int i);
-static void sys_tree_init(int i, bool init_shmem);
-static int	sys_tree_len(BTreeDescr *desc, OTuple tuple, OLengthType type);
-static uint32 sys_tree_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind);
-static void check_tree_num_input(int num);
-static OTuple sys_tree_tuple_make_key(BTreeDescr *desc, OTuple tuple,
+fn sys_tree_init_if_needed(int i);
+fn sys_tree_init(int i, bool init_shmem);
+static int	sys_tree_len(desc: &mut BTreeDescr, OTuple tuple, OLengthType type);
+static uint32 sys_tree_hash(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType kind);
+fn check_tree_num_input(int num);
+static OTuple sys_tree_tuple_make_key(desc: &mut BTreeDescr, OTuple tuple,
 									  Pointer data, bool keep_version,
-									  bool *allocated);
-static int	shared_root_info_key_cmp(BTreeDescr *desc,
-									 void *p1, BTreeKeyType k1,
-									 void *p2, BTreeKeyType k2);
-static void idx_descr_key_print(BTreeDescr *desc, StringInfo buf,
+									  allocated: &mut bool);
+static int	shared_root_info_key_cmp(desc: &mut BTreeDescr,
+									  *p1, BTreeKeyType k1,
+									  *p2, BTreeKeyType k2);
+fn idx_descr_key_print(desc: &mut BTreeDescr, StringInfo buf,
 								OTuple tup, Pointer arg);
-static void idx_descr_tup_print(BTreeDescr *desc, StringInfo buf,
+fn idx_descr_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 								OTuple tup, Pointer arg);
-static JsonbValue *idx_descr_key_to_jsonb(BTreeDescr *desc, OTuple tup,
+static idx_descr_key_to_jsonb: &mut JsonbValue(desc: &mut BTreeDescr, OTuple tup,
 										  JsonbParseState **state);
-static int	o_table_chunk_cmp(BTreeDescr *desc,
-							  void *p1, BTreeKeyType k1,
-							  void *p2, BTreeKeyType k2);
-static void o_table_chunk_key_print(BTreeDescr *desc, StringInfo buf,
+static int	o_table_chunk_cmp(desc: &mut BTreeDescr,
+							   *p1, BTreeKeyType k1,
+							   *p2, BTreeKeyType k2);
+fn o_table_chunk_key_print(desc: &mut BTreeDescr, StringInfo buf,
 									OTuple tup, Pointer arg);
-static void o_table_chunk_tup_print(BTreeDescr *desc, StringInfo buf,
+fn o_table_chunk_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 									OTuple tup, Pointer arg);
-static int	o_table_chunk_length(BTreeDescr *desc, OTuple tuple);
-static JsonbValue *o_table_chunk_key_to_jsonb(BTreeDescr *desc, OTuple tup,
+static int	o_table_chunk_length(desc: &mut BTreeDescr, OTuple tuple);
+static o_table_chunk_key_to_jsonb: &mut JsonbValue(desc: &mut BTreeDescr, OTuple tup,
 											  JsonbParseState **state);
-static bool o_table_chunk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
+static bool o_table_chunk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 									 OTuple oldTuple, OTupleXactInfo oldXactInfo,
 									 bool oldDeleted, OTuple newTuple,
 									 OXid newOxid);
-static int	o_index_chunk_cmp(BTreeDescr *desc,
-							  void *p1, BTreeKeyType k1,
-							  void *p2, BTreeKeyType k2);
-static void o_index_chunk_key_print(BTreeDescr *desc, StringInfo buf,
+static int	o_index_chunk_cmp(desc: &mut BTreeDescr,
+							   *p1, BTreeKeyType k1,
+							   *p2, BTreeKeyType k2);
+fn o_index_chunk_key_print(desc: &mut BTreeDescr, StringInfo buf,
 									OTuple tup, Pointer arg);
-static void o_index_chunk_tup_print(BTreeDescr *desc, StringInfo buf,
+fn o_index_chunk_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 									OTuple tup, Pointer arg);
-static int	o_index_chunk_length(BTreeDescr *desc, OTuple tuple);
-static JsonbValue *o_index_chunk_key_to_jsonb(BTreeDescr *desc, OTuple tup,
+static int	o_index_chunk_length(desc: &mut BTreeDescr, OTuple tuple);
+static o_index_chunk_key_to_jsonb: &mut JsonbValue(desc: &mut BTreeDescr, OTuple tup,
 											  JsonbParseState **state);
-static bool o_index_chunk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
+static bool o_index_chunk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 									 OTuple oldTuple, OTupleXactInfo oldXactInfo,
 									 bool oldDeleted, OTuple newTuple,
 									 OXid newOxid);
 
-static int	free_tree_off_len_cmp(BTreeDescr *desc,
-								  void *p1, BTreeKeyType k1,
-								  void *p2, BTreeKeyType k2);
-static int	free_tree_len_off_cmp(BTreeDescr *desc,
-								  void *p1, BTreeKeyType k1,
-								  void *p2, BTreeKeyType k2);
-static void free_tree_print(BTreeDescr *desc, StringInfo buf,
+static int	free_tree_off_len_cmp(desc: &mut BTreeDescr,
+								   *p1, BTreeKeyType k1,
+								   *p2, BTreeKeyType k2);
+static int	free_tree_len_off_cmp(desc: &mut BTreeDescr,
+								   *p1, BTreeKeyType k1,
+								   *p2, BTreeKeyType k2);
+fn free_tree_print(desc: &mut BTreeDescr, StringInfo buf,
 							OTuple tup, Pointer arg);
-static JsonbValue *free_tree_key_to_jsonb(BTreeDescr *desc, OTuple tup,
+static free_tree_key_to_jsonb: &mut JsonbValue(desc: &mut BTreeDescr, OTuple tup,
 										  JsonbParseState **state);
 
-static void o_chkp_num_print(BTreeDescr *desc, StringInfo buf,
+fn o_chkp_num_print(desc: &mut BTreeDescr, StringInfo buf,
 							 OTuple tup, Pointer arg);
 
-static void o_evicted_data_print(BTreeDescr *desc, StringInfo buf,
+fn o_evicted_data_print(desc: &mut BTreeDescr, StringInfo buf,
 								 OTuple tup, Pointer arg);
-static int	o_sys_xid_undo_location_key_cmp(BTreeDescr *desc,
-											void *p1, BTreeKeyType k1,
-											void *p2, BTreeKeyType k2);
-static void o_sys_xid_undo_location_key_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg);
-static void o_sys_xid_undo_location_tuple_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg);
-static JsonbValue *o_sys_xid_undo_location_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state);
+static int	o_sys_xid_undo_location_key_cmp(desc: &mut BTreeDescr,
+											 *p1, BTreeKeyType k1,
+											 *p2, BTreeKeyType k2);
+fn o_sys_xid_undo_location_key_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg);
+fn o_sys_xid_undo_location_tuple_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg);
+static o_sys_xid_undo_location_key_to_jsonb: &mut JsonbValue(desc: &mut BTreeDescr, OTuple tup, JsonbParseState **state);
 
 static SysTreeMeta sysTreesMeta[] =
 {
@@ -419,7 +419,7 @@ static SysTreeMeta sysTreesMeta[] =
 	},
 };
 
-static SysTreeShmemHeader *sysTreesShmemHeaders = NULL;
+static sysTreesShmemHeaders: &mut SysTreeShmemHeader = NULL;
 static SysTreeDescr sysTreesDescrs[SYS_TREES_NUM];
 
 PG_FUNCTION_INFO_V1(orioledb_sys_tree_structure);
@@ -430,7 +430,7 @@ PG_FUNCTION_INFO_V1(orioledb_sys_tree_rows);
 // Returns size of the shared memory needed for enum tree header.
 //
 Size
-sys_trees_shmem_needs(void)
+sys_trees_shmem_needs()
 {
 	Size		size = 0;
 
@@ -445,7 +445,7 @@ sys_trees_shmem_needs(void)
 //
 // Initializes the enum B-tree memory.
 //
-void
+
 sys_trees_shmem_init(Pointer ptr, bool found)
 {
 	sysTreesShmemHeaders = (SysTreeShmemHeader *) ptr;
@@ -453,7 +453,7 @@ sys_trees_shmem_init(Pointer ptr, bool found)
 	if (!found)
 	{
 		int			i;
-		SysTreeShmemHeader *header;
+		header: &mut SysTreeShmemHeader;
 
 		for (i = 0; i < SYS_TREES_NUM; i++)
 		{
@@ -489,22 +489,22 @@ get_sys_tree_no_init(int tree_num)
 }
 
 PrintFunc
-sys_tree_key_print(BTreeDescr *desc)
+sys_tree_key_print(desc: &mut BTreeDescr)
 {
-	SysTreeMeta *meta = (SysTreeMeta *) desc->arg;
+	meta: &mut SysTreeMeta = (SysTreeMeta *) desc->arg;
 
 	return meta->keyPrint;
 }
 
 PrintFunc
-sys_tree_tup_print(BTreeDescr *desc)
+sys_tree_tup_print(desc: &mut BTreeDescr)
 {
-	SysTreeMeta *meta = (SysTreeMeta *) desc->arg;
+	meta: &mut SysTreeMeta = (SysTreeMeta *) desc->arg;
 
 	return meta->tupPrint;
 }
 
-static void
+fn
 check_tree_num_input(int num)
 {
 	if (!(num >= 1 && num <= SYS_TREES_NUM))
@@ -521,7 +521,7 @@ Datum
 orioledb_sys_tree_structure(PG_FUNCTION_ARGS)
 {
 	int			num = PG_GETARG_INT32(0);
-	VarChar    *optionsArg = (VarChar *) PG_GETARG_VARCHAR_P(1);
+	optionsArg: &mut VarChar = (VarChar *) PG_GETARG_VARCHAR_P(1);
 	int			depth = PG_GETARG_INT32(2);
 	BTreePrintOptions printOptions = {0};
 	StringInfoData buf;
@@ -546,7 +546,7 @@ const text *
 inspect_sys_tree_structure(int systree, int depth)
 {
 	Datum		res;
-	text	   *options = cstring_to_text("");
+	options: &mut text = cstring_to_text("");
 
 	res = DirectFunctionCall3(orioledb_sys_tree_structure,
 							  ObjectIdGetDatum(systree),
@@ -576,9 +576,9 @@ orioledb_sys_tree_check(PG_FUNCTION_ARGS)
 }
 
 static JsonbValue *
-o_tuphdr_to_jsonb(BTreeLeafTuphdr *tupHdr, JsonbParseState **state)
+o_tuphdr_to_jsonb(tupHdr: &mut BTreeLeafTuphdr, JsonbParseState **state)
 {
-	(void) pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
+	() pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
 	jsonb_push_bool_key(state, "deleted", tupHdr->deleted);
 	return pushJsonbValue(state, WJB_END_OBJECT, NULL);
 }
@@ -590,13 +590,13 @@ Datum
 orioledb_sys_tree_rows(PG_FUNCTION_ARGS)
 {
 	int			num = PG_GETARG_INT32(0);
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
-	BTreeIterator *it;
-	BTreeDescr *td;
+	it: &mut BTreeIterator;
+	td: &mut BTreeDescr;
 	Datum		values[1];
 	bool		nulls[1] = {false};
 	Oid			funcrettype;
@@ -631,9 +631,9 @@ orioledb_sys_tree_rows(PG_FUNCTION_ARGS)
 		bool		end;
 		OTuple		key;
 		bool		allocated;
-		JsonbParseState *state = NULL;
-		Jsonb	   *res;
-		BTreeLeafTuphdr *tupHdr;
+		state: &mut JsonbParseState = NULL;
+		res: &mut Jsonb;
+		tupHdr: &mut BTreeLeafTuphdr;
 		OTuple		tup;
 
 		tup = btree_iterate_all(it, NULL, BTreeKeyNone, false, &end, NULL,
@@ -642,12 +642,12 @@ orioledb_sys_tree_rows(PG_FUNCTION_ARGS)
 		if (O_TUPLE_IS_NULL(tup))
 			break;
 
-		(void) pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+		() pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 		key = o_btree_tuple_make_key(td, tup, NULL, true, &allocated);
 		jsonb_push_key(&state, "tupHdr");
-		(void) o_tuphdr_to_jsonb(tupHdr, &state);
+		() o_tuphdr_to_jsonb(tupHdr, &state);
 		jsonb_push_key(&state, "key");
-		(void) o_btree_key_to_jsonb(td, key, &state);
+		() o_btree_key_to_jsonb(td, key, &state);
 		res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 		if (allocated)
 			pfree(key.data);
@@ -674,7 +674,7 @@ sys_tree_get_storage_type(int tree_num)
 	return sysTreesMeta[tree_num - 1].storageType;
 }
 
-void
+
 sys_tree_set_extra(int tree_num, Pointer extra)
 {
 	sysTreesMeta[tree_num - 1].extra = extra;
@@ -692,10 +692,10 @@ sys_tree_get_extra(int tree_num)
 // We can not initialize it on the shared memory startup because it uses
 // postgres file descriptors for BTreeDescr.file.
 //
-static void
+fn
 sys_tree_init_if_needed(int i)
 {
-	SysTreeShmemHeader *header;
+	header: &mut SysTreeShmemHeader;
 
 	if (sysTreesDescrs[i].initialized)
 		return;
@@ -715,7 +715,7 @@ sys_tree_init_if_needed(int i)
 
 		if (!header->initialized)
 		{
-			PagePool   *pool = get_ppool(sysTreesMeta[i].poolType);
+			pool: &mut PagePool = get_ppool(sysTreesMeta[i].poolType);
 
 			ppool_reserve_pages(pool, PPOOL_RESERVE_META, 8);
 			LWLockAcquire(&checkpoint_state->oSharedRootInfoInsertLocks[0],
@@ -750,14 +750,14 @@ sys_tree_init_if_needed(int i)
 // Recovery worker should initialize system BTree with init_shmem = true on
 // startup. Backends should call it only with init_shmem = false.
 //
-static void
+fn
 sys_tree_init(int i, bool init_shmem)
 {
-	PagePool   *pool;
-	SysTreeShmemHeader *header;
-	SysTreeMeta *meta;
-	BTreeDescr *descr;
-	BTreeOps   *ops;
+	pool: &mut PagePool;
+	header: &mut SysTreeShmemHeader;
+	meta: &mut SysTreeMeta;
+	descr: &mut BTreeDescr;
+	ops: &mut BTreeOps;
 
 	header = &sysTreesShmemHeaders[i];
 	meta = &sysTreesMeta[i];
@@ -814,9 +814,9 @@ sys_tree_init(int i, bool init_shmem)
 }
 
 static int
-sys_tree_len(BTreeDescr *desc, OTuple tuple, OLengthType type)
+sys_tree_len(desc: &mut BTreeDescr, OTuple tuple, OLengthType type)
 {
-	SysTreeMeta *meta = (SysTreeMeta *) desc->arg;
+	meta: &mut SysTreeMeta = (SysTreeMeta *) desc->arg;
 
 	if (type == OTupleLength)
 	{
@@ -838,7 +838,7 @@ sys_tree_len(BTreeDescr *desc, OTuple tuple, OLengthType type)
 }
 
 static uint32
-sys_tree_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
+sys_tree_hash(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType kind)
 {
 	int			keyLength = sys_tree_len(desc, tuple, OTupleKeyLength);
 
@@ -846,8 +846,8 @@ sys_tree_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
 }
 
 static OTuple
-sys_tree_tuple_make_key(BTreeDescr *desc, OTuple tuple, Pointer data,
-						bool keep_version, bool *allocated)
+sys_tree_tuple_make_key(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
+						bool keep_version, allocated: &mut bool)
 {
 	if (data)
 	{
@@ -861,12 +861,12 @@ sys_tree_tuple_make_key(BTreeDescr *desc, OTuple tuple, Pointer data,
 }
 
 static int
-shared_root_info_key_cmp(BTreeDescr *desc,
-						 void *p1, BTreeKeyType k1,
-						 void *p2, BTreeKeyType k2)
+shared_root_info_key_cmp(desc: &mut BTreeDescr,
+						  *p1, BTreeKeyType k1,
+						  *p2, BTreeKeyType k2)
 {
-	SharedRootInfoKey *key1 = (SharedRootInfoKey *) (((OTuple *) p1)->data);
-	SharedRootInfoKey *key2 = (SharedRootInfoKey *) (((OTuple *) p2)->data);
+	key1: &mut SharedRootInfoKey = (SharedRootInfoKey *) (((OTuple *) p1)->data);
+	key2: &mut SharedRootInfoKey = (SharedRootInfoKey *) (((OTuple *) p2)->data);
 
 	Assert(k1 != BTreeKeyBound && k2 != BTreeKeyBound);
 
@@ -883,18 +883,18 @@ shared_root_info_key_cmp(BTreeDescr *desc,
 	return 0;
 }
 
-static void
-idx_descr_key_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+idx_descr_key_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	SharedRootInfoKey *key = (SharedRootInfoKey *) tup.data;
+	key: &mut SharedRootInfoKey = (SharedRootInfoKey *) tup.data;
 
 	appendStringInfo(buf, "(%u, %u)", key->datoid, key->relnode);
 }
 
-static void
-idx_descr_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+idx_descr_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	SharedRootInfo *sh_descr = (SharedRootInfo *) tup.data;
+	sh_descr: &mut SharedRootInfo = (SharedRootInfo *) tup.data;
 
 	appendStringInfo(buf, "((%u, %u), %u, %u)",
 					 sh_descr->key.datoid,
@@ -904,23 +904,23 @@ idx_descr_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
 }
 
 static JsonbValue *
-idx_descr_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state)
+idx_descr_key_to_jsonb(desc: &mut BTreeDescr, OTuple tup, JsonbParseState **state)
 {
-	SharedRootInfoKey *key = (SharedRootInfoKey *) tup.data;
+	key: &mut SharedRootInfoKey = (SharedRootInfoKey *) tup.data;
 
-	(void) pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
+	() pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
 	jsonb_push_int8_key(state, "datoid", key->datoid);
 	jsonb_push_int8_key(state, "relnode", key->relnode);
 	return pushJsonbValue(state, WJB_END_OBJECT, NULL);
 }
 
 static int
-o_table_chunk_cmp(BTreeDescr *desc,
-				  void *p1, BTreeKeyType k1,
-				  void *p2, BTreeKeyType k2)
+o_table_chunk_cmp(desc: &mut BTreeDescr,
+				   *p1, BTreeKeyType k1,
+				   *p2, BTreeKeyType k2)
 {
-	OTableChunkKey *key1;
-	OTableChunkKey *key2;
+	key1: &mut OTableChunkKey;
+	key2: &mut OTableChunkKey;
 
 	if (k1 == BTreeKeyBound)
 		key1 = (OTableChunkKey *) p1;
@@ -951,27 +951,27 @@ o_table_chunk_cmp(BTreeDescr *desc,
 }
 
 static int
-o_table_chunk_length(BTreeDescr *desc, OTuple tuple)
+o_table_chunk_length(desc: &mut BTreeDescr, OTuple tuple)
 {
-	OTableChunk *chunk = (OTableChunk *) tuple.data;
+	chunk: &mut OTableChunk = (OTableChunk *) tuple.data;
 
 	return offsetof(OTableChunk, data) + chunk->dataLength;
 }
 
-static void
-o_table_chunk_key_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_table_chunk_key_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	OTableChunkKey *key = (OTableChunkKey *) tup.data;
+	key: &mut OTableChunkKey = (OTableChunkKey *) tup.data;
 
 	appendStringInfo(buf, "((%u, %u, %u), %u, %u)", key->oids.datoid,
 					 key->oids.relnode, key->oids.reloid, key->chunknum,
 					 key->version);
 }
 
-static void
-o_table_chunk_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_table_chunk_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	OTableChunk *chunk = (OTableChunk *) tup.data;
+	chunk: &mut OTableChunk = (OTableChunk *) tup.data;
 
 	appendStringInfo(buf, "(((%u, %u, %u), chunknum %u, version %u), dataLength %u)",
 					 chunk->key.oids.datoid,
@@ -983,11 +983,11 @@ o_table_chunk_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer ar
 }
 
 static JsonbValue *
-o_table_chunk_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state)
+o_table_chunk_key_to_jsonb(desc: &mut BTreeDescr, OTuple tup, JsonbParseState **state)
 {
-	OTableChunkKey *key = (OTableChunkKey *) tup.data;
+	key: &mut OTableChunkKey = (OTableChunkKey *) tup.data;
 
-	(void) pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
+	() pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
 	jsonb_push_int8_key(state, "datoid", key->oids.datoid);
 	jsonb_push_int8_key(state, "reloid", key->oids.reloid);
 	jsonb_push_int8_key(state, "relnode", key->oids.relnode);
@@ -997,12 +997,12 @@ o_table_chunk_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state
 }
 
 static bool
-o_table_chunk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
+o_table_chunk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 						 OTuple oldTuple, OTupleXactInfo oldXactInfo, bool oldDeleted,
 						 OTuple newTuple, OXid newOxid)
 {
-	OTableChunkKey *old_tuple_key = (OTableChunkKey *) oldTuple.data;
-	OTableChunkKey *new_tuple_key = (OTableChunkKey *) newTuple.data;
+	old_tuple_key: &mut OTableChunkKey = (OTableChunkKey *) oldTuple.data;
+	new_tuple_key: &mut OTableChunkKey = (OTableChunkKey *) newTuple.data;
 
 	if (action == BTreeOperationDelete)
 		return true;
@@ -1020,12 +1020,12 @@ o_table_chunk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
 }
 
 static int
-o_index_chunk_cmp(BTreeDescr *desc,
-				  void *p1, BTreeKeyType k1,
-				  void *p2, BTreeKeyType k2)
+o_index_chunk_cmp(desc: &mut BTreeDescr,
+				   *p1, BTreeKeyType k1,
+				   *p2, BTreeKeyType k2)
 {
-	OIndexChunkKey *key1;
-	OIndexChunkKey *key2;
+	key1: &mut OIndexChunkKey;
+	key2: &mut OIndexChunkKey;
 
 	if (k1 == BTreeKeyBound)
 		key1 = (OIndexChunkKey *) p1;
@@ -1053,25 +1053,25 @@ o_index_chunk_cmp(BTreeDescr *desc,
 }
 
 static int
-o_index_chunk_length(BTreeDescr *desc, OTuple tuple)
+o_index_chunk_length(desc: &mut BTreeDescr, OTuple tuple)
 {
-	OIndexChunk *chunk = (OIndexChunk *) tuple.data;
+	chunk: &mut OIndexChunk = (OIndexChunk *) tuple.data;
 
 	return offsetof(OIndexChunk, data) + chunk->dataLength;
 }
 
-static void
-o_index_chunk_key_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_index_chunk_key_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	OIndexChunkKey *key = (OIndexChunkKey *) tup.data;
+	key: &mut OIndexChunkKey = (OIndexChunkKey *) tup.data;
 
 	appendStringInfo(buf, "(%d, (%u, %u, %u), %u)", (int) key->type, key->oids.datoid, key->oids.relnode, key->oids.reloid, key->chunknum);
 }
 
-static void
-o_index_chunk_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_index_chunk_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	OIndexChunk *chunk = (OIndexChunk *) tup.data;
+	chunk: &mut OIndexChunk = (OIndexChunk *) tup.data;
 
 	appendStringInfo(buf, "((%d, (%u, %u, %u), %u), %u)",
 					 (int) chunk->key.type,
@@ -1083,11 +1083,11 @@ o_index_chunk_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer ar
 }
 
 static JsonbValue *
-o_index_chunk_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state)
+o_index_chunk_key_to_jsonb(desc: &mut BTreeDescr, OTuple tup, JsonbParseState **state)
 {
-	OIndexChunkKey *key = (OIndexChunkKey *) tup.data;
+	key: &mut OIndexChunkKey = (OIndexChunkKey *) tup.data;
 
-	(void) pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
+	() pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
 	jsonb_push_int8_key(state, "type", (int64) key->type);
 	jsonb_push_int8_key(state, "datoid", key->oids.datoid);
 	jsonb_push_int8_key(state, "reloid", key->oids.reloid);
@@ -1097,7 +1097,7 @@ o_index_chunk_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state
 }
 
 static bool
-o_index_chunk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
+o_index_chunk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 						 OTuple oldTuple, OTupleXactInfo oldXactInfo, bool oldDeleted,
 						 OTuple newTuple, OXid newOxid)
 {
@@ -1108,7 +1108,7 @@ o_index_chunk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
 // Compares oids and ix_num of FreeTreeTuples.
 //
 static inline int
-free_tree_id_cmp(FreeTreeTuple *left, FreeTreeTuple *right)
+free_tree_id_cmp(left: &mut FreeTreeTuple, right: &mut FreeTreeTuple)
 {
 	if (left->ixType != right->ixType)
 		return left->ixType < right->ixType ? -1 : 1;
@@ -1127,11 +1127,11 @@ free_tree_id_cmp(FreeTreeTuple *left, FreeTreeTuple *right)
 // 4. FreeTreeTuple.extent.off
 //
 static int
-free_tree_off_len_cmp(BTreeDescr *desc,
-					  void *p1, BTreeKeyType k1,
-					  void *p2, BTreeKeyType k2)
+free_tree_off_len_cmp(desc: &mut BTreeDescr,
+					   *p1, BTreeKeyType k1,
+					   *p2, BTreeKeyType k2)
 {
-	FreeTreeTuple *left = (FreeTreeTuple *) ((OTuple *) p1)->data,
+	left: &mut FreeTreeTuple = (FreeTreeTuple *) ((OTuple *) p1)->data,
 			   *right = (FreeTreeTuple *) ((OTuple *) p2)->data;
 	int			cmp = free_tree_id_cmp(left, right);
 
@@ -1153,11 +1153,11 @@ free_tree_off_len_cmp(BTreeDescr *desc,
 // 5. FreeTreeTuple.extent.off
 //
 static int
-free_tree_len_off_cmp(BTreeDescr *desc,
-					  void *p1, BTreeKeyType k1,
-					  void *p2, BTreeKeyType k2)
+free_tree_len_off_cmp(desc: &mut BTreeDescr,
+					   *p1, BTreeKeyType k1,
+					   *p2, BTreeKeyType k2)
 {
-	FreeTreeTuple *left = (FreeTreeTuple *) ((OTuple *) p1)->data,
+	left: &mut FreeTreeTuple = (FreeTreeTuple *) ((OTuple *) p1)->data,
 			   *right = (FreeTreeTuple *) ((OTuple *) p2)->data;
 	int			cmp = free_tree_id_cmp(left, right);
 
@@ -1173,10 +1173,10 @@ free_tree_len_off_cmp(BTreeDescr *desc,
 	return 0;
 }
 
-static void
-free_tree_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+free_tree_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	FreeTreeTuple *f_tree_tup = (FreeTreeTuple *) tup.data;
+	f_tree_tup: &mut FreeTreeTuple = (FreeTreeTuple *) tup.data;
 
 	appendStringInfo(
 					 buf, "((%u, %u, %u), " UINT64_FORMAT ", " UINT64_FORMAT ")",
@@ -1188,11 +1188,11 @@ free_tree_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
 }
 
 static JsonbValue *
-free_tree_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state)
+free_tree_key_to_jsonb(desc: &mut BTreeDescr, OTuple tup, JsonbParseState **state)
 {
-	FreeTreeTuple *key = (FreeTreeTuple *) tup.data;
+	key: &mut FreeTreeTuple = (FreeTreeTuple *) tup.data;
 
-	(void) pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
+	() pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
 	jsonb_push_int8_key(state, "ixType", (int64) key->ixType);
 	jsonb_push_int8_key(state, "datoid", key->datoid);
 	jsonb_push_int8_key(state, "relnode", key->relnode);
@@ -1201,10 +1201,10 @@ free_tree_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state)
 	return pushJsonbValue(state, WJB_END_OBJECT, NULL);
 }
 
-static void
-o_chkp_num_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_chkp_num_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	ChkpNumTuple *chkpNumTup = (ChkpNumTuple *) tup.data;
+	chkpNumTup: &mut ChkpNumTuple = (ChkpNumTuple *) tup.data;
 
 	appendStringInfo(buf, "((%u, %u), %u, %u)",
 					 chkpNumTup->key.datoid,
@@ -1213,10 +1213,10 @@ o_chkp_num_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
 					 chkpNumTup->checkpointNumbers[1]);
 }
 
-static void
-o_evicted_data_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_evicted_data_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	EvictedTreeData *evictedData = (EvictedTreeData *) tup.data;
+	evictedData: &mut EvictedTreeData = (EvictedTreeData *) tup.data;
 
 	appendStringInfo(buf, "((%u, %u), %llu, %llu)",
 					 evictedData->key.datoid,
@@ -1226,12 +1226,12 @@ o_evicted_data_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
 }
 
 static int
-o_sys_xid_undo_location_key_cmp(BTreeDescr *desc,
-								void *p1, BTreeKeyType k1,
-								void *p2, BTreeKeyType k2)
+o_sys_xid_undo_location_key_cmp(desc: &mut BTreeDescr,
+								 *p1, BTreeKeyType k1,
+								 *p2, BTreeKeyType k2)
 {
-	TransactionId *key1 = (TransactionId *) (((OTuple *) p1)->data);
-	TransactionId *key2 = (TransactionId *) (((OTuple *) p2)->data);
+	key1: &mut TransactionId = (TransactionId *) (((OTuple *) p1)->data);
+	key2: &mut TransactionId = (TransactionId *) (((OTuple *) p2)->data);
 
 	if (TransactionIdPrecedes(*key1, *key2))
 		return -1;
@@ -1241,18 +1241,18 @@ o_sys_xid_undo_location_key_cmp(BTreeDescr *desc,
 	return 0;
 }
 
-static void
-o_sys_xid_undo_location_key_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_sys_xid_undo_location_key_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	TransactionId *key = (TransactionId *) tup.data;
+	key: &mut TransactionId = (TransactionId *) tup.data;
 
 	appendStringInfo(buf, "(%u)", *key);
 }
 
-static void
-o_sys_xid_undo_location_tuple_print(BTreeDescr *desc, StringInfo buf, OTuple tup, Pointer arg)
+fn
+o_sys_xid_undo_location_tuple_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 {
-	ReplicationRetainUndoTuple *tuple = (ReplicationRetainUndoTuple *) tup.data;
+	tuple: &mut ReplicationRetainUndoTuple = (ReplicationRetainUndoTuple *) tup.data;
 
 	//
 // The undo location is an absolute offset into the undo log, which shifts
@@ -1265,11 +1265,11 @@ o_sys_xid_undo_location_tuple_print(BTreeDescr *desc, StringInfo buf, OTuple tup
 }
 
 static JsonbValue *
-o_sys_xid_undo_location_key_to_jsonb(BTreeDescr *desc, OTuple tup, JsonbParseState **state)
+o_sys_xid_undo_location_key_to_jsonb(desc: &mut BTreeDescr, OTuple tup, JsonbParseState **state)
 {
-	TransactionId *key = (TransactionId *) tup.data;
+	key: &mut TransactionId = (TransactionId *) tup.data;
 
-	(void) pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
+	() pushJsonbValue(state, WJB_BEGIN_OBJECT, NULL);
 	jsonb_push_int8_key(state, "xid", (int64) *key);
 	return pushJsonbValue(state, WJB_END_OBJECT, NULL);
 }

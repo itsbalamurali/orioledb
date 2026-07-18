@@ -31,14 +31,14 @@ use pgrx::pg_sys;
 // Load chunk to the partial page.
 //
 bool
-partial_load_hikeys_chunk(PartialPageState *partial, Page img)
+partial_load_hikeys_chunk(partial: &mut PartialPageState, Page img)
 {
 	uint64		imgState,
 				srcState;
 	Page		src = partial->src;
 	LocationIndex chunkBegin,
 				chunkEnd;
-	BTreePageHeader *header = (BTreePageHeader *) img;
+	header: &mut BTreePageHeader = (BTreePageHeader *) img;
 
 	if (!partial->isPartial || partial->hikeysChunkIsLoaded)
 		return true;
@@ -72,15 +72,15 @@ partial_load_hikeys_chunk(PartialPageState *partial, Page img)
 // Load chunk to the partial page.
 //
 bool
-partial_load_chunk(PartialPageState *partial, Page img,
-				   OffsetNumber chunkOffset, BTreePageItemLocator *loc)
+partial_load_chunk(partial: &mut PartialPageState, Page img,
+				   OffsetNumber chunkOffset, loc: &mut BTreePageItemLocator)
 {
 	uint64		imgState = pg_atomic_read_u64(&(O_PAGE_HEADER(img)->state)),
 				srcState;
 	Page		src = partial->src;
 	LocationIndex chunkBegin,
 				chunkEnd;
-	BTreePageHeader *header;
+	header: &mut BTreePageHeader;
 
 	if (!partial->isPartial || partial->chunkIsLoaded[chunkOffset])
 		return true;
@@ -166,16 +166,16 @@ partial_load_chunk(PartialPageState *partial, Page img,
 // Fully materialize a partially-loaded page image: load the hikeys chunk and
 // every data chunk from the source page, leaving `img` a complete copy.
 //
-// Differential page-level undo images (UndoPageImage*Diff) reconstruct the
+// Differential page-level undo images (Diff: &mut UndoPageImage) reconstruct the
 // historical page in place from the live page carried in `img`, so they require
 // every chunk present; the partial-read fast path (BTREE_PAGE_FIND_FETCH) only
 // loads the chunks touched so far.  Returns false if the source page changed
 // mid-load (consistency lost) -- the caller must retry the read.
 //
 bool
-partial_load_full_page(PartialPageState *partial, Page img)
+partial_load_full_page(partial: &mut PartialPageState, Page img)
 {
-	BTreePageHeader *header = (BTreePageHeader *) img;
+	header: &mut BTreePageHeader = (BTreePageHeader *) img;
 	OffsetNumber i;
 
 	if (!partial->isPartial)
@@ -198,7 +198,7 @@ partial_load_full_page(PartialPageState *partial, Page img)
 }
 
 BTreeItemPageFitType
-page_locator_fits_item(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
+page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageItemLocator,
 					   LocationIndex size, bool replace, CommitSeqNo csn)
 {
 	int			freeSpace = BTREE_PAGE_FREE_SPACE(p);
@@ -256,7 +256,7 @@ page_locator_fits_item(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 	if (replace)
 	{
 		// Correct the estimation according to our tuple replacement
-		BTreeLeafTuphdr *tupHdr;
+		tupHdr: &mut BTreeLeafTuphdr;
 
 		tupHdr = (BTreeLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, locator);
 
@@ -312,10 +312,10 @@ page_locator_fits_item(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 		return BTreeItemPageFitSplitRequired;
 }
 
-void
-init_page_first_chunk(BTreeDescr *desc, Page p, LocationIndex hikeySize)
+
+init_page_first_chunk(desc: &mut BTreeDescr, Page p, LocationIndex hikeySize)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	Assert(hikeySize == MAXALIGN(hikeySize));
 
@@ -338,11 +338,11 @@ init_page_first_chunk(BTreeDescr *desc, Page p, LocationIndex hikeySize)
 	header->chunkDesc[0].chunkKeysFixed = 1;
 }
 
-void
+
 page_chunk_fill_locator(Page p, OffsetNumber chunkOffset,
-						BTreePageItemLocator *locator)
+						locator: &mut BTreePageItemLocator)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	if (chunkOffset + 1 < header->chunksCount)
 	{
@@ -363,11 +363,11 @@ page_chunk_fill_locator(Page p, OffsetNumber chunkOffset,
 	locator->chunk = (BTreePageChunk *) (p + SHORT_GET_LOCATION(header->chunkDesc[chunkOffset].shortLocation));
 }
 
-void
+
 page_item_fill_locator(Page p, OffsetNumber itemOffset,
-					   BTreePageItemLocator *locator)
+					   locator: &mut BTreePageItemLocator)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OffsetNumber chunkOffset;
 
 	chunkOffset = 0;
@@ -379,11 +379,11 @@ page_item_fill_locator(Page p, OffsetNumber itemOffset,
 	locator->itemOffset = itemOffset - header->chunkDesc[chunkOffset].offset;
 }
 
-void
+
 page_item_fill_locator_backwards(Page p, OffsetNumber itemOffset,
-								 BTreePageItemLocator *locator)
+								 locator: &mut BTreePageItemLocator)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OffsetNumber chunkOffset;
 
 	chunkOffset = header->chunksCount - 1;
@@ -401,11 +401,11 @@ page_item_fill_locator_backwards(Page p, OffsetNumber itemOffset,
 // Locate the next page item.
 //
 bool
-page_locator_next_chunk(Page p, BTreePageItemLocator *locator)
+page_locator_next_chunk(Page p, locator: &mut BTreePageItemLocator)
 {
 	while (locator->itemOffset >= locator->chunkItemsCount)
 	{
-		BTreePageHeader *header = (BTreePageHeader *) p;
+		header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 		if (locator->chunkOffset + 1 < header->chunksCount)
 		{
@@ -423,7 +423,7 @@ page_locator_next_chunk(Page p, BTreePageItemLocator *locator)
 // Locate the next page item.
 //
 bool
-page_locator_prev_chunk(Page p, BTreePageItemLocator *locator)
+page_locator_prev_chunk(Page p, locator: &mut BTreePageItemLocator)
 {
 	do
 	{
@@ -445,8 +445,8 @@ page_locator_prev_chunk(Page p, BTreePageItemLocator *locator)
 //
 // Insert a new item of given size at the given location.
 //
-void
-page_locator_insert_item(Page p, BTreePageItemLocator *locator,
+
+page_locator_insert_item(Page p, locator: &mut BTreePageItemLocator,
 						 LocationIndex itemsize)
 {
 	int			itemsShift,
@@ -454,7 +454,7 @@ page_locator_insert_item(Page p, BTreePageItemLocator *locator,
 	Pointer		firstItemPtr,
 				itemPtr,
 				endPtr;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OffsetNumber i;
 
 	Assert(itemsize == MAXALIGN(itemsize));
@@ -520,7 +520,7 @@ page_locator_insert_item(Page p, BTreePageItemLocator *locator,
 }
 
 bool
-page_locator_fits_new_item(Page p, BTreePageItemLocator *locator,
+page_locator_fits_new_item(Page p, locator: &mut BTreePageItemLocator,
 						   LocationIndex itemsize)
 {
 	LocationIndex sizeDiff;
@@ -537,11 +537,11 @@ page_locator_fits_new_item(Page p, BTreePageItemLocator *locator,
 // Get size of the item at given location.
 //
 LocationIndex
-page_locator_get_item_size(Page p, BTreePageItemLocator *locator)
+page_locator_get_item_size(Page p, locator: &mut BTreePageItemLocator)
 {
 	LocationIndex itemOffset,
 				nextItemOffset;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	// Calculate offset form the beginning of the chunk
 	itemOffset = ITEM_GET_OFFSET(locator->chunk->items[locator->itemOffset]);
@@ -568,14 +568,14 @@ page_locator_get_item_size(Page p, BTreePageItemLocator *locator)
 //
 // Resizes page item under given locator.
 //
-void
-page_locator_resize_item(Page p, BTreePageItemLocator *locator,
+
+page_locator_resize_item(Page p, locator: &mut BTreePageItemLocator,
 						 LocationIndex newsize)
 {
 	int			dataShift;
 	Pointer		nextItemPtr,
 				endPtr;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OffsetNumber i;
 
 	// Calculate data shift
@@ -615,7 +615,7 @@ page_locator_resize_item(Page p, BTreePageItemLocator *locator,
 //
 // Merge two chunks into one.
 //
-static void
+fn
 page_merge_chunks(Page p, OffsetNumber index)
 {
 	LocationIndex tmpItems[BTREE_PAGE_MAX_CHUNK_ITEMS],
@@ -626,7 +626,7 @@ page_merge_chunks(Page p, OffsetNumber index)
 	OffsetNumber i,
 				count1,
 				count2;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	BTreePageItemLocator loc1,
 				loc2;
 	Pointer		chunk1DataPtr,
@@ -745,8 +745,8 @@ page_merge_chunks(Page p, OffsetNumber index)
 //
 // Deletes page item under given locator.
 //
-void
-page_locator_delete_item(Page p, BTreePageItemLocator *locator)
+
+page_locator_delete_item(Page p, locator: &mut BTreePageItemLocator)
 {
 	int			itemsShift,
 				dataShift,
@@ -754,7 +754,7 @@ page_locator_delete_item(Page p, BTreePageItemLocator *locator)
 	Pointer		firstItemPtr,
 				itemPtr,
 				endPtr;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OffsetNumber i;
 
 	// Get item size
@@ -826,8 +826,8 @@ page_locator_delete_item(Page p, BTreePageItemLocator *locator)
 //
 // Split the given page chunk into two.
 //
-static void
-page_split_chunk(Page p, BTreePageItemLocator *locator,
+fn
+page_split_chunk(Page p, locator: &mut BTreePageItemLocator,
 				 LocationIndex hikeysEnd, LocationIndex hikeySize)
 {
 	LocationIndex tmpItems[BTREE_PAGE_MAX_CHUNK_ITEMS],
@@ -848,7 +848,7 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 	OffsetNumber i,
 				leftItemsCount,
 				rightItemsCount;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	Assert(hikeySize == MAXALIGN(hikeySize));
 
@@ -964,15 +964,15 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 #define MAXALIGN_WASTE(s) \
 	((MAXIMUM_ALIGNOF - 1) - ((s) + (MAXIMUM_ALIGNOF - 1)) % (MAXIMUM_ALIGNOF))
 
-void
-page_split_chunk_if_needed(BTreeDescr *desc, Page p, BTreePageItemLocator *locator)
+
+page_split_chunk_if_needed(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageItemLocator)
 {
 	OffsetNumber i,
 				chunkOffset;
 	LocationIndex hikeysFreeSpace,
 				dataFreeSpace,
 				newChunkDescSize;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	int			bestOffset = -1;
 	float4		bestScore = 0.0f;
 	LocationIndex bestHiKeySize = 0,
@@ -1115,14 +1115,14 @@ page_split_chunk_if_needed(BTreeDescr *desc, Page p, BTreePageItemLocator *locat
 }
 
 #ifdef NOT_USED
-static void
-check_page(BTreeDescr *desc, Page p)
+fn
+check_page(desc: &mut BTreeDescr, Page p)
 {
 	BTreePageItemLocator loc;
 	OTuple		prev,
 				tup;
 	BTreeKeyType kind = O_PAGE_IS(p, LEAF) ? BTreeTuple : BTreeKey;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	O_TUPLE_SET_NULL(prev);
 
@@ -1156,7 +1156,7 @@ check_page(BTreeDescr *desc, Page p)
 #endif
 
 static LocationIndex
-item_get_key_size(BTreeDescr *desc, bool leaf, BTreePageItem *item)
+item_get_key_size(desc: &mut BTreeDescr, bool leaf, item: &mut BTreePageItem)
 {
 	OTuple		tuple;
 
@@ -1177,15 +1177,15 @@ item_get_key_size(BTreeDescr *desc, bool leaf, BTreePageItem *item)
 //
 // Split the page containing the single chunk into multiple chunks.
 //
-void
-btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
+
+btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 				 OffsetNumber count, LocationIndex hikeySize, OTuple hikey)
 {
 	int			chunksCount;
 	LocationIndex totalDataSize,
 				itemHeaderSize = O_PAGE_IS(p, LEAF) ? BTreeLeafTuphdrSize : BTreeNonLeafTuphdrSize;
-	BTreePageChunk *chunk;
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	chunk: &mut BTreePageChunk;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	Pointer		ptr,
 				hikeysPtr;
 	bool		chunkFixedKeys[BTREE_PAGE_MAX_CHUNKS];
@@ -1412,8 +1412,8 @@ btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 }
 
-void
-split_page_by_chunks(BTreeDescr *desc, Page p)
+
+split_page_by_chunks(desc: &mut BTreeDescr, Page p)
 {
 	BTreePageItemLocator loc;
 	BTreePageItem items[BTREE_PAGE_MAX_CHUNK_ITEMS];
@@ -1444,10 +1444,10 @@ split_page_by_chunks(BTreeDescr *desc, Page p)
 }
 
 bool
-page_locator_find_real_item(Page p, PartialPageState *partial,
-							BTreePageItemLocator *locator)
+page_locator_find_real_item(Page p, partial: &mut PartialPageState,
+							locator: &mut BTreePageItemLocator)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OffsetNumber offset;
 
 	while (locator->itemOffset >= locator->chunkItemsCount)
@@ -1484,9 +1484,9 @@ page_locator_find_real_item(Page p, PartialPageState *partial,
 
 // No existing callers
 OffsetNumber
-page_locator_get_offset(Page p, BTreePageItemLocator *locator)
+page_locator_get_offset(Page p, locator: &mut BTreePageItemLocator)
 {
-	BTreePageHeader *header = (BTreePageHeader *) p;
+	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	return header->chunkDesc[locator->chunkOffset].offset + locator->itemOffset;
 }

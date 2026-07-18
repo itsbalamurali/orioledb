@@ -42,9 +42,9 @@ use pgrx::pg_sys;
 
 static volatile sig_atomic_t shutdown_requested = false;
 static int	RewindHorizonCheckDelay = 1000; // Time between checking in ms
-static RewindItem *rewindAddBuffer = NULL;
-static RewindItem *rewindCompleteBuffer = NULL;
-static RewindMeta *rewindMeta = NULL;
+static rewindAddBuffer: &mut RewindItem = NULL;
+static rewindCompleteBuffer: &mut RewindItem = NULL;
+static rewindMeta: &mut RewindMeta = NULL;
 static bool rewindWorker = false;
 
 static OBuffersDesc rewindBuffersDesc = {
@@ -53,12 +53,12 @@ static OBuffersDesc rewindBuffersDesc = {
 	.groupCtlTrancheName = "rewindBuffersGroupCtlTranche",
 	.bufferCtlTrancheName = "rewindBuffersCtlTranche"
 };
-static FullTransactionId GetOldestFullTransactionIdConsideredRunning(void);
+static FullTransactionId GetOldestFullTransactionIdConsideredRunning();
 
 // Temporary storage for heap info between pre-commit and commit in a backend
 static TransactionId precommit_xid;
 static int	precommit_nsubxids;
-static TransactionId *precommit_subxids;
+static precommit_subxids: &mut TransactionId;
 
 PG_FUNCTION_INFO_V1(orioledb_rewind_by_time);
 PG_FUNCTION_INFO_V1(orioledb_rewind_to_timestamp);
@@ -79,10 +79,10 @@ PG_FUNCTION_INFO_V1(orioledb_rewind_set_complete);
 #define REWIND_MODE_TIMESTAMP (2)
 #define	REWIND_MODE_XID	(3)
 
-static void orioledb_rewind_internal(int rewind_mode, int rewind_time, OXid rewind_oxid, TransactionId rewind_xid, TimestampTz rewind_timestamp, bool attempt_restart);
-static void try_restart_pg(void);
-static void cleanup_fds(void);
-static void bootstrap_signals(void);
+fn orioledb_rewind_internal(int rewind_mode, int rewind_time, OXid rewind_oxid, TransactionId rewind_xid, TimestampTz rewind_timestamp, bool attempt_restart);
+fn try_restart_pg();
+fn cleanup_fds();
+fn bootstrap_signals();
 
 // Interface functions
 
@@ -171,7 +171,7 @@ orioledb_get_rewind_evicted_length(PG_FUNCTION_ARGS)
 // Datum
 // orioledb_rewind_queue_age(PG_FUNCTION_ARGS)
 // {
-// RewindItem *rewindItem;
+// rewindItem: &mut RewindItem;
 // long	secs;
 // int	usecs;
 //
@@ -255,8 +255,8 @@ orioledb_rewind_sync(PG_FUNCTION_ARGS)
 
 #ifdef REWIND_DEBUG_MODE
 static inline
-void
-print_rewind_item(RewindItem *rewindItem, uint64 pos, int source_buffer)
+
+print_rewind_item(rewindItem: &mut RewindItem, uint64 pos, int source_buffer)
 {
 	// To shorten output invalid values are printed as -1
 	int64		oxid = OXidIsValid(rewindItem->oxid) ? rewindItem->oxid : -1;
@@ -290,8 +290,8 @@ print_rewind_item(RewindItem *rewindItem, uint64 pos, int source_buffer)
 // to log. Doesn't take any locks, so results are not warrantied with any concurrent operation
 // on the queue.
 //
-static void
-log_print_rewind_queue(void)
+fn
+log_print_rewind_queue()
 {
 	int			i;
 	uint64		pos;
@@ -348,7 +348,7 @@ log_print_rewind_queue(void)
 #endif
 
 Size
-rewind_shmem_needs(void)
+rewind_shmem_needs()
 {
 	Size		size;
 
@@ -365,12 +365,12 @@ rewind_shmem_needs(void)
 }
 
 // Perform actual rewind within one backend left
-static void
+fn
 do_rewind(int rewind_mode, int rewind_time, TimestampTz rewindStartTimeStamp, OXid rewind_oxid, TransactionId rewind_xid, TimestampTz rewind_timestamp)
 {
 	int			i = 0;
 	int			k = 0;
-	RewindItem *rewindItem;
+	rewindItem: &mut RewindItem;
 	RewindItem	tmpbuf[REWIND_DISK_BUFFER_LENGTH];
 	uint64		pos;
 	uint64		reserved;
@@ -381,7 +381,7 @@ do_rewind(int rewind_mode, int rewind_time, TimestampTz rewindStartTimeStamp, OX
 #ifdef USE_ASSERT_CHECKING
 	bool		started_subxids = false;
 #endif
-	TransactionId *subxids = NULL;
+	subxids: &mut TransactionId = NULL;
 	TransactionId xid = InvalidTransactionId;
 	OXid		oxid = InvalidOXid;
 	CommitSeqNo csn PG_USED_FOR_ASSERTS_ONLY;
@@ -462,7 +462,7 @@ do_rewind(int rewind_mode, int rewind_time, TimestampTz rewindStartTimeStamp, OX
 //
 		if (rewindItem->tag == SUBXIDS_ITEM_TAG)
 		{
-			SubxidsItem *subxidsItem = (SubxidsItem *) rewindItem;
+			subxidsItem: &mut SubxidsItem = (SubxidsItem *) rewindItem;
 
 			Assert(!got_all_subxids);
 			Assert(subxidsItem->nsubxids);
@@ -658,7 +658,7 @@ rewind_complete:
 // NB: after rewind, this function either shuts down Postgres or, when attempt_restart is true,
 // tries a best-effort restart via try_restart_pg().
 //
-static void
+fn
 orioledb_rewind_internal(int rewind_mode, int rewind_time, OXid rewind_oxid, TransactionId rewind_xid, TimestampTz rewind_timestamp, bool attempt_restart)
 {
 	TimestampTz rewindStartTimeStamp;
@@ -877,17 +877,17 @@ orioledb_rewind_internal(int rewind_mode, int rewind_time, OXid rewind_oxid, Tra
 	if (attempt_restart)
 		try_restart_pg();
 	else
-		(void) kill(PostmasterPid, SIGTERM);
+		() kill(PostmasterPid, SIGTERM);
 }
 
 TransactionId
-orioledb_vacuum_horizon_hook(void)
+orioledb_vacuum_horizon_hook()
 {
 	return XidFromFullTransactionId(rewindMeta->oldestConsideredRunningXid);
 }
 
-static void
-cleanup_rewind_files(OBuffersDesc *desc, uint32 tag)
+fn
+cleanup_rewind_files(desc: &mut OBuffersDesc, uint32 tag)
 {
 	char		curFileName[MAXPGPATH];
 	int			curFile;
@@ -909,7 +909,7 @@ cleanup_rewind_files(OBuffersDesc *desc, uint32 tag)
 
 		close(curFile);
 
-		(void) unlink(curFileName);
+		() unlink(curFileName);
 		fileNum++;
 	}
 }
@@ -941,7 +941,7 @@ FullXidRelativeTo(FullTransactionId rel, TransactionId xid)
 }
 
 static FullTransactionId
-GetOldestFullTransactionIdConsideredRunning(void)
+GetOldestFullTransactionIdConsideredRunning()
 {
 	TransactionId oldestConsideredRunningXid;
 	FullTransactionId latestCompletedXid;
@@ -953,7 +953,7 @@ GetOldestFullTransactionIdConsideredRunning(void)
 	return FullXidRelativeTo(latestCompletedXid, oldestConsideredRunningXid);
 }
 
-void
+
 rewind_init_shmem(Pointer ptr, bool found)
 {
 	if (!enable_rewind)
@@ -994,7 +994,7 @@ rewind_init_shmem(Pointer ptr, bool found)
 
 		for (j = 0; j < (int) UndoLogsCount; j++)
 		{
-			UndoMeta   *undoMeta = get_undo_meta_by_type((UndoLogType) j);
+			undoMeta: &mut UndoMeta = get_undo_meta_by_type((UndoLogType) j);
 
 			pg_atomic_write_u64(&undoMeta->minRewindRetainLocation, pg_atomic_read_u64(&undoMeta->minProcRetainLocation));
 		}
@@ -1030,15 +1030,15 @@ rewind_init_shmem(Pointer ptr, bool found)
 // Code for rewind worker
 //
 
-static void
+fn
 handle_sigterm(SIGNAL_ARGS)
 {
 	shutdown_requested = true;
 	SetLatch(MyLatch);
 }
 
-void
-register_rewind_worker(void)
+
+register_rewind_worker()
 {
 	BackgroundWorker worker;
 
@@ -1055,7 +1055,7 @@ register_rewind_worker(void)
 }
 
 bool
-is_rewind_worker(void)
+is_rewind_worker()
 {
 	return rewindWorker;
 }
@@ -1064,8 +1064,8 @@ is_rewind_worker(void)
 // Restore page from disk to an empty space in completeBuffer.
 // Takes an exclusive lock to avoid cocurrent page eviction.
 //
-static void
-try_restore_evicted_rewind_page(void)
+fn
+try_restore_evicted_rewind_page()
 {
 	int			start;
 	int			length_to_end;
@@ -1173,12 +1173,12 @@ try_restore_evicted_rewind_page(void)
 	}
 }
 
-void
+
 rewind_worker_main(Datum main_arg)
 {
 	int			rc,
 				wake_events = WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT;
-	RewindItem *rewindItem;
+	rewindItem: &mut RewindItem;
 
 	rewindWorker = true;
 
@@ -1335,7 +1335,7 @@ rewind_worker_main(Datum main_arg)
 						clear_rewind_oxid(rewindItem->oxid);
 						for (i = 0; i < (int) UndoLogsCount; i++)
 						{
-							UndoMeta   *undoMeta = get_undo_meta_by_type((UndoLogType) i);
+							undoMeta: &mut UndoMeta = get_undo_meta_by_type((UndoLogType) i);
 
 							elog(DEBUG3,
 								 "Completing: oxid " UINT64_FORMAT
@@ -1409,7 +1409,7 @@ rewind_worker_main(Datum main_arg)
 //
 // Evict page from a ring buffer to disk. Takes exclusive lock against concurrent eviction.
 //
-static void
+fn
 evict_rewind_items(uint64 curAddPosFilled)
 {
 	int			start;
@@ -1542,16 +1542,16 @@ evict_rewind_items(uint64 curAddPosFilled)
 	LWLockRelease(&rewindMeta->rewindCheckpointLock);
 }
 
-void
-reset_precommit_xid_subxids(void)
+
+reset_precommit_xid_subxids()
 {
 	precommit_xid = InvalidTransactionId;
 	precommit_nsubxids = 0;
 	precommit_subxids = NULL;
 }
 
-void
-save_precommit_xid_subxids(void)
+
+save_precommit_xid_subxids()
 {
 	TransactionId xid1 = InvalidTransactionId;
 	TransactionId xid2 = InvalidTransactionId;
@@ -1571,7 +1571,7 @@ save_precommit_xid_subxids(void)
 }
 
 TransactionId
-get_precommit_xid_subxids(int *nsubxids, TransactionId **subxids)
+get_precommit_xid_subxids(nsubxids: &mut int, TransactionId **subxids)
 {
 	if (TransactionIdIsValid(precommit_xid))
 	{
@@ -1582,10 +1582,10 @@ get_precommit_xid_subxids(int *nsubxids, TransactionId **subxids)
 	return precommit_xid;
 }
 
-void
-add_to_rewind_buffer(OXid oxid, TransactionId xid, int nsubxids, TransactionId *subxids)
+
+add_to_rewind_buffer(OXid oxid, TransactionId xid, int nsubxids, subxids: &mut TransactionId)
 {
-	RewindItem *rewindItem;
+	rewindItem: &mut RewindItem;
 	int			i;
 	uint64		curAddPos;
 	uint64		startAddPos;
@@ -1687,7 +1687,7 @@ next_subxids_item:
 	if (subxid_only)
 	{
 		// Fill subxids entry in a circular buffer.
-		SubxidsItem *subxidsItem = (SubxidsItem *) rewindItem;
+		subxidsItem: &mut SubxidsItem = (SubxidsItem *) rewindItem;
 
 		Assert(TransactionIdIsValid(xid));
 		Assert(nsubxids > 0);
@@ -1736,14 +1736,14 @@ next_subxids_item:
 		{
 			uint64		curValue = InvalidOXid;
 
-			(void) pg_atomic_compare_exchange_u64(&rewindMeta->runXmin, &curValue, rewindItem->runXmin);
+			() pg_atomic_compare_exchange_u64(&rewindMeta->runXmin, &curValue, rewindItem->runXmin);
 		}
 
 		if (pg_atomic_read_u64(&rewindMeta->oldestConsideredRunningXid) == InvalidTransactionId)
 		{
 			uint64		curValue = InvalidTransactionId;
 
-			(void) pg_atomic_compare_exchange_u64(&rewindMeta->oldestConsideredRunningXid, &curValue, rewindItem->oldestConsideredRunningXid.value);
+			() pg_atomic_compare_exchange_u64(&rewindMeta->oldestConsideredRunningXid, &curValue, rewindItem->oldestConsideredRunningXid.value);
 		}
 
 		Assert(OXidIsValid(oxid) || TransactionIdIsValid(xid));
@@ -1754,8 +1754,8 @@ next_subxids_item:
 
 			for (i = 0; i < (int) UndoLogsCount; i++)
 			{
-				UndoMeta   *undoMeta = get_undo_meta_by_type((UndoLogType) i);
-				UndoStackSharedLocations *sharedLocations = GET_CUR_UNDO_STACK_LOCATIONS((UndoLogType) i);
+				undoMeta: &mut UndoMeta = get_undo_meta_by_type((UndoLogType) i);
+				sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS((UndoLogType) i);
 
 				rewindItem->onCommitUndoLocation[i] = pg_atomic_read_u64(&sharedLocations->onCommitLocation);
 				rewindItem->undoLocation[i] = pg_atomic_read_u64(&sharedLocations->location);
@@ -1845,8 +1845,8 @@ next_subxids_item:
 // Write rewind records from circular in-memory rewind buffer and on-disk rewind buffer
 // to xid buffer at checkpoint.
 //
-void
-checkpoint_write_rewind_xids(void)
+
+checkpoint_write_rewind_xids()
 {
 	bool		buffer_loaded = false;
 	RewindItem	buffer[REWIND_DISK_BUFFER_LENGTH];
@@ -1924,7 +1924,7 @@ checkpoint_write_rewind_xids(void)
 }
 
 OXid
-get_rewind_run_xmin(void)
+get_rewind_run_xmin()
 {
 	return pg_atomic_read_u64(&rewindMeta->runXmin);
 }
@@ -1942,8 +1942,8 @@ get_rewind_run_xmin(void)
 // lacking these primitives (e.g. Windows), are not supported, so we can't end
 // up here. See orioledb_enable_rewind_check_hook for details.
 //
-static void
-try_restart_pg(void)
+fn
+try_restart_pg()
 {
 	pid_t		pid;
 	sigset_t	blocked_sigset,
@@ -1969,7 +1969,7 @@ try_restart_pg(void)
 		ereport(WARNING,
 				(errmsg("could not restart instance"),
 				 errdetail("Sending shutdown request to postmaster.")));
-		(void) kill(PostmasterPid, SIGTERM);
+		() kill(PostmasterPid, SIGTERM);
 		return;
 	}
 
@@ -1994,7 +1994,7 @@ try_restart_pg(void)
 		sigset_t	empty_mask;
 		char		bindir[MAXPGPATH];
 		char		cmd[PG_CTL_MAX_CMD_LEN];
-		char	   *lastslash;
+		lastslash: &mut char;
 
 		strlcpy(bindir, my_exec_path, MAXPGPATH);
 
@@ -2033,12 +2033,12 @@ emergency_shutdown:
 // is "system error". We don't want to put too much effort into
 // investigating here.
 //
-	(void) kill(PostmasterPid, SIGTERM);
+	() kill(PostmasterPid, SIGTERM);
 	_exit(71);
 }
 
-static void
-cleanup_fds(void)
+fn
+cleanup_fds()
 {
 	int			devnull = open("/dev/null", O_RDWR);
 
@@ -2059,8 +2059,8 @@ cleanup_fds(void)
 	}
 }
 
-static void
-bootstrap_signals(void)
+fn
+bootstrap_signals()
 {
 	pqsignal(SIGHUP, SIG_DFL);
 	pqsignal(SIGPIPE, SIG_DFL);

@@ -51,29 +51,29 @@ static CommitSeqNo my_ptr;
 static bool recovery_initialized = false;
 static bool recovery_needs_feedback = false;
 
-static void recovery_queue_process(shm_mq_handle *queue, int id);
-static inline Pointer recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id);
-static void apply_tbl_modify_record(OTableDescr *descr,
+fn recovery_queue_process(queue: &mut shm_mq_handle, int id);
+static inline Pointer recovery_queue_read(queue: &mut shm_mq_handle, data_size: &mut Size, int id);
+fn apply_tbl_modify_record(descr: &mut OTableDescr,
 									RecoveryMsgType type,
 									OTuple p, OXid oxid, CommitSeqNo csn);
-static void apply_tbl_insert(OTableDescr *descr, OTuple tuple,
+fn apply_tbl_insert(descr: &mut OTableDescr, OTuple tuple,
 							 OXid oxid, CommitSeqNo csn);
-static void apply_tbl_delete(OTableDescr *descr, OTuple key,
+fn apply_tbl_delete(descr: &mut OTableDescr, OTuple key,
 							 OXid oxid, CommitSeqNo csn);
-static void apply_tbl_update(OTableDescr *descr, OTuple tuple,
+fn apply_tbl_update(descr: &mut OTableDescr, OTuple tuple,
 							 OXid oxid, CommitSeqNo csn);
-static void ReleaseWorkerResources(bool isCommit);
+fn ReleaseWorkerResources(bool isCommit);
 
 typedef struct
 {
 	OTuple		tuple;
 	OTuple		key;
 	CommitSeqNo csn;
-	OTableDescr *descr;			// for set_pending_sk_marker_from_tup_copy
+	descr: &mut OTableDescr;			// for set_pending_sk_marker_from_tup_copy
 } CallbackTupleCopy;
 
-static void
-set_pending_sk_marker_from_tup_copy(UndoLocation pkUndoLoc, void *arg)
+fn
+set_pending_sk_marker_from_tup_copy(UndoLocation pkUndoLoc,  *arg)
 {
 	set_pending_sk_marker(((CallbackTupleCopy *) arg)->descr, pkUndoLoc);
 }
@@ -83,8 +83,8 @@ set_pending_sk_marker_from_tup_copy(UndoLocation pkUndoLoc, void *arg)
 // modify callbacks themselves -- we repurpose it to carry the
 // OTableDescr for the post-undo hook.
 //
-static void
-set_pending_sk_marker_from_descr(UndoLocation pkUndoLoc, void *arg)
+fn
+set_pending_sk_marker_from_descr(UndoLocation pkUndoLoc,  *arg)
 {
 	set_pending_sk_marker((OTableDescr *) arg, pkUndoLoc);
 }
@@ -93,12 +93,12 @@ set_pending_sk_marker_from_descr(UndoLocation pkUndoLoc, void *arg)
 // Callback examples which stores modified tuple as arg.
 //
 static OBTreeModifyCallbackAction
-o_delete_copy_callback(BTreeDescr *descr,
-					   OTuple tup, OTuple *newtup, OXid oxid,
+o_delete_copy_callback(descr: &mut BTreeDescr,
+					   OTuple tup, newtup: &mut OTuple, OXid oxid,
 					   OTupleXactInfo xactInfo, UndoLocation location,
-					   RowLockMode *lock_mode, BTreeLocationHint *hint, void *arg)
+					   lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,  *arg)
 {
-	CallbackTupleCopy *copyArg = (CallbackTupleCopy *) arg;
+	copyArg: &mut CallbackTupleCopy = (CallbackTupleCopy *) arg;
 
 	if (descr->type == oIndexPrimary || descr->type == oIndexToast)
 	{
@@ -109,7 +109,7 @@ o_delete_copy_callback(BTreeDescr *descr,
 
 	if (descr->type == oIndexPrimary)
 	{
-		OIndexDescr *id = (OIndexDescr *) descr->arg;
+		id: &mut OIndexDescr = (OIndexDescr *) descr->arg;
 		Size		sz = o_tuple_size(tup, &id->leafSpec);
 
 		copyArg->tuple.data = (Pointer) palloc(sz);
@@ -124,12 +124,12 @@ o_delete_copy_callback(BTreeDescr *descr,
 }
 
 static OBTreeModifyCallbackAction
-o_update_copy_callback(BTreeDescr *descr,
-					   OTuple tup, OTuple *newtup, OXid oxid,
+o_update_copy_callback(descr: &mut BTreeDescr,
+					   OTuple tup, newtup: &mut OTuple, OXid oxid,
 					   OTupleXactInfo xactInfo, UndoLocation location,
-					   RowLockMode *lock_mode, BTreeLocationHint *hint, void *arg)
+					   lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,  *arg)
 {
-	CallbackTupleCopy *copyArg = (CallbackTupleCopy *) arg;
+	copyArg: &mut CallbackTupleCopy = (CallbackTupleCopy *) arg;
 
 	if (descr->type == oIndexPrimary || descr->type == oIndexToast)
 	{
@@ -140,7 +140,7 @@ o_update_copy_callback(BTreeDescr *descr,
 
 	if (descr->type == oIndexPrimary)
 	{
-		OIndexDescr *id = (OIndexDescr *) descr->arg;
+		id: &mut OIndexDescr = (OIndexDescr *) descr->arg;
 		Size		sz = o_tuple_size(tup, &id->leafSpec);
 
 		copyArg->tuple.data = (Pointer) palloc(sz);
@@ -163,7 +163,7 @@ recovery_worker_register(int worker_id)
 {
 	char		worker_name[128];
 	BackgroundWorker worker;
-	BackgroundWorkerHandle *handle = NULL;
+	handle: &mut BackgroundWorkerHandle = NULL;
 
 	sprintf(worker_name, "orioledb recovery worker %d", worker_id);
 	// Set up background worker parameters
@@ -193,10 +193,10 @@ recovery_worker_register(int worker_id)
 //
 // Recovery worker main function.
 //
-void
+
 recovery_worker_main(Datum main_arg)
 {
-	shm_mq_handle *recovery_worker_queue = NULL;
+	recovery_worker_queue: &mut shm_mq_handle = NULL;
 
 	PG_TRY();
 	{
@@ -287,7 +287,7 @@ recovery_worker_main(Datum main_arg)
 ParallelRecoveryContext *
 CreateParallelRecoveryContext(int nworkers)
 {
-	ParallelRecoveryContext *context;
+	context: &mut ParallelRecoveryContext;
 
 	context = palloc0(sizeof(ParallelRecoveryContext));
 	context->nworkers = nworkers;
@@ -296,8 +296,8 @@ CreateParallelRecoveryContext(int nworkers)
 	return context;
 }
 
-void
-InitializeParallelRecoveryDSM(ParallelRecoveryContext *context)
+
+InitializeParallelRecoveryDSM(context: &mut ParallelRecoveryContext)
 {
 	Size		segsize = 0;
 
@@ -319,8 +319,8 @@ InitializeParallelRecoveryDSM(ParallelRecoveryContext *context)
 	}
 }
 
-void
-DestroyParallelRecoveryContext(ParallelRecoveryContext *context)
+
+DestroyParallelRecoveryContext(context: &mut ParallelRecoveryContext)
 {
 	if (context->seg != NULL)
 	{
@@ -341,7 +341,7 @@ DestroyParallelRecoveryContext(ParallelRecoveryContext *context)
 	pfree(context);
 }
 
-static inline void
+static inline 
 update_worker_ptr(int worker_id, XLogRecPtr ptr)
 {
 	pg_atomic_add_fetch_u32(worker_ptrs_changes, 1);
@@ -355,14 +355,14 @@ update_worker_ptr(int worker_id, XLogRecPtr ptr)
 //
 // Reads messages from recovery queue and applies modify records to BTrees.
 //
-static void
-recovery_queue_process(shm_mq_handle *queue, int id)
+fn
+recovery_queue_process(queue: &mut shm_mq_handle, int id)
 {
-	RecoveryMsgOXidPtr *oxid_ptr_record;
-	RecoveryMsgPtr *csn_record;
-	RecoveryMsgHeader *recovery_header;
-	OTableDescr *descr = NULL;
-	OIndexDescr *indexDescr = NULL;
+	oxid_ptr_record: &mut RecoveryMsgOXidPtr;
+	csn_record: &mut RecoveryMsgPtr;
+	recovery_header: &mut RecoveryMsgHeader;
+	descr: &mut OTableDescr = NULL;
+	indexDescr: &mut OIndexDescr = NULL;
 	Pointer		data;
 	OIndexType	ix_type;
 	ORelOids	oids = {InvalidOid, InvalidOid, InvalidOid};
@@ -409,8 +409,8 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 
 				if (recovery_header->type & RECOVERY_MODIFY_OIDS)
 				{
-					char	   *prefix;
-					char	   *db_prefix;
+					prefix: &mut char;
+					db_prefix: &mut char;
 
 					memcpy(&oids, data + data_pos, sizeof(ORelOids));
 					data_pos += sizeof(ORelOids);
@@ -475,11 +475,11 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 			}
 			else if (type == RecoveryMsgTypeLeaderParallelIndexBuild)
 			{
-				RecoveryMsgLeaderIdxBuild *msg = (RecoveryMsgLeaderIdxBuild *) (data + data_pos);
-				OTable	   *o_table,
+				msg: &mut RecoveryMsgLeaderIdxBuild = (RecoveryMsgLeaderIdxBuild *) (data + data_pos);
+				o_table: &mut OTable,
 						   *old_o_table = NULL;
-				OTableDescr *o_descr;
-				OTableDescr *old_o_descr = NULL;
+				o_descr: &mut OTableDescr;
+				old_o_descr: &mut OTableDescr = NULL;
 				MemoryContext prev_context;
 
 				prev_context = MemoryContextSwitchTo(recovery_context);
@@ -539,9 +539,9 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 			}
 			else if (type == RecoveryMsgTypeWorkerParallelIndexBuild)
 			{
-				RecoveryMsgWorkerIdxBuild *msg = (RecoveryMsgWorkerIdxBuild *) (data + data_pos);
-				dsm_segment *seg;
-				shm_toc    *toc;
+				msg: &mut RecoveryMsgWorkerIdxBuild = (RecoveryMsgWorkerIdxBuild *) (data + data_pos);
+				seg: &mut dsm_segment;
+				toc: &mut shm_toc;
 				MemoryContext prev_context;
 
 				prev_context = MemoryContextSwitchTo(recovery_context);
@@ -622,7 +622,7 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 			}
 			else if (type == RecoveryMsgTypeSavepoint)
 			{
-				RecoveryMsgSavepoint *msg;
+				msg: &mut RecoveryMsgSavepoint;
 
 				msg = (RecoveryMsgSavepoint *) (data + data_pos);
 				recovery_switch_to_oxid(msg->oxid, id);
@@ -631,7 +631,7 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 			}
 			else if (type == RecoveryMsgTypeRollbackToSavepointt)
 			{
-				RecoveryMsgRollbackToSavepoint *msg;
+				msg: &mut RecoveryMsgRollbackToSavepoint;
 
 				msg = (RecoveryMsgRollbackToSavepoint *) (data + data_pos);
 				recovery_switch_to_oxid(msg->oxid, id);
@@ -664,8 +664,8 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 //
 // Apply the modify WAL record.
 //
-void
-apply_modify_record(OTableDescr *descr, OIndexDescr *id, uint16 type,
+
+apply_modify_record(descr: &mut OTableDescr, id: &mut OIndexDescr, uint16 type,
 					OTuple p)
 {
 	OXid		oxid;
@@ -692,7 +692,7 @@ apply_modify_record(OTableDescr *descr, OIndexDescr *id, uint16 type,
 // Reads a message from the queue.
 //
 static inline Pointer
-recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id)
+recovery_queue_read(queue: &mut shm_mq_handle, data_size: &mut Size, int id)
 {
 	shm_mq_result read_result;
 	XLogRecPtr	prev_rec_ptr = InvalidXLogRecPtr,
@@ -703,7 +703,7 @@ recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id)
 	usleep_time = QUEUE_READ_USLEEP_BASE;
 	while (true)
 	{
-		read_result = shm_mq_receive(queue, data_size, (void **) &data, true);
+		read_result = shm_mq_receive(queue, data_size, ( **) &data, true);
 
 		if (read_result == SHM_MQ_SUCCESS)
 		{
@@ -789,8 +789,8 @@ recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id)
 // Applies table modify records. We skip unique indices because recovery master
 // distributes it separately.
 //
-static void
-apply_tbl_modify_record(OTableDescr *descr, RecoveryMsgType type,
+fn
+apply_tbl_modify_record(descr: &mut OTableDescr, RecoveryMsgType type,
 						OTuple p, OXid oxid, CommitSeqNo csn)
 {
 	o_set_syscache_hooks();
@@ -812,17 +812,17 @@ apply_tbl_modify_record(OTableDescr *descr, RecoveryMsgType type,
 	o_unset_syscache_hooks();
 }
 
-static void
-apply_tbl_insert(OTableDescr *descr, OTuple tuple,
+fn
+apply_tbl_insert(descr: &mut OTableDescr, OTuple tuple,
 				 OXid oxid, CommitSeqNo csn)
 {
 	OBTreeKeyBound keyBound;
 	OTuple		stuple,
 				cur_tuple;
-	OIndexDescr *id;
+	id: &mut OIndexDescr;
 	int			i;
 	bool		isPrimary = false;
-	TupleTableSlot *slot = descr->newTuple;
+	slot: &mut TupleTableSlot = descr->newTuple;
 	BTreeModifyCallbackInfo callbackInfo = nullCallbackInfo;
 
 	O_TUPLE_SET_NULL(stuple);
@@ -839,7 +839,7 @@ apply_tbl_insert(OTableDescr *descr, OTuple tuple,
 
 	if (descr->bridge)
 	{
-		OTableSlot *oslot = (OTableSlot *) slot;
+		oslot: &mut OTableSlot = (OTableSlot *) slot;
 
 		o_btree_load_shmem(&GET_PRIMARY(descr)->desc);
 		btree_ctid_update_if_needed(&GET_PRIMARY(descr)->desc,
@@ -909,9 +909,9 @@ apply_tbl_insert(OTableDescr *descr, OTuple tuple,
 		}
 
 		// HACK: prevent sys cache pages from loading during o_btree_modify
-		(void) o_btree_cmp(&id->desc, &cur_tuple, BTreeKeyLeafTuple,
+		() o_btree_cmp(&id->desc, &cur_tuple, BTreeKeyLeafTuple,
 						   (Pointer) &keyBound, BTreeKeyBound);
-		(void) o_btree_modify(&id->desc, BTreeOperationInsert,
+		() o_btree_modify(&id->desc, BTreeOperationInsert,
 							  cur_tuple, BTreeKeyLeafTuple,
 							  (Pointer) &keyBound, BTreeKeyBound,
 							  oxid, csn, RowLockUpdate,
@@ -933,17 +933,17 @@ apply_tbl_insert(OTableDescr *descr, OTuple tuple,
 	ExecClearTuple(slot);
 }
 
-static void
-apply_tbl_delete(OTableDescr *descr, OTuple key,
+fn
+apply_tbl_delete(descr: &mut OTableDescr, OTuple key,
 				 OXid oxid, CommitSeqNo csn)
 {
 	OBTreeModifyResult modify_result;
 	OBTreeKeyBound keyBound;
 	CallbackTupleCopy tupCopy;
-	OIndexDescr *id;
+	id: &mut OIndexDescr;
 	int			i;
 	bool		isPrimary;
-	TupleTableSlot *slot = descr->newTuple;
+	slot: &mut TupleTableSlot = descr->newTuple;
 	OTuple		nullTup;
 
 	O_TUPLE_SET_NULL(nullTup);
@@ -1013,8 +1013,8 @@ apply_tbl_delete(OTableDescr *descr, OTuple key,
 	ExecClearTuple(slot);
 }
 
-static void
-apply_tbl_update(OTableDescr *descr, OTuple tuple,
+fn
+apply_tbl_update(descr: &mut OTableDescr, OTuple tuple,
 				 OXid oxid, CommitSeqNo csn)
 {
 	OBTreeModifyResult modify_result;
@@ -1022,10 +1022,10 @@ apply_tbl_update(OTableDescr *descr, OTuple tuple,
 				new_key;
 	OTuple		new_stup;
 	CallbackTupleCopy tupCopy;
-	OIndexDescr *tree;
+	tree: &mut OIndexDescr;
 	int			i;
 	bool		isPrimary;
-	TupleTableSlot *new_slot = descr->newTuple,
+	new_slot: &mut TupleTableSlot = descr->newTuple,
 			   *old_slot = descr->oldTuple;
 
 	for (i = 0; i < descr->nIndices; i++)
@@ -1090,7 +1090,7 @@ apply_tbl_update(OTableDescr *descr, OTuple tuple,
 												   tree->econtext))
 				{
 					callbackInfo.modifyCallback = recovery_delete_overwrite_callback;
-					(void) o_btree_modify(&tree->desc, BTreeOperationDelete,
+					() o_btree_modify(&tree->desc, BTreeOperationDelete,
 										  nullTup, BTreeKeyNone,
 										  (Pointer) &old_key, BTreeKeyBound,
 										  oxid, csn, RowLockUpdate,
@@ -1119,7 +1119,7 @@ apply_tbl_update(OTableDescr *descr, OTuple tuple,
 						continue;
 					}
 
-					(void) o_btree_modify(&tree->desc, BTreeOperationInsert,
+					() o_btree_modify(&tree->desc, BTreeOperationInsert,
 										  new_stup, BTreeKeyLeafTuple,
 										  (Pointer) &new_key, BTreeKeyBound,
 										  oxid, csn, RowLockUpdate,
@@ -1140,7 +1140,7 @@ apply_tbl_update(OTableDescr *descr, OTuple tuple,
 // Safely release all resources owned by the current background worker.
 // Mirrors ReleaseAuxProcessResources but applies to CurrentResourceOwner.
 //
-static void
+fn
 ReleaseWorkerResources(bool isCommit)
 {
 	if (CurrentResourceOwner == NULL)

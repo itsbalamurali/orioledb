@@ -20,7 +20,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void initHashTable(S3ChecksumState *state, const char *filename);
+fn initHashTable(state: &mut S3ChecksumState, const filename: &mut char);
 
 //
 // Allocate S3ChecksumState and initalize hashTable by reading filename.  A
@@ -28,10 +28,10 @@ static void initHashTable(S3ChecksumState *state, const char *filename);
 // responsible to release the buffer.
 //
 S3ChecksumState *
-makeS3ChecksumState(uint32 checkpointNumber, S3FileChecksum *fileChecksums,
-					uint32 fileChecksumsMaxLen, const char *filename)
+makeS3ChecksumState(uint32 checkpointNumber, fileChecksums: &mut S3FileChecksum,
+					uint32 fileChecksumsMaxLen, const filename: &mut char)
 {
-	S3ChecksumState *res;
+	res: &mut S3ChecksumState;
 
 	res = (S3ChecksumState *) palloc(sizeof(S3ChecksumState));
 	res->hashTable = NULL;
@@ -49,8 +49,8 @@ makeS3ChecksumState(uint32 checkpointNumber, S3FileChecksum *fileChecksums,
 // Free S3ChecksumState and hashTable.  A caller is responsible to release the
 // buffer of S3FileChecksum entries.
 //
-void
-freeS3ChecksumState(S3ChecksumState *state)
+
+freeS3ChecksumState(state: &mut S3ChecksumState)
 {
 	if (state == NULL)
 		return;
@@ -62,10 +62,10 @@ freeS3ChecksumState(S3ChecksumState *state)
 //
 // Initialize a hash table to store checksums of database files.
 //
-static void
-initHashTable(S3ChecksumState *state, const char *filename)
+fn
+initHashTable(state: &mut S3ChecksumState, const filename: &mut char)
 {
-	FILE	   *file;
+	file: &mut FILE;
 	StringInfoData buf;
 	HASHCTL		ctl;
 
@@ -103,7 +103,7 @@ initHashTable(S3ChecksumState *state, const char *filename)
 				   fileEntry.filename, fileEntry.checksum, &fileEntry.checkpointNumber) == 3)
 		{
 			char		key[MAXPGPATH];
-			S3FileChecksum *newEntry;
+			newEntry: &mut S3FileChecksum;
 			bool		found;
 
 			MemSet(key, 0, sizeof(key));
@@ -150,10 +150,10 @@ initHashTable(S3ChecksumState *state, const char *filename)
 //
 // Save current workers' fileChecksums array into a temporary file.
 //
-void
-flushS3ChecksumState(S3ChecksumState *state, const char *filename)
+
+flushS3ChecksumState(state: &mut S3ChecksumState, const filename: &mut char)
 {
-	FILE	   *file;
+	file: &mut FILE;
 
 	Assert(state->fileChecksums != NULL);
 
@@ -192,11 +192,11 @@ flushS3ChecksumState(S3ChecksumState *state, const char *filename)
 // S3FileChecksum.
 //
 S3FileChecksum *
-getS3FileChecksum(S3ChecksumState *state, const char *filename,
+getS3FileChecksum(state: &mut S3ChecksumState, const filename: &mut char,
 				  Pointer data, uint64 size)
 {
-	S3FileChecksum *prevEntry = NULL;
-	S3FileChecksum *newEntry;
+	prevEntry: &mut S3FileChecksum = NULL;
+	newEntry: &mut S3FileChecksum;
 	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
 	char		checksumstringbuf[O_SHA256_DIGEST_STRING_LENGTH];
 
@@ -215,7 +215,7 @@ getS3FileChecksum(S3ChecksumState *state, const char *filename,
 												   HASH_FIND, NULL);
 	}
 
-	(void) SHA256((unsigned char *) data, size, checksumbuf);
+	() SHA256((unsigned char *) data, size, checksumbuf);
 
 	hex_encode((char *) checksumbuf, sizeof(checksumbuf), checksumstringbuf);
 	checksumstringbuf[O_SHA256_DIGEST_STRING_LENGTH - 1] = '\0';

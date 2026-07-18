@@ -27,10 +27,10 @@ use pgrx::pg_sys;
 PG_FUNCTION_INFO_V1(s3_get);
 PG_FUNCTION_INFO_V1(s3_put);
 
-static void
-hmac_sha256(char *input, char *output, char *secretkey, int secretkeylen)
+fn
+hmac_sha256(input: &mut char, output: &mut char, secretkey: &mut char, int secretkeylen)
 {
-	HMAC_CTX   *ctx;
+	ctx: &mut HMAC_CTX;
 	unsigned int len;
 
 	ctx = HMAC_CTX_new();
@@ -48,7 +48,7 @@ hmac_sha256(char *input, char *output, char *secretkey, int secretkeylen)
 static char *
 hex_string(Pointer data, int len)
 {
-	char	   *result = palloc(len * 2 + 1);
+	result: &mut char = palloc(len * 2 + 1);
 
 	hex_encode(data, len, result);
 
@@ -60,8 +60,8 @@ hex_string(Pointer data, int len)
 // Calculate the checksum of canonical request according to AWS4-HMAC-SHA256.
 //
 static char *
-canonical_request_checksum(char *method, char *datetime, char *objectname,
-						   char *contentchecksum)
+canonical_request_checksum(method: &mut char, datetime: &mut char, objectname: &mut char,
+						   contentchecksum: &mut char)
 {
 	StringInfoData buf;
 	unsigned char checksumbuf[32];
@@ -77,7 +77,7 @@ canonical_request_checksum(char *method, char *datetime, char *objectname,
 	appendStringInfo(&buf, "host;x-amz-content-sha256;x-amz-date\n");
 	appendStringInfo(&buf, "%s", contentchecksum);
 
-	(void) SHA256((unsigned char *) buf.data, buf.len, checksumbuf);
+	() SHA256((unsigned char *) buf.data, buf.len, checksumbuf);
 	pfree(buf.data);
 
 	return hex_string((Pointer) checksumbuf, sizeof(checksumbuf));
@@ -88,13 +88,13 @@ canonical_request_checksum(char *method, char *datetime, char *objectname,
 // following the Amazon S3 REST API spec.
 //
 static char *
-s3_signature(char *method, char *datetimestring, char *datestring,
-			 char *objectname, char *secretkey, char *checksumstring)
+s3_signature(method: &mut char, datetimestring: &mut char, datestring: &mut char,
+			 objectname: &mut char, secretkey: &mut char, checksumstring: &mut char)
 {
 	StringInfoData buf;
-	char	   *key;
+	key: &mut char;
 	char		checksumbuf[32];
-	char	   *canonical_checksum;
+	canonical_checksum: &mut char;
 
 	canonical_checksum = canonical_request_checksum(method, datetimestring,
 													objectname, checksumstring);
@@ -124,11 +124,11 @@ s3_signature(char *method, char *datetimestring, char *datestring,
 // Constructs GMT-style string for date.
 //
 static char *
-httpdate(time_t *timer)
+httpdate(timer: &mut time_t)
 {
-	char	   *datetimestring;
+	datetimestring: &mut char;
 	time_t		t;
-	struct tm  *gt;
+	struct gt: &mut tm;
 
 	t = time(timer);
 	gt = gmtime(&t);
@@ -141,11 +141,11 @@ httpdate(time_t *timer)
 // Constructs GMT-style string for date and time.
 //
 static char *
-httpdatetime(time_t *timer)
+httpdatetime(timer: &mut time_t)
 {
-	char	   *datetimestring;
+	datetimestring: &mut char;
 	time_t		t;
-	struct tm  *gt;
+	struct gt: &mut tm;
 
 	t = time(timer);
 	gt = gmtime(&t);
@@ -158,7 +158,7 @@ httpdatetime(time_t *timer)
 // Curl callback, which appends data to String Info.
 //
 static size_t
-write_data_to_buf(void *buffer, size_t size, size_t nmemb, void *userp)
+write_data_to_buf( *buffer, size_t size, size_t nmemb,  *userp)
 {
 	size_t		segsize = size * nmemb;
 	StringInfo	info = (StringInfo) userp;
@@ -174,22 +174,22 @@ write_data_to_buf(void *buffer, size_t size, size_t nmemb, void *userp)
 // Returns HTTP status code.
 //
 long
-s3_get_object(char *objectname, StringInfo str, bool missing_ok)
+s3_get_object(objectname: &mut char, StringInfo str, bool missing_ok)
 {
-	CURL	   *curl;
-	char	   *url;
-	char	   *datestring;
-	char	   *datetimestring;
-	char	   *signature;
-	struct curl_slist *slist;
-	char	   *tmp;
+	curl: &mut CURL;
+	url: &mut char;
+	datestring: &mut char;
+	datetimestring: &mut char;
+	signature: &mut char;
+	struct slist: &mut curl_slist;
+	tmp: &mut char;
 	int			sc;
 	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
-	char	   *checksumstringbuf;
-	char	   *objectpath = objectname;
+	checksumstringbuf: &mut char;
+	objectpath: &mut char = objectname;
 	long		http_code = 0;
 
-	(void) SHA256(NULL, 0, checksumbuf);
+	() SHA256(NULL, 0, checksumbuf);
 	checksumstringbuf = hex_string((Pointer) checksumbuf, sizeof(checksumbuf));
 
 	if (s3_prefix)
@@ -278,24 +278,24 @@ s3_get(PG_FUNCTION_ARGS)
 //
 // Delete an object from an S3 bucket.
 //
-void
-s3_delete_object(char *objectname)
+
+s3_delete_object(objectname: &mut char)
 {
-	CURL	   *curl;
-	char	   *url;
-	char	   *datestring;
-	char	   *datetimestring;
-	char	   *signature;
-	struct curl_slist *slist;
-	char	   *tmp;
+	curl: &mut CURL;
+	url: &mut char;
+	datestring: &mut char;
+	datetimestring: &mut char;
+	signature: &mut char;
+	struct slist: &mut curl_slist;
+	tmp: &mut char;
 	int			sc;
 	StringInfoData buf;
 	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
-	char	   *checksumstringbuf;
-	char	   *objectpath = objectname;
+	checksumstringbuf: &mut char;
+	objectpath: &mut char = objectname;
 	long		http_code = 0;
 
-	(void) SHA256(NULL, 0, checksumbuf);
+	() SHA256(NULL, 0, checksumbuf);
 	checksumstringbuf = hex_string((Pointer) checksumbuf, sizeof(checksumbuf));
 
 	if (s3_prefix)
@@ -365,8 +365,8 @@ s3_delete_object(char *objectname)
 // The actual length might appear to be lower, it's to be written to '*size'.
 //
 static Pointer
-read_file_part(const char *filename, uint64 offset,
-			   uint64 maxSize, uint64 *size)
+read_file_part(const filename: &mut char, uint64 offset,
+			   uint64 maxSize, size: &mut uint64)
 {
 	int			file;
 	Pointer		buffer,
@@ -427,8 +427,8 @@ read_file_part(const char *filename, uint64 offset,
 //
 // Writes the part of the file 'filename' from 'offset' with length 'size'.
 //
-static void
-write_file_part(const char *filename, uint64 offset,
+fn
+write_file_part(const filename: &mut char, uint64 offset,
 				Pointer data, uint64 size)
 {
 	File		file;
@@ -462,7 +462,7 @@ write_file_part(const char *filename, uint64 offset,
 // Read the whole file.
 //
 Pointer
-read_file(const char *filename, uint64 *size)
+read_file(const filename: &mut char, size: &mut uint64)
 {
 	return read_file_part(filename, 0, UINT64_MAX, size);
 }
@@ -470,8 +470,8 @@ read_file(const char *filename, uint64 *size)
 //
 // Write the whole file.
 //
-static void
-write_file(const char *filename, Pointer data, uint64 size)
+fn
+write_file(const filename: &mut char, Pointer data, uint64 size)
 {
 	write_file_part(filename, 0, data, size);
 }
@@ -484,18 +484,18 @@ write_file(const char *filename, Pointer data, uint64 size)
 // Returns HTTP status code.
 //
 long
-s3_put_object_with_contents(char *objectname, Pointer data, uint64 dataSize,
-							char *dataChecksum, bool ifNoneMatch)
+s3_put_object_with_contents(objectname: &mut char, Pointer data, uint64 dataSize,
+							dataChecksum: &mut char, bool ifNoneMatch)
 {
-	CURL	   *curl;
-	char	   *url;
-	char	   *datestring;
-	char	   *datetimestring;
-	char	   *signature;
-	char	   *checksumstringbuf;
-	char	   *objectpath = objectname;
-	struct curl_slist *slist;
-	char	   *tmp;
+	curl: &mut CURL;
+	url: &mut char;
+	datestring: &mut char;
+	datetimestring: &mut char;
+	signature: &mut char;
+	checksumstringbuf: &mut char;
+	objectpath: &mut char = objectname;
+	struct slist: &mut curl_slist;
+	tmp: &mut char;
 	int			sc;
 	StringInfoData buf;
 	long		http_code = 0;
@@ -504,7 +504,7 @@ s3_put_object_with_contents(char *objectname, Pointer data, uint64 dataSize,
 	{
 		unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
 
-		(void) SHA256((unsigned char *) data, dataSize, checksumbuf);
+		() SHA256((unsigned char *) data, dataSize, checksumbuf);
 		checksumstringbuf = hex_string((Pointer) checksumbuf, sizeof(checksumbuf));
 	}
 	else
@@ -600,7 +600,7 @@ s3_put_object_with_contents(char *objectname, Pointer data, uint64 dataSize,
 // Put the whole file as S3 object.
 //
 long
-s3_put_file(char *objectname, char *filename, bool ifNoneMatch)
+s3_put_file(objectname: &mut char, filename: &mut char, bool ifNoneMatch)
 {
 	Pointer		data;
 	uint64		dataSize = 0;
@@ -620,8 +620,8 @@ s3_put_file(char *objectname, char *filename, bool ifNoneMatch)
 //
 // Get the whole file from S3 object.
 //
-void
-s3_get_file(char *objectname, char *filename)
+
+s3_get_file(objectname: &mut char, filename: &mut char)
 {
 	StringInfoData buf;
 
@@ -639,7 +639,7 @@ s3_get_file(char *objectname, char *filename)
 // Put the file part as S3 object.
 //
 long
-s3_put_file_part(char *objectname, char *filename, int partnum)
+s3_put_file_part(objectname: &mut char, filename: &mut char, int partnum)
 {
 	Pointer		data;
 	uint64		dataSize;
@@ -661,8 +661,8 @@ s3_put_file_part(char *objectname, char *filename, int partnum)
 //
 // Get the file part from S3 object.
 //
-void
-s3_get_file_part(char *objectname, char *filename, int partnum)
+
+s3_get_file_part(objectname: &mut char, filename: &mut char, int partnum)
 {
 	StringInfoData buf;
 
@@ -680,8 +680,8 @@ s3_get_file_part(char *objectname, char *filename, int partnum)
 //
 // Put empty dir as S3 object.
 //
-void
-s3_put_empty_dir(char *objectname)
+
+s3_put_empty_dir(objectname: &mut char)
 {
 	s3_put_object_with_contents(objectname, NULL, 0, NULL, false);
 }
@@ -693,7 +693,7 @@ s3_put_empty_dir(char *objectname)
 Datum
 s3_put(PG_FUNCTION_ARGS)
 {
-	char	   *objectname,
+	objectname: &mut char,
 			   *filename;
 
 	objectname = text_to_cstring(PG_GETARG_TEXT_PP(0));

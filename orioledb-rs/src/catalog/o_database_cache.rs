@@ -27,7 +27,7 @@ use pgrx::pg_sys;
 
 #endif
 
-static OSysCache *database_cache = NULL;
+static database_cache: &mut OSysCache = NULL;
 
 typedef struct ODatabase
 {
@@ -36,19 +36,19 @@ typedef struct ODatabase
 	int32		encoding;
 	char		datlocprovider;
 #if PG_VERSION_NUM >= 170000
-	char	   *datlocale;
-	char	   *daticurules;
+	datlocale: &mut char;
+	daticurules: &mut char;
 #endif
-	char	   *datcollate;
+	datcollate: &mut char;
 #if PG_VERSION_NUM >= 180000
-	char	   *datctype;
+	datctype: &mut char;
 #endif
 } ODatabase;
 
-static void o_database_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn o_database_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 										Pointer arg);
-static void o_database_cache_free_entry(Pointer entry);
-static Pointer o_database_cache_serialize_entry(Pointer entry, int *len);
+fn o_database_cache_free_entry(Pointer entry);
+static Pointer o_database_cache_serialize_entry(Pointer entry, len: &mut int);
 static Pointer o_database_cache_deserialize_entry(MemoryContext mcxt,
 												  Pointer data, Size length);
 
@@ -75,13 +75,13 @@ O_SYS_CACHE_INIT_FUNC(database_cache)
 										&database_cache_funcs);
 }
 
-static void
-o_database_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+fn
+o_database_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							Pointer arg)
 {
 	HeapTuple	databasetup;
 	Form_pg_database dbform;
-	ODatabase  *o_database = (ODatabase *) *entry_ptr;
+	o_database: &mut ODatabase = (ODatabase *) *entry_ptr;
 	MemoryContext prev_context;
 	Oid			dboid;
 	Datum		datum;
@@ -145,7 +145,7 @@ o_database_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	ReleaseSysCache(databasetup);
 }
 
-static void
+fn
 o_database_cache_free_entry(Pointer entry)
 {
 	pfree(entry);
@@ -155,7 +155,7 @@ int32
 o_database_cache_get_database_encoding()
 {
 	XLogRecPtr	cur_lsn;
-	ODatabase  *o_database;
+	o_database: &mut ODatabase;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
@@ -163,7 +163,7 @@ o_database_cache_get_database_encoding()
 	return o_database ? o_database->encoding : PG_SQL_ASCII;
 }
 
-void
+
 o_database_cache_set_database_encoding()
 {
 	int32		encoding = o_database_cache_get_database_encoding();
@@ -172,11 +172,11 @@ o_database_cache_set_database_encoding()
 }
 
 #if PG_VERSION_NUM >= 170000
-void
+
 o_database_cache_set_default_locale_provider()
 {
 	XLogRecPtr	cur_lsn;
-	ODatabase  *o_database;
+	o_database: &mut ODatabase;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
@@ -235,11 +235,11 @@ o_database_cache_set_default_locale_provider()
 }
 #endif
 
-void
+
 o_database_cache_set_lc_collate()
 {
 	XLogRecPtr	cur_lsn;
-	ODatabase  *o_database;
+	o_database: &mut ODatabase;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
@@ -256,10 +256,10 @@ o_database_cache_set_lc_collate()
 }
 
 static Pointer
-o_database_cache_serialize_entry(Pointer entry, int *len)
+o_database_cache_serialize_entry(Pointer entry, len: &mut int)
 {
 	StringInfoData str;
-	ODatabase  *o_database = (ODatabase *) entry;
+	o_database: &mut ODatabase = (ODatabase *) entry;
 
 	if (o_database->data_version != ORIOLEDB_SYS_TREE_VERSION)
 		elog(FATAL,
@@ -283,9 +283,7 @@ o_database_cache_serialize_entry(Pointer entry, int *len)
 
 #if PG_VERSION_NUM >= 180000
 	o_serialize_string(o_database->datctype, &str);
-#endif
-
-	*len = str.len;
+#len: &mut endif = str.len;
 	return str.data;
 }
 
@@ -294,7 +292,7 @@ o_database_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 								   Size length)
 {
 	Pointer		ptr = data;
-	ODatabase  *o_database;
+	o_database: &mut ODatabase;
 	int			len;
 
 	o_database = (ODatabase *) palloc0(sizeof(ODatabase));

@@ -47,7 +47,7 @@ typedef struct
 	ConditionVariable cv;
 } StopEvent;
 
-static StopEvent *stopevents = NULL;
+static stopevents: &mut StopEvent = NULL;
 
 bool		enable_stopevents = false;
 bool		trace_stopevents = false;
@@ -58,7 +58,7 @@ PG_FUNCTION_INFO_V1(pg_stopevent_reset);
 PG_FUNCTION_INFO_V1(pg_stopevents);
 
 Size
-StopEventShmemSize(void)
+StopEventShmemSize()
 {
 	Size		size;
 
@@ -66,7 +66,7 @@ StopEventShmemSize(void)
 	return size;
 }
 
-void
+
 StopEventShmemInit(Pointer ptr, bool found)
 {
 	stopevents = (StopEvent *) ptr;
@@ -86,10 +86,10 @@ StopEventShmemInit(Pointer ptr, bool found)
 }
 
 static StopEvent *
-find_stop_event(text *name)
+find_stop_event(name: &mut text)
 {
 	int			i;
-	char	   *name_data = VARDATA_ANY(name);
+	name_data: &mut char = VARDATA_ANY(name);
 	int			len = VARSIZE_ANY_EXHDR(name);
 
 	for (i = 0; i < STOPEVENTS_COUNT; i++)
@@ -106,15 +106,15 @@ find_stop_event(text *name)
 Datum
 pg_stopevent_set(PG_FUNCTION_ARGS)
 {
-	text	   *event_name = PG_GETARG_TEXT_PP(0);
-	JsonPath   *condition = PG_GETARG_JSONPATH_P(1);
-	StopEvent  *event;
+	event_name: &mut text = PG_GETARG_TEXT_PP(0);
+	condition: &mut JsonPath = PG_GETARG_JSONPATH_P(1);
+	event: &mut StopEvent;
 	uint32		flags = 0;
 
 	if (PG_NARGS() >= 3)
 	{
-		text	   *flagsText = PG_GETARG_TEXT_PP(2);
-		char	   *p,
+		flagsText: &mut text = PG_GETARG_TEXT_PP(2);
+		p: &mut char,
 				   *end = VARDATA_ANY(flagsText) + VARSIZE_ANY_EXHDR(flagsText);
 
 		for (p = VARDATA_ANY(flagsText); p < end; p++)
@@ -146,8 +146,8 @@ pg_stopevent_set(PG_FUNCTION_ARGS)
 Datum
 pg_stopevent_reset(PG_FUNCTION_ARGS)
 {
-	text	   *event_name = PG_GETARG_TEXT_PP(0);
-	StopEvent  *event;
+	event_name: &mut text = PG_GETARG_TEXT_PP(0);
+	event: &mut StopEvent;
 	bool		result = false;
 
 	event = find_stop_event(event_name);
@@ -166,10 +166,10 @@ pg_stopevent_reset(PG_FUNCTION_ARGS)
 Datum
 pg_stopevents(PG_FUNCTION_ARGS)
 {
-	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	bool		randomAccess;
 	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
+	tupstore: &mut Tuplestorestate;
 	MemoryContext oldcontext;
 	AttrNumber	attnum;
 	int			i;
@@ -197,11 +197,11 @@ pg_stopevents(PG_FUNCTION_ARGS)
 	{
 		Datum		values[3];
 		bool		nulls[3] = {false, false, false};
-		StopEvent  *event = &stopevents[i];
+		event: &mut StopEvent = &stopevents[i];
 		proclist_mutable_iter iter;
-		List	   *waiters = NIL;
-		Datum	   *elems;
-		ListCell   *lc;
+		waiters: &mut List = NIL;
+		elems: &mut Datum;
+		lc: &mut ListCell;
 		int			j;
 
 		SpinLockAcquire(&event->lock);
@@ -216,7 +216,7 @@ pg_stopevents(PG_FUNCTION_ARGS)
 		SpinLockAcquire(&event->cv.mutex);
 		proclist_foreach_modify(iter, &event->cv.wakeup, cvWaitLink)
 		{
-			PGPROC	   *waiter = GetPGProcByNumber(iter.cur);
+			waiter: &mut PGPROC = GetPGProcByNumber(iter.cur);
 
 			waiters = lappend_int(waiters, waiter->pid);
 		}
@@ -245,7 +245,7 @@ pid_is_waiting_for_stopevent(int pid)
 
 	for (i = 0; i < STOPEVENTS_COUNT; i++)
 	{
-		StopEvent  *event = &stopevents[i];
+		event: &mut StopEvent = &stopevents[i];
 		proclist_mutable_iter iter;
 
 		SpinLockAcquire(&event->lock);
@@ -258,7 +258,7 @@ pid_is_waiting_for_stopevent(int pid)
 		SpinLockAcquire(&event->cv.mutex);
 		proclist_foreach_modify(iter, &event->cv.wakeup, cvWaitLink)
 		{
-			PGPROC	   *waiter = GetPGProcByNumber(iter.cur);
+			waiter: &mut PGPROC = GetPGProcByNumber(iter.cur);
 
 			if (waiter->pid == pid)
 			{
@@ -274,11 +274,11 @@ pid_is_waiting_for_stopevent(int pid)
 }
 
 static Jsonb *
-make_process_params(void)
+make_process_params()
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
-	const char *beType = NULL;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
+	const beType: &mut char = NULL;
 	BackendType bt;
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
@@ -311,7 +311,7 @@ make_process_params(void)
 }
 
 static bool
-check_stopevent_condition(StopEvent *event, Jsonb *params)
+check_stopevent_condition(event: &mut StopEvent, params: &mut Jsonb)
 {
 	Datum		res;
 
@@ -334,10 +334,10 @@ check_stopevent_condition(StopEvent *event, Jsonb *params)
 }
 
 static Jsonb *
-make_empty_params(void)
+make_empty_params()
 {
-	JsonbParseState *state = NULL;
-	Jsonb	   *res;
+	state: &mut JsonbParseState = NULL;
+	res: &mut Jsonb;
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -349,7 +349,7 @@ make_empty_params(void)
 }
 
 static uint32
-stop_event_wait_info(void)
+stop_event_wait_info()
 {
 #if PG_VERSION_NUM >= 170000
 	static uint32 cached_wait_info = 0;
@@ -362,10 +362,10 @@ stop_event_wait_info(void)
 #endif
 }
 
-void
-handle_stopevent(int event_id, Jsonb *params)
+
+handle_stopevent(int event_id, params: &mut Jsonb)
 {
-	StopEvent  *event = &stopevents[event_id];
+	event: &mut StopEvent = &stopevents[event_id];
 
 	Assert(event_id >= 0 && event_id < STOPEVENTS_COUNT);
 
@@ -405,7 +405,7 @@ handle_stopevent(int event_id, Jsonb *params)
 
 	if (trace_stopevents)
 	{
-		char	   *params_string;
+		params_string: &mut char;
 
 		params_string = DatumGetCString(DirectFunctionCall1(jsonb_out, PointerGetDatum(params)));
 		elog(LOG, "stop event \"%s\", params \"%s\"",
@@ -418,9 +418,9 @@ handle_stopevent(int event_id, Jsonb *params)
 }
 
 bool
-check_stopevent(int event_id, Jsonb *params)
+check_stopevent(int event_id, params: &mut Jsonb)
 {
-	StopEvent  *event = &stopevents[event_id];
+	event: &mut StopEvent = &stopevents[event_id];
 
 	Assert(event_id >= 0 && event_id < STOPEVENTS_COUNT);
 
@@ -430,10 +430,10 @@ check_stopevent(int event_id, Jsonb *params)
 	return false;
 }
 
-void
+
 wait_for_stopevent_enabled(int event_id)
 {
-	StopEvent  *event = &stopevents[event_id];
+	event: &mut StopEvent = &stopevents[event_id];
 
 	Assert(event_id >= 0 && event_id < STOPEVENTS_COUNT);
 
@@ -450,8 +450,8 @@ wait_for_stopevent_enabled(int event_id)
 	ConditionVariableCancelSleep();
 }
 
-void
-stopevents_make_cxt(void)
+
+stopevents_make_cxt()
 {
 	if (!stopevents_cxt)
 		stopevents_cxt = AllocSetContextCreate(TopMemoryContext,

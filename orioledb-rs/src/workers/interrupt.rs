@@ -17,12 +17,12 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static void o_worker_shutdown(int elevel);
+fn o_worker_shutdown(int elevel);
 
 //
 // Exit from an orioledb worker
 //
-static void
+fn
 o_worker_shutdown(int elevel)
 {
 	Assert(MyBackendType == B_BG_WORKER);
@@ -31,8 +31,8 @@ o_worker_shutdown(int elevel)
 			 errmsg("terminating orioledb worker due to administrator command")));
 }
 
-void
-o_worker_handle_interrupts(void)
+
+o_worker_handle_interrupts()
 {
 	//
 // In case of a pending shutdown request we just raise an ERROR message
