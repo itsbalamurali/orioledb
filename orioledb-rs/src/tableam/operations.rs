@@ -123,7 +123,7 @@ set_pending_sk_marker(descr: &mut OTableDescr, UndoLocation pkUndoLoc)
 
 fire_sk_modify_pending_stopevent(descr: &mut OTableDescr)
 {
-	UndoLocation cur;
+	pub static mut CUR: UndoLocation = std::mem::zeroed();
 
 	if (!STOPEVENTS_ENABLED())
 		return;
@@ -137,8 +137,8 @@ fire_sk_modify_pending_stopevent(descr: &mut OTableDescr)
 		return;
 
 	{
-		state: &mut JsonbParseState = NULL;
-		params: &mut Jsonb;
+		pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+		pub static mut JSONB: *mut params = std::ptr::null_mut();
 		MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
 		pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
@@ -297,7 +297,7 @@ o_apply_new_bridge_index_ctid(descr: &mut OTableDescr, Relation relation,
 {
 	primary: &mut OIndexDescr = GET_PRIMARY(descr);
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	bool		success;
+	pub static mut SUCCESS: bool = false;
 	BTreeModifyCallbackInfo callbackInfo =
 	{
 		.waitCallback = NULL,
@@ -305,14 +305,14 @@ o_apply_new_bridge_index_ctid(descr: &mut OTableDescr, Relation relation,
 		.modifyCallback = NULL,
 		.needsUndoForSelfCreated = true
 	};
-	OSnapshot	o_snapshot;
-	OXid		oxid;
-	bridge_slot: &mut TupleTableSlot;
-	uint32		version = 0;
-	OTuple		tuple;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut TUPLE_TABLE_SLOT: *mut bridge_slot = std::ptr::null_mut();
+	pub static mut VERSION: uint32 = 0;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 	Datum		values[INDEX_MAX_KEYS + 1];
 	bool		isnull[INDEX_MAX_KEYS + 1];
-	bool		overflow = false;
+	pub static mut OVERFLOW: bool = false;
 
 	if (descr->bridge->primaryIsCtid)
 	{
@@ -321,7 +321,7 @@ o_apply_new_bridge_index_ctid(descr: &mut OTableDescr, Relation relation,
 	}
 	else
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		for (i = 0; i < GET_PRIMARY(descr)->nKeyFields; i++)
 		{
@@ -375,11 +375,11 @@ delete_old_bridge_index_ctid(descr: &mut OTableDescr, Relation relation,
 							 ItemPointer iptr, CommitSeqNo csn)
 {
 	primary: &mut OIndexDescr = GET_PRIMARY(descr);
-	OSnapshot	o_snapshot;
-	OXid		oxid;
-	bridge_slot: &mut TupleTableSlot;
-	bridge_oslot: &mut OTableSlot;
-	OTableModifyResult result PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut TUPLE_TABLE_SLOT: *mut bridge_slot = std::ptr::null_mut();
+	pub static mut O_TABLE_SLOT: *mut bridge_oslot = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OTableModifyResult result = std::mem::zeroed();
 
 	bridge_slot = descr->bridge->new_leaf_slot;
 	bridge_oslot = (OTableSlot *) bridge_slot;
@@ -392,7 +392,7 @@ delete_old_bridge_index_ctid(descr: &mut OTableDescr, Relation relation,
 
 	if (primary->desc.storageType == BTreeStoragePersistence)
 	{
-		OTuple		keyTuple;
+		pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
 
 		keyTuple.formatFlags = O_TUPLE_FLAGS_FIXED_FORMAT;
 		keyTuple.data = (Pointer) &bridge_oslot->bridge_ctid;
@@ -415,10 +415,10 @@ TupleTableSlot *
 o_tbl_insert(descr: &mut OTableDescr, Relation relation,
 			 slot: &mut TupleTableSlot, OXid oxid, CommitSeqNo csn)
 {
-	OTableModifyResult mres;
-	OTuple		tup;
+	pub static mut MRES: OTableModifyResult = std::mem::zeroed();
+	pub static mut TUP: OTuple = std::mem::zeroed();
 	primary: &mut OIndexDescr = GET_PRIMARY(descr);
-	bool		was_saving;
+	pub static mut WAS_SAVING: bool = false;
 	BTreeModifyCallbackInfo callbackInfo =
 	{
 		.waitCallback = NULL,
@@ -450,7 +450,7 @@ o_tbl_insert(descr: &mut OTableDescr, Relation relation,
 
 	if (GET_PRIMARY(descr)->primaryIsCtid)
 	{
-		ItemPointerData iptr;
+		pub static mut IPTR: ItemPointerData = std::mem::zeroed();
 
 		o_btree_load_shmem(&primary->desc);
 		iptr = btree_ctid_get_and_inc(&primary->desc);
@@ -500,7 +500,7 @@ o_tbl_insert(descr: &mut OTableDescr, Relation relation,
 	if (primary->desc.storageType == BTreeStoragePersistence)
 		o_wal_insert(&primary->desc, tup, relation->rd_rel->relreplident, descr->version);
 
-	return slot;
+	pub static mut SLOT: return = std::mem::zeroed();
 }
 
 //
@@ -510,8 +510,8 @@ o_tbl_insert(descr: &mut OTableDescr, Relation relation,
 //
 typedef struct MultiInsertSortCtx
 {
-	desc: &mut BTreeDescr;
-	keys: &mut OBTreeKeyBound;
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
+	pub static mut OB_TREE_KEY_BOUND: *mut keys = std::ptr::null_mut();
 } MultiInsertSortCtx;
 
 static int
@@ -565,13 +565,13 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 				   OXid oxid, CommitSeqNo csn)
 {
 	primary: &mut OIndexDescr = GET_PRIMARY(descr);
-	pdesc: &mut BTreeDescr = &primary->desc;
-	bool		was_saving;
-	tuples: &mut OTuple;
-	tuplens: &mut LocationIndex;
-	keys: &mut OBTreeKeyBound;
-	keyptrs: &mut Pointer;
-	OBTreeFindPageContext ctx;
+	pub static mut B_TREE_DESCR: *mut pdesc = &primary->desc;
+	pub static mut WAS_SAVING: bool = false;
+	pub static mut O_TUPLE: *mut tuples = std::ptr::null_mut();
+	pub static mut LOCATION_INDEX: *mut tuplens = std::ptr::null_mut();
+	pub static mut OB_TREE_KEY_BOUND: *mut keys = std::ptr::null_mut();
+	pub static mut POINTER: *mut keyptrs = std::ptr::null_mut();
+	pub static mut CTX: OBTreeFindPageContext = std::mem::zeroed();
 	BTreeModifyCallbackInfo callbackInfo =
 	{
 		.waitCallback = NULL,
@@ -580,7 +580,7 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 		.needsUndoForSelfCreated = false,
 		.postUndoRecorded = set_pending_sk_marker_from_slot
 	};
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	was_saving = o_start_saving_inval_messages();
 	CheckCmdReplicaIdentity(relation, CMD_INSERT);
@@ -594,7 +594,7 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 //
 	for (i = 0; i < ntuples; i++)
 	{
-		slot: &mut TupleTableSlot = slots[i];
+		pub static mut TUPLE_TABLE_SLOT: *mut slot = slots[i];
 
 		if (slot->tts_ops != descr->newTuple->tts_ops ||
 			(((OTableSlot *) slot)->descr != NULL &&
@@ -614,7 +614,7 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 	// Phase 1: per-slot prep (ctid, bridge, toast, form, key bound).
 	for (i = 0; i < ntuples; i++)
 	{
-		slot: &mut TupleTableSlot = slots[i];
+		pub static mut TUPLE_TABLE_SLOT: *mut slot = slots[i];
 
 		if (primary->primaryIsCtid)
 		{
@@ -654,12 +654,12 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 // slot via idx[].
 //
 	{
-		use_tuples: &mut OTuple = tuples;
-		use_tuplens: &mut LocationIndex = tuplens;
-		use_keyptrs: &mut Pointer = keyptrs;
+		pub static mut O_TUPLE: *mut use_tuples = tuples;
+		pub static mut LOCATION_INDEX: *mut use_tuplens = tuplens;
+		pub static mut POINTER: *mut use_keyptrs = keyptrs;
 			  **use_cb_args = ( **) slots;
-		idx: &mut int = NULL;
-		bool		sorted = true;
+		pub static mut INT: *mut idx = std::ptr::null_mut();
+		pub static mut SORTED: bool = true;
 
 		for (i = 1; i < ntuples; i++)
 		{
@@ -674,9 +674,9 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 		if (!sorted)
 		{
 			MultiInsertSortCtx sortcx = {pdesc, keys};
-			sorted_tuples: &mut OTuple;
-			sorted_tuplens: &mut LocationIndex;
-			sorted_keyptrs: &mut Pointer;
+			pub static mut O_TUPLE: *mut sorted_tuples = std::ptr::null_mut();
+			pub static mut LOCATION_INDEX: *mut sorted_tuplens = std::ptr::null_mut();
+			pub static mut POINTER: *mut sorted_keyptrs = std::ptr::null_mut();
 				  **sorted_cb_args;
 
 			idx = (int *) palloc(sizeof(int) * ntuples);
@@ -709,18 +709,18 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 		i = 0;
 		while (i < ntuples)
 		{
-			OFindPageResult fr PG_USED_FOR_ASSERTS_ONLY;
-			BTreeLeafProbeResult result;
-			int			n;
-			int			remaining = ntuples - i;
-			int			batch = remaining;
-			int			k;
-			int			orig;
+			pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult fr = std::mem::zeroed();
+			pub static mut RESULT: BTreeLeafProbeResult = std::mem::zeroed();
+			pub static mut N: std::os::raw::c_int = 0;
+			pub static mut REMAINING: std::os::raw::c_int = ntuples - i;
+			pub static mut BATCH: std::os::raw::c_int = remaining;
+			pub static mut K: std::os::raw::c_int = 0;
+			pub static mut ORIG: std::os::raw::c_int = 0;
 
 			if (pdesc->undoType != UndoLogNone)
 			{
-				Size		need = MAXIMUM_ALIGNOF;
-				Size		maxrow = 0;
+				pub static mut NEED: Size = MAXIMUM_ALIGNOF;
+				pub static mut MAXROW: Size = 0;
 
 				//
 // Bound the batch by the per-backend row-undo share the
@@ -813,8 +813,8 @@ o_tbl_multi_insert(descr: &mut OTableDescr, Relation relation,
 	// Phase 4: per-slot TOAST values + WAL.
 	for (i = 0; i < ntuples; i++)
 	{
-		slot: &mut TupleTableSlot = slots[i];
-		OTuple		tup;
+		pub static mut TUPLE_TABLE_SLOT: *mut slot = slots[i];
+		pub static mut TUP: OTuple = std::mem::zeroed();
 
 		o_toast_insert_values(relation, descr, slot, oxid, csn);
 		tup = tts_orioledb_form_tuple(slot, descr);
@@ -836,13 +836,13 @@ tuple_lock_mode_to_row_lock_mode(LockTupleMode mode)
 	switch (mode)
 	{
 		case LockTupleKeyShare:
-			return RowLockKeyShare;
+			pub static mut ROW_LOCK_KEY_SHARE: return = std::mem::zeroed();
 		case LockTupleShare:
-			return RowLockShare;
+			pub static mut ROW_LOCK_SHARE: return = std::mem::zeroed();
 		case LockTupleNoKeyExclusive:
-			return RowLockNoKeyUpdate;
+			pub static mut ROW_LOCK_NO_KEY_UPDATE: return = std::mem::zeroed();
 		case LockTupleExclusive:
-			return RowLockUpdate;
+			pub static mut ROW_LOCK_UPDATE: return = std::mem::zeroed();
 		default:
 			elog(ERROR, "Unknown lock mode: %u", mode);
 			break;
@@ -854,9 +854,9 @@ OBTreeModifyResult
 o_tbl_lock(descr: &mut OTableDescr, pkey: &mut OBTreeKeyBound, LockTupleMode mode,
 		   OXid oxid, larg: &mut OLockCallbackArg, hint: &mut BTreeLocationHint)
 {
-	RowLockMode lock_mode;
-	OBTreeModifyResult res;
-	OTuple		nullTup;
+	pub static mut LOCK_MODE: RowLockMode = std::mem::zeroed();
+	pub static mut RES: OBTreeModifyResult = std::mem::zeroed();
+	pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = o_lock_wait_callback,
 		.modifyDeletedCallback = o_lock_deleted_callback,
@@ -875,7 +875,7 @@ o_tbl_lock(descr: &mut OTableDescr, pkey: &mut OBTreeKeyBound, LockTupleMode mod
 
 	Assert(res == OBTreeModifyResultLocked || res == OBTreeModifyResultFound || res == OBTreeModifyResultNotFound);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 fn
@@ -887,7 +887,7 @@ fill_pkey_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, pkey: &mut OBT
 
 	if (idx->primaryIsCtid)
 	{
-		Datum		value;
+		pub static mut VALUE: Datum = std::mem::zeroed();
 
 		pkey->nkeys = 1;
 		if (idx->bridging)
@@ -903,15 +903,15 @@ fill_pkey_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, pkey: &mut OBT
 	}
 	else
 	{
-		int			i;
-		int			pk_from;
+		pub static mut I: std::os::raw::c_int = 0;
+		pub static mut PK_FROM: std::os::raw::c_int = 0;
 
 		pk_from = idx->nFields - idx->nPrimaryFields;
 
 		pkey->nkeys = idx->nPrimaryFields;
 		for (i = 0; i < idx->nPrimaryFields; i++)
 		{
-			AttrNumber	attnum = idx->primaryFieldsAttnums[i];
+			pub static mut ATTNUM: AttrNumber = idx->primaryFieldsAttnums[i];
 
 			pkey->keys[i].value = slot->tts_values[attnum - 1];
 			pkey->keys[i].type = TupleDescAttr(idx->leafTupdesc, pk_from + i)->atttypid;
@@ -929,7 +929,7 @@ bridged_index_fill_pkey_bound(slot: &mut TupleTableSlot, primary: &mut OIndexDes
 {
 	if (primary->primaryIsCtid)
 	{
-		Datum		value;
+		pub static mut VALUE: Datum = std::mem::zeroed();
 
 		pkey->nkeys = 1;
 		value = PointerGetDatum(&slot->tts_tid);
@@ -942,12 +942,12 @@ bridged_index_fill_pkey_bound(slot: &mut TupleTableSlot, primary: &mut OIndexDes
 	}
 	else
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		pkey->nkeys = primary->nKeyFields;
 		for (i = 0; i < primary->nKeyFields; i++)
 		{
-			int			attnum = primary->tableAttnums[i];
+			pub static mut ATTNUM: std::os::raw::c_int = primary->tableAttnums[i];
 
 			pkey->keys[i].value = slot->tts_values[attnum - 1];
 			pkey->keys[i].type = TupleDescAttr(primary->leafTupdesc, attnum - 1)->atttypid;
@@ -963,12 +963,12 @@ bridged_index_fill_pkey_bound(slot: &mut TupleTableSlot, primary: &mut OIndexDes
 static int
 o_exclusion_cmp(id: &mut OIndexDescr, key1: &mut OBTreeKeyBound, tuple2: &mut OTuple)
 {
-	TupleDesc	tupdesc;
-	spec: &mut OTupleFixedFormatSpec;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = std::ptr::null_mut();
 	int			i,
 				attnum;
-	Datum		value;
-	bool		isnull;
+	pub static mut VALUE: Datum = std::mem::zeroed();
+	pub static mut ISNULL: bool = false;
 
 	tupdesc = id->leafTupdesc;
 	spec = &id->leafSpec;
@@ -976,8 +976,8 @@ o_exclusion_cmp(id: &mut OIndexDescr, key1: &mut OBTreeKeyBound, tuple2: &mut OT
 	Assert(id->nKeyFields > 0); // for clang-analyzer
 	for (i = 0; i < id->nKeyFields; i++)
 	{
-		uint8		flags = key1->keys[i].flags;
-		int			cmp;
+		pub static mut FLAGS: uint8 = key1->keys[i].flags;
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		if (flags & O_VALUE_BOUND_UNBOUNDED)
 			return (flags & O_VALUE_BOUND_LOWER) ? -1 : 1;
@@ -988,17 +988,17 @@ o_exclusion_cmp(id: &mut OIndexDescr, key1: &mut OBTreeKeyBound, tuple2: &mut OT
 		cmp = o_idx_cmp_range_key_to_value(&key1->keys[i], &id->fields[i],
 										   value, isnull);
 		if (cmp != 0)
-			return cmp;
+			pub static mut CMP: return = std::mem::zeroed();
 	}
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
 exclusion_fill_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &mut OBTreeKeyBound)
 {
-	int			i;
-	int			ctid_off = idx->primaryIsCtid ? 1 : 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = idx->primaryIsCtid ? 1 : 0;
 	indexpr_item: &mut ListCell = list_head(idx->expressions_state);
 
 	slot_getsomeattrs(slot, idx->maxTableAttnum - ctid_off);
@@ -1007,10 +1007,10 @@ exclusion_fill_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &m
 	Assert(bound->nkeys > 0);	// for clang-analyzer
 	for (i = 0; i < bound->nkeys; i++)
 	{
-		Datum		value;
-		bool		isnull;
-		int			attnum;
-		Oid			typid;
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
+		pub static mut ATTNUM: std::os::raw::c_int = 0;
+		pub static mut TYPID: Oid = std::mem::zeroed();
 
 		attnum = idx->tableAttnums[i];
 
@@ -1042,11 +1042,11 @@ exclusion_fill_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &m
 static bool
 o_check_exclusion_constraint(descr: &mut OTableDescr, index: &mut OIndexDescr, slot: &mut TupleTableSlot)
 {
-	OSnapshot	o_snapshot;
-	OXid		oxid;
-	iter: &mut BTreeIterator;
-	OTuple		tuple;
-	OBTreeKeyBound bound;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut B_TREE_ITERATOR: *mut iter = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut BOUND: OBTreeKeyBound = std::mem::zeroed();
 
 	fill_current_oxid_osnapshot(&oxid, &o_snapshot);
 	iter = o_btree_iterator_create(&index->desc, NULL, BTreeKeyNone, &o_snapshot, ForwardScanDirection);
@@ -1066,7 +1066,7 @@ o_check_exclusion_constraint(descr: &mut OTableDescr, index: &mut OIndexDescr, s
 			{
 				pfree(tuple.data);
 				btree_iterator_free(iter);
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 		}
 
@@ -1077,7 +1077,7 @@ o_check_exclusion_constraint(descr: &mut OTableDescr, index: &mut OIndexDescr, s
 	}
 	btree_iterator_free(iter);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 TupleTableSlot *
@@ -1091,12 +1091,12 @@ o_tbl_insert_with_arbiter(Relation rel,
 						  estate: &mut EState,
 						  resultRelInfo: &mut ResultRelInfo)
 {
-	InsertOnConflictCallbackArg ioc_arg;
-	UndoStackLocations undoStackLocations;
-	OTuple		tup;
+	pub static mut IOC_ARG: InsertOnConflictCallbackArg = std::mem::zeroed();
+	pub static mut UNDO_STACK_LOCATIONS: UndoStackLocations = std::mem::zeroed();
+	pub static mut TUP: OTuple = std::mem::zeroed();
 	OSnapshot	oSnapshot = {0};
-	CommitSeqNo csn;
-	OXid		oxid;
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
 	Datum		conflictRowid = PointerGetDatum(( *) 0xB0B);
 
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
@@ -1112,11 +1112,11 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 	while (true)
 	{
-		CommitSeqNo save_csn = csn;
+		pub static mut SAVE_CSN: CommitSeqNo = csn;
 		int			i,
 					failedIndexNumber = -1;
-		bool		success = true;
-		bool		specConflict = false;
+		pub static mut SUCCESS: bool = true;
+		pub static mut SPEC_CONFLICT: bool = false;
 
 		BTreeModifyCallbackInfo callbackInfo = {
 			.waitCallback = o_insert_with_arbiter_wait_callback,
@@ -1134,7 +1134,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 		for (i = 0; (i < descr->nIndices) && success; i++)
 		{
-			OBTreeModifyResult result;
+			pub static mut RESULT: OBTreeModifyResult = std::mem::zeroed();
 
 			if (arbiterIndexes != NIL &&
 				!list_member_oid(arbiterIndexes, descr->indices[i]->oids.reloid))
@@ -1171,12 +1171,12 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 		if (descr->bridge)
 		{
-			conflictRowidPtr: &mut Datum = &conflictRowid;
+			pub static mut DATUM: *mut conflictRowidPtr = &conflictRowid;
 			Datum		conflictRowidPtrDatum = PointerGetDatum(conflictRowidPtr);
 
 #if PG_VERSION_NUM >= 180000
-			ItemPointerData invalidItemPtr;
-			Datum		invalidItemPtrDatum;
+			pub static mut INVALID_ITEM_PTR: ItemPointerData = std::mem::zeroed();
+			pub static mut INVALID_ITEM_PTR_DATUM: Datum = std::mem::zeroed();
 
 			if (table_get_row_ref_type(resultRelInfo->ri_RelationDesc) == ROW_REF_ROWID)
 				invalidItemPtrDatum = PointerGetDatum(NULL);
@@ -1197,11 +1197,11 @@ o_tbl_insert_with_arbiter(Relation rel,
 			{
 				if (lockedSlot)
 				{
-					TM_Result	test;
-					TM_FailureData tmfd;
-					Datum		xminDatum;
-					TransactionId xmin;
-					bool		isnull;
+					pub static mut TEST: TM_Result = std::mem::zeroed();
+					pub static mut TMFD: TM_FailureData = std::mem::zeroed();
+					pub static mut XMIN_DATUM: Datum = std::mem::zeroed();
+					pub static mut XMIN: TransactionId = std::mem::zeroed();
+					pub static mut ISNULL: bool = false;
 
 					// Determine lock mode to use
 					lockmode = ExecUpdateLockMode(estate, resultRelInfo);
@@ -1299,7 +1299,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 // deleted.
 //
 							ExecClearTuple(lockedSlot);
-							return NULL;
+							pub static mut NULL: return = std::mem::zeroed();
 
 						case TM_Deleted:
 							if (IsolationUsesXactSnapshot())
@@ -1310,7 +1310,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 							// see TM_Updated case
 							Assert(!ItemPointerIndicatesMovedPartitions(&tmfd.ctid));
 							ExecClearTuple(lockedSlot);
-							return NULL;
+							pub static mut NULL: return = std::mem::zeroed();
 
 						default:
 							elog(ERROR, "unrecognized table_tuple_lock status: %u", test);
@@ -1334,7 +1334,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 // versions.
 //
 					// ExecCheckTupleVisible(estate, rel, lockedSlot);
-					return NULL;
+					pub static mut NULL: return = std::mem::zeroed();
 				}
 				else
 				{
@@ -1342,7 +1342,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 // ExecCheckTIDVisible(estate, rel, &conflictTid,
 // tempSlot);
 //
-					return NULL;
+					pub static mut NULL: return = std::mem::zeroed();
 				}
 			}
 
@@ -1354,8 +1354,8 @@ o_tbl_insert_with_arbiter(Relation rel,
 			{
 				if (lockedSlot)
 				{
-					rowid: &mut bytea;
-					Pointer		p;
+					pub static mut BYTEA: *mut rowid = std::ptr::null_mut();
+					pub static mut P: Pointer = std::ptr::null_mut();
 					primary: &mut OIndexDescr = GET_PRIMARY(descr);
 
 					ExecCopySlot(lockedSlot, slot);
@@ -1365,8 +1365,8 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 					if (!primary->primaryIsCtid)
 					{
-						add: &mut ORowIdAddendumNonCtid;
-						OTuple		tuple;
+						pub static mut O_ROW_ID_ADDENDUM_NON_CTID: *mut add = std::ptr::null_mut();
+						pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 						add = (ORowIdAddendumNonCtid *) p;
 						p += MAXALIGN(sizeof(ORowIdAddendumNonCtid));
@@ -1379,7 +1379,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 						for (i = 0; i < primary->nKeyFields; i++)
 						{
-							int			attnum;
+							pub static mut ATTNUM: std::os::raw::c_int = 0;
 
 							attnum = primary->tableAttnums[i];
 
@@ -1403,7 +1403,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 		ioc_arg.copyPrimaryOxid = true;
 		for (i = 0; (i < descr->nIndices) && success; i++)
 		{
-			OBTreeModifyResult result;
+			pub static mut RESULT: OBTreeModifyResult = std::mem::zeroed();
 
 			if (arbiterIndexes == NIL ||
 				list_member_oid(arbiterIndexes, descr->indices[i]->oids.reloid))
@@ -1435,7 +1435,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 			if (primary->desc.storageType == BTreeStoragePersistence)
 				o_wal_insert(&primary->desc, tup, rel->rd_rel->relreplident, descr->version);
-			return slot;
+			pub static mut SLOT: return = std::mem::zeroed();
 		}
 
 		// Conflict on non-arbiter index case
@@ -1469,7 +1469,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 				}
 				STOPEVENT(STOPEVENT_IOC_BEFORE_UPDATE, NULL);
 			}
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 		}
 
 		// Failed to insert.  Rollback the changes we managed to make.
@@ -1494,9 +1494,9 @@ o_tbl_insert_with_arbiter(Relation rel,
 			OBTreeKeyBound key,
 						key2;
 			BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
-			OLockCallbackArg larg;
-			OBTreeModifyResult lockResult;
-			TupleDesc	saved_td;
+			pub static mut LARG: OLockCallbackArg = std::mem::zeroed();
+			pub static mut LOCK_RESULT: OBTreeModifyResult = std::mem::zeroed();
+			pub static mut SAVED_TD: TupleDesc = std::mem::zeroed();
 
 			Assert(failedIndexNumber >= 0 || specConflict);
 			Assert(!TTS_EMPTY(lockedSlot));
@@ -1574,11 +1574,11 @@ o_tbl_insert_with_arbiter(Relation rel,
 				}
 			}
 		}
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	Assert(false);
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 OTableModifyResult
@@ -1587,13 +1587,13 @@ o_tbl_update(descr: &mut OTableDescr, slot: &mut TupleTableSlot,
 			 CommitSeqNo csn, hint: &mut BTreeLocationHint,
 			 arg: &mut OModifyCallbackArg, ItemPointer bridge_ctid)
 {
-	oldSlot: &mut TupleTableSlot;
-	OTableModifyResult mres;
-	OBTreeKeyBound newPkey;
-	OTuple		newTup;
+	pub static mut TUPLE_TABLE_SLOT: *mut oldSlot = std::ptr::null_mut();
+	pub static mut MRES: OTableModifyResult = std::mem::zeroed();
+	pub static mut NEW_PKEY: OBTreeKeyBound = std::mem::zeroed();
+	pub static mut NEW_TUP: OTuple = std::mem::zeroed();
 	primary: &mut OIndexDescr = GET_PRIMARY(descr);
-	bool		touched_indices = false;
-	bool		was_saving;
+	pub static mut TOUCHED_INDICES: bool = false;
+	pub static mut WAS_SAVING: bool = false;
 
 	was_saving = o_start_saving_inval_messages();
 	CheckCmdReplicaIdentity(rel, CMD_UPDATE);
@@ -1621,11 +1621,11 @@ o_tbl_update(descr: &mut OTableDescr, slot: &mut TupleTableSlot,
 
 	if (descr->bridge)
 	{
-		indexIds: &mut List;
-		indexId: &mut ListCell;
-		int			attnum;
-		newSlot: &mut TupleTableSlot;
-		changed_attrs: &mut Bitmapset = NULL;
+		pub static mut LIST: *mut indexIds = std::ptr::null_mut();
+		pub static mut LIST_CELL: *mut indexId = std::ptr::null_mut();
+		pub static mut ATTNUM: std::os::raw::c_int = 0;
+		pub static mut TUPLE_TABLE_SLOT: *mut newSlot = std::ptr::null_mut();
+		pub static mut BITMAPSET: *mut changed_attrs = std::ptr::null_mut();
 
 		was_saving = o_start_saving_inval_messages();
 		// not using simple reindex_relation here anymore,
@@ -1668,7 +1668,7 @@ o_tbl_update(descr: &mut OTableDescr, slot: &mut TupleTableSlot,
 		{
 			Oid			indexOid = lfirst_oid(indexId);
 			Relation	index_rel = index_open(indexOid, AccessExclusiveLock);
-			bool		interesting = index_rel->rd_rel->relam != BTREE_AM_OID;
+			pub static mut INTERESTING: bool = index_rel->rd_rel->relam != BTREE_AM_OID;
 
 			if (!interesting)
 			{
@@ -1680,13 +1680,13 @@ o_tbl_update(descr: &mut OTableDescr, slot: &mut TupleTableSlot,
 			{
 				for (attnum = 0; attnum < index_rel->rd_index->indnatts; attnum++)
 				{
-					AttrNumber	tbl_attnum = index_rel->rd_index->indkey.values[attnum];
+					pub static mut TBL_ATTNUM: AttrNumber = index_rel->rd_index->indkey.values[attnum];
 
 					if (index_rel->rd_indpred != NIL)
 					{
-						predicate: &mut ExprState;
-						estate: &mut EState;
-						econtext: &mut ExprContext;
+						pub static mut EXPR_STATE: *mut predicate = std::ptr::null_mut();
+						pub static mut E_STATE: *mut estate = std::ptr::null_mut();
+						pub static mut EXPR_CONTEXT: *mut econtext = std::ptr::null_mut();
 
 						estate = CreateExecutorState();
 						predicate = ExecPrepareQual(index_rel->rd_indpred, estate);
@@ -1822,14 +1822,14 @@ o_tbl_update(descr: &mut OTableDescr, slot: &mut TupleTableSlot,
 		{
 			Assert(mres.action == BTreeOperationLock);
 			Assert(mres.oldTuple);
-			return mres;
+			pub static mut MRES: return = std::mem::zeroed();
 		}
 	}
 
 	if (mres.success && mres.oldTuple != NULL)
 		mres.oldTuple = slot;
 
-	return mres;
+	pub static mut MRES: return = std::mem::zeroed();
 }
 
 OTableModifyResult
@@ -1837,8 +1837,8 @@ o_tbl_delete(Relation rel, descr: &mut OTableDescr, primary_key: &mut OBTreeKeyB
 			 OXid oxid, CommitSeqNo csn,
 			 hint: &mut BTreeLocationHint, arg: &mut OModifyCallbackArg)
 {
-	OTableModifyResult result;
-	bool		was_saving;
+	pub static mut RESULT: OTableModifyResult = std::mem::zeroed();
+	pub static mut WAS_SAVING: bool = false;
 
 	was_saving = o_start_saving_inval_messages();
 	CheckCmdReplicaIdentity(rel, CMD_DELETE);
@@ -1873,7 +1873,7 @@ o_tbl_delete(Relation rel, descr: &mut OTableDescr, primary_key: &mut OBTreeKeyB
 		if (result.action == BTreeOperationDelete)
 		{
 			primary: &mut OIndexDescr = GET_PRIMARY(descr);
-			OTuple		primary_tuple;
+			pub static mut PRIMARY_TUPLE: OTuple = std::mem::zeroed();
 			oslot: &mut OTableSlot = (OTableSlot *) result.oldTuple;
 
 			csn = arg->csn;
@@ -1886,7 +1886,7 @@ o_tbl_delete(Relation rel, descr: &mut OTableDescr, primary_key: &mut OBTreeKeyB
 			{
 				result.success = false;
 				result.failedIxNum = TOASTIndexNumber;
-				return result;
+				pub static mut RESULT: return = std::mem::zeroed();
 			}
 
 			primary_tuple = ((OTableSlot *) result.oldTuple)->tuple;
@@ -1897,17 +1897,17 @@ o_tbl_delete(Relation rel, descr: &mut OTableDescr, primary_key: &mut OBTreeKeyB
 		else
 		{
 			Assert(result.action == BTreeOperationLock);
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 bool
 o_is_index_predicate_satisfied(idx: &mut OIndexDescr, slot: &mut TupleTableSlot,
 							   econtext: &mut ExprContext)
 {
-	bool		result = true;
+	pub static mut RESULT: bool = true;
 
 	// Check for partial index
 	if (idx->predicate != NIL)
@@ -1917,7 +1917,7 @@ o_is_index_predicate_satisfied(idx: &mut OIndexDescr, slot: &mut TupleTableSlot,
 		if (!ExecQual(idx->predicate_state, econtext))
 			result = false;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 // fills key bound from tuple or index tuple that belongs to current BTree
@@ -1925,7 +1925,7 @@ fn
 fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &mut OBTreeKeyBound)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	slot_getallattrs(slot);
 
@@ -1933,9 +1933,9 @@ fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, bound: &mut OBT
 	Assert(bound->nkeys > 0);	// for clang-analyzer
 	for (i = 0; i < bound->nkeys; i++)
 	{
-		Datum		value;
-		bool		isnull;
-		Oid			typid;
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
+		pub static mut TYPID: Oid = std::mem::zeroed();
 
 		typid = TupleDescAttr(idx->nonLeafTupdesc, i)->atttypid;
 
@@ -1985,11 +1985,11 @@ o_update_secondary_index(id: &mut OIndexDescr,
 						 CommitSeqNo csn,
 						 IndexUniqueCheck checkUnique)
 {
-	OTableModifyResult res;
+	pub static mut RES: OTableModifyResult = std::mem::zeroed();
 	OBTreeKeyBound old_key,
 				new_key;
-	OTuple		nullTup;
-	BTreeModifyCallbackInfo callbackInfo = nullCallbackInfo;
+	pub static mut NULL_TUP: OTuple = std::mem::zeroed();
+	pub static mut CALLBACK_INFO: BTreeModifyCallbackInfo = nullCallbackInfo;
 
 	slot_getallattrs(oldSlot);
 
@@ -2001,7 +2001,7 @@ o_update_secondary_index(id: &mut OIndexDescr,
 	fill_key_bound(newSlot, id, &new_key);
 
 	if (is_keys_eq(id, &old_key, &new_key) && (old_valid == new_valid))
-		return res;
+		pub static mut RES: return = std::mem::zeroed();
 
 	O_TUPLE_SET_NULL(nullTup);
 
@@ -2042,7 +2042,7 @@ o_update_secondary_index(id: &mut OIndexDescr,
 	}
 	if (!res.success)
 		res.failedIxNum = ix_num;
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 // returns TupleTableSlot of old tuple as OTableModifyResul.result
@@ -2054,9 +2054,9 @@ o_tbl_indices_overwrite(descr: &mut OTableDescr,
 						hint: &mut BTreeLocationHint,
 						arg: &mut OModifyCallbackArg)
 {
-	OTableModifyResult result;
-	OTuple		newTup;
-	OBTreeModifyResult modify_result;
+	pub static mut RESULT: OTableModifyResult = std::mem::zeroed();
+	pub static mut NEW_TUP: OTuple = std::mem::zeroed();
+	pub static mut MODIFY_RESULT: OBTreeModifyResult = std::mem::zeroed();
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = NULL,
 		.modifyDeletedCallback = o_update_deleted_callback,
@@ -2085,7 +2085,7 @@ o_tbl_indices_overwrite(descr: &mut OTableDescr,
 		result.success = true;
 		result.oldTuple = arg->scanSlot;
 		result.action = BTreeOperationLock;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	result.success = modify_result == OBTreeModifyResultUpdated;
@@ -2114,7 +2114,7 @@ o_tbl_indices_overwrite(descr: &mut OTableDescr,
 		result.action = BTreeOperationInsert;
 		result.failedIxNum = PrimaryIndexNumber;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTableModifyResult
@@ -2125,10 +2125,10 @@ o_tbl_indices_reinsert(descr: &mut OTableDescr,
 					   OXid oxid, CommitSeqNo csn,
 					   hint: &mut BTreeLocationHint, arg: &mut OModifyCallbackArg)
 {
-	OTableModifyResult result;
-	OBTreeModifyResult modify_result;
-	OTuple		newTup;
-	bool		inserted;
+	pub static mut RESULT: OTableModifyResult = std::mem::zeroed();
+	pub static mut MODIFY_RESULT: OBTreeModifyResult = std::mem::zeroed();
+	pub static mut NEW_TUP: OTuple = std::mem::zeroed();
+	pub static mut INSERTED: bool = false;
 	BTreeModifyCallbackInfo deleteCallbackInfo = {
 		.waitCallback = NULL,
 		.modifyDeletedCallback = o_delete_deleted_callback,
@@ -2162,7 +2162,7 @@ o_tbl_indices_reinsert(descr: &mut OTableDescr,
 		result.success = true;
 		result.oldTuple = arg->scanSlot;
 		result.action = BTreeOperationLock;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 	else if (modify_result == OBTreeModifyResultNotFound)
 	{
@@ -2170,14 +2170,14 @@ o_tbl_indices_reinsert(descr: &mut OTableDescr,
 		result.oldTuple = NULL;
 		result.action = BTreeOperationDelete;
 		result.failedIxNum = PrimaryIndexNumber;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 	else if (modify_result != OBTreeModifyResultDeleted)
 	{
 		result.success = false;
 		result.action = BTreeOperationDelete;
 		result.failedIxNum = PrimaryIndexNumber;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	inserted = o_btree_modify(&GET_PRIMARY(descr)->desc, BTreeOperationInsert,
@@ -2202,15 +2202,15 @@ o_tbl_indices_reinsert(descr: &mut OTableDescr,
 
 	if (result.success)
 		result.action = BTreeOperationDelete;
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 OTableModifyResult
 o_tbl_index_delete(id: &mut OIndexDescr, OIndexNumber ix_num, slot: &mut TupleTableSlot,
 				   OXid oxid, CommitSeqNo csn)
 {
-	OTableModifyResult result;
-	OBTreeModifyResult res;
+	pub static mut RESULT: OTableModifyResult = std::mem::zeroed();
+	pub static mut RES: OBTreeModifyResult = std::mem::zeroed();
 	OModifyCallbackArg marg = {0};
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = NULL,
@@ -2219,8 +2219,8 @@ o_tbl_index_delete(id: &mut OIndexDescr, OIndexNumber ix_num, slot: &mut TupleTa
 		.needsUndoForSelfCreated = false,
 		.arg = &marg
 	};
-	OBTreeKeyBound bound;
-	OTuple		nullTup;
+	pub static mut BOUND: OBTreeKeyBound = std::mem::zeroed();
+	pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 
 	O_TUPLE_SET_NULL(nullTup);
 
@@ -2238,7 +2238,7 @@ o_tbl_index_delete(id: &mut OIndexDescr, OIndexNumber ix_num, slot: &mut TupleTa
 		result.success = false;
 		result.failedIxNum = ix_num;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 // Returns TupleTableSlot of old tuple as OTableModifyResult.result
@@ -2247,10 +2247,10 @@ o_tbl_indices_delete(descr: &mut OTableDescr, key: &mut OBTreeKeyBound,
 					 OXid oxid, CommitSeqNo csn, hint: &mut BTreeLocationHint,
 					 arg: &mut OModifyCallbackArg)
 {
-	OTableModifyResult result;
-	OBTreeModifyResult res;
-	slot: &mut TupleTableSlot;
-	OTuple		nullTup;
+	pub static mut RESULT: OTableModifyResult = std::mem::zeroed();
+	pub static mut RES: OBTreeModifyResult = std::mem::zeroed();
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+	pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = NULL,
 		.modifyDeletedCallback = o_delete_deleted_callback,
@@ -2286,7 +2286,7 @@ o_tbl_indices_delete(descr: &mut OTableDescr, key: &mut OBTreeKeyBound,
 		result.success = true;
 		result.oldTuple = slot;
 		result.action = BTreeOperationLock;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	result.success = (res == OBTreeModifyResultDeleted);
@@ -2295,14 +2295,14 @@ o_tbl_indices_delete(descr: &mut OTableDescr, key: &mut OBTreeKeyBound,
 	{
 		result.oldTuple = slot;
 		result.failedIxNum = PrimaryIndexNumber;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	result.success = true;
 	result.action = BTreeOperationDelete;
 	result.oldTuple = slot;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 OBTreeModifyResult
@@ -2314,12 +2314,12 @@ o_tbl_index_insert(descr: &mut OTableDescr,
 				   callbackInfo: &mut BTreeModifyCallbackInfo,
 				   IndexUniqueCheck checkUnique)
 {
-	bd: &mut BTreeDescr = &id->desc;
-	OTuple		tup;
-	OBTreeKeyBound knew;
+	pub static mut B_TREE_DESCR: *mut bd = &id->desc;
+	pub static mut TUP: OTuple = std::mem::zeroed();
+	pub static mut KNEW: OBTreeKeyBound = std::mem::zeroed();
 	bool		primary = (bd->type == oIndexPrimary);
 
-	OBTreeModifyResult result;
+	pub static mut RESULT: OBTreeModifyResult = std::mem::zeroed();
 
 	if (!primary)
 	{
@@ -2359,7 +2359,7 @@ o_tbl_index_insert(descr: &mut OTableDescr,
 
 	STOPEVENT(STOPEVENT_INDEX_INSERT, NULL);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
@@ -2429,7 +2429,7 @@ o_check_tbl_delete_mres(OTableModifyResult mres,
 {
 	if (!mres.success && mres.failedIxNum == TOASTIndexNumber)
 	{
-		oldSlot: &mut TupleTableSlot = mres.oldTuple;
+		pub static mut TUPLE_TABLE_SLOT: *mut oldSlot = mres.oldTuple;
 
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -2444,7 +2444,7 @@ o_check_tbl_delete_mres(OTableModifyResult mres,
 	{
 		if (mres.oldTuple != NULL)
 		{
-			oldSlot: &mut TupleTableSlot = mres.oldTuple;
+			pub static mut TUPLE_TABLE_SLOT: *mut oldSlot = mres.oldTuple;
 
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
@@ -2472,7 +2472,7 @@ static inline bool
 o_callback_is_modified(OXid oxid, CommitSeqNo csn, OTupleXactInfo xactInfo)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (XACT_INFO_IS_FINISHED(xactInfo) && XACT_INFO_MAP_CSN(xactInfo) >= csn)
 	{
@@ -2482,9 +2482,9 @@ o_callback_is_modified(OXid oxid, CommitSeqNo csn, OTupleXactInfo xactInfo)
 					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 					 errmsg("%s", "could not serialize access due to concurrent update")));
 		}
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 fn
@@ -2492,9 +2492,9 @@ copy_tuple_to_slot(OTuple tup, slot: &mut TupleTableSlot, descr: &mut OTableDesc
 				   CommitSeqNo csn, OIndexNumber ix_num,
 				   hint: &mut BTreeLocationHint)
 {
-	id: &mut OIndexDescr = descr->indices[ix_num];
+	pub static mut O_INDEX_DESCR: *mut id = descr->indices[ix_num];
 	Size		sz = o_tuple_size(tup, &id->leafSpec);
-	OTuple		copy;
+	pub static mut COPY: OTuple = std::mem::zeroed();
 
 	copy.data = (Pointer) MemoryContextAlloc(slot->tts_mcxt, sz);
 	copy.formatFlags = tup.formatFlags;
@@ -2520,7 +2520,7 @@ o_insert_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 							o_tuple_get_version(tup) + 1);
 		oslot->tuple = *newtup;
 	}
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeWaitCallbackAction
@@ -2537,10 +2537,10 @@ o_insert_with_arbiter_wait_callback(descr: &mut BTreeDescr,
 	if (descr->type == oIndexPrimary && ioc_arg->copyPrimaryOxid)
 	{
 		ioc_arg->conflictOxid = oxid;
-		return OBTreeCallbackActionXidExit;
+		pub static mut OB_TREE_CALLBACK_ACTION_XID_EXIT: return = std::mem::zeroed();
 	}
 
-	return OBTreeCallbackActionXidWait;
+	pub static mut OB_TREE_CALLBACK_ACTION_XID_WAIT: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2565,7 +2565,7 @@ o_insert_with_arbiter_modify_deleted_callback(descr: &mut BTreeDescr,
 							o_tuple_get_version(tup) + 1);
 		ioc_arg->newSlot->tuple = *newtup;
 	}
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2581,7 +2581,7 @@ o_insert_with_arbiter_modify_callback(descr: &mut BTreeDescr,
 
 	if (ioc_arg->scanSlot && ioc_arg->conflictIxNum != InvalidIndexNumber)
 	{
-		bool		modified;
+		pub static mut MODIFIED: bool = false;
 
 		modified = o_callback_is_modified(ioc_arg->oxid, ioc_arg->csn, xactInfo);
 
@@ -2603,11 +2603,11 @@ o_insert_with_arbiter_modify_callback(descr: &mut BTreeDescr,
 		if (ioc_arg->conflictIxNum == PrimaryIndexNumber)
 		{
 			*lock_mode = ioc_arg->lockMode;
-			return OBTreeCallbackActionLock;
+			pub static mut OB_TREE_CALLBACK_ACTION_LOCK: return = std::mem::zeroed();
 		}
 	}
 
-	return OBTreeCallbackActionDoNothing;
+	pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2618,10 +2618,10 @@ o_delete_callback(descr: &mut BTreeDescr,
 				  hint: &mut BTreeLocationHint,  *arg)
 {
 	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
-	bool		modified;
+	pub static mut MODIFIED: bool = false;
 
 	if (descr->type != oIndexPrimary)
-		return OBTreeCallbackActionDelete;
+		pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 
 	modified = o_callback_is_modified(o_arg->oxid, o_arg->csn, xactInfo);
 
@@ -2651,13 +2651,13 @@ o_delete_callback(descr: &mut BTreeDescr,
 	}
 
 	if (o_arg->selfModified)
-		return OBTreeCallbackActionDoNothing;
+		pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 	else if (!modified)
-		return OBTreeCallbackActionDelete;
+		pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 	else if (o_arg->options & TABLE_MODIFY_LOCK_UPDATED)
-		return OBTreeCallbackActionLock;
+		pub static mut OB_TREE_CALLBACK_ACTION_LOCK: return = std::mem::zeroed();
 	else
-		return OBTreeCallbackActionDoNothing;
+		pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2673,12 +2673,12 @@ o_delete_deleted_callback(desc: &mut BTreeDescr,
 						   *arg)
 {
 	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
-	bool		modified;
+	pub static mut MODIFIED: bool = false;
 
 	o_arg->deleted = deleted;
 
 	if (desc->type != oIndexPrimary)
-		return OBTreeCallbackActionDelete;
+		pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 
 	if (XACT_INFO_OXID_IS_CURRENT(xactInfo))
 	{
@@ -2697,7 +2697,7 @@ o_delete_deleted_callback(desc: &mut BTreeDescr,
 		o_arg->oxid = XACT_INFO_GET_OXID(xactInfo);
 		o_arg->tup_undo_location = location;
 	}
-	return OBTreeCallbackActionDoNothing;
+	pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2709,12 +2709,12 @@ o_update_callback(descr: &mut BTreeDescr,
 				  hint: &mut BTreeLocationHint,  *arg)
 {
 	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
-	slot: &mut TupleTableSlot;
-	bool		modified;
-	uint32		version = 0;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+	pub static mut MODIFIED: bool = false;
+	pub static mut VERSION: uint32 = 0;
 
 	if (descr->type != oIndexPrimary)
-		return OBTreeCallbackActionUpdate;
+		pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 
 	if (descr->type == oIndexPrimary &&
 		XACT_INFO_OXID_IS_CURRENT(xactInfo))
@@ -2749,18 +2749,18 @@ o_update_callback(descr: &mut BTreeDescr,
 						   PrimaryIndexNumber, hint);
 		if (tts_orioledb_modified(slot, &o_arg->newSlot->base, o_arg->keyAttrs))
 			*lock_mode = RowLockUpdate;
-		lock_mode: &mut else = RowLockNoKeyUpdate;
+		pub static mut ELSE: *mut lock_mode = RowLockNoKeyUpdate;
 	}
 
 	if (o_arg->selfModified)
-		return OBTreeCallbackActionDoNothing;
+		pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 	else if (!modified)
-		return OBTreeCallbackActionUpdate;
+		pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 
 	if (o_arg->options & TABLE_MODIFY_LOCK_UPDATED)
-		return OBTreeCallbackActionLock;
+		pub static mut OB_TREE_CALLBACK_ACTION_LOCK: return = std::mem::zeroed();
 	else
-		return OBTreeCallbackActionDoNothing;
+		pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2773,7 +2773,7 @@ o_update_deleted_callback(descr: &mut BTreeDescr,
 						  hint: &mut BTreeLocationHint,  *arg)
 {
 	o_arg: &mut OModifyCallbackArg = (OModifyCallbackArg *) arg;
-	bool		modified;
+	pub static mut MODIFIED: bool = false;
 
 	o_arg->deleted = deleted;
 
@@ -2796,7 +2796,7 @@ o_update_deleted_callback(descr: &mut BTreeDescr,
 		o_arg->tup_undo_location = location;
 	}
 
-	return OBTreeCallbackActionDoNothing;
+	pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 }
 
 static OBTreeWaitCallbackAction
@@ -2810,10 +2810,10 @@ o_lock_wait_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 	switch (o_arg->waitPolicy)
 	{
 		case LockWaitBlock:
-			return OBTreeCallbackActionXidWait;
+			pub static mut OB_TREE_CALLBACK_ACTION_XID_WAIT: return = std::mem::zeroed();
 		case LockWaitSkip:
 			o_arg->wouldBlock = true;
-			return OBTreeCallbackActionXidExit;
+			pub static mut OB_TREE_CALLBACK_ACTION_XID_EXIT: return = std::mem::zeroed();
 		case LockWaitError:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
@@ -2835,7 +2835,7 @@ o_lock_modify_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 					    *arg)
 {
 	o_arg: &mut OLockCallbackArg = (OLockCallbackArg *) arg;
-	slot: &mut TupleTableSlot = o_arg->scanSlot;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = o_arg->scanSlot;
 
 	o_arg->modified = o_callback_is_modified(o_arg->oxid, o_arg->csn, xactInfo);
 
@@ -2872,7 +2872,7 @@ o_lock_modify_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 	copy_tuple_to_slot(tup, slot, o_arg->descr, o_arg->csn,
 					   PrimaryIndexNumber, hint);
 
-	return OBTreeCallbackActionLock;
+	pub static mut OB_TREE_CALLBACK_ACTION_LOCK: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2885,7 +2885,7 @@ o_lock_deleted_callback(descr: &mut BTreeDescr,
 						hint: &mut BTreeLocationHint,  *arg)
 {
 	o_arg: &mut OLockCallbackArg = (OLockCallbackArg *) arg;
-	bool		modified;
+	pub static mut MODIFIED: bool = false;
 
 	modified = o_callback_is_modified(o_arg->oxid, o_arg->csn, xactInfo);
 
@@ -2911,7 +2911,7 @@ o_lock_deleted_callback(descr: &mut BTreeDescr,
 				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 				 errmsg("tuple to be locked has its primary key changed due to concurrent update")));
 
-	return OBTreeCallbackActionDoNothing;
+	pub static mut OB_TREE_CALLBACK_ACTION_DO_NOTHING: return = std::mem::zeroed();
 }
 
 //
@@ -2924,7 +2924,7 @@ is_keys_eq(id: &mut OIndexDescr, k1: &mut OBTreeKeyBound, k2: &mut OBTreeKeyBoun
 				n;
 
 	if (k1->nkeys != k2->nkeys)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (id->desc.type == oIndexPrimary)
 		n = id->nUniqueFields;
@@ -2938,22 +2938,22 @@ is_keys_eq(id: &mut OIndexDescr, k1: &mut OBTreeKeyBound, k2: &mut OBTreeKeyBoun
 		attr: &mut OTupleAttrCompact = OTupleDescAttrFast(id->nonLeafTupdesc, i);
 
 		if (k1->keys[i].flags != k2->keys[i].flags)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		if (k1->keys[i].flags & O_VALUE_BOUND_NO_VALUE)
 			continue;
 
 		if (!datum_image_eq(k1->keys[i].value, k2->keys[i].value,
 							attr->attbyval, attr->attlen))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
 o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot)
 {
-	bool		is_ctid = id->primaryIsCtid;
-	bool		is_primary = id->desc.type == oIndexPrimary;
+	pub static mut IS_CTID: bool = id->primaryIsCtid;
+	pub static mut IS_PRIMARY: bool = id->desc.type == oIndexPrimary;
 
 	if (is_primary && is_ctid)
 	{
@@ -2966,7 +2966,7 @@ o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot
 	else
 	{
 		StringInfo	str = makeStringInfo();
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		appendStringInfo(str, "(");
 		for (i = 0; i < id->nKeyFields; i++)
@@ -2993,12 +2993,12 @@ o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot
 
 o_truncate_table(ORelOids oids, bool missingOK)
 {
-	trees: &mut OIndexKey;
-	o_table: &mut OTable;
-	int			treesNum;
-	int			i;
-	bool		invalidatedTable = false;
-	bool		is_temp;
+	pub static mut O_INDEX_KEY: *mut trees = std::ptr::null_mut();
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut TREES_NUM: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut INVALIDATED_TABLE: bool = false;
+	pub static mut IS_TEMP: bool = false;
 
 	o_tables_rel_lock(&oids, AccessExclusiveLock);
 
@@ -3054,7 +3054,7 @@ Datum
 orioledb_int4range_immutable(PG_FUNCTION_ARGS)
 {
 	range_input: &mut char = text_to_cstring(PG_GETARG_TEXT_PP(0));
-	Datum		range;
+	pub static mut RANGE: Datum = std::mem::zeroed();
 
 	range = OidInputFunctionCall(F_RANGE_IN, range_input,
 								 INT4RANGEOID, -1);

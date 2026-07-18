@@ -30,8 +30,8 @@ PG_FUNCTION_INFO_V1(s3_put);
 fn
 hmac_sha256(input: &mut char, output: &mut char, secretkey: &mut char, int secretkeylen)
 {
-	ctx: &mut HMAC_CTX;
-	unsigned int len;
+	pub static mut HMAC_CTX: *mut ctx = std::ptr::null_mut();
+	pub static mut LEN: unsigned int = std::mem::zeroed();
 
 	ctx = HMAC_CTX_new();
 	HMAC_Init_ex(ctx, secretkey, secretkeylen, EVP_sha256(), NULL);
@@ -53,7 +53,7 @@ hex_string(Pointer data, int len)
 	hex_encode(data, len, result);
 
 	result[len * 2] = '\0';
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -63,7 +63,7 @@ static char *
 canonical_request_checksum(method: &mut char, datetime: &mut char, objectname: &mut char,
 						   contentchecksum: &mut char)
 {
-	StringInfoData buf;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 	unsigned char checksumbuf[32];
 
 	initStringInfo(&buf);
@@ -91,10 +91,10 @@ static char *
 s3_signature(method: &mut char, datetimestring: &mut char, datestring: &mut char,
 			 objectname: &mut char, secretkey: &mut char, checksumstring: &mut char)
 {
-	StringInfoData buf;
-	key: &mut char;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
+	pub static mut CHAR: *mut key = std::ptr::null_mut();
 	char		checksumbuf[32];
-	canonical_checksum: &mut char;
+	pub static mut CHAR: *mut canonical_checksum = std::ptr::null_mut();
 
 	canonical_checksum = canonical_request_checksum(method, datetimestring,
 													objectname, checksumstring);
@@ -126,15 +126,15 @@ s3_signature(method: &mut char, datetimestring: &mut char, datestring: &mut char
 static char *
 httpdate(timer: &mut time_t)
 {
-	datetimestring: &mut char;
-	time_t		t;
-	struct gt: &mut tm;
+	pub static mut CHAR: *mut datetimestring = std::ptr::null_mut();
+	pub static mut T: time_t = std::mem::zeroed();
+	pub static mut TM: *mut struct gt = std::ptr::null_mut();
 
 	t = time(timer);
 	gt = gmtime(&t);
 	datetimestring = (char *) palloc0(256 * sizeof(char));
 	strftime(datetimestring, 256 * sizeof(char), "%Y%m%d", gt);
-	return datetimestring;
+	pub static mut DATETIMESTRING: return = std::mem::zeroed();
 }
 
 //
@@ -143,15 +143,15 @@ httpdate(timer: &mut time_t)
 static char *
 httpdatetime(timer: &mut time_t)
 {
-	datetimestring: &mut char;
-	time_t		t;
-	struct gt: &mut tm;
+	pub static mut CHAR: *mut datetimestring = std::ptr::null_mut();
+	pub static mut T: time_t = std::mem::zeroed();
+	pub static mut TM: *mut struct gt = std::ptr::null_mut();
 
 	t = time(timer);
 	gt = gmtime(&t);
 	datetimestring = (char *) palloc0(256 * sizeof(char));
 	strftime(datetimestring, 256 * sizeof(char), "%Y%m%dT%H%M%SZ", gt);
-	return datetimestring;
+	pub static mut DATETIMESTRING: return = std::mem::zeroed();
 }
 
 //
@@ -160,12 +160,12 @@ httpdatetime(timer: &mut time_t)
 static size_t
 write_data_to_buf( *buffer, size_t size, size_t nmemb,  *userp)
 {
-	size_t		segsize = size * nmemb;
+	pub static mut SEGSIZE: size_t = size * nmemb;
 	StringInfo	info = (StringInfo) userp;
 
 	appendBinaryStringInfo(info, (const char *) buffer, segsize);
 
-	return segsize;
+	pub static mut SEGSIZE: return = std::mem::zeroed();
 }
 
 //
@@ -176,18 +176,18 @@ write_data_to_buf( *buffer, size_t size, size_t nmemb,  *userp)
 long
 s3_get_object(objectname: &mut char, StringInfo str, bool missing_ok)
 {
-	curl: &mut CURL;
-	url: &mut char;
-	datestring: &mut char;
-	datetimestring: &mut char;
-	signature: &mut char;
-	struct slist: &mut curl_slist;
-	tmp: &mut char;
-	int			sc;
+	pub static mut CURL: *mut curl = std::ptr::null_mut();
+	pub static mut CHAR: *mut url = std::ptr::null_mut();
+	pub static mut CHAR: *mut datestring = std::ptr::null_mut();
+	pub static mut CHAR: *mut datetimestring = std::ptr::null_mut();
+	pub static mut CHAR: *mut signature = std::ptr::null_mut();
+	pub static mut CURL_SLIST: *mut struct slist = std::ptr::null_mut();
+	pub static mut CHAR: *mut tmp = std::ptr::null_mut();
+	pub static mut SC: std::os::raw::c_int = 0;
 	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
-	checksumstringbuf: &mut char;
-	objectpath: &mut char = objectname;
-	long		http_code = 0;
+	pub static mut CHAR: *mut checksumstringbuf = std::ptr::null_mut();
+	pub static mut CHAR: *mut objectpath = objectname;
+	pub static mut HTTP_CODE: long = 0;
 
 	() SHA256(NULL, 0, checksumbuf);
 	checksumstringbuf = hex_string((Pointer) checksumbuf, sizeof(checksumbuf));
@@ -256,7 +256,7 @@ s3_get_object(objectname: &mut char, StringInfo str, bool missing_ok)
 		pfree(objectpath);
 	pfree(checksumstringbuf);
 
-	return http_code;
+	pub static mut HTTP_CODE: return = std::mem::zeroed();
 }
 
 //
@@ -266,7 +266,7 @@ s3_get_object(objectname: &mut char, StringInfo str, bool missing_ok)
 Datum
 s3_get(PG_FUNCTION_ARGS)
 {
-	StringInfoData buf;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 
 	initStringInfo(&buf);
 
@@ -281,19 +281,19 @@ s3_get(PG_FUNCTION_ARGS)
 
 s3_delete_object(objectname: &mut char)
 {
-	curl: &mut CURL;
-	url: &mut char;
-	datestring: &mut char;
-	datetimestring: &mut char;
-	signature: &mut char;
-	struct slist: &mut curl_slist;
-	tmp: &mut char;
-	int			sc;
-	StringInfoData buf;
+	pub static mut CURL: *mut curl = std::ptr::null_mut();
+	pub static mut CHAR: *mut url = std::ptr::null_mut();
+	pub static mut CHAR: *mut datestring = std::ptr::null_mut();
+	pub static mut CHAR: *mut datetimestring = std::ptr::null_mut();
+	pub static mut CHAR: *mut signature = std::ptr::null_mut();
+	pub static mut CURL_SLIST: *mut struct slist = std::ptr::null_mut();
+	pub static mut CHAR: *mut tmp = std::ptr::null_mut();
+	pub static mut SC: std::os::raw::c_int = 0;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
-	checksumstringbuf: &mut char;
-	objectpath: &mut char = objectname;
-	long		http_code = 0;
+	pub static mut CHAR: *mut checksumstringbuf = std::ptr::null_mut();
+	pub static mut CHAR: *mut objectpath = objectname;
+	pub static mut HTTP_CODE: long = 0;
 
 	() SHA256(NULL, 0, checksumbuf);
 	checksumstringbuf = hex_string((Pointer) checksumbuf, sizeof(checksumbuf));
@@ -368,10 +368,10 @@ static Pointer
 read_file_part(const filename: &mut char, uint64 offset,
 			   uint64 maxSize, size: &mut uint64)
 {
-	int			file;
+	pub static mut FILE: std::os::raw::c_int = 0;
 	Pointer		buffer,
 				ptr;
-	uint64		totalSize;
+	pub static mut TOTAL_SIZE: uint64 = std::mem::zeroed();
 
 	file = BasicOpenFile(filename, O_RDONLY | PG_BINARY);
 	if (file < 0)
@@ -379,7 +379,7 @@ read_file_part(const filename: &mut char, uint64 offset,
 		ereport(WARNING,
 				(errcode_for_file_access(),
 				 errmsg("could not open file \"%s\": %m", filename)));
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	totalSize = lseek(file, 0, SEEK_END);
@@ -391,7 +391,7 @@ read_file_part(const filename: &mut char, uint64 offset,
 	while (offset < totalSize)
 	{
 		int			amount = Min(totalSize - offset, BLCKSZ);
-		int			rc;
+		pub static mut RC: std::os::raw::c_int = 0;
 
 		pgstat_report_wait_start(WAIT_EVENT_DATA_FILE_READ);
 		rc = pg_pread(file, ptr, amount, offset);
@@ -402,7 +402,7 @@ read_file_part(const filename: &mut char, uint64 offset,
 			ereport(ERROR,
 					(errcode_for_file_access(),
 					 errmsg("could not read file \"%s\": %m", filename)));
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 		}
 
 		if (rc != amount)
@@ -421,7 +421,7 @@ read_file_part(const filename: &mut char, uint64 offset,
 				(errcode_for_file_access(),
 				 errmsg("could not close file \"%s\": %m", filename)));
 
-	return buffer;
+	pub static mut BUFFER: return = std::mem::zeroed();
 }
 
 //
@@ -431,8 +431,8 @@ fn
 write_file_part(const filename: &mut char, uint64 offset,
 				Pointer data, uint64 size)
 {
-	File		file;
-	int			rc;
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut RC: std::os::raw::c_int = 0;
 
 	file = PathNameOpenFile(filename, O_CREAT | O_RDWR | PG_BINARY);
 	if (file < 0)
@@ -487,18 +487,18 @@ long
 s3_put_object_with_contents(objectname: &mut char, Pointer data, uint64 dataSize,
 							dataChecksum: &mut char, bool ifNoneMatch)
 {
-	curl: &mut CURL;
-	url: &mut char;
-	datestring: &mut char;
-	datetimestring: &mut char;
-	signature: &mut char;
-	checksumstringbuf: &mut char;
-	objectpath: &mut char = objectname;
-	struct slist: &mut curl_slist;
-	tmp: &mut char;
-	int			sc;
-	StringInfoData buf;
-	long		http_code = 0;
+	pub static mut CURL: *mut curl = std::ptr::null_mut();
+	pub static mut CHAR: *mut url = std::ptr::null_mut();
+	pub static mut CHAR: *mut datestring = std::ptr::null_mut();
+	pub static mut CHAR: *mut datetimestring = std::ptr::null_mut();
+	pub static mut CHAR: *mut signature = std::ptr::null_mut();
+	pub static mut CHAR: *mut checksumstringbuf = std::ptr::null_mut();
+	pub static mut CHAR: *mut objectpath = objectname;
+	pub static mut CURL_SLIST: *mut struct slist = std::ptr::null_mut();
+	pub static mut CHAR: *mut tmp = std::ptr::null_mut();
+	pub static mut SC: std::os::raw::c_int = 0;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
+	pub static mut HTTP_CODE: long = 0;
 
 	if (dataChecksum == NULL)
 	{
@@ -593,7 +593,7 @@ s3_put_object_with_contents(objectname: &mut char, Pointer data, uint64 dataSize
 	if (checksumstringbuf != dataChecksum)
 		pfree(checksumstringbuf);
 
-	return http_code;
+	pub static mut HTTP_CODE: return = std::mem::zeroed();
 }
 
 //
@@ -602,9 +602,9 @@ s3_put_object_with_contents(objectname: &mut char, Pointer data, uint64 dataSize
 long
 s3_put_file(objectname: &mut char, filename: &mut char, bool ifNoneMatch)
 {
-	Pointer		data;
-	uint64		dataSize = 0;
-	long		res = -1;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut DATA_SIZE: uint64 = 0;
+	pub static mut RES: long = -1;
 
 	data = read_file(filename, &dataSize);
 	if (data)
@@ -614,7 +614,7 @@ s3_put_file(objectname: &mut char, filename: &mut char, bool ifNoneMatch)
 		pfree(data);
 	}
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 //
@@ -623,7 +623,7 @@ s3_put_file(objectname: &mut char, filename: &mut char, bool ifNoneMatch)
 
 s3_get_file(objectname: &mut char, filename: &mut char)
 {
-	StringInfoData buf;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 
 	initStringInfo(&buf);
 	s3_get_object(objectname, &buf, false);
@@ -641,9 +641,9 @@ s3_get_file(objectname: &mut char, filename: &mut char)
 long
 s3_put_file_part(objectname: &mut char, filename: &mut char, int partnum)
 {
-	Pointer		data;
-	uint64		dataSize;
-	long		res = -1;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut DATA_SIZE: uint64 = std::mem::zeroed();
+	pub static mut RES: long = -1;
 
 	data = read_file_part(filename,
 						  partnum * ORIOLEDB_S3_PART_SIZE + ORIOLEDB_BLCKSZ,
@@ -655,7 +655,7 @@ s3_put_file_part(objectname: &mut char, filename: &mut char, int partnum)
 		pfree(data);
 	}
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 //
@@ -664,7 +664,7 @@ s3_put_file_part(objectname: &mut char, filename: &mut char, int partnum)
 
 s3_get_file_part(objectname: &mut char, filename: &mut char, int partnum)
 {
-	StringInfoData buf;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 
 	initStringInfo(&buf);
 	s3_get_object(objectname, &buf, false);

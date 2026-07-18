@@ -110,12 +110,12 @@ static IndexScanDesc bridged_ambeginscan(Relation rel, int nkeys, int norderbys)
 
 typedef struct BridgedIndexAmRoutine
 {
-	original_routine: &mut IndexAmRoutine;
-	IndexAmRoutine routine;
-	Oid			amhandler;
+	pub static mut INDEX_AM_ROUTINE: *mut original_routine = std::ptr::null_mut();
+	pub static mut ROUTINE: IndexAmRoutine = std::mem::zeroed();
+	pub static mut AMHANDLER: Oid = std::mem::zeroed();
 } BridgedIndexAmRoutine;
 
-static bridged_ams: &mut List = NIL;
+static mut LIST: *mut bridged_ams = NIL;
 
 static IndexAmRoutine *
 orioledb_btree_handler()
@@ -177,16 +177,16 @@ orioledb_btree_handler()
 	amroutine->aminitparallelscan = orioledb_aminitparallelscan;
 	amroutine->amparallelrescan = orioledb_amparallelrescan;
 
-	return amroutine;
+	pub static mut AMROUTINE: return = std::mem::zeroed();
 }
 
 IndexAmRoutine *
 orioledb_indexam_routine_hook(Oid tamoid, Oid amhandler)
 {
-	static Oid	orioledb_tam_oid = InvalidOid;
+	static mut ORIOLEDB_TAM_OID: Oid = InvalidOid;
 
 	if (tamoid == HEAP_TABLE_AM_OID)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (!OidIsValid(orioledb_tam_oid))
 		orioledb_tam_oid = GetSysCacheOid1(AMNAME, Anum_pg_am_oid,
@@ -200,8 +200,8 @@ orioledb_indexam_routine_hook(Oid tamoid, Oid amhandler)
 		}
 		else
 		{
-			amroutine: &mut IndexAmRoutine = NULL;
-			lc: &mut ListCell;
+			pub static mut INDEX_AM_ROUTINE: *mut amroutine = std::ptr::null_mut();
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 			foreach(lc, bridged_ams)
 			{
@@ -217,9 +217,9 @@ orioledb_indexam_routine_hook(Oid tamoid, Oid amhandler)
 
 			if (amroutine == NULL)
 			{
-				bridged: &mut BridgedIndexAmRoutine;
-				MemoryContext old_mcxt;
-				Datum		datum;
+				pub static mut BRIDGED_INDEX_AM_ROUTINE: *mut bridged = std::ptr::null_mut();
+				pub static mut OLD_MCXT: MemoryContext = std::mem::zeroed();
+				pub static mut DATUM: Datum = std::mem::zeroed();
 
 				old_mcxt = MemoryContextSwitchTo(TopMemoryContext);
 				bridged = palloc0(sizeof(BridgedIndexAmRoutine));
@@ -235,11 +235,11 @@ orioledb_indexam_routine_hook(Oid tamoid, Oid amhandler)
 				amroutine = palloc0(sizeof(IndexAmRoutine));
 				memcpy(amroutine, &bridged->routine, sizeof(IndexAmRoutine));
 			}
-			return amroutine;
+			pub static mut AMROUTINE: return = std::mem::zeroed();
 		}
 	}
 
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 // Check if name is used
@@ -260,14 +260,14 @@ orioledb_amreuse(Relation index)
 static IndexBuildResult *
 orioledb_ambuild(Relation heap, Relation index, indexInfo: &mut IndexInfo)
 {
-	bool		reindex = false;
-	result: &mut IndexBuildResult;
-	relname: &mut String;
+	pub static mut REINDEX: bool = false;
+	pub static mut INDEX_BUILD_RESULT: *mut result = std::ptr::null_mut();
+	pub static mut STRING: *mut relname = std::ptr::null_mut();
 	options: &mut OBTOptions = (OBTOptions *) index->rd_options;
 
 	if (options && !options->orioledb_index)
 	{
-		descr: &mut OTableDescr;
+		pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
 
 		descr = relation_get_descr(heap);
 
@@ -284,7 +284,7 @@ orioledb_ambuild(Relation heap, Relation index, indexInfo: &mut IndexInfo)
 			result->heap_tuples = 0.0;
 			result->index_tuples = 0.0;
 
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 		else
 			return btbuild(heap, index, indexInfo);
@@ -306,8 +306,8 @@ orioledb_ambuild(Relation heap, Relation index, indexInfo: &mut IndexInfo)
 
 	if (in_nontransactional_truncate || !OidIsValid(o_saved_relrewrite))
 	{
-		ORelOids	tbl_oids;
-		o_table: &mut OTable;
+		pub static mut TBL_OIDS: ORelOids = std::mem::zeroed();
+		pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
 
 		ORelOidsSetFromRel(tbl_oids, heap);
 		o_table = o_tables_get(tbl_oids);
@@ -327,7 +327,7 @@ orioledb_ambuild(Relation heap, Relation index, indexInfo: &mut IndexInfo)
 		}
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
@@ -354,14 +354,14 @@ o_insert_callback(descr: &mut BTreeDescr, OTuple tup, newtup: &mut OTuple,
 							o_tuple_get_version(tup) + 1);
 		oslot->tuple = *newtup;
 	}
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 fn
 o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot)
 {
-	bool		is_ctid = id->primaryIsCtid;
-	bool		is_primary = id->desc.type == oIndexPrimary;
+	pub static mut IS_CTID: bool = id->primaryIsCtid;
+	pub static mut IS_PRIMARY: bool = id->desc.type == oIndexPrimary;
 
 	if (is_primary && is_ctid)
 	{
@@ -371,7 +371,7 @@ o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot
 	else
 	{
 		StringInfo	str = makeStringInfo();
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		appendStringInfo(str, "(");
 		for (i = 0; i < id->nKeyFields; i++)
@@ -388,8 +388,8 @@ o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot
 		appendStringInfo(str, "(");
 		for (i = 0; i < id->nUniqueFields; i++)
 		{
-			Datum		value = slot->tts_values[i];
-			bool		isnull = slot->tts_isnull[i];
+			pub static mut VALUE: Datum = slot->tts_values[i];
+			pub static mut ISNULL: bool = slot->tts_isnull[i];
 
 			if (i != 0)
 				appendStringInfo(str, ", ");
@@ -397,9 +397,9 @@ o_report_duplicate(Relation rel, id: &mut OIndexDescr, slot: &mut TupleTableSlot
 				appendStringInfo(str, "null");
 			else
 			{
-				Oid			typoutput;
-				bool		typisvarlena;
-				res: &mut char;
+				pub static mut TYPOUTPUT: Oid = std::mem::zeroed();
+				pub static mut TYPISVARLENA: bool = false;
+				pub static mut CHAR: *mut res = std::ptr::null_mut();
 
 				getTypeOutputInfo(TupleDescAttr(id->nonLeafTupdesc, i)->atttypid,
 								  &typoutput, &typisvarlena);
@@ -425,16 +425,16 @@ append_rowid_values(id: &mut OIndexDescr,
 					Datum pkDatum, values: &mut Datum, isnull: &mut bool,
 					csn: &mut CommitSeqNo, version: &mut uint32)
 {
-	rowid: &mut bytea;
-	Pointer		p;
+	pub static mut BYTEA: *mut rowid = std::ptr::null_mut();
+	pub static mut P: Pointer = std::ptr::null_mut();
 
 	rowid = DatumGetByteaP(pkDatum);
 	p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
 
 	if (!id->primaryIsCtid)
 	{
-		add: &mut ORowIdAddendumNonCtid;
-		OTuple		tuple;
+		pub static mut O_ROW_ID_ADDENDUM_NON_CTID: *mut add = std::ptr::null_mut();
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 		add = (ORowIdAddendumNonCtid *) p;
 		p += MAXALIGN(sizeof(ORowIdAddendumNonCtid));
@@ -449,15 +449,15 @@ append_rowid_values(id: &mut OIndexDescr,
 
 		if (id->nPrimaryFields <= id->nFields)
 		{
-			int			i;
-			int			pk_from;
+			pub static mut I: std::os::raw::c_int = 0;
+			pub static mut PK_FROM: std::os::raw::c_int = 0;
 
 			pk_from = id->nFields - id->nPrimaryFields;
 
 			// Amount of index fields checked in o_define_index_validate
 			for (i = 0; i < id->nPrimaryFields; i++)
 			{
-				AttrNumber	attnum = id->primaryFieldsAttnums[i] - 1;
+				pub static mut ATTNUM: AttrNumber = id->primaryFieldsAttnums[i] - 1;
 
 				if (attnum >= pk_from)
 				{
@@ -468,8 +468,8 @@ append_rowid_values(id: &mut OIndexDescr,
 	}
 	else
 	{
-		add: &mut ORowIdAddendumCtid;
-		AttrNumber	attnum = id->nFields - 1;
+		pub static mut O_ROW_ID_ADDENDUM_CTID: *mut add = std::ptr::null_mut();
+		pub static mut ATTNUM: AttrNumber = id->nFields - 1;
 
 		add = (ORowIdAddendumCtid *) p;
 		*csn = add->csn;
@@ -483,15 +483,15 @@ append_rowid_values(id: &mut OIndexDescr,
 fn
 detoast_passed_values(index_descr: &mut OIndexDescr, values: &mut Datum, isnull: &mut bool, vfree: &mut bool)
 {
-	int			i;
-	int			pk_from;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut PK_FROM: std::os::raw::c_int = 0;
 
 	pk_from = index_descr->nFields - index_descr->nPrimaryFields;
 
 	for (i = 0; i < pk_from; i++)
 	{
 		Form_pg_attribute att = TupleDescAttr(index_descr->nonLeafTupdesc, i);
-		Datum		tmp;
+		pub static mut TMP: Datum = std::mem::zeroed();
 
 		if (!isnull[i] && att->attlen == -1 &&
 			VARATT_IS_EXTENDED(values[i]))
@@ -511,13 +511,13 @@ orioledb_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 				  bool indexUnchanged,
 				  indexInfo: &mut IndexInfo)
 {
-	ORelOids	oids;
-	OIndexType	ix_type;
-	index_descr: &mut OIndexDescr;
-	descr: &mut OTableDescr;
-	OIndexNumber ix_num;
-	OBTreeModifyResult iresult;
-	bool		success;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+	pub static mut IRESULT: OBTreeModifyResult = std::mem::zeroed();
+	pub static mut SUCCESS: bool = false;
 	BTreeModifyCallbackInfo callbackInfo =
 	{
 		.waitCallback = NULL,
@@ -525,20 +525,20 @@ orioledb_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 		.modifyCallback = NULL,
 		.needsUndoForSelfCreated = true
 	};
-	OSnapshot	o_snapshot;
-	OXid		oxid;
-	slot: &mut TupleTableSlot;
-	uint32		version;
-	OTuple		tuple;
-	CommitSeqNo csn;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+	pub static mut VERSION: uint32 = std::mem::zeroed();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 	options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 	if (options && !options->orioledb_index)
 	{
-		rowid: &mut bytea;
-		Pointer		p;
-		bool		result;
-		bridgeData: &mut ORowIdBridgeData;
+		pub static mut BYTEA: *mut rowid = std::ptr::null_mut();
+		pub static mut P: Pointer = std::ptr::null_mut();
+		pub static mut RESULT: bool = false;
+		pub static mut O_ROW_ID_BRIDGE_DATA: *mut bridgeData = std::ptr::null_mut();
 
 		ORelOidsSetFromRel(oids, heapRel);
 
@@ -567,14 +567,14 @@ orioledb_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 		else
 			result = true;		// FIXME: Wrong assumption?
 
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	if (OidIsValid(rel->rd_rel->relrewrite))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (rel->rd_index->indisprimary)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	ORelOidsSetFromRel(oids, rel);
 	ix_type = o_index_rel_get_ix_type(rel);
@@ -585,7 +585,7 @@ orioledb_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
-		index: &mut OIndexDescr;
+		pub static mut O_INDEX_DESCR: *mut index = std::ptr::null_mut();
 
 		index = descr->indices[ix_num];
 		if (index->oids.reloid == rel->rd_rel->oid)
@@ -595,10 +595,10 @@ orioledb_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 
 	if (index_descr->duplicates != NIL)
 	{
-		lc: &mut ListCell = NULL;
-		duplicate: &mut List = NIL;
-		int			cur_attr;
-		int			i;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+		pub static mut LIST: *mut duplicate = NIL;
+		pub static mut CUR_ATTR: std::os::raw::c_int = 0;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		// Remove duplicate column values to store in our index
 
@@ -656,7 +656,7 @@ orioledb_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 	if (tuple.data)
 		pfree(tuple.data);
 
-	return success;
+	pub static mut SUCCESS: return = std::mem::zeroed();
 }
 
 static bool
@@ -668,27 +668,27 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 				  bool indexUnchanged,
 				  indexInfo: &mut IndexInfo)
 {
-	OTableModifyResult result;
-	ORelOids	oids;
-	OIndexType	ix_type;
-	index_descr: &mut OIndexDescr;
-	descr: &mut OTableDescr;
-	OIndexNumber ix_num;
-	CommitSeqNo csn;
-	OSnapshot	oSnapshot;
-	OXid		oxid;
-	new_slot: &mut TupleTableSlot;
-	old_slot: &mut TupleTableSlot;
-	uint32		version;
-	OTuple		new_tuple;
-	OTuple		old_tuple;
-	vfree: &mut bool;
-	int			i;
+	pub static mut RESULT: OTableModifyResult = std::mem::zeroed();
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut TUPLE_TABLE_SLOT: *mut new_slot = std::ptr::null_mut();
+	pub static mut TUPLE_TABLE_SLOT: *mut old_slot = std::ptr::null_mut();
+	pub static mut VERSION: uint32 = std::mem::zeroed();
+	pub static mut NEW_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut OLD_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut BOOL: *mut vfree = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 	options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 	if (options && !options->orioledb_index)
 	{
-		bool		satisfiesConstraint;
+		pub static mut SATISFIES_CONSTRAINT: bool = false;
 
 		//
 // Call index_insert here, to mimic non MVCC aware part of
@@ -706,11 +706,11 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 										   indexInfo);	// index AM may need
 // this
 
-		return satisfiesConstraint;
+		pub static mut SATISFIES_CONSTRAINT: return = std::mem::zeroed();
 	}
 
 	if (rel->rd_index->indisprimary)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	ORelOidsSetFromRel(oids, rel);
 	ix_type = o_index_rel_get_ix_type(rel);
@@ -722,7 +722,7 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
-		index: &mut OIndexDescr;
+		pub static mut O_INDEX_DESCR: *mut index = std::ptr::null_mut();
 
 		index = descr->indices[ix_num];
 		if (index->oids.reloid == rel->rd_rel->oid)
@@ -786,9 +786,9 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 							appendStringInfo(str, "null");
 						else
 						{
-							Oid			typoutput;
-							bool		typisvarlena;
-							res: &mut char;
+							pub static mut TYPOUTPUT: Oid = std::mem::zeroed();
+							pub static mut TYPISVARLENA: bool = false;
+							pub static mut CHAR: *mut res = std::ptr::null_mut();
 
 							getTypeOutputInfo(TupleDescAttr(index_descr->leafTupdesc, i)->atttypid,
 											  &typoutput, &typisvarlena);
@@ -840,27 +840,27 @@ static bool
 orioledb_amdelete(Relation rel, values: &mut Datum, isnull: &mut bool,
 				  Datum tupleid, Relation heapRel, indexInfo: &mut IndexInfo)
 {
-	OTableModifyResult result;
-	ORelOids	oids;
-	OIndexType	ix_type;
-	index_descr: &mut OIndexDescr;
-	descr: &mut OTableDescr;
-	OIndexNumber ix_num;
-	CommitSeqNo csn;
-	OSnapshot	oSnapshot;
-	OXid		oxid;
-	uint32		version;
-	slot: &mut TupleTableSlot;
-	OTuple		tuple;
-	vfree: &mut bool;
-	int			i;
+	pub static mut RESULT: OTableModifyResult = std::mem::zeroed();
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut VERSION: uint32 = std::mem::zeroed();
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut BOOL: *mut vfree = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 	options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 	if (options && !options->orioledb_index)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (rel->rd_index->indisprimary)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	ORelOidsSetFromRel(oids, rel);
 	ix_type = o_index_rel_get_ix_type(rel);
@@ -872,7 +872,7 @@ orioledb_amdelete(Relation rel, values: &mut Datum, isnull: &mut bool,
 	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
-		index: &mut OIndexDescr;
+		pub static mut O_INDEX_DESCR: *mut index = std::ptr::null_mut();
 
 		index = descr->indices[ix_num];
 		if (index->oids.reloid == rel->rd_rel->oid)
@@ -922,9 +922,9 @@ orioledb_amdelete(Relation rel, values: &mut Datum, isnull: &mut bool,
 							appendStringInfo(str, "null");
 						else
 						{
-							Oid			typoutput;
-							bool		typisvarlena;
-							res: &mut char;
+							pub static mut TYPOUTPUT: Oid = std::mem::zeroed();
+							pub static mut TYPISVARLENA: bool = false;
+							pub static mut CHAR: *mut res = std::ptr::null_mut();
 
 							getTypeOutputInfo(TupleDescAttr(index_descr->nonLeafTupdesc, i)->atttypid,
 											  &typoutput, &typisvarlena);
@@ -980,7 +980,7 @@ orioledb_ambulkdelete(info: &mut IndexVacuumInfo, stats: &mut IndexBulkDeleteRes
 // path.  We must not error here because parallel vacuum iterates every
 // index in the relation.
 //
-	return stats;
+	pub static mut STATS: return = std::mem::zeroed();
 }
 
 IndexBulkDeleteResult *
@@ -991,7 +991,7 @@ orioledb_amvacuumcleanup(info: &mut IndexVacuumInfo, stats: &mut IndexBulkDelete
 	if (options && !options->orioledb_index)
 		return btvacuumcleanup(info, stats);
 
-	return stats;
+	pub static mut STATS: return = std::mem::zeroed();
 }
 
 static bool
@@ -1002,7 +1002,7 @@ orioledb_amcanreturn(Relation index, int attno)
 	if (options && !options->orioledb_index)
 		return btcanreturn(index, attno);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 // TODO: Rewrite to be more orioledb-specific
@@ -1012,20 +1012,20 @@ orioledb_amcostestimate(root: &mut PlannerInfo, path: &mut IndexPath, double loo
 						indexSelectivity: &mut Selectivity, indexCorrelation: &mut double,
 						indexPages: &mut double)
 {
-	index: &mut IndexOptInfo = path->indexinfo;
+	pub static mut INDEX_OPT_INFO: *mut index = path->indexinfo;
 	GenericCosts costs = {0};
-	Oid			relid;
-	AttrNumber	colnum;
+	pub static mut RELID: Oid = std::mem::zeroed();
+	pub static mut COLNUM: AttrNumber = std::mem::zeroed();
 	VariableStatData vardata = {0};
-	double		numIndexTuples;
-	Cost		descentCost;
-	indexBoundQuals: &mut List;
-	int			indexcol;
-	bool		eqQualHere;
-	bool		found_saop;
-	bool		found_is_null_op;
-	double		num_sa_scans;
-	lc: &mut ListCell;
+	pub static mut NUM_INDEX_TUPLES: double = std::mem::zeroed();
+	pub static mut DESCENT_COST: Cost = std::mem::zeroed();
+	pub static mut LIST: *mut indexBoundQuals = std::ptr::null_mut();
+	pub static mut INDEXCOL: std::os::raw::c_int = 0;
+	pub static mut EQ_QUAL_HERE: bool = false;
+	pub static mut FOUND_SAOP: bool = false;
+	pub static mut FOUND_IS_NULL_OP: bool = false;
+	pub static mut NUM_SA_SCANS: double = std::mem::zeroed();
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 	//
 // For a btree scan, only leading '=' quals plus inequality quals for the
@@ -1053,7 +1053,7 @@ orioledb_amcostestimate(root: &mut PlannerInfo, path: &mut IndexPath, double loo
 	foreach(lc, path->indexclauses)
 	{
 		iclause: &mut IndexClause = lfirst_node(IndexClause, lc);
-		lc2: &mut ListCell;
+		pub static mut LIST_CELL: *mut lc2 = std::ptr::null_mut();
 
 		if (indexcol != iclause->indexcol)
 		{
@@ -1070,9 +1070,9 @@ orioledb_amcostestimate(root: &mut PlannerInfo, path: &mut IndexPath, double loo
 		foreach(lc2, iclause->indexquals)
 		{
 			rinfo: &mut RestrictInfo = lfirst_node(RestrictInfo, lc2);
-			clause: &mut Expr = rinfo->clause;
-			Oid			clause_op = InvalidOid;
-			int			op_strategy;
+			pub static mut EXPR: *mut clause = rinfo->clause;
+			pub static mut CLAUSE_OP: Oid = InvalidOid;
+			pub static mut OP_STRATEGY: std::os::raw::c_int = 0;
 
 			if (IsA(clause, OpExpr))
 			{
@@ -1144,8 +1144,8 @@ orioledb_amcostestimate(root: &mut PlannerInfo, path: &mut IndexPath, double loo
 		numIndexTuples = 1.0;
 	else
 	{
-		selectivityQuals: &mut List;
-		Selectivity btreeSelectivity;
+		pub static mut LIST: *mut selectivityQuals = std::ptr::null_mut();
+		pub static mut BTREE_SELECTIVITY: Selectivity = std::mem::zeroed();
 
 		//
 // If the index is partial, AND the index predicate with the
@@ -1303,8 +1303,8 @@ orioledb_amcostestimate(root: &mut PlannerInfo, path: &mut IndexPath, double loo
 
 	if (HeapTupleIsValid(vardata.statsTuple))
 	{
-		Oid			sortop;
-		AttStatsSlot sslot;
+		pub static mut SORTOP: Oid = std::mem::zeroed();
+		pub static mut SSLOT: AttStatsSlot = std::mem::zeroed();
 
 		sortop = get_opfamily_member(index->opfamily[0],
 									 index->opcintype[0],
@@ -1315,7 +1315,7 @@ orioledb_amcostestimate(root: &mut PlannerInfo, path: &mut IndexPath, double loo
 							 STATISTIC_KIND_CORRELATION, sortop,
 							 ATTSTATSSLOT_NUMBERS))
 		{
-			double		varCorrelation;
+			pub static mut VAR_CORRELATION: double = std::mem::zeroed();
 
 			Assert(sslot.nnumbers == 1);
 			varCorrelation = sslot.numbers[0];
@@ -1351,12 +1351,12 @@ validate_index_compress(const value: &mut char)
 static bytea *
 orioledb_amoptions(Datum reloptions, bool validate)
 {
-	static bool relopts_set = false;
+	static mut RELOPTS_SET: bool = false;
 	static local_relopts relopts = {0};
 
 	if (!relopts_set)
 	{
-		MemoryContext oldcxt;
+		pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
 
 		oldcxt = MemoryContextSwitchTo(TopMemoryContext);
 		init_local_reloptions(&relopts, sizeof(OBTOptions));
@@ -1406,9 +1406,9 @@ orioledb_amproperty(Oid index_oid, int attno, IndexAMProperty prop,
 		case AMPROP_RETURNABLE:
 			// answer only for columns, not AM or whole index
 			if (attno == 0)
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			// otherwise, btree can always return res: &mut data = true;
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		default:
 			return false;		// punt to generic code
@@ -1431,14 +1431,14 @@ orioledb_ambuildphasename(int64 phasenum)
 		case PROGRESS_BTREE_PHASE_LEAF_LOAD:
 			return "loading tuples in tree";
 		default:
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 	}
 }
 
 static bool
 orioledb_amvalidate(Oid opclassoid)
 {
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
@@ -1450,13 +1450,13 @@ orioledb_amadjustmembers(Oid opfamilyoid, Oid opclassoid, operators: &mut List,
 static IndexScanDesc
 orioledb_ambeginscan(Relation rel, int nkeys, int norderbys)
 {
-	o_scan: &mut OScanState;
-	IndexScanDesc scan;
-	ORelOids	oids;
-	OIndexType	ix_type;
-	index_descr: &mut OIndexDescr;
-	descr: &mut OTableDescr;
-	OIndexNumber ix_num;
+	pub static mut O_SCAN_STATE: *mut o_scan = std::ptr::null_mut();
+	pub static mut SCAN: IndexScanDesc = std::mem::zeroed();
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
 	options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 	if (options && !options->orioledb_index)
@@ -1487,7 +1487,7 @@ orioledb_ambeginscan(Relation rel, int nkeys, int norderbys)
 	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
-		index: &mut OIndexDescr;
+		pub static mut O_INDEX_DESCR: *mut index = std::ptr::null_mut();
 
 		index = descr->indices[ix_num];
 		if (index->oids.reloid == rel->rd_rel->oid)
@@ -1499,14 +1499,14 @@ orioledb_ambeginscan(Relation rel, int nkeys, int norderbys)
 	o_scan->cxt = AllocSetContextCreate(CurrentMemoryContext,
 										"orioledb_cs plan data",
 										ALLOCSET_DEFAULT_SIZES);
-	return scan;
+	pub static mut SCAN: return = std::mem::zeroed();
 }
 
 int
 o_get_num_prefix_exact_keys(ScanKey scankey, int nscankeys)
 {
-	AttrNumber	prevAttr = 0;
-	int			i;
+	pub static mut PREV_ATTR: AttrNumber = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < nscankeys; i++)
 	{
@@ -1516,25 +1516,25 @@ o_get_num_prefix_exact_keys(ScanKey scankey, int nscankeys)
 
 		prevAttr = scankey[i].sk_attno;
 	}
-	return i;
+	pub static mut I: return = std::mem::zeroed();
 }
 
 int
 o_adjust_num_prefix_exact_keys(BTScanOpaque so, int numPrefixExactKeys)
 {
-	int			adjusted = numPrefixExactKeys;
+	pub static mut ADJUSTED: std::os::raw::c_int = numPrefixExactKeys;
 
 #if PG_VERSION_NUM >= 180000
 	for (int i = 0; i < so->numArrayKeys; i++)
 	{
-		arrayKey: &mut BTArrayKeyInfo = &so->arrayKeys[i];
+		pub static mut BT_ARRAY_KEY_INFO: *mut arrayKey = &so->arrayKeys[i];
 
 		if (arrayKey->num_elems <= 0 && arrayKey->scan_key < adjusted)
 			adjusted = arrayKey->scan_key;
 	}
 #endif
 
-	return adjusted;
+	pub static mut ADJUSTED: return = std::mem::zeroed();
 }
 
 fn
@@ -1560,7 +1560,7 @@ fn
 fill_hitup(IndexScanDesc scan, OTuple tuple, descr: &mut OTableDescr,
 		   CommitSeqNo tupleCsn, hint: &mut BTreeLocationHint)
 {
-	slot: &mut TupleTableSlot;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
 
 	scan->xs_hitupdesc = descr->tupdesc;
 	slot = descr->oldTuple;
@@ -1598,9 +1598,9 @@ fill_hitup(IndexScanDesc scan, OTuple tuple, descr: &mut OTableDescr,
 static inline 
 search_next_dup_range(duplicates: &mut List, int dup_range_lc_id, dup_range_start: &mut int, dup_range_end: &mut int)
 {
-	duplicate: &mut List = NIL;
-	dup_range_lc: &mut ListCell = NULL;
-	int			dup_range_src_attnum = -1;
+	pub static mut LIST: *mut duplicate = NIL;
+	pub static mut LIST_CELL: *mut dup_range_lc = std::ptr::null_mut();
+	pub static mut DUP_RANGE_SRC_ATTNUM: std::os::raw::c_int = -1;
 
 	*dup_range_start = -1;
 	*dup_range_end = -1;
@@ -1638,14 +1638,14 @@ o_new_rowid(primary: &mut OIndexDescr, slot: &mut TupleTableSlot,
 			CommitSeqNo tupleCsn, hint: &mut BTreeLocationHint)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	Pointer		ptr;
+	pub static mut PTR: Pointer = std::ptr::null_mut();
 	int			result_size,
 				tuple_size = 0;
-	rowid: &mut bytea;
+	pub static mut BYTEA: *mut rowid = std::ptr::null_mut();
 
 	if (primary->primaryIsCtid)
 	{
-		ORowIdAddendumCtid addCtid;
+		pub static mut ADD_CTID: ORowIdAddendumCtid = std::mem::zeroed();
 
 		addCtid.hint = *hint;
 		addCtid.csn = tupleCsn;
@@ -1675,10 +1675,10 @@ o_new_rowid(primary: &mut OIndexDescr, slot: &mut TupleTableSlot,
 	}
 	else
 	{
-		ORowIdAddendumNonCtid addNonCtid;
+		pub static mut ADD_NON_CTID: ORowIdAddendumNonCtid = std::mem::zeroed();
 		OTuple		temp_tuple = {0};
-		TupleDesc	pk_tupdesc = NULL;
-		pk_spec: &mut OTupleFixedFormatSpec = NULL;
+		pub static mut PK_TUPDESC: TupleDesc = std::ptr::null_mut();
+		pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut pk_spec = std::ptr::null_mut();
 
 		//
 // General-case primary key: prepend tuple with maxaligned hint.
@@ -1719,7 +1719,7 @@ o_new_rowid(primary: &mut OIndexDescr, slot: &mut TupleTableSlot,
 		memcpy(ptr, &addNonCtid, sizeof(ORowIdAddendumNonCtid));
 	}
 
-	return rowid;
+	pub static mut ROWID: return = std::mem::zeroed();
 }
 
 // TODO: Rewrite
@@ -1728,11 +1728,11 @@ fill_itup(IndexScanDesc scan, OTuple tuple, descr: &mut OTableDescr,
 		  CommitSeqNo tupleCsn, hint: &mut BTreeLocationHint)
 {
 	o_scan: &mut OScanState = (OScanState *) scan;
-	slot: &mut TupleTableSlot;
-	rowid: &mut bytea;
-	index_descr: &mut OIndexDescr = descr->indices[o_scan->ixNum];
-	rowid_values: &mut Datum = NULL;
-	rowid_isnull: &mut bool = NULL;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+	pub static mut BYTEA: *mut rowid = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut index_descr = descr->indices[o_scan->ixNum];
+	pub static mut DATUM: *mut rowid_values = std::ptr::null_mut();
+	pub static mut BOOL: *mut rowid_isnull = std::ptr::null_mut();
 	Datum		temp_rowid_values[2 * INDEX_MAX_KEYS];
 	bool		temp_rowid_isnull[2 * INDEX_MAX_KEYS];
 
@@ -1746,15 +1746,15 @@ fill_itup(IndexScanDesc scan, OTuple tuple, descr: &mut OTableDescr,
 //
 	if (index_descr->duplicates != NIL)
 	{
-		int			lc_id = 0;
-		lc: &mut ListCell = NULL;
-		duplicate: &mut List = NIL;
-		int			i;
-		int			cur_attr;
-		int			ctid_off = index_descr->primaryIsCtid ? 1 : 0;
-		int			dup_range_start = -1;
-		int			dup_range_end = -1;
-		int			dup_range_diff = -1;
+		pub static mut LC_ID: std::os::raw::c_int = 0;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+		pub static mut LIST: *mut duplicate = NIL;
+		pub static mut I: std::os::raw::c_int = 0;
+		pub static mut CUR_ATTR: std::os::raw::c_int = 0;
+		pub static mut CTID_OFF: std::os::raw::c_int = index_descr->primaryIsCtid ? 1 : 0;
+		pub static mut DUP_RANGE_START: std::os::raw::c_int = -1;
+		pub static mut DUP_RANGE_END: std::os::raw::c_int = -1;
+		pub static mut DUP_RANGE_DIFF: std::os::raw::c_int = -1;
 
 		lc_id = list_length(index_descr->duplicates) - 1;
 
@@ -1807,14 +1807,14 @@ fill_itup(IndexScanDesc scan, OTuple tuple, descr: &mut OTableDescr,
 
 	if (!index_descr->primaryIsCtid)
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		//
 // Amount of index fields checked in o_define_index_validate
 //
 		for (i = 0; i < index_descr->nPrimaryFields; i++)
 		{
-			AttrNumber	attnum = index_descr->primaryFieldsAttnums[i] - 1;
+			pub static mut ATTNUM: AttrNumber = index_descr->primaryFieldsAttnums[i] - 1;
 
 			temp_rowid_values[i] = slot->tts_values[attnum];
 			temp_rowid_isnull[i] = slot->tts_isnull[attnum];
@@ -1916,14 +1916,14 @@ fill_itup(IndexScanDesc scan, OTuple tuple, descr: &mut OTableDescr,
 static bool
 orioledb_amgettuple(IndexScanDesc scan, ScanDirection dir)
 {
-	bool		res;
+	pub static mut RES: bool = false;
 	o_scan: &mut OScanState = (OScanState *) scan;
-	descr: &mut OTableDescr;
-	OTuple		tuple;
-	bool		scan_primary;
-	MemoryContext tupleCxt = CurrentMemoryContext;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut SCAN_PRIMARY: bool = false;
+	pub static mut TUPLE_CXT: MemoryContext = CurrentMemoryContext;
 	BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
-	CommitSeqNo csn;
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 	options: &mut OBTOptions = (OBTOptions *) scan->indexRelation->rd_options;
 
 	if (options && !options->orioledb_index)
@@ -1979,7 +1979,7 @@ orioledb_amgettuple(IndexScanDesc scan, ScanDirection dir)
 			fill_hitup(scan, tuple, descr, csn, &hint);
 		res = true;
 	}
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 static int64
@@ -1989,7 +1989,7 @@ orioledb_amgetbitmap(IndexScanDesc scan, tbm: &mut TIDBitmap)
 
 	if (options && !options->orioledb_index)
 		return btgetbitmap(scan, tbm);
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
@@ -2033,8 +2033,8 @@ orioledb_amparallelrescan(IndexScanDesc scan)
 static IndexAmRoutine *
 find_bridged_am(Relation index)
 {
-	amroutine: &mut IndexAmRoutine = NULL;
-	lc: &mut ListCell;
+	pub static mut INDEX_AM_ROUTINE: *mut amroutine = std::ptr::null_mut();
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 	foreach(lc, bridged_ams)
 	{
@@ -2047,14 +2047,14 @@ find_bridged_am(Relation index)
 		}
 	}
 
-	return amroutine;
+	pub static mut AMROUTINE: return = std::mem::zeroed();
 }
 
 static IndexBuildResult *
 bridged_ambuild(Relation heap, Relation index, indexInfo: &mut IndexInfo)
 {
-	result: &mut IndexBuildResult;
-	descr: &mut OTableDescr;
+	pub static mut INDEX_BUILD_RESULT: *mut result = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
 
 	descr = relation_get_descr(heap);
 
@@ -2071,7 +2071,7 @@ bridged_ambuild(Relation heap, Relation index, indexInfo: &mut IndexInfo)
 		result->heap_tuples = 0.0;
 		result->index_tuples = 0.0;
 
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 	else
 	{
@@ -2090,12 +2090,12 @@ bridged_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 				 bool indexUnchanged,
 				 indexInfo: &mut IndexInfo)
 {
-	ORelOids	oids;
-	descr: &mut OTableDescr;
-	rowid: &mut bytea;
-	Pointer		p;
-	amroutine: &mut IndexAmRoutine = NULL;
-	bridgeData: &mut ORowIdBridgeData;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut BYTEA: *mut rowid = std::ptr::null_mut();
+	pub static mut P: Pointer = std::ptr::null_mut();
+	pub static mut INDEX_AM_ROUTINE: *mut amroutine = std::ptr::null_mut();
+	pub static mut O_ROW_ID_BRIDGE_DATA: *mut bridgeData = std::ptr::null_mut();
 
 	ORelOidsSetFromRel(oids, heapRel);
 
@@ -2118,7 +2118,7 @@ bridged_aminsert(Relation rel, values: &mut Datum, isnull: &mut bool,
 	}
 
 	if (!bridgeData->bridgeChanged)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	tupleid = PointerGetDatum(&bridgeData->bridgeCtid);
 

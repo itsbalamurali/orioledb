@@ -37,8 +37,8 @@ o_fill_row_key_bound(bound: &mut OBTreeKeyBound,
 					 bool first_subkey, bool last_subkey,
 					 AttrNumber subattnum, uint8 flags)
 {
-	rowkey: &mut OBtreeRowKeyBound;
-	result: &mut OBTreeValueBound;
+	pub static mut O_BTREE_ROW_KEY_BOUND: *mut rowkey = std::ptr::null_mut();
+	pub static mut OB_TREE_VALUE_BOUND: *mut result = std::ptr::null_mut();
 
 	if (first_subkey)
 	{
@@ -73,7 +73,7 @@ o_fill_row_key_bound(bound: &mut OBTreeKeyBound,
 	if (!last_subkey)
 		result->flags |= O_VALUE_BOUND_INCLUSIVE;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -82,12 +82,12 @@ o_key_data_update_array_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKe
 								  int numPrefixExactKeys,
 								  int resultNKeys, fields: &mut OIndexField)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < numberOfKeys; i++)
 	{
-		key: &mut ScanKeyData = &keyData[i];
-		AttrNumber	attnum = key->sk_attno - 1;
+		pub static mut SCAN_KEY_DATA: *mut key = &keyData[i];
+		pub static mut ATTNUM: AttrNumber = key->sk_attno - 1;
 
 		if ((key->sk_flags & SK_SEARCHARRAY) &&
 			key->sk_strategy == BTEqualStrategyNumber)
@@ -109,8 +109,8 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 						int numPrefixExactKeys,
 						int resultNKeys, fields: &mut OIndexField)
 {
-	int			i;
-	bool		exact = true;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut EXACT: bool = true;
 
 	res->empty = false;
 	res->low.nkeys = resultNKeys;
@@ -126,11 +126,11 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 	{
 		bool		setLow = false,
 					setHigh = false;
-		key: &mut ScanKeyData = &keyData[i];
-		AttrNumber	attnum = key->sk_attno - 1;
+		pub static mut SCAN_KEY_DATA: *mut key = &keyData[i];
+		pub static mut ATTNUM: AttrNumber = key->sk_attno - 1;
 		OBTreeValueBound low = {0, 0, O_VALUE_BOUND_MINUS_INFINITY, NULL, NULL};
 		OBTreeValueBound high = {0, 0, O_VALUE_BOUND_PLUS_INFINITY, NULL, NULL};
-		field: &mut OIndexField = &fields[attnum];
+		pub static mut O_INDEX_FIELD: *mut field = &fields[attnum];
 
 		switch (key->sk_strategy)
 		{
@@ -223,7 +223,7 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 				bool		have_next = (key->sk_flags & SK_BT_NEXT) != 0;
 				bool		have_prior = (key->sk_flags & SK_BT_PRIOR) != 0;
 				bool		have_isnull = (key->sk_flags & SK_ISNULL) != 0;
-				bool		sentinel = have_minval || have_maxval || have_isnull;
+				pub static mut SENTINEL: bool = have_minval || have_maxval || have_isnull;
 
 				Assert(arrayKeys->num_elems == -1);
 
@@ -272,7 +272,7 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 				}
 				else if (arrayKeys->low_compare)
 				{
-					ScanKey		lk = arrayKeys->low_compare;
+					pub static mut LK: ScanKey = arrayKeys->low_compare;
 
 					low.flags = O_VALUE_BOUND_LOWER |
 						(lk->sk_strategy == BTGreaterEqualStrategyNumber ?
@@ -305,7 +305,7 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 				}
 				else if (arrayKeys->high_compare)
 				{
-					ScanKey		hk = arrayKeys->high_compare;
+					pub static mut HK: ScanKey = arrayKeys->high_compare;
 
 					high.flags = O_VALUE_BOUND_UPPER |
 						(hk->sk_strategy == BTLessEqualStrategyNumber ?
@@ -356,18 +356,18 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 		}
 		else if (key->sk_flags & SK_ROW_HEADER)
 		{
-			subkey: &mut ScanKeyData;
-			bool		first_subkey = true;
-			bool		last_subkey = false;
+			pub static mut SCAN_KEY_DATA: *mut subkey = std::ptr::null_mut();
+			pub static mut FIRST_SUBKEY: bool = true;
+			pub static mut LAST_SUBKEY: bool = false;
 
 			subkey = (ScanKey) DatumGetPointer(key->sk_argument);
 
 			while (!last_subkey)
 			{
-				AttrNumber	subattnum;
-				subfield: &mut OIndexField;
-				sublow: &mut OBTreeValueBound = NULL;
-				subhigh: &mut OBTreeValueBound = NULL;
+				pub static mut SUBATTNUM: AttrNumber = std::mem::zeroed();
+				pub static mut O_INDEX_FIELD: *mut subfield = std::ptr::null_mut();
+				pub static mut OB_TREE_VALUE_BOUND: *mut sublow = std::ptr::null_mut();
+				pub static mut OB_TREE_VALUE_BOUND: *mut subhigh = std::ptr::null_mut();
 
 				last_subkey = subkey->sk_flags & SK_ROW_END;
 
@@ -395,7 +395,7 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 		}
 		else
 		{
-			Oid			type = key->sk_subtype;
+			pub static mut TYPE: Oid = key->sk_subtype;
 
 			if (!OidIsValid(type))
 				type = field->inputtype;
@@ -415,7 +415,7 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 
 	for (i = 0; i < resultNKeys; i++)
 	{
-		bool		equals;
+		pub static mut EQUALS: bool = false;
 
 		if (o_idx_cmp_value_bounds(&res->low.keys[i],
 								   &res->high.keys[i],
@@ -423,13 +423,13 @@ o_key_data_to_key_range(res: &mut OBTreeKeyRange, keyData: &mut ScanKeyData,
 								   &equals) >= 0)
 		{
 			res->empty = true;
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 
 		if (!equals)
 			exact = false;
 	}
-	return exact;
+	pub static mut EXACT: return = std::mem::zeroed();
 }
 
 fn
@@ -437,8 +437,8 @@ o_fill_key_bounds(Datum v, Oid type,
 				  low: &mut OBTreeValueBound, high: &mut OBTreeValueBound,
 				  field: &mut OIndexField)
 {
-	bool		coercible = false;
-	comparator: &mut OComparator = NULL;
+	pub static mut COERCIBLE: bool = false;
+	pub static mut O_COMPARATOR: *mut comparator = std::ptr::null_mut();
 
 	if (!low && !high)
 		return;
@@ -474,7 +474,7 @@ o_key_range_is_unbounded(range: &mut OBTreeKeyRange, int attnum)
 {
 	if (range->low.keys[attnum].flags == O_VALUE_BOUND_MINUS_INFINITY &&
 		range->high.keys[attnum].flags == O_VALUE_BOUND_PLUS_INFINITY)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	else
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 }

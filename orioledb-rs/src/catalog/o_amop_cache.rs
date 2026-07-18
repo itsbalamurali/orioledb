@@ -25,8 +25,8 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static amop_cache: &mut OSysCache = NULL;
-static amop_strat_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut amop_cache = std::ptr::null_mut();
+static mut O_SYS_CACHE: *mut amop_strat_cache = std::ptr::null_mut();
 
 fn o_amop_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									Pointer arg);
@@ -81,13 +81,13 @@ O_SYS_CACHE_INIT_FUNC(amop_strat_cache)
 fn
 o_amop_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	amoptup;
-	Form_pg_amop amopform;
+	pub static mut AMOPTUP: HeapTuple = std::mem::zeroed();
+	pub static mut AMOPFORM: Form_pg_amop = std::mem::zeroed();
 	o_amop: &mut OAmOp = (OAmOp *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			amopopr;
-	char		amoppurpose;
-	Oid			amopfamily;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut AMOPOPR: Oid = std::mem::zeroed();
+	pub static mut AMOPPURPOSE: char = std::mem::zeroed();
+	pub static mut AMOPFAMILY: Oid = std::mem::zeroed();
 
 	amopopr = DatumGetObjectId(key->keys[0]);
 	amoppurpose = DatumGetChar(key->keys[1]);
@@ -131,14 +131,14 @@ fn
 o_amop_strat_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							  Pointer arg)
 {
-	HeapTuple	amoptup;
-	Form_pg_amop amopform;
+	pub static mut AMOPTUP: HeapTuple = std::mem::zeroed();
+	pub static mut AMOPFORM: Form_pg_amop = std::mem::zeroed();
 	o_amop_strat: &mut OAmOpStrat = (OAmOpStrat *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			amopfamily;
-	Oid			amoplefttype;
-	Oid			amoprighttype;
-	int16		amopstrategy;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut AMOPFAMILY: Oid = std::mem::zeroed();
+	pub static mut AMOPLEFTTYPE: Oid = std::mem::zeroed();
+	pub static mut AMOPRIGHTTYPE: Oid = std::mem::zeroed();
+	pub static mut AMOPSTRATEGY: int16 = std::mem::zeroed();
 
 	amopfamily = DatumGetObjectId(key->keys[0]);
 	amoplefttype = DatumGetObjectId(key->keys[1]);
@@ -178,7 +178,7 @@ o_amop_strat_cache_free_entry(Pointer entry)
 static HeapTuple
 o_amop_to_htup(o_amop: &mut OAmOp, TupleDesc tupdesc)
 {
-	HeapTuple	result = NULL;
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_amop] = {0};
 	bool		nulls[Natts_pg_amop] = {0};
 
@@ -198,16 +198,16 @@ o_amop_to_htup(o_amop: &mut OAmOp, TupleDesc tupdesc)
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 HeapTuple
 o_amop_cache_search_htup(TupleDesc tupdesc, Oid amopopr, char amoppurpose,
 						 Oid amopfamily)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	o_amop: &mut OAmOp;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut O_AM_OP: *mut o_amop = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_amop = o_amop_cache_search(datoid, amopopr, amoppurpose, amopfamily,
@@ -218,9 +218,9 @@ o_amop_cache_search_htup(TupleDesc tupdesc, Oid amopopr, char amoppurpose,
 List *
 o_amop_cache_search_htup_list(TupleDesc tupdesc, Oid amopopr)
 {
-	result: &mut List = NIL;
+	pub static mut LIST: *mut result = NIL;
 	td: &mut BTreeDescr = get_sys_tree(amop_cache->sys_tree_num);
-	it: &mut BTreeIterator;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 	OSysCacheKey3 key = {0};
 	OSysCacheBound bound = {.key = (OSysCacheKey *) &key,.nkeys = 1};
 
@@ -248,13 +248,13 @@ o_amop_cache_search_htup_list(TupleDesc tupdesc, Oid amopopr)
 	} while (true);
 
 	btree_iterator_free(it);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static HeapTuple
 o_amop_strat_to_htup(o_amop_strat: &mut OAmOpStrat, TupleDesc tupdesc)
 {
-	HeapTuple	result = NULL;
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_amop] = {0};
 	bool		nulls[Natts_pg_amop] = {0};
 
@@ -269,7 +269,7 @@ o_amop_strat_to_htup(o_amop_strat: &mut OAmOpStrat, TupleDesc tupdesc)
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 HeapTuple
@@ -277,9 +277,9 @@ o_amop_strat_cache_search_htup(TupleDesc tupdesc, Oid amopfamily,
 							   Oid amoplefttype, Oid amoprighttype,
 							   int16 amopstrategy)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	o_amop_strat: &mut OAmOpStrat;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut O_AM_OP_STRAT: *mut o_amop_strat = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_amop_strat = o_amop_strat_cache_search(datoid, amopfamily, amoplefttype,

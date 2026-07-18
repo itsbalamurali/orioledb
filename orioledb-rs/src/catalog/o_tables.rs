@@ -72,51 +72,51 @@ PG_FUNCTION_INFO_V1(orioledb_table_oids);
 
 typedef struct
 {
-	OTablesCallback callback;
+	pub static mut CALLBACK: OTablesCallback = std::mem::zeroed();
 		   *arg;
 } OTablesForeachArg;
 
 typedef struct
 {
-	OXid		oxid;
-	CommitSeqNo csn;
-	Oid			datoid;
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
 } OTablesDropAllArg;
 
 typedef struct
 {
-	OXid		oxid;
-	CommitSeqNo csn;
-	Oid			datoid;
-	Oid			old_tablespace;
-	Oid			new_tablespace;
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut OLD_TABLESPACE: Oid = std::mem::zeroed();
+	pub static mut NEW_TABLESPACE: Oid = std::mem::zeroed();
 } OTablesMoveAllArg;
 
 typedef struct
 {
-	Oid			datoid;
-	evicted: &mut List;
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut LIST: *mut evicted = std::ptr::null_mut();
 } OTablesEvictDBArg;
 
 typedef struct
 {
-	OXid		oxid;
-	CommitSeqNo csn;
-	Oid			type_oid;
-	Form_pg_type type_data;
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut TYPE_OID: Oid = std::mem::zeroed();
+	pub static mut TYPE_DATA: Form_pg_type = std::mem::zeroed();
 } OTablesDropAllWithTypeArg;
 
 typedef struct
 {
-	OIndexType	type;
-	ORelOids	oids;
-	OIndexNumber ixNum;
+	pub static mut TYPE: OIndexType = std::mem::zeroed();
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
 } OTableIndexOidsKey;
 
 typedef struct OTablesNumArg
 {
-	Oid			datoid;
-	int			result;
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: std::os::raw::c_int = 0;
 } OTablesNumArg;
 
 fn o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, name: &mut char, field: &mut OTableField);
@@ -132,7 +132,7 @@ oTablesGetBTreeDesc( *arg)
 {
 	desc: &mut BTreeDescr = (BTreeDescr *) arg;
 
-	return desc;
+	pub static mut DESC: return = std::mem::zeroed();
 }
 
 static uint32
@@ -144,11 +144,11 @@ oTablesGetKeySize( *arg)
 static uint32
 oTablesGetMaxChunkSize( *key,  *arg)
 {
-	uint32		max_chunk_size;
+	pub static mut MAX_CHUNK_SIZE: uint32 = std::mem::zeroed();
 
 	max_chunk_size = MAXALIGN_DOWN((O_BTREE_MAX_TUPLE_SIZE * 3 - MAXALIGN(sizeof(OTableChunkKey))) / 3) - offsetof(OTableChunk, data);
 
-	return max_chunk_size;
+	pub static mut MAX_CHUNK_SIZE: return = std::mem::zeroed();
 }
 
 fn
@@ -163,7 +163,7 @@ fn *
 oTablesGetNextKey( *key,  *arg)
 {
 	ckey: &mut OTableChunkKey = (OTableChunkKey *) key;
-	static OTableChunkKey nextKey;
+	static mut NEXT_KEY: OTableChunkKey = std::mem::zeroed();
 
 	nextKey = *ckey;
 	nextKey.oids.relnode++;
@@ -177,8 +177,8 @@ oTablesCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum,
 				   int length,  *arg)
 {
 	ckey: &mut OTableChunkKey = (OTableChunkKey *) key;
-	chunk: &mut OTableChunk;
-	OTuple		result;
+	pub static mut O_TABLE_CHUNK: *mut chunk = std::ptr::null_mut();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	ckey->chunknum = chunknum;
 
@@ -190,15 +190,15 @@ oTablesCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum,
 	result.data = (Pointer) chunk;
 	result.formatFlags = 0;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTuple
 oTablesCreateKey( *key, uint32 chunknum,  *arg)
 {
 	ckey: &mut OTableChunkKey = (OTableChunkKey *) key;
-	ckey_copy: &mut OTableChunkKey;
-	OTuple		result;
+	pub static mut O_TABLE_CHUNK_KEY: *mut ckey_copy = std::ptr::null_mut();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	ckey_copy = (OTableChunkKey *) palloc(sizeof(OTableChunkKey));
 	*ckey_copy = *ckey;
@@ -206,7 +206,7 @@ oTablesCreateKey( *key, uint32 chunknum,  *arg)
 	result.data = (Pointer) ckey_copy;
 	result.formatFlags = 0;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static Pointer
@@ -249,38 +249,38 @@ oTablesFetchCallback(OTuple tuple, OXid tupOxid, oSnapshot: &mut OSnapshot,
 			if (!OXidIsValid(boundKey->oxid))
 				boundKey->oxid = tupOxid;
 			else if (boundKey->oxid != tupOxid)
-				return OTupleFetchNotMatch;
+				pub static mut O_TUPLE_FETCH_NOT_MATCH: return = std::mem::zeroed();
 
 			if (boundKey->key.version == O_TABLE_INVALID_VERSION)
 				boundKey->key.version = tupleKey->version;
 			else if (boundKey->key.version != tupleKey->version)
-				return OTupleFetchNotMatch;
+				pub static mut O_TUPLE_FETCH_NOT_MATCH: return = std::mem::zeroed();
 
 			if (boundKey->key.chunknum == tupleKey->chunknum)
 			{
 				boundKey->key.chunknum++;
-				return OTupleFetchMatch;
+				pub static mut O_TUPLE_FETCH_MATCH: return = std::mem::zeroed();
 			}
 			else
-				return OTupleFetchNotMatch;
+				pub static mut O_TUPLE_FETCH_NOT_MATCH: return = std::mem::zeroed();
 		}
 
 		if (boundKey->key.version == O_TABLE_INVALID_VERSION)
 			boundKey->key.version = tupleKey->version;
 
 		if (tupleKey->version > boundKey->key.version)
-			return OTupleFetchNext;
+			pub static mut O_TUPLE_FETCH_NEXT: return = std::mem::zeroed();
 		else if (tupleKey->version == boundKey->key.version)
-			return OTupleFetchMatch;
+			pub static mut O_TUPLE_FETCH_MATCH: return = std::mem::zeroed();
 		else
-			return OTupleFetchNotMatch;
+			pub static mut O_TUPLE_FETCH_NOT_MATCH: return = std::mem::zeroed();
 	}
 
 	//
 // Return current tuple with unmatched key to iterator immediately to
 // finish the scan.
 //
-	return OTupleFetchMatch;
+	pub static mut O_TUPLE_FETCH_MATCH: return = std::mem::zeroed();
 }
 
 static ToastAPI oTablesToastAPI = {
@@ -305,11 +305,11 @@ o_tables_foreach_oids(OTablesOidsCallback callback,
 					  oSnapshot: &mut OSnapshot,
 					   *arg)
 {
-	OTableChunkKey chunk_key;
+	pub static mut CHUNK_KEY: OTableChunkKey = std::mem::zeroed();
 	ORelOids	oids = {0, 0, 0},
-				old_oids PG_USED_FOR_ASSERTS_ONLY;
-	it: &mut BTreeIterator;
-	OTuple		tuple;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: old_oids = std::mem::zeroed();
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 	desc: &mut BTreeDescr = get_sys_tree(SYS_TREES_O_TABLES);
 
 	chunk_key.oids = oids;
@@ -355,7 +355,7 @@ o_tables_foreach(OTablesCallback callback,
 				 oSnapshot: &mut OSnapshot,
 				  *arg)
 {
-	OTablesForeachArg foreach_arg;
+	pub static mut FOREACH_ARG: OTablesForeachArg = std::mem::zeroed();
 
 	foreach_arg.callback = callback;
 	foreach_arg.arg = arg;
@@ -366,7 +366,7 @@ o_tables_foreach(OTablesCallback callback,
 static char *
 o_deparse_expression(expr_str: &mut char, Oid relid)
 {
-	Datum		expr;
+	pub static mut EXPR: Datum = std::mem::zeroed();
 	expr_text: &mut text = cstring_to_text(expr_str);
 
 	expr = DirectFunctionCall2(pg_get_expr, (Datum) expr_text,
@@ -377,17 +377,17 @@ o_deparse_expression(expr_str: &mut char, Oid relid)
 
 o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel)
 {
-	index: &mut OTableIndex = &o_table->indices[ix_num];
-	index_expr_elem: &mut ListCell;
-	int			ix_exprfield_num;
-	lc: &mut ListCell;
+	pub static mut O_TABLE_INDEX: *mut index = &o_table->indices[ix_num];
+	pub static mut LIST_CELL: *mut index_expr_elem = std::ptr::null_mut();
+	pub static mut IX_EXPRFIELD_NUM: std::os::raw::c_int = 0;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 	MemoryContext mcxt,
 				old_mcxt;
-	int			keyno;
-	Datum		datum;
-	indclass: &mut oidvector;
-	bool		isnull;
-	int			i;
+	pub static mut KEYNO: std::os::raw::c_int = 0;
+	pub static mut DATUM: Datum = std::mem::zeroed();
+	pub static mut OIDVECTOR: *mut indclass = std::ptr::null_mut();
+	pub static mut ISNULL: bool = false;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (index->index_mctx)
 	{
@@ -418,7 +418,7 @@ o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel
 	foreach(lc, index_rel->rd_indexprs)
 	{
 		e: &mut Expr = (Expr *) lfirst(lc);
-		node: &mut Expr;
+		pub static mut EXPR: *mut node = std::ptr::null_mut();
 
 		node = expression_planner(e);
 		index->expressions = lappend(index->expressions, node);
@@ -428,7 +428,7 @@ o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel
 	{
 		op_operators: &mut Oid,
 				   *op_procs;
-		op_strats: &mut uint16;
+		pub static mut UINT16: *mut op_strats = std::ptr::null_mut();
 
 		Assert(index_rel->rd_index->indisexclusion);
 		RelationGetExclusionInfo(index_rel, &op_operators, &op_procs, &op_strats);
@@ -451,9 +451,9 @@ o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel
 	ix_exprfield_num = 0;
 	for (keyno = 0; keyno < index->nfields; keyno++)
 	{
-		AttrNumber	attnum = index_rel->rd_index->indkey.values[keyno];
-		ix_field: &mut OTableIndexField;
-		exprField: &mut OTableField = NULL;
+		pub static mut ATTNUM: AttrNumber = index_rel->rd_index->indkey.values[keyno];
+		pub static mut O_TABLE_INDEX_FIELD: *mut ix_field = std::ptr::null_mut();
+		pub static mut O_TABLE_FIELD: *mut exprField = std::ptr::null_mut();
 
 		ix_field = &index->fields[keyno];
 		if (AttributeNumberIsValid(attnum))
@@ -464,10 +464,10 @@ o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel
 		else
 		{
 			// Expressional index
-			indexkey: &mut Node;
-			HeapTuple	tuple;
-			Form_pg_type typeTup;
-			Oid			field_typeid;
+			pub static mut NODE: *mut indexkey = std::ptr::null_mut();
+			pub static mut TUPLE: HeapTuple = std::mem::zeroed();
+			pub static mut TYPE_TUP: Form_pg_type = std::mem::zeroed();
+			pub static mut FIELD_TYPEID: Oid = std::mem::zeroed();
 
 			Assert(index_rel->rd_indexprs);
 			indexkey = lfirst(index_expr_elem);
@@ -519,10 +519,10 @@ o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel
 
 		if (keyno >= index->nkeyfields)
 		{
-			primary: &mut OTableIndex = NULL;
-			bool		pk_member = false;
-			primary_field: &mut OTableIndexField = NULL;
-			int			pk_field;
+			pub static mut O_TABLE_INDEX: *mut primary = std::ptr::null_mut();
+			pub static mut PK_MEMBER: bool = false;
+			pub static mut O_TABLE_INDEX_FIELD: *mut primary_field = std::ptr::null_mut();
+			pub static mut PK_FIELD: std::os::raw::c_int = 0;
 
 			if (o_table->has_primary)
 			{
@@ -563,10 +563,10 @@ o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel
 		}
 		else
 		{
-			int16		opt = index_rel->rd_indoption[keyno];
-			Oid			typid;
-			bool		hashable = true;
-			processed: &mut List = NIL;
+			pub static mut OPT: int16 = index_rel->rd_indoption[keyno];
+			pub static mut TYPID: Oid = std::mem::zeroed();
+			pub static mut HASHABLE: bool = true;
+			pub static mut LIST: *mut processed = NIL;
 
 			if (AttributeNumberIsValid(attnum))
 			{
@@ -620,8 +620,8 @@ o_table_fill_index(o_table: &mut OTable, OIndexNumber ix_num, Relation index_rel
 
 o_table_resize_constr(o_table: &mut OTable)
 {
-	MemoryContext oldcxt;
-	MemoryContext tbl_cxt;
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
+	pub static mut TBL_CXT: MemoryContext = std::mem::zeroed();
 
 	tbl_cxt = OGetTableContext(o_table);
 	oldcxt = MemoryContextSwitchTo(tbl_cxt);
@@ -645,21 +645,21 @@ Datum
 o_eval_default(o_table: &mut OTable, Relation rel, expr: &mut Node, scantuple: &mut TupleTableSlot,
 			   bool byval, int16 typlen, isNull: &mut bool)
 {
-	MemoryContext oldcxt;
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
 	MemoryContext tbl_cxt = OGetTableContext(o_table);
-	Datum		new_val;
-	expr2: &mut Expr;
-	nsitem: &mut ParseNamespaceItem;
-	pstate: &mut ParseState;
-	estate: &mut EState = NULL;
-	econtext: &mut ExprContext;
-	exprState: &mut ExprState;
-	Datum		result = 0;
+	pub static mut NEW_VAL: Datum = std::mem::zeroed();
+	pub static mut EXPR: *mut expr2 = std::ptr::null_mut();
+	pub static mut PARSE_NAMESPACE_ITEM: *mut nsitem = std::ptr::null_mut();
+	pub static mut PARSE_STATE: *mut pstate = std::ptr::null_mut();
+	pub static mut E_STATE: *mut estate = std::ptr::null_mut();
+	pub static mut EXPR_CONTEXT: *mut econtext = std::ptr::null_mut();
+	pub static mut EXPR_STATE: *mut exprState = std::ptr::null_mut();
+	pub static mut RESULT: Datum = 0;
 
 	if (!expr)
 	{
 		*isNull = true;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	pstate = make_parsestate(NULL);
@@ -685,20 +685,20 @@ o_eval_default(o_table: &mut OTable, Relation rel, expr: &mut Node, scantuple: &
 	if (!*isNull)
 		result = datumCopy(new_val, byval, typlen);
 	MemoryContextSwitchTo(oldcxt);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
 o_table_fill_constr(o_table: &mut OTable, Relation rel, int fieldnum,
 					old_field: &mut OTableField, field: &mut OTableField)
 {
-	MemoryContext oldcxt;
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
 	MemoryContext tbl_cxt = OGetTableContext(o_table);
-	AttrMissing attrmiss_temp;
-	defaultexpr: &mut Node;
-	attrmiss: &mut AttrMissing = NULL;
-	bool		missingIsNull = true;
-	bool		has_domain_constraints = false;
+	pub static mut ATTRMISS_TEMP: AttrMissing = std::mem::zeroed();
+	pub static mut NODE: *mut defaultexpr = std::ptr::null_mut();
+	pub static mut ATTR_MISSING: *mut attrmiss = std::ptr::null_mut();
+	pub static mut MISSING_IS_NULL: bool = true;
+	pub static mut HAS_DOMAIN_CONSTRAINTS: bool = false;
 
 	if (field->hasdef || get_typtype(field->typid) == TYPTYPE_DOMAIN)
 		defaultexpr = build_column_default(rel, fieldnum + 1);
@@ -764,12 +764,12 @@ OTable *
 o_table_tableam_create(ORelOids oids, TupleDesc tupdesc, char relpersistence,
 					   uint8 fillfactor, Oid tablespace, bool bridging)
 {
-	o_table: &mut OTable;
-	int			i;
-	Oid			hash_opclass;
-	Oid			hash_opfamily;
-	prefix: &mut char;
-	db_prefix: &mut char;
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut HASH_OPCLASS: Oid = std::mem::zeroed();
+	pub static mut HASH_OPFAMILY: Oid = std::mem::zeroed();
+	pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+	pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 	if (tablespace == 0)
 		tablespace = MyDatabaseTableSpace;
@@ -815,7 +815,7 @@ o_table_tableam_create(ORelOids oids, TupleDesc tupdesc, char relpersistence,
 
 	for (i = 0; i < tupdesc->natts; i++)
 	{
-		field: &mut OTableField = &o_table->fields[i];
+		pub static mut O_TABLE_FIELD: *mut field = &o_table->fields[i];
 
 		orioledb_attr_to_field(field, TupleDescAttr(tupdesc, i));
 		orioledb_save_collation(field->collation);
@@ -823,7 +823,7 @@ o_table_tableam_create(ORelOids oids, TupleDesc tupdesc, char relpersistence,
 	o_table->nindices = 0;
 	o_table_resize_constr(o_table);
 
-	return o_table;
+	pub static mut O_TABLE: return = std::mem::zeroed();
 }
 
 static OTableField builtin_fields[] =
@@ -838,7 +838,7 @@ static OTableField builtin_fields[] =
 OTableField *
 o_tables_get_builtin_field(Oid type)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < sizeof(builtin_fields) / sizeof(builtin_fields[0]); i++)
 	{
@@ -848,7 +848,7 @@ o_tables_get_builtin_field(Oid type)
 		}
 	}
 	Assert(false);				// shouldn't get there
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 //
@@ -866,26 +866,26 @@ o_tables_tupdesc_init_builtin(TupleDesc desc, AttrNumber att_num, name: &mut cha
 TupleDesc
 o_table_fields_make_tupdesc(fields: &mut OTableField, int nfields)
 {
-	field: &mut OTableField;
+	pub static mut O_TABLE_FIELD: *mut field = std::ptr::null_mut();
 	TupleDesc	tupdesc = CreateTemplateTupleDesc(nfields);
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < nfields; i++)
 	{
 		field = &fields[i];
 		o_table_tupdesc_init_entry(tupdesc, i + 1, NameStr(field->name), field);
 	}
-	return tupdesc;
+	pub static mut TUPDESC: return = std::mem::zeroed();
 }
 
 
 o_tupdesc_load_constr(TupleDesc tupdesc, o_table: &mut OTable, descr: &mut OIndexDescr)
 {
-	MemoryContext oldcxt;
-	MemoryContext idx_cxt;
-	int			i;
-	int			fields_start;
-	int			all_attrs = o_table->nfields;
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
+	pub static mut IDX_CXT: MemoryContext = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut FIELDS_START: std::os::raw::c_int = 0;
+	pub static mut ALL_ATTRS: std::os::raw::c_int = o_table->nfields;
 
 	idx_cxt = OGetIndexContext(descr);
 	oldcxt = MemoryContextSwitchTo(idx_cxt);
@@ -904,8 +904,8 @@ o_tupdesc_load_constr(TupleDesc tupdesc, o_table: &mut OTable, descr: &mut OInde
 
 	for (i = 0; i < o_table->nfields; i++)
 	{
-		field: &mut OTableField = &o_table->fields[i];
-		tupdesc_miss: &mut AttrMissing = &tupdesc->constr->missing[i + fields_start];
+		pub static mut O_TABLE_FIELD: *mut field = &o_table->fields[i];
+		pub static mut ATTR_MISSING: *mut tupdesc_miss = &tupdesc->constr->missing[i + fields_start];
 
 		tupdesc_miss->am_present = o_table->missing[i].am_present;
 
@@ -919,7 +919,7 @@ o_tupdesc_load_constr(TupleDesc tupdesc, o_table: &mut OTable, descr: &mut OInde
 
 	if (o_table->index_bridging)
 	{
-		tupdesc_miss: &mut AttrMissing = &tupdesc->constr->missing[fields_start - 1];
+		pub static mut ATTR_MISSING: *mut tupdesc_miss = &tupdesc->constr->missing[fields_start - 1];
 
 		tupdesc_miss->am_present = false;
 		tupdesc_miss->am_value = 0;
@@ -930,7 +930,7 @@ o_tupdesc_load_constr(TupleDesc tupdesc, o_table: &mut OTable, descr: &mut OInde
 TupleDesc
 o_table_tupdesc(o_table: &mut OTable)
 {
-	TupleDesc	tupdesc;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
 
 	tupdesc = o_table_fields_make_tupdesc(o_table->fields, o_table->nfields);
 	if (IsTransactionState())
@@ -951,7 +951,7 @@ o_table_tupdesc(o_table: &mut OTable)
 // scrambling and B-tree corruption on the replica.
 //
 		tupdesc->tdtypeid = o_table->oids.reloid;
-	return tupdesc;
+	pub static mut TUPDESC: return = std::mem::zeroed();
 }
 
 static int
@@ -963,37 +963,37 @@ index_keys_cmp(p1: &mut const, p2: &mut const)
 	if (key1->type < key2->type)
 		return -1;
 	else if (key1->type > key2->type)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (key1->oids.datoid < key2->oids.datoid)
 		return -1;
 	else if (key1->oids.datoid > key2->oids.datoid)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (key1->oids.reloid < key2->oids.reloid)
 		return -1;
 	else if (key1->oids.reloid > key2->oids.reloid)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (key1->oids.relnode < key2->oids.relnode)
 		return -1;
 	else if (key1->oids.relnode > key2->oids.relnode)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 static OTableIndexOidsKey *
 o_table_make_index_oids_keys(table: &mut OTable, num: &mut int)
 {
-	keys: &mut OTableIndexOidsKey;
-	int			keys_num = 0;
-	int			i;
+	pub static mut O_TABLE_INDEX_OIDS_KEY: *mut keys = std::ptr::null_mut();
+	pub static mut KEYS_NUM: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (!table)
 	{
 		*num = 0;
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	keys = (OTableIndexOidsKey *) palloc(sizeof(OTableIndexOidsKey) *
@@ -1032,7 +1032,7 @@ o_table_make_index_oids_keys(table: &mut OTable, num: &mut int)
 	qsort(keys, keys_num, sizeof(OTableIndexOidsKey), index_keys_cmp);
 
 	*num = keys_num;
-	return keys;
+	pub static mut KEYS: return = std::mem::zeroed();
 }
 
 //
@@ -1043,9 +1043,9 @@ o_table_make_index_oids_keys(table: &mut OTable, num: &mut int)
 OIndexKey *
 o_table_make_index_keys(table: &mut OTable, num: &mut int)
 {
-	trees: &mut OIndexKey;
-	int			trees_num;
-	int			i;
+	pub static mut O_INDEX_KEY: *mut trees = std::ptr::null_mut();
+	pub static mut TREES_NUM: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(table && num);
 
@@ -1081,7 +1081,7 @@ o_table_make_index_keys(table: &mut OTable, num: &mut int)
 	}
 
 	*num = trees_num;
-	return trees;
+	pub static mut TREES: return = std::mem::zeroed();
 }
 
 //
@@ -1091,20 +1091,20 @@ fn
 o_tables_oids_indexes(old_table: &mut OTable, new_table: &mut OTable,
 					  OXid oxid, CommitSeqNo csn)
 {
-	old_keys: &mut OTableIndexOidsKey = NULL;
-	new_keys: &mut OTableIndexOidsKey = NULL;
+	pub static mut O_TABLE_INDEX_OIDS_KEY: *mut old_keys = std::ptr::null_mut();
+	pub static mut O_TABLE_INDEX_OIDS_KEY: *mut new_keys = std::ptr::null_mut();
 	int			old_keys_num = 0,
 				new_keys_num = 0,
 				i = 0,
 				j = 0;
-	bool		reuse_relnode = false;
+	pub static mut REUSE_RELNODE: bool = false;
 
 	old_keys = o_table_make_index_oids_keys(old_table, &old_keys_num);
 	new_keys = o_table_make_index_oids_keys(new_table, &new_keys_num);
 
 	while (i < old_keys_num || j < new_keys_num)
 	{
-		int			cmp;
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		if (i >= old_keys_num)
 		{
@@ -1135,7 +1135,7 @@ o_tables_oids_indexes(old_table: &mut OTable, new_table: &mut OTable,
 
 		if (cmp < 0)
 		{
-			bool		result;
+			pub static mut RESULT: bool = false;
 
 			Assert(old_table);
 			if (!reuse_relnode)
@@ -1159,7 +1159,7 @@ o_tables_oids_indexes(old_table: &mut OTable, new_table: &mut OTable,
 
 		if (cmp > 0)
 		{
-			bool		result PG_USED_FOR_ASSERTS_ONLY;
+			pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		result = std::mem::zeroed();
 
 			Assert(new_table);
 			if (!reuse_relnode)
@@ -1186,11 +1186,11 @@ o_tables_oids_indexes(old_table: &mut OTable, new_table: &mut OTable,
 OTable *
 o_tables_drop_by_oids(ORelOids oids, OXid oxid, CommitSeqNo csn)
 {
-	OTableChunkKey key;
-	table: &mut OTable = NULL;
+	pub static mut KEY: OTableChunkKey = std::mem::zeroed();
+	pub static mut O_TABLE: *mut table = std::ptr::null_mut();
 	bool		result = false,
 				any_wal = false;
-	sys_tree: &mut BTreeDescr = NULL;
+	pub static mut B_TREE_DESCR: *mut sys_tree = std::ptr::null_mut();
 
 	key.oids = oids;
 	key.chunknum = 0;
@@ -1217,20 +1217,20 @@ o_tables_drop_by_oids(ORelOids oids, OXid oxid, CommitSeqNo csn)
 
 	if (result)
 	{
-		return table;
+		pub static mut TABLE: return = std::mem::zeroed();
 	}
 	else
 	{
 		if (table)
 			o_table_free(table);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 }
 
 
 o_tables_drop_all(OXid oxid, CommitSeqNo csn, Oid database_id)
 {
-	OTablesDropAllArg arg;
+	pub static mut ARG: OTablesDropAllArg = std::mem::zeroed();
 
 	arg.oxid = oxid;
 	arg.csn = csn;
@@ -1244,8 +1244,8 @@ fn
 o_tables_move_all_callback(o_table: &mut OTable,  *arg)
 {
 	move_arg: &mut OTablesMoveAllArg = (OTablesMoveAllArg *) arg;
-	int			ctid_idx_off = o_table->has_primary ? 0 : 1;
-	bool		table_moved = false;
+	pub static mut CTID_IDX_OFF: std::os::raw::c_int = o_table->has_primary ? 0 : 1;
+	pub static mut TABLE_MOVED: bool = false;
 
 	Assert(o_table);
 
@@ -1274,7 +1274,7 @@ o_tables_move_all_callback(o_table: &mut OTable,  *arg)
 
 	for (int ixnum = 0; ixnum < o_table->nindices; ixnum++)
 	{
-		ix_table: &mut OTableIndex;
+		pub static mut O_TABLE_INDEX: *mut ix_table = std::ptr::null_mut();
 
 		ix_table = &o_table->indices[ixnum];
 		if (ix_table->tablespace != move_arg->old_tablespace)
@@ -1294,7 +1294,7 @@ o_tables_move_all_callback(o_table: &mut OTable,  *arg)
 
 o_tables_move_all(OXid oxid, CommitSeqNo csn, Oid database_id, Oid old_tspcoid, Oid new_tspcoid)
 {
-	OTablesMoveAllArg arg;
+	pub static mut ARG: OTablesMoveAllArg = std::mem::zeroed();
 
 	arg.oxid = oxid;
 	arg.csn = csn;
@@ -1311,8 +1311,8 @@ fn
 o_tables_evict_callback(o_table: &mut OTable,  *arg)
 {
 	args: &mut OTablesEvictDBArg = (OTablesEvictDBArg *) arg;
-	descr: &mut OTableDescr;
-	td: &mut BTreeDescr;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut td = std::ptr::null_mut();
 
 	if (args->datoid != o_table->oids.datoid)
 		return;
@@ -1343,7 +1343,7 @@ o_tables_evict_callback(o_table: &mut OTable,  *arg)
 
 o_tables_evict(Oid datoid, List **evicted)
 {
-	OTablesEvictDBArg arg;
+	pub static mut ARG: OTablesEvictDBArg = std::mem::zeroed();
 
 	arg.datoid = datoid;
 	arg.evicted = NIL;
@@ -1354,9 +1354,9 @@ o_tables_evict(Oid datoid, List **evicted)
 
 o_tables_truncate_all_unlogged()
 {
-	OTablesDropAllArg arg;
-	OXid		oxid;
-	OSnapshot	oSnapshot;
+	pub static mut ARG: OTablesDropAllArg = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
 
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
@@ -1370,11 +1370,11 @@ o_tables_truncate_all_unlogged()
 bool
 o_tables_add(table: &mut OTable, OXid oxid, CommitSeqNo csn)
 {
-	OTableChunkKey key;
-	bool		result;
-	Pointer		data;
-	int			len;
-	sys_tree: &mut BTreeDescr;
+	pub static mut KEY: OTableChunkKey = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut LEN: std::os::raw::c_int = 0;
+	pub static mut B_TREE_DESCR: *mut sys_tree = std::ptr::null_mut();
 
 	key.oids = table->oids;
 	key.chunknum = 0;
@@ -1390,7 +1390,7 @@ o_tables_add(table: &mut OTable, OXid oxid, CommitSeqNo csn)
 	systrees_modify_end(table->persistence != RELPERSISTENCE_TEMP);
 	pfree(data);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1403,8 +1403,8 @@ o_tables_add(table: &mut OTable, OXid oxid, CommitSeqNo csn)
 OTable *
 o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 {
-	OTableChunkKey key;
-	int			retry;
+	pub static mut KEY: OTableChunkKey = std::mem::zeroed();
+	pub static mut RETRY: std::os::raw::c_int = 0;
 
 	key.oids = oids;
 	key.chunknum = 0;
@@ -1412,11 +1412,11 @@ o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 
 	for (retry = 0;; retry++)
 	{
-		OTableChunkBoundKey boundKey;
-		found_key: &mut OTableChunkBoundKey = NULL;
-		Pointer		result;
-		Size		dataLength;
-		oTable: &mut OTable;
+		pub static mut BOUND_KEY: OTableChunkBoundKey = std::mem::zeroed();
+		pub static mut O_TABLE_CHUNK_BOUND_KEY: *mut found_key = std::ptr::null_mut();
+		pub static mut RESULT: Pointer = std::ptr::null_mut();
+		pub static mut DATA_LENGTH: Size = 0;
+		pub static mut O_TABLE: *mut oTable = std::ptr::null_mut();
 
 		boundKey.key = key;
 		boundKey.oxid = InvalidOXid;
@@ -1429,7 +1429,7 @@ o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 												(Pointer *) &found_key);
 
 		if (result == NULL)
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 
 		oTable = deserialize_o_table(result, dataLength);
 		pfree(result);
@@ -1438,7 +1438,7 @@ o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 		{
 			oTable->version = found_key->key.version;
 			pfree(found_key);
-			return oTable;
+			pub static mut O_TABLE: return = std::mem::zeroed();
 		}
 
 		// Truncated data — concurrent chunk write in progress, retry
@@ -1471,14 +1471,14 @@ o_tables_get(ORelOids oids)
 OTable *
 o_tables_get_by_tree(ORelOids oids, OIndexType type)
 {
-	ORelOids	tableOids;
-	bool		result;
+	pub static mut TABLE_OIDS: ORelOids = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 
 	// See if it's index oid first
 	result = o_indices_find_table_oids(oids, type, &o_in_progress_snapshot,
 									   &tableOids);
 	if (!result)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	return o_tables_get(tableOids);
 }
@@ -1487,7 +1487,7 @@ o_tables_get_by_tree(ORelOids oids, OIndexType type)
 int
 o_tables_num(Oid datoid)
 {
-	OTablesNumArg num_arg;
+	pub static mut NUM_ARG: OTablesNumArg = std::mem::zeroed();
 
 	num_arg.datoid = datoid;
 	num_arg.result = 0;
@@ -1500,7 +1500,7 @@ o_tables_num(Oid datoid)
 
 o_table_free(table: &mut OTable)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(table != NULL);
 
@@ -1517,12 +1517,12 @@ o_table_free(table: &mut OTable)
 bool
 o_tables_update(table: &mut OTable, OXid oxid, CommitSeqNo csn)
 {
-	OTableChunkKey key;
-	old_table: &mut OTable;
-	bool		result;
-	Pointer		data;
-	int			len;
-	sys_tree: &mut BTreeDescr;
+	pub static mut KEY: OTableChunkKey = std::mem::zeroed();
+	pub static mut O_TABLE: *mut old_table = std::ptr::null_mut();
+	pub static mut RESULT: bool = false;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut LEN: std::os::raw::c_int = 0;
+	pub static mut B_TREE_DESCR: *mut sys_tree = std::ptr::null_mut();
 
 	key.oids = table->oids;
 	key.chunknum = 0;
@@ -1541,7 +1541,7 @@ o_tables_update(table: &mut OTable, OXid oxid, CommitSeqNo csn)
 	pfree(data);
 	o_table_free(old_table);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -1573,8 +1573,8 @@ bool
 o_tables_rel_try_lock_extended(oids: &mut ORelOids, int lockmode,
 							   nested: &mut bool, bool checkpoint)
 {
-	LOCKTAG		locktag;
-	LockAcquireResult result;
+	pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
+	pub static mut RESULT: LockAcquireResult = std::mem::zeroed();
 
 	o_tables_rel_fill_locktag(&locktag, oids, lockmode, checkpoint);
 
@@ -1589,15 +1589,15 @@ o_tables_rel_try_lock_extended(oids: &mut ORelOids, int lockmode,
 	if (result != LOCKACQUIRE_NOT_AVAIL)
 	{
 		AcceptInvalidationMessages();
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 
 o_tables_rel_lock_extended(oids: &mut ORelOids, int lockmode, bool checkpoint)
 {
-	LOCKTAG		locktag;
+	pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
 
 	o_tables_rel_fill_locktag(&locktag, oids, lockmode, checkpoint);
 
@@ -1612,7 +1612,7 @@ o_tables_rel_lock_extended(oids: &mut ORelOids, int lockmode, bool checkpoint)
 o_tables_rel_lock_extended_no_inval(oids: &mut ORelOids, int lockmode,
 									bool checkpoint)
 {
-	LOCKTAG		locktag;
+	pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
 
 	o_tables_rel_fill_locktag(&locktag, oids, lockmode, checkpoint);
 
@@ -1625,7 +1625,7 @@ o_tables_rel_lock_extended_no_inval(oids: &mut ORelOids, int lockmode,
 
 o_tables_rel_lock_exclusive_no_inval_no_log(oids: &mut ORelOids)
 {
-	LOCKTAG		locktag;
+	pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
 
 	o_tables_rel_fill_locktag(&locktag, oids, AccessExclusiveLock, false);
 	locktag.locktag_lockmethodid = NO_LOG_LOCKMETHOD;
@@ -1636,7 +1636,7 @@ o_tables_rel_lock_exclusive_no_inval_no_log(oids: &mut ORelOids)
 
 o_tables_rel_unlock_extended(oids: &mut ORelOids, int lockmode, bool checkpoint)
 {
-	LOCKTAG		locktag;
+	pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
 
 	o_tables_rel_fill_locktag(&locktag, oids, lockmode, checkpoint);
 
@@ -1662,7 +1662,7 @@ o_get_type_name(Oid typid, int32 typmod)
 static text *
 describe_table(ORelOids oids)
 {
-	table: &mut OTable;
+	pub static mut O_TABLE: *mut table = std::ptr::null_mut();
 	StringInfoData buf,
 				format,
 				title;
@@ -1683,7 +1683,7 @@ describe_table(ORelOids oids)
 	max_collation_str = strlen(collation_str);
 	for (i = 0; i < table->nfields; i++)
 	{
-		field: &mut OTableField = &table->fields[i];
+		pub static mut O_TABLE_FIELD: *mut field = &table->fields[i];
 		typename: &mut char = o_get_type_name(field->typid, field->typmod);
 		colname: &mut char = get_collation_name(field->collation);
 
@@ -1720,7 +1720,7 @@ describe_table(ORelOids oids)
 
 	for (i = 0; i < table->nfields; i++)
 	{
-		field: &mut OTableField = &table->fields[i];
+		pub static mut O_TABLE_FIELD: *mut field = &table->fields[i];
 		typename: &mut char = o_get_type_name(field->typid, field->typmod);
 		colname: &mut char = get_collation_name(field->collation);
 
@@ -1732,7 +1732,7 @@ describe_table(ORelOids oids)
 						 field->droped ? "true" : "false");
 		if (orioledb_table_description_compress)
 		{
-			const compression: &mut char = "";
+			pub static mut CHAR: *mut const compression = "";
 
 			if (CompressionMethodIsValid(field->compression))
 				compression = GetCompressionMethodName(field->compression);
@@ -1747,8 +1747,8 @@ describe_table(ORelOids oids)
 Datum
 orioledb_table_description(PG_FUNCTION_ARGS)
 {
-	ORelOids	oids;
-	Relation	rel;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut REL: Relation = std::mem::zeroed();
 
 	if (PG_NARGS() == 1)
 	{
@@ -1776,10 +1776,10 @@ Datum
 orioledb_table_oids(PG_FUNCTION_ARGS)
 {
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -1805,7 +1805,7 @@ fn
 o_tables_foreach_callback(ORelOids oids,  *arg)
 {
 	foreach_arg: &mut OTablesForeachArg = (OTablesForeachArg *) arg;
-	table: &mut OTable;
+	pub static mut O_TABLE: *mut table = std::ptr::null_mut();
 
 	Assert(ORelOidsIsValid(oids));
 
@@ -1824,14 +1824,14 @@ o_tables_drop_all_callback(ORelOids oids,  *arg)
 
 	if (drop_arg->datoid == oids.datoid)
 	{
-		table: &mut OTable;
+		pub static mut O_TABLE: *mut table = std::ptr::null_mut();
 
 		table = o_tables_drop_by_oids(oids, drop_arg->oxid, drop_arg->csn);
 
 		if (table)
 		{
-			trees: &mut OIndexKey;
-			int			numTrees;
+			pub static mut O_INDEX_KEY: *mut trees = std::ptr::null_mut();
+			pub static mut NUM_TREES: std::os::raw::c_int = 0;
 
 			trees = o_table_make_index_keys(table, &numTrees);
 			add_undo_drop_relnode(oids, trees, numTrees);
@@ -1877,17 +1877,17 @@ o_tables_num_callback(ORelOids oids,  *arg)
 OTableField *
 o_table_field_by_name(table: &mut OTable, const name: &mut char)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (name == NULL)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	i = o_table_fieldnum(table, name);
 
 	if (i < table->nfields)
 		return &table->fields[i];
 	else
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 }
 
 //
@@ -1897,7 +1897,7 @@ fn
 o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, name: &mut char,
 						   field: &mut OTableField)
 {
-	Form_pg_attribute att;
+	pub static mut ATT: Form_pg_attribute = std::mem::zeroed();
 
 	//
 // sanity checks
@@ -1991,8 +1991,8 @@ serialize_o_table_index(o_table_index: &mut OTableIndex, StringInfo str)
 Pointer
 serialize_o_table(o_table: &mut OTable, size: &mut int)
 {
-	StringInfoData str;
-	int			i;
+	pub static mut STR: StringInfoData = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(o_table != NULL);
 	if (o_table->data_version != ORIOLEDB_SYS_TREE_VERSION)
@@ -2012,7 +2012,7 @@ serialize_o_table(o_table: &mut OTable, size: &mut int)
 
 	for (i = 0; i < o_table->nfields; i++)
 	{
-		Size		field_size;
+		pub static mut FIELD_SIZE: Size = 0;
 		Pointer		buf,
 					buf_start;
 
@@ -2045,13 +2045,13 @@ static bool
 deserialize_o_table_index(o_table_index: &mut OTableIndex, ptr: &mut Pointer,
 						  Pointer data, Size length, uint16 data_version)
 {
-	int			len;
+	pub static mut LEN: std::os::raw::c_int = 0;
 	MemoryContext mcxt,
 				old_mcxt;
 
 	len = offsetof(OTableIndex, exprfields);
 	if ((*ptr - data) + len > length)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	memcpy(o_table_index, *ptr, len);
 	*ptr += len;
 
@@ -2062,7 +2062,7 @@ deserialize_o_table_index(o_table_index: &mut OTableIndex, ptr: &mut Pointer,
 	if ((*ptr - data) + len > length)
 	{
 		MemoryContextSwitchTo(old_mcxt);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	o_table_index->exprfields = (OTableField *) palloc0(len);
 	memcpy(o_table_index->exprfields, *ptr, len);
@@ -2072,7 +2072,7 @@ deserialize_o_table_index(o_table_index: &mut OTableIndex, ptr: &mut Pointer,
 								 (Node **) &o_table_index->predicate))
 	{
 		MemoryContextSwitchTo(old_mcxt);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	if (o_table_index->predicate)
 	{
@@ -2080,21 +2080,21 @@ deserialize_o_table_index(o_table_index: &mut OTableIndex, ptr: &mut Pointer,
 									   &o_table_index->predicate_str))
 		{
 			MemoryContextSwitchTo(old_mcxt);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 	if (!o_deserialize_node_safe(ptr, data, length,
 								 (Node **) &o_table_index->expressions))
 	{
 		MemoryContextSwitchTo(old_mcxt);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	len = sizeof(Oid);
 	if ((*ptr - data) + len > length)
 	{
 		MemoryContextSwitchTo(old_mcxt);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	memcpy(&o_table_index->tablespace, *ptr, len);
 	*ptr += len;
@@ -2105,7 +2105,7 @@ deserialize_o_table_index(o_table_index: &mut OTableIndex, ptr: &mut Pointer,
 		if ((*ptr - data) + len > length)
 		{
 			MemoryContextSwitchTo(old_mcxt);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 		o_table_index->exclops = (Oid *) palloc0(len);
 		memcpy(o_table_index->exclops, *ptr, len);
@@ -2116,13 +2116,13 @@ deserialize_o_table_index(o_table_index: &mut OTableIndex, ptr: &mut Pointer,
 	if ((*ptr - data) + len > length)
 	{
 		MemoryContextSwitchTo(old_mcxt);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	memcpy(&o_table_index->immediate, *ptr, len);
 	*ptr += len;
 
 	MemoryContextSwitchTo(old_mcxt);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -2134,13 +2134,13 @@ static bool
 datumRestoreSafe(char **start_address, isnull: &mut bool, result: &mut Datum,
 				 Pointer data, Size length)
 {
-	int			header;
+	pub static mut HEADER: std::os::raw::c_int = 0;
 		   *d;
-	ptr: &mut char = *start_address;
+	pub static mut CHAR: *mut ptr = *start_address;
 
 	// Need at least sizeof(int) for the header word.
 	if ((ptr - data) + (int) sizeof(int) > length)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	memcpy(&header, ptr, sizeof(int));
 	ptr += sizeof(int);
@@ -2151,7 +2151,7 @@ datumRestoreSafe(char **start_address, isnull: &mut bool, result: &mut Datum,
 		*isnull = true;
 		*result = (Datum) 0;
 		*start_address = ptr;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	*isnull = false;
@@ -2159,29 +2159,29 @@ datumRestoreSafe(char **start_address, isnull: &mut bool, result: &mut Datum,
 	// Pass-by-value datum.
 	if (header == -1)
 	{
-		Datum		val;
+		pub static mut VAL: Datum = std::mem::zeroed();
 
 		if ((ptr - data) + (int) sizeof(Datum) > length)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		memcpy(&val, ptr, sizeof(Datum));
 		ptr += sizeof(Datum);
 		*result = val;
 		*start_address = ptr;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	// Pass-by-reference: header is the byte count.
 	Assert(header > 0);
 	if ((ptr - data) + header > length)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	d = palloc(header);
 	memcpy(d, ptr, header);
 	ptr += header;
 	*result = PointerGetDatum(d);
 	*start_address = ptr;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -2191,19 +2191,19 @@ datumRestoreSafe(char **start_address, isnull: &mut bool, result: &mut Datum,
 OTable *
 deserialize_o_table(Pointer data, Size length)
 {
-	Pointer		ptr = data;
-	o_table: &mut OTable;
-	int			len;
-	int			i;
-	MemoryContext oldcxt;
-	MemoryContext tbl_cxt;
+	pub static mut PTR: Pointer = data;
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut LEN: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
+	pub static mut TBL_CXT: MemoryContext = std::mem::zeroed();
 
 	o_table = (OTable *) palloc0(sizeof(OTable));
 	len = offsetof(OTable, indices);
 	if ((ptr - data) + len > length)
 	{
 		pfree(o_table);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 	memcpy(o_table, ptr, len);
 	ptr += len;
@@ -2220,14 +2220,14 @@ deserialize_o_table(Pointer data, Size length)
 		{
 			MemoryContextSwitchTo(oldcxt);
 			o_table_free(o_table);
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 		}
 	}
 	if ((ptr - data) > length)
 	{
 		MemoryContextSwitchTo(oldcxt);
 		o_table_free(o_table);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	len = o_table->nfields * sizeof(OTableField);
@@ -2235,7 +2235,7 @@ deserialize_o_table(Pointer data, Size length)
 	{
 		MemoryContextSwitchTo(oldcxt);
 		o_table_free(o_table);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 	o_table->fields = (OTableField *) palloc(len);
 	memcpy(o_table->fields, ptr, len);
@@ -2246,14 +2246,14 @@ deserialize_o_table(Pointer data, Size length)
 
 	for (i = 0; i < o_table->nfields; i++)
 	{
-		miss: &mut AttrMissing = &o_table->missing[i];
-		bool		isnull;
+		pub static mut ATTR_MISSING: *mut miss = &o_table->missing[i];
+		pub static mut ISNULL: bool = false;
 
 		if ((ptr - data) + (int) sizeof(bool) > length)
 		{
 			MemoryContextSwitchTo(oldcxt);
 			o_table_free(o_table);
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 		}
 		memcpy(&miss->am_present, ptr, sizeof(bool));
 		ptr += sizeof(bool);
@@ -2261,7 +2261,7 @@ deserialize_o_table(Pointer data, Size length)
 		{
 			MemoryContextSwitchTo(oldcxt);
 			o_table_free(o_table);
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 		}
 	}
 	MemoryContextSwitchTo(oldcxt);
@@ -2270,7 +2270,7 @@ deserialize_o_table(Pointer data, Size length)
 	if ((ptr - data) + len > length)
 	{
 		o_table_free(o_table);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 	memcpy(&o_table->tablespace, ptr, len);
 	ptr += len;
@@ -2278,16 +2278,16 @@ deserialize_o_table(Pointer data, Size length)
 	if (ptr - data != length)
 	{
 		o_table_free(o_table);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
-	return o_table;
+	pub static mut O_TABLE: return = std::mem::zeroed();
 }
 
 fn
 o_tables_drop_columns_with_type_callback(o_table: &mut OTable,  *arg)
 {
-	int			i;
-	bool		updated = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut UPDATED: bool = false;
 	drop_arg: &mut OTablesDropAllWithTypeArg = (OTablesDropAllWithTypeArg *) arg;
 
 	// Ignore search for rows of own class in table and base types
@@ -2299,7 +2299,7 @@ o_tables_drop_columns_with_type_callback(o_table: &mut OTable,  *arg)
 	// Drop columns containing type
 	for (i = 0; i < o_table->nfields; i++)
 	{
-		o_field: &mut OTableField = &o_table->fields[i];
+		pub static mut O_TABLE_FIELD: *mut o_field = &o_table->fields[i];
 
 		if (drop_arg->type_oid == o_field->typid && !o_field->droped)
 		{
@@ -2322,8 +2322,8 @@ o_tables_drop_columns_with_type_callback(o_table: &mut OTable,  *arg)
 
 o_tables_drop_columns_by_type(OXid oxid, CommitSeqNo csn, Oid type_oid)
 {
-	OTablesDropAllWithTypeArg arg;
-	HeapTuple	tuple;
+	pub static mut ARG: OTablesDropAllWithTypeArg = std::mem::zeroed();
+	pub static mut TUPLE: HeapTuple = std::mem::zeroed();
 
 	tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
 	Assert(HeapTupleIsValid(tuple));
@@ -2345,7 +2345,7 @@ o_table_fill_oids(oTable: &mut OTable, Relation rel, const newrnode: &mut RelFil
 {
 	Relation	toastRel,
 				indexRel;
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	oTable->oids.datoid = MyDatabaseId;
 	oTable->oids.reloid = rel->rd_id;
@@ -2386,7 +2386,7 @@ o_table_fill_oids(oTable: &mut OTable, Relation rel, const newrnode: &mut RelFil
 	}
 }
 
-static int	recovery_num_o_tables_meta_locks = 0;
+static mut RECOVERY_NUM_O_TABLES_META_LOCKS: std::os::raw::c_int = 0;
 
 
 o_tables_meta_lock()

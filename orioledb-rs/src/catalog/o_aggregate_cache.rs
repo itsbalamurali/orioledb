@@ -25,31 +25,31 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static aggregate_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut aggregate_cache = std::ptr::null_mut();
 
 struct OAggregate
 {
-	OSysCacheKey1 key;
-	uint16		data_version;
-	regproc		aggfinalfn;
-	regproc		aggserialfn;
-	regproc		aggdeserialfn;
-	bool		aggfinalextra;
-	regproc		aggcombinefn;
-	regproc		aggtransfn;
-	char		aggfinalmodify;
-	bool		aggmfinalextra;
-	regproc		aggmfinalfn;
-	char		aggmfinalmodify;
-	regproc		aggminvtransfn;
-	regproc		aggmtransfn;
-	Oid			aggmtranstype;
-	Oid			aggtranstype;
-	bool		has_initval;
-	bool		has_minitval;
+	pub static mut KEY: OSysCacheKey1 = std::mem::zeroed();
+	pub static mut DATA_VERSION: uint16 = std::mem::zeroed();
+	pub static mut AGGFINALFN: regproc = std::mem::zeroed();
+	pub static mut AGGSERIALFN: regproc = std::mem::zeroed();
+	pub static mut AGGDESERIALFN: regproc = std::mem::zeroed();
+	pub static mut AGGFINALEXTRA: bool = false;
+	pub static mut AGGCOMBINEFN: regproc = std::mem::zeroed();
+	pub static mut AGGTRANSFN: regproc = std::mem::zeroed();
+	pub static mut AGGFINALMODIFY: char = std::mem::zeroed();
+	pub static mut AGGMFINALEXTRA: bool = false;
+	pub static mut AGGMFINALFN: regproc = std::mem::zeroed();
+	pub static mut AGGMFINALMODIFY: char = std::mem::zeroed();
+	pub static mut AGGMINVTRANSFN: regproc = std::mem::zeroed();
+	pub static mut AGGMTRANSFN: regproc = std::mem::zeroed();
+	pub static mut AGGMTRANSTYPE: Oid = std::mem::zeroed();
+	pub static mut AGGTRANSTYPE: Oid = std::mem::zeroed();
+	pub static mut HAS_INITVAL: bool = false;
+	pub static mut HAS_MINITVAL: bool = false;
 
-	agginitval: &mut char;
-	aggminitval: &mut char;
+	pub static mut CHAR: *mut agginitval = std::ptr::null_mut();
+	pub static mut CHAR: *mut aggminitval = std::ptr::null_mut();
 };
 
 fn o_aggregate_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
@@ -86,12 +86,12 @@ fn
 o_aggregate_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							 Pointer arg)
 {
-	HeapTuple	aggtup;
-	Form_pg_aggregate aggform;
+	pub static mut AGGTUP: HeapTuple = std::mem::zeroed();
+	pub static mut AGGFORM: Form_pg_aggregate = std::mem::zeroed();
 	o_agg: &mut OAggregate = (OAggregate *) *entry_ptr;
-	MemoryContext prev_context;
-	Datum		textInitVal;
-	bool		initValueIsNull;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut TEXT_INIT_VAL: Datum = std::mem::zeroed();
+	pub static mut INIT_VALUE_IS_NULL: bool = false;
 	Oid			aggfnoid = DatumGetObjectId(key->keys[0]);
 
 	aggtup = SearchSysCache1(AGGFNOID, key->keys[0]);
@@ -163,7 +163,7 @@ o_aggregate_cache_free_entry(Pointer entry)
 static Pointer
 o_aggregate_cache_serialize_entry(Pointer entry, len: &mut int)
 {
-	StringInfoData str;
+	pub static mut STR: StringInfoData = std::mem::zeroed();
 	o_agg: &mut OAggregate = (OAggregate *) entry;
 
 	if (o_agg->data_version != ORIOLEDB_SYS_TREE_VERSION)
@@ -187,9 +187,9 @@ static Pointer
 o_aggregate_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 									Size length)
 {
-	Pointer		ptr = data;
-	o_agg: &mut OAggregate;
-	int			len;
+	pub static mut PTR: Pointer = data;
+	pub static mut O_AGGREGATE: *mut o_agg = std::ptr::null_mut();
+	pub static mut LEN: std::os::raw::c_int = 0;
 
 	o_agg = (OAggregate *) palloc(sizeof(OAggregate));
 	len = offsetof(OAggregate, agginitval);
@@ -212,12 +212,12 @@ o_aggregate_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 HeapTuple
 o_aggregate_cache_search_htup(TupleDesc tupdesc, Oid aggfnoid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_aggregate] = {0};
 	bool		nulls[Natts_pg_aggregate] = {0};
-	o_agg: &mut OAggregate;
+	pub static mut O_AGGREGATE: *mut o_agg = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_agg = o_aggregate_cache_search(datoid, aggfnoid, cur_lsn,
@@ -266,5 +266,5 @@ o_aggregate_cache_search_htup(TupleDesc tupdesc, Oid aggfnoid)
 			nulls[Anum_pg_aggregate_aggminitval - 1] = true;
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }

@@ -24,7 +24,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static amproc_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut amproc_cache = std::ptr::null_mut();
 
 fn o_amproc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									  Pointer arg);
@@ -54,14 +54,14 @@ O_SYS_CACHE_INIT_FUNC(amproc_cache)
 fn
 o_amproc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	amproctup;
-	Form_pg_amproc amprocform;
+	pub static mut AMPROCTUP: HeapTuple = std::mem::zeroed();
+	pub static mut AMPROCFORM: Form_pg_amproc = std::mem::zeroed();
 	o_amproc: &mut OAmProc = (OAmProc *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			amprocfamily;
-	Oid			amproclefttype;
-	Oid			amprocrighttype;
-	int16		amprocnum;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut AMPROCFAMILY: Oid = std::mem::zeroed();
+	pub static mut AMPROCLEFTTYPE: Oid = std::mem::zeroed();
+	pub static mut AMPROCRIGHTTYPE: Oid = std::mem::zeroed();
+	pub static mut AMPROCNUM: int16 = std::mem::zeroed();
 
 	amprocfamily = DatumGetObjectId(key->keys[0]);
 	amproclefttype = DatumGetObjectId(key->keys[1]);
@@ -103,12 +103,12 @@ o_amproc_cache_search_htup(TupleDesc tupdesc, Oid amprocfamily,
 						   Oid amproclefttype, Oid amprocrighttype,
 						   int16 amprocnum)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_amproc] = {0};
 	bool		nulls[Natts_pg_amproc] = {0};
-	o_amproc: &mut OAmProc;
+	pub static mut O_AM_PROC: *mut o_amproc = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_amproc = o_amproc_cache_search(datoid, amprocfamily, amproclefttype,
@@ -120,7 +120,7 @@ o_amproc_cache_search_htup(TupleDesc tupdesc, Oid amprocfamily,
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //

@@ -37,7 +37,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static opclass_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut opclass_cache = std::ptr::null_mut();
 
 fn o_opclass_cache_free_entry(Pointer entry);
 fn o_opclass_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
@@ -82,7 +82,7 @@ O_SYS_CACHE_INIT_FUNC(opclass_cache)
 OOpclass *
 o_opclass_get(Oid opclassoid, Oid datoid)
 {
-	XLogRecPtr	cur_lsn;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, datoid == InvalidOid ? &datoid : NULL);
 	return o_opclass_cache_search(datoid, opclassoid, cur_lsn,
@@ -92,13 +92,13 @@ o_opclass_get(Oid opclassoid, Oid datoid)
 HeapTuple
 o_opclass_cache_search_htup(TupleDesc tupdesc, Oid opclassoid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_opclass] = {0};
 	bool		nulls[Natts_pg_opclass] = {0};
-	o_opclass: &mut OOpclass;
-	NameData	oname;
+	pub static mut O_OPCLASS: *mut o_opclass = std::ptr::null_mut();
+	pub static mut ONAME: NameData = std::mem::zeroed();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_opclass = o_opclass_cache_search(datoid, opclassoid, cur_lsn,
@@ -115,17 +115,17 @@ o_opclass_cache_search_htup(TupleDesc tupdesc, Oid opclassoid)
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
 o_opclass_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	opclasstuple;
-	Form_pg_opclass opclassform;
+	pub static mut OPCLASSTUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut OPCLASSFORM: Form_pg_opclass = std::mem::zeroed();
 	o_opclass: &mut OOpclass = (OOpclass *) *entry_ptr;
 	Oid			opclassoid = DatumGetObjectId(key->keys[0]);
-	Oid			inputtype;
+	pub static mut INPUTTYPE: Oid = std::mem::zeroed();
 
 	//
 // find typecache entry

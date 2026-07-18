@@ -29,16 +29,16 @@ fn add_rel_wal_record(ORelOids oids, OIndexType type, uint32 version, uint32 bas
 
 typedef struct
 {
-	int			buffer_offset;
-	bool		has_material_changes;
-	bool		contains_xid;
-	bool		contains_switch_xid;
-	ORelOids	oids;
-	OIndexType	ix_type;
+	pub static mut BUFFER_OFFSET: std::os::raw::c_int = 0;
+	pub static mut HAS_MATERIAL_CHANGES: bool = false;
+	pub static mut CONTAINS_XID: bool = false;
+	pub static mut CONTAINS_SWITCH_XID: bool = false;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
 	char		buffer[LOCAL_WAL_BUFFER_SIZE];
 } LocalWal;
 
-static LocalWal local_wal;
+static mut LOCAL_WAL: LocalWal = std::mem::zeroed();
 
 fn add_finish_wal_record(uint8 rec_type, OXid xmin);
 fn add_joint_commit_wal_record(TransactionId xid, OXid xmin);
@@ -57,7 +57,7 @@ static XLogRecPtr log_logical_wal_container(Pointer ptr, int length, bool withXa
 add_modify_wal_record(uint8 rec_type, desc: &mut BTreeDescr,
 					  OTuple tuple, OffsetNumber length, char relreplident, uint32 version, uint32 base_version)
 {
-	OTuple		nulltup;
+	pub static mut NULLTUP: OTuple = std::mem::zeroed();
 
 	O_TUPLE_SET_NULL(nulltup);
 	add_modify_wal_record_extended(rec_type, desc, tuple, length, nulltup, 0, relreplident, version, base_version);
@@ -71,10 +71,10 @@ fn
 add_modify_wal_record_extended(uint8 rec_type, desc: &mut BTreeDescr,
 							   OTuple tuple, OffsetNumber length, OTuple tuple2, OffsetNumber length2, char relreplident, uint32 version, uint32 base_version)
 {
-	int			required_length;
-	ORelOids	oids = desc->oids;
-	OIndexType	type = desc->type;
-	bool		write_two_tuples;
+	pub static mut REQUIRED_LENGTH: std::os::raw::c_int = 0;
+	pub static mut OIDS: ORelOids = desc->oids;
+	pub static mut TYPE: OIndexType = desc->type;
+	pub static mut WRITE_TWO_TUPLES: bool = false;
 
 	elog(DEBUG4, "[%s] rec_type %d oids [ %u %u %u ]", __func__, rec_type, oids.datoid, oids.reloid, oids.relnode);
 
@@ -134,10 +134,10 @@ add_modify_wal_record_extended(uint8 rec_type, desc: &mut BTreeDescr,
 
 add_bridge_erase_wal_record(desc: &mut BTreeDescr, ItemPointer iptr, uint32 version, uint32 base_version)
 {
-	int			required_length;
-	ORelOids	oids = desc->oids;
-	OIndexType	type = desc->type;
-	rec: &mut WALRecBridgeErase;
+	pub static mut REQUIRED_LENGTH: std::os::raw::c_int = 0;
+	pub static mut OIDS: ORelOids = desc->oids;
+	pub static mut TYPE: OIndexType = desc->type;
+	pub static mut WAL_REC_BRIDGE_ERASE: *mut rec = std::ptr::null_mut();
 
 	// Do not write WAL during recovery
 	if (OXidIsValid(recovery_oxid))
@@ -187,7 +187,7 @@ add_local_modify(uint8 record_type, OTuple record1, OffsetNumber length1, OTuple
 	if (!O_TUPLE_IS_NULL(record2))
 	{
 		// Two-tuple modify record
-		wal_rec: &mut WALRecModify2;
+		pub static mut WAL_REC_MODIFY2: *mut wal_rec = std::ptr::null_mut();
 
 		Assert(length2);
 		Assert(local_wal.buffer_offset + sizeof(*wal_rec) + length1 + length2 + XID_RESERVED_LENGTH <= LOCAL_WAL_BUFFER_SIZE);
@@ -207,7 +207,7 @@ add_local_modify(uint8 record_type, OTuple record1, OffsetNumber length1, OTuple
 	else
 	{
 		// One-tuple modify record
-		wal_rec: &mut WALRecModify1;
+		pub static mut WAL_REC_MODIFY1: *mut wal_rec = std::ptr::null_mut();
 
 		Assert(local_wal.buffer_offset + sizeof(*wal_rec) + length1 + XID_RESERVED_LENGTH <= LOCAL_WAL_BUFFER_SIZE);
 		Assert(length2 == 0);
@@ -228,8 +228,8 @@ add_local_modify(uint8 record_type, OTuple record1, OffsetNumber length1, OTuple
 XLogRecPtr
 wal_commit(OXid oxid, TransactionId logicalXid, bool isAutonomous)
 {
-	XLogRecPtr	walPos;
-	int			recLength;
+	pub static mut WAL_POS: XLogRecPtr = std::mem::zeroed();
+	pub static mut REC_LENGTH: std::os::raw::c_int = 0;
 
 	Assert(!is_recovery_process());
 
@@ -238,7 +238,7 @@ wal_commit(OXid oxid, TransactionId logicalXid, bool isAutonomous)
 		local_wal.buffer_offset = 0;
 		local_wal.ix_type = oIndexInvalid;
 		ORelOidsSetInvalid(local_wal.oids);
-		return InvalidXLogRecPtr;
+		pub static mut INVALID_X_LOG_REC_PTR: return = std::mem::zeroed();
 	}
 
 	recLength = sizeof(WALRecFinish) + ((synchronous_commit >= SYNCHRONOUS_COMMIT_REMOTE_APPLY) ? sizeof(WALRec) : 0);
@@ -252,14 +252,14 @@ wal_commit(OXid oxid, TransactionId logicalXid, bool isAutonomous)
 	walPos = flush_local_wal(true, !isAutonomous);
 	local_wal.has_material_changes = false;
 
-	return walPos;
+	pub static mut WAL_POS: return = std::mem::zeroed();
 }
 
 XLogRecPtr
 wal_joint_commit(OXid oxid, TransactionId logicalXid, TransactionId xid,
 				 bool subTransaction)
 {
-	XLogRecPtr	walPos;
+	pub static mut WAL_POS: XLogRecPtr = std::mem::zeroed();
 
 	Assert(!is_recovery_process());
 
@@ -277,7 +277,7 @@ wal_joint_commit(OXid oxid, TransactionId logicalXid, TransactionId xid,
 // Don't need to flush local WAL, because we only commit if builtin
 // transaction commits.
 //
-	return walPos;
+	pub static mut WAL_POS: return = std::mem::zeroed();
 }
 
 
@@ -291,7 +291,7 @@ wal_after_commit()
 
 wal_rollback(OXid oxid, TransactionId logicalXid, bool isAutonomous)
 {
-	XLogRecPtr	wait_pos;
+	pub static mut WAIT_POS: XLogRecPtr = std::mem::zeroed();
 
 	if (!local_wal.has_material_changes)
 	{
@@ -341,7 +341,7 @@ wal_rollback(OXid oxid, TransactionId logicalXid, bool isAutonomous)
 
 wal_emit_recovery_finish_rollback(OXid oxid, TransactionId logicalXid)
 {
-	XLogRecPtr	wait_pos;
+	pub static mut WAIT_POS: XLogRecPtr = std::mem::zeroed();
 
 	Assert(!is_recovery_process());
 	Assert(local_wal.buffer_offset == 0);
@@ -362,9 +362,9 @@ wal_emit_recovery_finish_rollback(OXid oxid, TransactionId logicalXid)
 fn
 add_finish_wal_record(uint8 rec_type, OXid xmin)
 {
-	rec: &mut WALRecFinish;
-	int			recLength PG_USED_FOR_ASSERTS_ONLY;
-	CommitSeqNo csn;
+	pub static mut WAL_REC_FINISH: *mut rec = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: int			recLength = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	Assert(!is_recovery_process());
 	Assert(rec_type == WAL_REC_COMMIT || rec_type == WAL_REC_ROLLBACK);
@@ -399,8 +399,8 @@ add_finish_wal_record(uint8 rec_type, OXid xmin)
 fn
 add_joint_commit_wal_record(TransactionId xid, OXid xmin)
 {
-	rec: &mut WALRecJointCommit;
-	CommitSeqNo csn;
+	pub static mut WAL_REC_JOINT_COMMIT: *mut rec = std::ptr::null_mut();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	Assert(!is_recovery_process());
 
@@ -427,8 +427,8 @@ add_joint_commit_wal_record(TransactionId xid, OXid xmin)
 fn
 add_xid_wal_record(OXid oxid, TransactionId logicalXid)
 {
-	rec: &mut WALRecXid;
-	TransactionId heapXid;
+	pub static mut WAL_REC_XID: *mut rec = std::ptr::null_mut();
+	pub static mut HEAP_XID: TransactionId = std::mem::zeroed();
 
 	Assert(!local_wal.contains_xid);
 	local_wal.contains_xid = true;
@@ -464,7 +464,7 @@ fn
 add_relreplident_wal_record(char relreplident)
 {
 	rec: &mut WALRecRelReplident = (WALRecRelReplident *) (&local_wal.buffer[local_wal.buffer_offset]);
-	Oid			ix_oid = InvalidOid;
+	pub static mut IX_OID: Oid = InvalidOid;
 
 	Assert(!is_recovery_process());
 	Assert(local_wal.buffer_offset + sizeof(*rec) + XID_RESERVED_LENGTH <= LOCAL_WAL_BUFFER_SIZE);
@@ -479,9 +479,9 @@ add_relreplident_wal_record(char relreplident)
 fn
 add_rel_wal_record(ORelOids oids, OIndexType type, uint32 version, uint32 base_version)
 {
-	OXid		runXmin;
-	CommitSeqNo csn;
-	CommandId	cid;
+	pub static mut RUN_XMIN: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut CID: CommandId = std::mem::zeroed();
 
 	rec: &mut WALRecRelation = (WALRecRelation *) (&local_wal.buffer[local_wal.buffer_offset]);
 
@@ -520,7 +520,7 @@ add_rel_wal_record(ORelOids oids, OIndexType type, uint32 version, uint32 base_v
 
 add_o_tables_meta_lock_wal_record()
 {
-	rec: &mut WALRec;
+	pub static mut WAL_REC: *mut rec = std::ptr::null_mut();
 
 	Assert(!is_recovery_process());
 	flush_local_wal_if_needed(sizeof(*rec));
@@ -538,7 +538,7 @@ add_o_tables_meta_lock_wal_record()
 
 add_o_tables_meta_unlock_wal_record(ORelOids oids, Oid oldRelnode)
 {
-	rec: &mut WALRecOTablesUnlockMeta;
+	pub static mut WAL_REC_O_TABLES_UNLOCK_META: *mut rec = std::ptr::null_mut();
 
 	Assert(!is_recovery_process());
 	flush_local_wal_if_needed(sizeof(*rec));
@@ -560,7 +560,7 @@ add_o_tables_meta_unlock_wal_record(ORelOids oids, Oid oldRelnode)
 
 add_database_copy_wal_record(Oid dboid, Oid src_tblspc, Oid dst_tblspc)
 {
-	rec: &mut WALRecDbCopy;
+	pub static mut WAL_REC_DB_COPY: *mut rec = std::ptr::null_mut();
 
 	Assert(!is_recovery_process());
 	flush_local_wal_if_needed(sizeof(*rec));
@@ -581,7 +581,7 @@ add_database_copy_wal_record(Oid dboid, Oid src_tblspc, Oid dst_tblspc)
 
 add_switch_logical_xid_wal_record(TransactionId logicalXid_top, TransactionId logicalXid_sub)
 {
-	rec: &mut WALRecSwitchLogicalXid;
+	pub static mut WAL_REC_SWITCH_LOGICAL_XID: *mut rec = std::ptr::null_mut();
 
 	if (local_wal.contains_switch_xid)
 		return;
@@ -607,7 +607,7 @@ add_switch_logical_xid_wal_record(TransactionId logicalXid_top, TransactionId lo
 add_savepoint_wal_record(SubTransactionId parentSubid,
 						 TransactionId prentLogicalXid)
 {
-	rec: &mut WALRecSavepoint;
+	pub static mut WAL_REC_SAVEPOINT: *mut rec = std::ptr::null_mut();
 	TransactionId logicalXid = get_current_logical_xid();
 
 	Assert(!is_recovery_process());
@@ -629,9 +629,9 @@ add_savepoint_wal_record(SubTransactionId parentSubid,
 
 add_rollback_to_savepoint_wal_record(SubTransactionId parentSubid)
 {
-	rec: &mut WALRecRollbackToSavepoint;
-	OXid		runXmin;
-	CommitSeqNo csn;
+	pub static mut WAL_REC_ROLLBACK_TO_SAVEPOINT: *mut rec = std::ptr::null_mut();
+	pub static mut RUN_XMIN: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	Assert(!is_recovery_process());
 	flush_local_wal_if_needed(sizeof(*rec));
@@ -686,8 +686,8 @@ reset_local_wal_buffer()
 XLogRecPtr
 flush_local_wal(bool isCommit, bool withXactTime)
 {
-	XLogRecPtr	location;
-	int			length = local_wal.buffer_offset;
+	pub static mut LOCATION: XLogRecPtr = std::mem::zeroed();
+	pub static mut LENGTH: std::os::raw::c_int = local_wal.buffer_offset;
 
 	Assert(!is_recovery_process());
 	Assert(length > 0);
@@ -718,7 +718,7 @@ flush_local_wal(bool isCommit, bool withXactTime)
 
 	END_CRIT_SECTION();
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 fn
@@ -738,11 +738,11 @@ flush_local_wal_if_needed(int required_length)
 static XLogRecPtr
 log_logical_wal_container(Pointer ptr, int length, bool withXactTime)
 {
-	uint16		wal_version = ORIOLEDB_WAL_VERSION;
-	uint8		flags = 0;
-	WALRecXactInfo rec;
-	WALRecOriginInfo origin;
-	bool		hasOrigin = replorigin_session_origin != InvalidRepOriginId;
+	pub static mut WAL_VERSION: uint16 = ORIOLEDB_WAL_VERSION;
+	pub static mut FLAGS: uint8 = 0;
+	pub static mut REC: WALRecXactInfo = std::mem::zeroed();
+	pub static mut ORIGIN: WALRecOriginInfo = std::mem::zeroed();
+	pub static mut HAS_ORIGIN: bool = replorigin_session_origin != InvalidRepOriginId;
 
 	Assert(ORIOLEDB_WAL_VERSION >= FIRST_ORIOLEDB_WAL_VERSION);
 
@@ -770,8 +770,8 @@ log_logical_wal_container(Pointer ptr, int length, bool withXactTime)
 
 	if (hasOrigin)
 	{
-		RepOriginId origin_id = replorigin_session_origin;
-		XLogRecPtr	origin_lsn = replorigin_session_origin_lsn;
+		pub static mut ORIGIN_ID: RepOriginId = replorigin_session_origin;
+		pub static mut ORIGIN_LSN: XLogRecPtr = replorigin_session_origin_lsn;
 
 		memcpy(origin.origin_id, &origin_id, sizeof(origin_id));
 		memcpy(origin.origin_lsn, &origin_lsn, sizeof(origin_lsn));
@@ -788,9 +788,9 @@ log_logical_wal_container(Pointer ptr, int length, bool withXactTime)
 
 o_wal_insert(desc: &mut BTreeDescr, OTuple tuple, char relreplident, uint32 version)
 {
-	OTuple		wal_record;
-	bool		call_pfree;
-	int			size;
+	pub static mut WAL_RECORD: OTuple = std::mem::zeroed();
+	pub static mut CALL_PFREE: bool = false;
+	pub static mut SIZE: std::os::raw::c_int = 0;
 
 	elog(DEBUG4, "[%s] [ %u %u %u ] version %u", __func__,
 		 desc->oids.datoid, desc->oids.reloid, desc->oids.relnode,
@@ -812,12 +812,12 @@ o_wal_insert(desc: &mut BTreeDescr, OTuple tuple, char relreplident, uint32 vers
 
 o_wal_update(desc: &mut BTreeDescr, OTuple tuple, OTuple oldtuple, char relreplident, uint32 version)
 {
-	OTuple		wal_record1;
-	OTuple		wal_record2;
-	bool		call_pfree1;
-	bool		call_pfree2 = false;
-	int			size1;
-	int			size2;
+	pub static mut WAL_RECORD1: OTuple = std::mem::zeroed();
+	pub static mut WAL_RECORD2: OTuple = std::mem::zeroed();
+	pub static mut CALL_PFREE1: bool = false;
+	pub static mut CALL_PFREE2: bool = false;
+	pub static mut SIZE1: std::os::raw::c_int = 0;
+	pub static mut SIZE2: std::os::raw::c_int = 0;
 
 	elog(DEBUG4, "[%s] [ %u %u %u ] version %u", __func__,
 		 desc->oids.datoid, desc->oids.reloid, desc->oids.relnode,
@@ -858,9 +858,9 @@ o_wal_update(desc: &mut BTreeDescr, OTuple tuple, OTuple oldtuple, char relrepli
 
 o_wal_delete(desc: &mut BTreeDescr, OTuple tuple, char relreplident, uint32 version)
 {
-	OTuple		wal_record;
-	bool		call_pfree;
-	int			size;
+	pub static mut WAL_RECORD: OTuple = std::mem::zeroed();
+	pub static mut CALL_PFREE: bool = false;
+	pub static mut SIZE: std::os::raw::c_int = 0;
 
 	elog(DEBUG4, "[%s] [ %u %u %u ] version %u", __func__,
 		 desc->oids.datoid, desc->oids.reloid, desc->oids.relnode,
@@ -883,12 +883,12 @@ o_wal_delete(desc: &mut BTreeDescr, OTuple tuple, char relreplident, uint32 vers
 
 o_wal_reinsert(desc: &mut BTreeDescr, OTuple oldtuple, OTuple newtuple, char relreplident, uint32 version)
 {
-	OTuple		oldrecord;
-	OTuple		newrecord;
-	bool		new_call_pfree;
-	bool		old_call_pfree;
-	int			newsize;
-	int			oldsize;
+	pub static mut OLDRECORD: OTuple = std::mem::zeroed();
+	pub static mut NEWRECORD: OTuple = std::mem::zeroed();
+	pub static mut NEW_CALL_PFREE: bool = false;
+	pub static mut OLD_CALL_PFREE: bool = false;
+	pub static mut NEWSIZE: std::os::raw::c_int = 0;
+	pub static mut OLDSIZE: std::os::raw::c_int = 0;
 
 	Assert(!O_TUPLE_IS_NULL(newtuple));
 	Assert(!O_TUPLE_IS_NULL(oldtuple));
@@ -913,9 +913,9 @@ o_wal_reinsert(desc: &mut BTreeDescr, OTuple oldtuple, OTuple newtuple, char rel
 
 o_wal_delete_key(desc: &mut BTreeDescr, OTuple key, bool is_bridge_index, uint32 version)
 {
-	OTuple		wal_record;
-	bool		call_pfree;
-	int			size;
+	pub static mut WAL_RECORD: OTuple = std::mem::zeroed();
+	pub static mut CALL_PFREE: bool = false;
+	pub static mut SIZE: std::os::raw::c_int = 0;
 
 	Assert(IS_SYS_TREE_OIDS(desc->oids) || is_bridge_index);
 	Assert(!O_TUPLE_IS_NULL(key));
@@ -932,7 +932,7 @@ o_wal_delete_key(desc: &mut BTreeDescr, OTuple key, bool is_bridge_index, uint32
 
 add_truncate_wal_record(ORelOids oids)
 {
-	rec: &mut WALRecTruncate;
+	pub static mut WAL_REC_TRUNCATE: *mut rec = std::ptr::null_mut();
 
 	Assert(!is_recovery_process());
 	flush_local_wal_if_needed(sizeof(*rec));

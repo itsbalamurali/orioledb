@@ -30,7 +30,7 @@ use pgrx::pg_sys;
 #define RT_KEY_SIZE 12
 typedef struct
 {
-	uint32		id;
+	pub static mut ID: uint32 = std::mem::zeroed();
 } RtstVal;
 #define RT_VALUE_TYPE RtstVal
 
@@ -53,7 +53,7 @@ PG_FUNCTION_INFO_V1(orioledb_encode_selftest);
 fn
 enc_be(uint64 u, int nbytes, out: &mut uint8)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = nbytes - 1; i >= 0; i--)
 	{
@@ -67,16 +67,16 @@ enc_be(uint64 u, int nbytes, out: &mut uint8)
 // one test tuple: (int4 a, int8 b, int2 c)
 typedef struct
 {
-	int32		a;
-	int64		b;
-	int16		c;
+	pub static mut A: int32 = std::mem::zeroed();
+	pub static mut B: int64 = std::mem::zeroed();
+	pub static mut C: int16 = std::mem::zeroed();
 } EncTuple;
 
 static int
 enc_tuple_cmp(x: &mut const, y: &mut const)
 {
-	const p: &mut EncTuple = x;
-	const q: &mut EncTuple = y;
+	pub static mut ENC_TUPLE: *mut const p = x;
+	pub static mut ENC_TUPLE: *mut const q = y;
 
 	if (p->a != q->a)
 		return p->a < q->a ? -1 : 1;
@@ -84,7 +84,7 @@ enc_tuple_cmp(x: &mut const, y: &mut const)
 		return p->b < q->b ? -1 : 1;
 	if (p->c != q->c)
 		return p->c < q->c ? -1 : 1;
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -94,7 +94,7 @@ enc_tuple_cmp(x: &mut const, y: &mut const)
 fn
 enc_tuple(const t: &mut EncTuple, out: &mut uint8)
 {
-	int			off;
+	pub static mut OFF: std::os::raw::c_int = 0;
 
 	memset(out, 0, ENC_MAX);
 	off = ENC_MAX - (4 + 8 + 2);
@@ -111,10 +111,10 @@ orioledb_encode_selftest(PG_FUNCTION_ARGS)
 											  "enc", ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(cxt);
 	tuples: &mut EncTuple = palloc(sizeof(EncTuple) * nkeys);
-	encs: &mut uint8;
+	pub static mut UINT8: *mut encs = std::ptr::null_mut();
 	uint64		rng = UINT64CONST(0xdeadbeefcafef00d);
-	int			i;
-	err: &mut char = NULL;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CHAR: *mut err = std::ptr::null_mut();
 
 	for (i = 0; i < nkeys; i++)
 	{
@@ -172,7 +172,7 @@ rtst_memcmp(a: &mut const, b: &mut const,  *arg)
 fn
 rtst_gen(unsigned buf: &mut char, int count, int n, uint64 seed)
 {
-	uint64		rng = seed;
+	pub static mut RNG: uint64 = seed;
 	int			i,
 				b;
 
@@ -278,7 +278,7 @@ Datum
 orioledb_radixtree_selftest(PG_FUNCTION_ARGS)
 {
 	int			nkeys = PG_GETARG_INT32(0);
-	err: &mut char;
+	pub static mut CHAR: *mut err = std::ptr::null_mut();
 
 	err = rtst12_run(nkeys, UINT64CONST(0x9e3779b97f4a7c15));
 	if (err)
@@ -302,14 +302,14 @@ fkey_cmp(a: &mut const, b: &mut const,  *arg)
 static bool
 fkey_inc(key: &mut uint8)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = OKBM_FIXED_BYTES - 1; i >= 0; i--)
 	{
 		if (++key[i] != 0)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 Datum
@@ -320,22 +320,22 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 											  "kbm", ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(cxt);
 	keys: &mut uint8 = palloc((Size) nkeys * OKBM_FIXED_BYTES);
-	sorted: &mut uint8;
+	pub static mut UINT8: *mut sorted = std::ptr::null_mut();
 	uint64		rng = UINT64CONST(0x51ed270b);
 	bm: &mut OKeyBitmap = o_keybitmap_create_fixed();
 	bm2: &mut OKeyBitmap = o_keybitmap_create_fixed();
-	size_t		nsz = OKBM_FIXED_BYTES;
+	pub static mut NSZ: size_t = OKBM_FIXED_BYTES;
 	int			i,
 				ndistinct,
 				cnt;
 	uint8		cur[OKBM_FIXED_BYTES];
 	uint8		out[OKBM_FIXED_BYTES];
-	err: &mut char = NULL;
+	pub static mut CHAR: *mut err = std::ptr::null_mut();
 
 	// random keys, using only the low 12 bytes so collisions/order both occur
 	for (i = 0; i < nkeys; i++)
 	{
-		int			b;
+		pub static mut B: std::os::raw::c_int = 0;
 
 		memset(keys + (size_t) i * OKBM_FIXED_BYTES, 0, OKBM_FIXED_BYTES);
 		for (b = OKBM_FIXED_BYTES - 12; b < OKBM_FIXED_BYTES; b++)
@@ -350,7 +350,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 		if (!o_keybitmap_test_key(bm, keys + (size_t) i * OKBM_FIXED_BYTES))
 		{
 			err = psprintf("test_key missing at %d", i);
-			goto done;
+			pub static mut DONE: goto = std::mem::zeroed();
 		}
 
 	sorted = palloc((Size) nkeys * OKBM_FIXED_BYTES);
@@ -366,17 +366,17 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 		if (cnt >= ndistinct)
 		{
 			err = psprintf("walk overran distinct=%d", ndistinct);
-			goto done;
+			pub static mut DONE: goto = std::mem::zeroed();
 		}
 		if (memcmp(out, sorted + (size_t) cnt * OKBM_FIXED_BYTES, OKBM_FIXED_BYTES) != 0)
 		{
 			err = psprintf("walk != sorted at %d", cnt);
-			goto done;
+			pub static mut DONE: goto = std::mem::zeroed();
 		}
 		if (!o_keybitmap_range_is_valid_key(bm, out, (const uint8 *) "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"))
 		{
 			err = psprintf("range_is_valid false at %d", cnt);
-			goto done;
+			pub static mut DONE: goto = std::mem::zeroed();
 		}
 		cnt++;
 		memcpy(cur, out, OKBM_FIXED_BYTES);
@@ -386,7 +386,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 	if (cnt != ndistinct)
 	{
 		err = psprintf("walk count %d != distinct %d", cnt, ndistinct);
-		goto done;
+		pub static mut DONE: goto = std::mem::zeroed();
 	}
 
 	// intersect with self is a no-op; union with empty is a no-op
@@ -395,7 +395,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 		if (!o_keybitmap_test_key(bm, keys + (size_t) i * OKBM_FIXED_BYTES))
 		{
 			err = "self-intersect dropped a key";
-			goto done;
+			pub static mut DONE: goto = std::mem::zeroed();
 		}
 
 	// intersect with disjoint (empty bm2) -> empty
@@ -403,7 +403,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 	if (!o_keybitmap_is_empty(bm))
 	{
 		err = "intersect with empty not empty";
-		goto done;
+		pub static mut DONE: goto = std::mem::zeroed();
 	}
 
 done:

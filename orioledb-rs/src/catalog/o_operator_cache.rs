@@ -25,7 +25,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static operator_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut operator_cache = std::ptr::null_mut();
 
 fn o_operator_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 										Pointer arg);
@@ -55,10 +55,10 @@ O_SYS_CACHE_INIT_FUNC(operator_cache)
 fn
 o_operator_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	opertup;
-	Form_pg_operator operform;
+	pub static mut OPERTUP: HeapTuple = std::mem::zeroed();
+	pub static mut OPERFORM: Form_pg_operator = std::mem::zeroed();
 	o_operator: &mut OOperator = (OOperator *) *entry_ptr;
-	MemoryContext prev_context;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
 	Oid			operoid = DatumGetObjectId(key->keys[0]);
 
 	opertup = SearchSysCache1(OPEROID, key->keys[0]);
@@ -92,13 +92,13 @@ o_operator_cache_free_entry(Pointer entry)
 HeapTuple
 o_operator_cache_search_htup(TupleDesc tupdesc, Oid operoid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_operator] = {0};
 	bool		nulls[Natts_pg_operator] = {0};
-	o_operator: &mut OOperator;
-	NameData	oname;
+	pub static mut O_OPERATOR: *mut o_operator = std::ptr::null_mut();
+	pub static mut ONAME: NameData = std::mem::zeroed();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_operator = o_operator_cache_search(datoid, operoid, cur_lsn,
@@ -113,15 +113,15 @@ o_operator_cache_search_htup(TupleDesc tupdesc, Oid operoid)
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 Oid
 o_operator_cache_get_oprcode(Oid operoid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	o_operator: &mut OOperator;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut O_OPERATOR: *mut o_operator = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_operator = o_operator_cache_search(datoid, operoid, cur_lsn,

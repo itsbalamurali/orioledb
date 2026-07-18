@@ -31,7 +31,7 @@ S3ChecksumState *
 makeS3ChecksumState(uint32 checkpointNumber, fileChecksums: &mut S3FileChecksum,
 					uint32 fileChecksumsMaxLen, const filename: &mut char)
 {
-	res: &mut S3ChecksumState;
+	pub static mut S3_CHECKSUM_STATE: *mut res = std::ptr::null_mut();
 
 	res = (S3ChecksumState *) palloc(sizeof(S3ChecksumState));
 	res->hashTable = NULL;
@@ -42,7 +42,7 @@ makeS3ChecksumState(uint32 checkpointNumber, fileChecksums: &mut S3FileChecksum,
 
 	initHashTable(res, filename);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 //
@@ -65,9 +65,9 @@ freeS3ChecksumState(state: &mut S3ChecksumState)
 fn
 initHashTable(state: &mut S3ChecksumState, const filename: &mut char)
 {
-	file: &mut FILE;
-	StringInfoData buf;
-	HASHCTL		ctl;
+	pub static mut FILE: *mut file = std::ptr::null_mut();
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
+	pub static mut CTL: HASHCTL = std::mem::zeroed();
 
 	Assert(state->hashTable == NULL);
 
@@ -97,14 +97,14 @@ initHashTable(state: &mut S3ChecksumState, const filename: &mut char)
 
 	while (pg_get_line_buf(file, &buf))
 	{
-		S3FileChecksum fileEntry;
+		pub static mut FILE_ENTRY: S3FileChecksum = std::mem::zeroed();
 
 		if (sscanf(buf.data, "FILE: %1023[^,], CHECKSUM: %64[^,], CHECKPOINT: %u",
 				   fileEntry.filename, fileEntry.checksum, &fileEntry.checkpointNumber) == 3)
 		{
 			char		key[MAXPGPATH];
-			newEntry: &mut S3FileChecksum;
-			bool		found;
+			pub static mut S3_FILE_CHECKSUM: *mut newEntry = std::ptr::null_mut();
+			pub static mut FOUND: bool = false;
 
 			MemSet(key, 0, sizeof(key));
 			strlcpy(key, fileEntry.filename, sizeof(key));
@@ -153,7 +153,7 @@ initHashTable(state: &mut S3ChecksumState, const filename: &mut char)
 
 flushS3ChecksumState(state: &mut S3ChecksumState, const filename: &mut char)
 {
-	file: &mut FILE;
+	pub static mut FILE: *mut file = std::ptr::null_mut();
 
 	Assert(state->fileChecksums != NULL);
 
@@ -195,8 +195,8 @@ S3FileChecksum *
 getS3FileChecksum(state: &mut S3ChecksumState, const filename: &mut char,
 				  Pointer data, uint64 size)
 {
-	prevEntry: &mut S3FileChecksum = NULL;
-	newEntry: &mut S3FileChecksum;
+	pub static mut S3_FILE_CHECKSUM: *mut prevEntry = std::ptr::null_mut();
+	pub static mut S3_FILE_CHECKSUM: *mut newEntry = std::ptr::null_mut();
 	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
 	char		checksumstringbuf[O_SHA256_DIGEST_STRING_LENGTH];
 
@@ -247,5 +247,5 @@ getS3FileChecksum(state: &mut S3ChecksumState, const filename: &mut char,
 	memcpy(state->fileChecksums + state->fileChecksumsLen, newEntry, sizeof(S3FileChecksum));
 	state->fileChecksumsLen += 1;
 
-	return newEntry;
+	pub static mut NEW_ENTRY: return = std::mem::zeroed();
 }

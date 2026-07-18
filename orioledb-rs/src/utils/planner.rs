@@ -44,14 +44,14 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	proname: &mut char;
-	prosrc: &mut char;
+	pub static mut CHAR: *mut proname = std::ptr::null_mut();
+	pub static mut CHAR: *mut prosrc = std::ptr::null_mut();
 } validate_error_callback_arg;
 
 typedef struct
 {
-	hint_msg: &mut char;
-	proname: &mut char;
+	pub static mut CHAR: *mut hint_msg = std::ptr::null_mut();
+	pub static mut CHAR: *mut proname = std::ptr::null_mut();
 } validate_function_arg;
 
 typedef bool (*WalkerFunc) (node: &mut Node,  *context);
@@ -70,8 +70,8 @@ static bool plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context);
 fn
 sql_validate_error_callback( *arg)
 {
-	callback_arg: &mut validate_error_callback_arg;
-	int			syntaxerrposition;
+	pub static mut VALIDATE_ERROR_CALLBACK_ARG: *mut callback_arg = std::ptr::null_mut();
+	pub static mut SYNTAXERRPOSITION: std::os::raw::c_int = 0;
 
 	callback_arg = (validate_error_callback_arg *) arg;
 
@@ -93,16 +93,16 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 					    *context, Oid functionId, Oid inputcollid,
 					   args: &mut List)
 {
-	Form_pg_proc procedureStruct;
+	pub static mut PROCEDURE_STRUCT: Form_pg_proc = std::mem::zeroed();
 	MemoryContext mycxt,
 				oldcxt;
-	ErrorContextCallback sqlerrcontext;
-	validate_error_callback_arg callback_arg;
-	Datum		proc_body;
-	bool		isNull;
-	bool		haspolyarg;
-	querytree_list: &mut List;
-	int			i;
+	pub static mut SQLERRCONTEXT: ErrorContextCallback = std::mem::zeroed();
+	pub static mut CALLBACK_ARG: validate_error_callback_arg = std::mem::zeroed();
+	pub static mut PROC_BODY: Datum = std::mem::zeroed();
+	pub static mut IS_NULL: bool = false;
+	pub static mut HASPOLYARG: bool = false;
+	pub static mut LIST: *mut querytree_list = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	procedureStruct = (Form_pg_proc) GETSTRUCT(procedureTuple);
 
@@ -148,9 +148,9 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 								Anum_pg_proc_prosqlbody, &isNull);
 	if (!isNull)
 	{
-		lc: &mut ListCell;
-		n: &mut Node;
-		stored_query_list: &mut List;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+		pub static mut NODE: *mut n = std::ptr::null_mut();
+		pub static mut LIST: *mut stored_query_list = std::ptr::null_mut();
 
 		n = stringToNode(TextDatumGetCString(proc_body));
 		if (IsA(n, List))
@@ -162,7 +162,7 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 		foreach(lc, stored_query_list)
 		{
 			parsetree: &mut Query = lfirst_node(Query, lc);
-			querytree_sublist: &mut List;
+			pub static mut LIST: *mut querytree_sublist = std::ptr::null_mut();
 
 			AcquireRewriteLocks(parsetree, true, false);
 			querytree_sublist = pg_rewrite_query(parsetree);
@@ -171,22 +171,22 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 	}
 	else
 	{
-		raw_parsetree_list: &mut List;
+		pub static mut LIST: *mut raw_parsetree_list = std::ptr::null_mut();
 
 		raw_parsetree_list = pg_parse_query(callback_arg.prosrc);
 		querytree_list = NIL;
 
 		if (!haspolyarg)
 		{
-			lc: &mut ListCell;
-			SQLFunctionParseInfoPtr pinfo;
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+			pub static mut PINFO: SQLFunctionParseInfoPtr = std::mem::zeroed();
 
 			pinfo = prepare_sql_fn_parse_info(procedureTuple, NULL,
 											  InvalidOid);
 			foreach(lc, raw_parsetree_list)
 			{
 				parsetree: &mut RawStmt = lfirst_node(RawStmt, lc);
-				querytree_sublist: &mut List;
+				pub static mut LIST: *mut querytree_sublist = std::ptr::null_mut();
 
 				querytree_sublist = pg_analyze_and_rewrite_params(parsetree,
 																  callback_arg.prosrc,
@@ -209,25 +209,25 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 //
 	if (!haspolyarg)
 	{
-		Oid			rettype;
-		TupleDesc	rettupdesc;
-		lc: &mut ListCell;
+		pub static mut RETTYPE: Oid = std::mem::zeroed();
+		pub static mut RETTUPDESC: TupleDesc = std::mem::zeroed();
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 #if PG_VERSION_NUM < 180000
-		resulttlist: &mut List;
+		pub static mut LIST: *mut resulttlist = std::ptr::null_mut();
 #endif
 
 		foreach(lc, querytree_list)
 		{
 			sublist: &mut List = lfirst_node(List, lc);
-			lc2: &mut ListCell;
+			pub static mut LIST_CELL: *mut lc2 = std::ptr::null_mut();
 
 			foreach(lc2, sublist)
 			{
 				query: &mut Query = lfirst_node(Query, lc2);
-				new_query: &mut Query;
-				colnames: &mut List;
-				rte: &mut RangeTblEntry;
-				lc3: &mut ListCell;
+				pub static mut QUERY: *mut new_query = std::ptr::null_mut();
+				pub static mut LIST: *mut colnames = std::ptr::null_mut();
+				pub static mut RANGE_TBL_ENTRY: *mut rte = std::ptr::null_mut();
+				pub static mut LIST_CELL: *mut lc3 = std::ptr::null_mut();
 
 				MemoryContextSwitchTo(oldcxt);
 				new_query = makeNode(Query);
@@ -321,9 +321,9 @@ o_process_functions_in_node(node: &mut Node,
 												  *context),
 							 *context)
 {
-	Oid			functionId = InvalidOid;
-	Oid			inputcollid;
-	args: &mut List;
+	pub static mut FUNCTION_ID: Oid = InvalidOid;
+	pub static mut INPUTCOLLID: Oid = std::mem::zeroed();
+	pub static mut LIST: *mut args = std::ptr::null_mut();
 
 	switch (nodeTag(node))
 	{
@@ -391,9 +391,9 @@ o_process_functions_in_node(node: &mut Node,
 		case T_CoerceViaIO:
 			{
 				expr: &mut CoerceViaIO = (CoerceViaIO *) node;
-				Oid			iofunc;
-				Oid			typioparam;
-				bool		typisvarlena;
+				pub static mut IOFUNC: Oid = std::mem::zeroed();
+				pub static mut TYPIOPARAM: Oid = std::mem::zeroed();
+				pub static mut TYPISVARLENA: bool = false;
 
 				// check the result type's input function
 				getTypeInputInfo(expr->resulttype,
@@ -419,10 +419,10 @@ o_process_functions_in_node(node: &mut Node,
 		case T_RowCompareExpr:
 			{
 				rcexpr: &mut RowCompareExpr = (RowCompareExpr *) node;
-				opid: &mut ListCell;
-				collid: &mut ListCell;
-				larg: &mut ListCell;
-				rarg: &mut ListCell;
+				pub static mut LIST_CELL: *mut opid = std::ptr::null_mut();
+				pub static mut LIST_CELL: *mut collid = std::ptr::null_mut();
+				pub static mut LIST_CELL: *mut larg = std::ptr::null_mut();
+				pub static mut LIST_CELL: *mut rarg = std::ptr::null_mut();
 
 				forfour(opid, rcexpr->opnos,
 						collid, rcexpr->inputcollids,
@@ -448,8 +448,8 @@ fn
 validate_function_walker(Oid functionId, Oid inputcollid, args: &mut List,
 						  *context)
 {
-	HeapTuple	procedureTuple;
-	Form_pg_proc procedureStruct;
+	pub static mut PROCEDURE_TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut PROCEDURE_STRUCT: Form_pg_proc = std::mem::zeroed();
 	arg: &mut validate_function_arg = (validate_function_arg *) context;
 
 	procedureTuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(functionId));
@@ -489,7 +489,7 @@ validate_function(node: &mut Node,  *context)
 	arg: &mut validate_function_arg = (validate_function_arg *) context;
 
 	if (node == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (IsA(node, NextValueExpr))
 	{
@@ -506,7 +506,7 @@ validate_function(node: &mut Node,  *context)
 	if (IsA(node, Query))
 	{
 		query: &mut Query = (Query *) node;
-		rtable: &mut ListCell;
+		pub static mut LIST_CELL: *mut rtable = std::ptr::null_mut();
 
 		foreach(rtable, query->rtable)
 		{
@@ -528,7 +528,7 @@ validate_function(node: &mut Node,  *context)
 	else
 		() expression_tree_walker(node, validate_function,
 									  ( *) context);
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 
@@ -549,9 +549,9 @@ o_validate_funcexpr(node: &mut Node, hint_msg: &mut char)
 
 o_validate_function_by_oid(Oid procoid, hint_msg: &mut char)
 {
-	fexpr: &mut FuncExpr;
-	HeapTuple	procedureTuple;
-	Form_pg_proc procedureStruct;
+	pub static mut FUNC_EXPR: *mut fexpr = std::ptr::null_mut();
+	pub static mut PROCEDURE_TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut PROCEDURE_STRUCT: Form_pg_proc = std::mem::zeroed();
 
 	procedureTuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(procoid));
 	if (!HeapTupleIsValid(procedureTuple))
@@ -583,12 +583,12 @@ is_a_plan(node: &mut Node)
 static bool
 o_collect_function(node: &mut Node,  *context)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
 	List	  **processed = (List **) context;
 
 	if (node == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_class_cache_add_if_needed(datoid, TypeRelationId, cur_lsn, NULL);
@@ -632,9 +632,9 @@ o_collect_function(node: &mut Node,  *context)
 		case T_Aggref:
 			{
 				aggref: &mut Aggref = (Aggref *) node;
-				lc: &mut ListCell;
-				HeapTuple	aggtup;
-				Form_pg_aggregate aggform;
+				pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+				pub static mut AGGTUP: HeapTuple = std::mem::zeroed();
+				pub static mut AGGFORM: Form_pg_aggregate = std::mem::zeroed();
 
 				o_class_cache_add_if_needed(datoid, AggregateRelationId, cur_lsn,
 											NULL);
@@ -668,13 +668,13 @@ o_collect_function(node: &mut Node,  *context)
 		case T_Agg:
 			{
 				agg: &mut Agg = (Agg *) node;
-				int			i;
+				pub static mut I: std::os::raw::c_int = 0;
 
 				for (i = 0; i < agg->numCols; i++)
 				{
-					Oid			eq_opr = agg->grpOperators[i];
-					catlist: &mut CatCList;
-					int			j;
+					pub static mut EQ_OPR: Oid = agg->grpOperators[i];
+					pub static mut CAT_C_LIST: *mut catlist = std::ptr::null_mut();
+					pub static mut J: std::os::raw::c_int = 0;
 
 					o_class_cache_add_if_needed(datoid, OperatorRelationId,
 												cur_lsn, NULL);
@@ -691,7 +691,7 @@ o_collect_function(node: &mut Node,  *context)
 
 					for (j = 0; j < catlist->n_members; j++)
 					{
-						HeapTuple	tuple = &catlist->members[j]->tuple;
+						pub static mut TUPLE: HeapTuple = &catlist->members[j]->tuple;
 						Form_pg_amop aform = (Form_pg_amop) GETSTRUCT(tuple);
 
 						o_class_cache_add_if_needed(datoid,
@@ -705,7 +705,7 @@ o_collect_function(node: &mut Node,  *context)
 						if (aform->amopmethod == HASH_AM_OID &&
 							aform->amopstrategy == HTEqualStrategyNumber)
 						{
-							Oid			result;
+							pub static mut RESULT: Oid = std::mem::zeroed();
 
 							//
 // Get the matching support function(s).  Failure
@@ -837,13 +837,13 @@ o_collect_function(node: &mut Node,  *context)
 		() plan_tree_walker((Plan *) node, o_collect_function, context);
 	else
 		() expression_tree_walker(node, o_collect_function, context);
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 
 o_collect_funcexpr(node: &mut Node)
 {
-	processed: &mut List = NIL;
+	pub static mut LIST: *mut processed = NIL;
 
 	if (!node)
 		return;
@@ -857,11 +857,11 @@ fn
 o_collect_function_walker(Oid functionId, Oid inputcollid, args: &mut List,
 						   *context)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	procedureTuple;
-	Form_pg_proc procedureStruct;
-	int			i;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut PROCEDURE_TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut PROCEDURE_STRUCT: Form_pg_proc = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 	List	  **processed = (List **) context;
 	OProcArg	arg = {.collation = inputcollid,.processed = processed};
 
@@ -889,9 +889,9 @@ o_collect_function_walker(Oid functionId, Oid inputcollid, args: &mut List,
 
 o_collect_function_by_oid(Oid procoid, Oid inputcollid, List **processed)
 {
-	fexpr: &mut FuncExpr;
-	HeapTuple	procedureTuple;
-	Form_pg_proc procedureStruct;
+	pub static mut FUNC_EXPR: *mut fexpr = std::ptr::null_mut();
+	pub static mut PROCEDURE_TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut PROCEDURE_STRUCT: Form_pg_proc = std::mem::zeroed();
 
 	procedureTuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(procoid));
 	if (!HeapTupleIsValid(procedureTuple))
@@ -918,10 +918,10 @@ o_collect_function_by_oid(Oid procoid, Oid inputcollid, List **processed)
 
 o_collect_op_by_oid(Oid opoid)
 {
-	op_expr: &mut OpExpr;
-	HeapTuple	opTuple;
-	Form_pg_operator opStruct;
-	processed: &mut List = NIL;
+	pub static mut OP_EXPR: *mut op_expr = std::ptr::null_mut();
+	pub static mut OP_TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut OP_STRUCT: Form_pg_operator = std::mem::zeroed();
+	pub static mut LIST: *mut processed = NIL;
 
 	opTuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(opoid));
 	if (!HeapTupleIsValid(opTuple))
@@ -947,33 +947,33 @@ o_collect_op_by_oid(Oid opoid)
 static bool
 plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 {
-	lc: &mut ListCell;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 	if (plan == NULL)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	// Guard against stack overflow due to overly complex plan trees
 	check_stack_depth();
 
 	if (expression_tree_walker((Node *) plan->targetlist,
 							   walker, context))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	if (expression_tree_walker((Node *) plan->qual,
 							   walker, context))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	// lefttree
 	if (outerPlan(plan))
 	{
 		if (walker((Node *) outerPlan(plan), context))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	// righttree
 	if (innerPlan(plan))
 	{
 		if (walker((Node *) innerPlan(plan), context))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	switch (nodeTag(plan))
@@ -987,7 +987,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) result->resconstantqual,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -997,19 +997,19 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) modify_table->withCheckOptionLists,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) modify_table->returningLists,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) modify_table->onConflictSet,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) modify_table->onConflictWhere,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) modify_table->exclRelTlist,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1021,7 +1021,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 				{
 					if (plan_tree_walker((Plan *) lfirst(lc),
 										 walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			break;
@@ -1034,7 +1034,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 				{
 					if (plan_tree_walker((Plan *) lfirst(lc),
 										 walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			break;
@@ -1047,7 +1047,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 				{
 					if (plan_tree_walker((Plan *) lfirst(lc),
 										 walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			break;
@@ -1060,7 +1060,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 				{
 					if (plan_tree_walker((Plan *) lfirst(lc),
 										 walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			break;
@@ -1071,7 +1071,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) sample_scan->tablesample,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1081,16 +1081,16 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) index_scan->indexqual,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) index_scan->indexqualorig,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) index_scan->indexorderby,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) index_scan->indexorderbyorig,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1100,16 +1100,16 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) index_only_scan->recheckqual,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) index_only_scan->indexqual,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) index_only_scan->indexorderby,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) index_only_scan->indextlist,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1119,10 +1119,10 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) bitmap_index_scan->indexqual,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) bitmap_index_scan->indexqualorig,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1132,7 +1132,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) bitmap_heap_scan->bitmapqualorig,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1142,7 +1142,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) tid_scan->tidquals,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1152,7 +1152,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) tid_range_scan->tidrangequals,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1162,7 +1162,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (plan_tree_walker((Plan *) subquery_scan->subplan,
 									 walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1172,7 +1172,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) function_scan->functions,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1182,7 +1182,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) table_func_scan->tablefunc,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1192,7 +1192,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) values_scan->values_lists,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1202,13 +1202,13 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) foreign_scan->fdw_exprs,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) foreign_scan->fdw_recheck_quals,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) foreign_scan->fdw_scan_tlist,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1218,18 +1218,18 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) custom_scan->custom_scan_tlist,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) custom_scan->custom_exprs,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) custom_scan->custom_scan_tlist,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 
 				foreach(lc, custom_scan->custom_plans)
 				{
 					if (plan_tree_walker((Plan *) lfirst(lc), walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			break;
@@ -1242,7 +1242,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) join->joinqual,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 
 				if (IsA(join, NestLoop))
 				{
@@ -1254,7 +1254,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 						if (expression_tree_walker((Node *) nlp->paramval,
 												   walker, context))
-							return true;
+							pub static mut TRUE: return = std::mem::zeroed();
 					}
 				}
 				else if (IsA(join, MergeJoin))
@@ -1263,7 +1263,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 					if (expression_tree_walker((Node *) mj->mergeclauses,
 											   walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 				}
 				else if (IsA(join, HashJoin))
 				{
@@ -1271,10 +1271,10 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 					if (expression_tree_walker((Node *) hj->hashclauses,
 											   walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 					if (expression_tree_walker((Node *) hj->hashkeys,
 											   walker, context))
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			break;
@@ -1285,7 +1285,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) memoize->param_exprs,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1295,10 +1295,10 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) window_agg->startOffset,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) window_agg->endOffset,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1308,7 +1308,7 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) hash->hashkeys,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1318,10 +1318,10 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 
 				if (expression_tree_walker((Node *) limit->limitOffset,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				if (expression_tree_walker((Node *) limit->limitCount,
 										   walker, context))
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 			}
 			break;
 
@@ -1352,10 +1352,10 @@ plan_tree_walker(plan: &mut Plan, WalkerFunc walker,  *context)
 	foreach(lc, plan->initPlan)
 	{
 		if (walker((Node *) plan->initPlan, context))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 static bool
@@ -1363,9 +1363,9 @@ plannedstatement_tree_walker(pstmt: &mut PlannedStmt,
 							 WalkerFunc walker,
 							  *context)
 {
-	plan: &mut Plan = pstmt->planTree;
-	lc: &mut ListCell;
-	project_set: &mut ProjectSet;
+	pub static mut PLAN: *mut plan = pstmt->planTree;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+	pub static mut PROJECT_SET: *mut project_set = std::ptr::null_mut();
 
 	// Guard against stack overflow due to overly complex plan trees
 	check_stack_depth();
@@ -1381,10 +1381,10 @@ plannedstatement_tree_walker(pstmt: &mut PlannedStmt,
 		sp: &mut Plan = (Plan *) lfirst(lc);
 
 		if (sp && plan_tree_walker(sp, walker, context))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 

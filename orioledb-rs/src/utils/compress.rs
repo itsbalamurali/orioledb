@@ -19,10 +19,10 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static zstd_cctx: &mut ZSTD_CCtx = NULL;
-static zstd_dctx: &mut ZSTD_DCtx = NULL;
-static size_t zstd_dst_size;
-static Pointer zstd_dst = NULL;
+static mut ZSTD_C_CTX: *mut zstd_cctx = std::ptr::null_mut();
+static mut ZSTD_D_CTX: *mut zstd_dctx = std::ptr::null_mut();
+static mut ZSTD_DST_SIZE: size_t = std::mem::zeroed();
+static mut ZSTD_DST: Pointer = std::ptr::null_mut();
 
 //
 // Initializes compression context.
@@ -64,7 +64,7 @@ o_compress_page(Pointer page, size: &mut size_t, OCompress lvl)
 			 "Unable to compress page, reason: %s", ZSTD_getErrorName(*size));
 	}
 
-	return zstd_dst;
+	pub static mut ZSTD_DST: return = std::mem::zeroed();
 }
 
 //
@@ -73,7 +73,7 @@ o_compress_page(Pointer page, size: &mut size_t, OCompress lvl)
 
 o_decompress_page(Pointer src, size_t size, Pointer page)
 {
-	size_t		result;
+	pub static mut RESULT: size_t = std::mem::zeroed();
 
 	result = ZSTD_decompressDCtx(zstd_dctx,
 								 page, ORIOLEDB_BLCKSZ,

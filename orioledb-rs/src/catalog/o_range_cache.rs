@@ -32,7 +32,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static range_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut range_cache = std::ptr::null_mut();
 
 fn o_range_cache_free_entry(Pointer entry);
 fn o_range_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
@@ -61,11 +61,11 @@ O_SYS_CACHE_INIT_FUNC(range_cache)
 fn
 o_range_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	rangetup;
-	Form_pg_range rangeform;
+	pub static mut RANGETUP: HeapTuple = std::mem::zeroed();
+	pub static mut RANGEFORM: Form_pg_range = std::mem::zeroed();
 	o_range: &mut ORange = (ORange *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			rngtypid;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut RNGTYPID: Oid = std::mem::zeroed();
 
 	rngtypid = DatumGetObjectId(key->keys[0]);
 
@@ -115,12 +115,12 @@ o_range_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 HeapTuple
 o_range_cache_search_htup(TupleDesc tupdesc, Oid rngtypid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_range] = {0};
 	bool		nulls[Natts_pg_range] = {0};
-	o_range: &mut ORange;
+	pub static mut O_RANGE: *mut o_range = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_range =
@@ -137,10 +137,10 @@ o_range_cache_search_htup(TupleDesc tupdesc, Oid rngtypid)
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
-static multirange_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut multirange_cache = std::ptr::null_mut();
 
 fn o_multirange_cache_free_entry(Pointer entry);
 fn o_multirange_cache_fill_entry(entry_ptr: &mut Pointer,
@@ -169,11 +169,11 @@ fn
 o_multirange_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							  Pointer arg)
 {
-	HeapTuple	rangetup;
-	Form_pg_range rangeform;
+	pub static mut RANGETUP: HeapTuple = std::mem::zeroed();
+	pub static mut RANGEFORM: Form_pg_range = std::mem::zeroed();
 	o_multirange: &mut OMultiRange = (OMultiRange *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			rngtypid;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut RNGTYPID: Oid = std::mem::zeroed();
 
 	rngtypid = DatumGetObjectId(key->keys[0]);
 
@@ -215,12 +215,12 @@ o_multirange_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup,
 HeapTuple
 o_multirange_cache_search_htup(TupleDesc tupdesc, Oid rngmultitypid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_range] = {0};
 	bool		nulls[Natts_pg_range] = {0};
-	o_multirange: &mut OMultiRange;
+	pub static mut O_MULTI_RANGE: *mut o_multirange = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_multirange = o_multirange_cache_search(datoid, rngmultitypid, cur_lsn,
@@ -233,5 +233,5 @@ o_multirange_cache_search_htup(TupleDesc tupdesc, Oid rngmultitypid)
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }

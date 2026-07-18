@@ -35,13 +35,13 @@ partial_load_hikeys_chunk(partial: &mut PartialPageState, Page img)
 {
 	uint64		imgState,
 				srcState;
-	Page		src = partial->src;
+	pub static mut SRC: Page = partial->src;
 	LocationIndex chunkBegin,
 				chunkEnd;
 	header: &mut BTreePageHeader = (BTreePageHeader *) img;
 
 	if (!partial->isPartial || partial->hikeysChunkIsLoaded)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	chunkBegin = offsetof(BTreePageHeader, chunkDesc);
 	chunkEnd = header->hikeysEnd;
@@ -59,13 +59,13 @@ partial_load_hikeys_chunk(partial: &mut PartialPageState, Page img)
 	srcState = pg_atomic_read_u64(&(O_PAGE_HEADER(src)->state));
 	if ((imgState & PAGE_STATE_CHANGE_COUNT_MASK) != (srcState & PAGE_STATE_CHANGE_COUNT_MASK) ||
 		O_PAGE_STATE_READ_IS_BLOCKED(srcState))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (O_PAGE_GET_CHANGE_COUNT(img) != O_PAGE_GET_CHANGE_COUNT(src))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	partial->hikeysChunkIsLoaded = true;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -77,13 +77,13 @@ partial_load_chunk(partial: &mut PartialPageState, Page img,
 {
 	uint64		imgState = pg_atomic_read_u64(&(O_PAGE_HEADER(img)->state)),
 				srcState;
-	Page		src = partial->src;
+	pub static mut SRC: Page = partial->src;
 	LocationIndex chunkBegin,
 				chunkEnd;
-	header: &mut BTreePageHeader;
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
 
 	if (!partial->isPartial || partial->chunkIsLoaded[chunkOffset])
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (partial->hikeysChunkIsLoaded)
 	{
@@ -128,7 +128,7 @@ partial_load_chunk(partial: &mut PartialPageState, Page img,
 		srcState = pg_atomic_read_u64(&(O_PAGE_HEADER(src)->state));
 		if ((imgState & PAGE_STATE_CHANGE_COUNT_MASK) != (srcState & PAGE_STATE_CHANGE_COUNT_MASK) ||
 			O_PAGE_STATE_READ_IS_BLOCKED(srcState))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	Assert(chunkBegin >= 0 && chunkBegin <= ORIOLEDB_BLCKSZ);
@@ -146,10 +146,10 @@ partial_load_chunk(partial: &mut PartialPageState, Page img,
 	srcState = pg_atomic_read_u64(&(O_PAGE_HEADER(src)->state));
 	if ((imgState & PAGE_STATE_CHANGE_COUNT_MASK) != (srcState & PAGE_STATE_CHANGE_COUNT_MASK) ||
 		O_PAGE_STATE_READ_IS_BLOCKED(srcState))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (O_PAGE_GET_CHANGE_COUNT(img) != O_PAGE_GET_CHANGE_COUNT(src))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	partial->chunkIsLoaded[chunkOffset] = true;
 	if (loc)
@@ -159,7 +159,7 @@ partial_load_chunk(partial: &mut PartialPageState, Page img,
 		loc->chunk = (BTreePageChunk *) ((Pointer) img + chunkBegin);
 		loc->chunkSize = chunkEnd - chunkBegin;
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -176,25 +176,25 @@ bool
 partial_load_full_page(partial: &mut PartialPageState, Page img)
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) img;
-	OffsetNumber i;
+	pub static mut I: OffsetNumber = std::mem::zeroed();
 
 	if (!partial->isPartial)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!partial_load_hikeys_chunk(partial, img))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	for (i = 0; i < header->chunksCount; i++)
 	{
 		if (!partial_load_chunk(partial, img, i, NULL))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// btree_page_reorg() checks the whole page is defined under Valgrind.
 	VALGRIND_MAKE_MEM_DEFINED(img, ORIOLEDB_BLCKSZ);
 
 	partial->isPartial = false;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 BTreeItemPageFitType
@@ -202,9 +202,9 @@ page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageIte
 					   LocationIndex size, bool replace, CommitSeqNo csn)
 {
 	int			freeSpace = BTREE_PAGE_FREE_SPACE(p);
-	int			spaceNeeded = size;
-	int			compactedFreeSpace;
-	int			oldItemSize;
+	pub static mut SPACE_NEEDED: std::os::raw::c_int = size;
+	pub static mut COMPACTED_FREE_SPACE: std::os::raw::c_int = 0;
+	pub static mut OLD_ITEM_SIZE: std::os::raw::c_int = 0;
 
 	Assert(spaceNeeded == MAXALIGN(spaceNeeded));
 
@@ -235,7 +235,7 @@ page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageIte
 	if (freeSpace >= spaceNeeded)
 	{
 		// Already have enough of free space on the page
-		return BTreeItemPageFitAsIs;
+		pub static mut B_TREE_ITEM_PAGE_FIT_AS_IS: return = std::mem::zeroed();
 	}
 
 	//
@@ -248,7 +248,7 @@ page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageIte
 // indexes.
 //
 	if (!O_PAGE_IS(p, LEAF) || desc->type == oIndexBridge)
-		return BTreeItemPageFitSplitRequired;
+		pub static mut B_TREE_ITEM_PAGE_FIT_SPLIT_REQUIRED: return = std::mem::zeroed();
 
 	// Start with optimistic estimate of free space after compaction
 	compactedFreeSpace = freeSpace + PAGE_GET_N_VACATED(p);
@@ -256,7 +256,7 @@ page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageIte
 	if (replace)
 	{
 		// Correct the estimation according to our tuple replacement
-		tupHdr: &mut BTreeLeafTuphdr;
+		pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
 
 		tupHdr = (BTreeLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, locator);
 
@@ -272,8 +272,8 @@ page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageIte
 		}
 		else
 		{
-			OTuple		tuple;
-			int			oldItemCompactedSize;
+			pub static mut TUPLE: OTuple = std::mem::zeroed();
+			pub static mut OLD_ITEM_COMPACTED_SIZE: std::os::raw::c_int = 0;
 
 			//
 // Similarly to the previous case, the possible tuple shrinking is
@@ -293,7 +293,7 @@ page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageIte
 // optimistic esimate will work.
 //
 	if (compactedFreeSpace < spaceNeeded)
-		return BTreeItemPageFitSplitRequired;
+		pub static mut B_TREE_ITEM_PAGE_FIT_SPLIT_REQUIRED: return = std::mem::zeroed();
 
 	//
 // Switch to real estimate.  Real estimate is much slower, but there is a
@@ -307,9 +307,9 @@ page_locator_fits_item(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageIte
 		compactedFreeSpace = freeSpace + page_get_vacated_skip_item(desc, p, csn, BTREE_PAGE_LOCATOR_GET_OFFSET(p, locator));
 
 	if (compactedFreeSpace >= spaceNeeded)
-		return BTreeItemPageFitCompactRequired;
+		pub static mut B_TREE_ITEM_PAGE_FIT_COMPACT_REQUIRED: return = std::mem::zeroed();
 	else
-		return BTreeItemPageFitSplitRequired;
+		pub static mut B_TREE_ITEM_PAGE_FIT_SPLIT_REQUIRED: return = std::mem::zeroed();
 }
 
 
@@ -368,7 +368,7 @@ page_item_fill_locator(Page p, OffsetNumber itemOffset,
 					   locator: &mut BTreePageItemLocator)
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OffsetNumber chunkOffset;
+	pub static mut CHUNK_OFFSET: OffsetNumber = std::mem::zeroed();
 
 	chunkOffset = 0;
 	while (chunkOffset < header->chunksCount - 1 &&
@@ -384,7 +384,7 @@ page_item_fill_locator_backwards(Page p, OffsetNumber itemOffset,
 								 locator: &mut BTreePageItemLocator)
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OffsetNumber chunkOffset;
+	pub static mut CHUNK_OFFSET: OffsetNumber = std::mem::zeroed();
 
 	chunkOffset = header->chunksCount - 1;
 	while (itemOffset < header->chunkDesc[chunkOffset].offset)
@@ -413,10 +413,10 @@ page_locator_next_chunk(Page p, locator: &mut BTreePageItemLocator)
 		}
 		else
 		{
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -434,12 +434,12 @@ page_locator_prev_chunk(Page p, locator: &mut BTreePageItemLocator)
 		else
 		{
 			locator->chunk = NULL;
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 	while (locator->chunkItemsCount == 0);
 	locator->itemOffset = locator->chunkItemsCount - 1;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -455,7 +455,7 @@ page_locator_insert_item(Page p, locator: &mut BTreePageItemLocator,
 				itemPtr,
 				endPtr;
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OffsetNumber i;
+	pub static mut I: OffsetNumber = std::mem::zeroed();
 
 	Assert(itemsize == MAXALIGN(itemsize));
 
@@ -523,7 +523,7 @@ bool
 page_locator_fits_new_item(Page p, locator: &mut BTreePageItemLocator,
 						   LocationIndex itemsize)
 {
-	LocationIndex sizeDiff;
+	pub static mut SIZE_DIFF: LocationIndex = std::mem::zeroed();
 
 	sizeDiff = MAXALIGN(sizeof(LocationIndex) * (locator->chunkItemsCount + 1)) -
 		MAXALIGN(sizeof(LocationIndex) * locator->chunkItemsCount);
@@ -572,11 +572,11 @@ page_locator_get_item_size(Page p, locator: &mut BTreePageItemLocator)
 page_locator_resize_item(Page p, locator: &mut BTreePageItemLocator,
 						 LocationIndex newsize)
 {
-	int			dataShift;
+	pub static mut DATA_SHIFT: std::os::raw::c_int = 0;
 	Pointer		nextItemPtr,
 				endPtr;
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OffsetNumber i;
+	pub static mut I: OffsetNumber = std::mem::zeroed();
 
 	// Calculate data shift
 	Assert(newsize == MAXALIGN(newsize));
@@ -755,7 +755,7 @@ page_locator_delete_item(Page p, locator: &mut BTreePageItemLocator)
 				itemPtr,
 				endPtr;
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OffsetNumber i;
+	pub static mut I: OffsetNumber = std::mem::zeroed();
 
 	// Get item size
 	itemsize = page_locator_get_item_size(p, locator);
@@ -973,12 +973,12 @@ page_split_chunk_if_needed(desc: &mut BTreeDescr, Page p, locator: &mut BTreePag
 				dataFreeSpace,
 				newChunkDescSize;
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	int			bestOffset = -1;
-	float4		bestScore = 0.0f;
+	pub static mut BEST_OFFSET: std::os::raw::c_int = -1;
+	pub static mut BEST_SCORE: float4 = 0.0f;
 	LocationIndex bestHiKeySize = 0,
 				bestHiKeySizeUnaligned = 0,
 				hikeysEnd = BTREE_PAGE_HIKEYS_END(desc, p);
-	OFixedKey	newHikey;
+	pub static mut NEW_HIKEY: OFixedKey = std::mem::zeroed();
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 	VALGRIND_MAKE_MEM_DEFINED(p, ORIOLEDB_BLCKSZ);
@@ -1024,12 +1024,12 @@ page_split_chunk_if_needed(desc: &mut BTreeDescr, Page p, locator: &mut BTreePag
 					dataSize,
 					leftDataSize,
 					rightDataSize;
-		float4		score;
+		pub static mut SCORE: float4 = std::mem::zeroed();
 
 		locator->itemOffset = i;
 		if (O_PAGE_IS(p, LEAF))
 		{
-			OTuple		tuple;
+			pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 			tuple.data = BTREE_PAGE_LOCATOR_GET_ITEM(p, locator) + BTreeLeafTuphdrSize;
 			tuple.formatFlags = BTREE_PAGE_GET_ITEM_FLAGS(p, locator);
@@ -1073,8 +1073,8 @@ page_split_chunk_if_needed(desc: &mut BTreeDescr, Page p, locator: &mut BTreePag
 	locator->itemOffset = bestOffset;
 	if (O_PAGE_IS(p, LEAF))
 	{
-		OTuple		tuple;
-		bool		allocated;
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
+		pub static mut ALLOCATED: bool = false;
 
 		tuple.data = BTREE_PAGE_LOCATOR_GET_ITEM(p, locator) + BTreeLeafTuphdrSize;
 		tuple.formatFlags = BTREE_PAGE_GET_ITEM_FLAGS(p, locator);
@@ -1090,7 +1090,7 @@ page_split_chunk_if_needed(desc: &mut BTreeDescr, Page p, locator: &mut BTreePag
 	}
 	else
 	{
-		OTuple		key;
+		pub static mut KEY: OTuple = std::mem::zeroed();
 
 		key.data = BTREE_PAGE_LOCATOR_GET_ITEM(p, locator) + BTreeNonLeafTuphdrSize;
 		key.formatFlags = BTREE_PAGE_GET_ITEM_FLAGS(p, locator);
@@ -1118,7 +1118,7 @@ page_split_chunk_if_needed(desc: &mut BTreeDescr, Page p, locator: &mut BTreePag
 fn
 check_page(desc: &mut BTreeDescr, Page p)
 {
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	OTuple		prev,
 				tup;
 	BTreeKeyType kind = O_PAGE_IS(p, LEAF) ? BTreeTuple : BTreeKey;
@@ -1142,7 +1142,7 @@ check_page(desc: &mut BTreeDescr, Page p)
 
 		if (loc.chunkOffset < header->chunksCount - 1 || !O_PAGE_IS(p, RIGHTMOST))
 		{
-			OTuple		chunkHikey;
+			pub static mut CHUNK_HIKEY: OTuple = std::mem::zeroed();
 
 			chunkHikey.data = p + SHORT_GET_LOCATION(header->chunkDesc[loc.chunkOffset].hikeyShortLocation);
 			chunkHikey.formatFlags = header->chunkDesc[loc.chunkOffset].hikeyFlags;
@@ -1158,7 +1158,7 @@ check_page(desc: &mut BTreeDescr, Page p)
 static LocationIndex
 item_get_key_size(desc: &mut BTreeDescr, bool leaf, item: &mut BTreePageItem)
 {
-	OTuple		tuple;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	if (leaf)
 	{
@@ -1181,15 +1181,15 @@ item_get_key_size(desc: &mut BTreeDescr, bool leaf, item: &mut BTreePageItem)
 btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 				 OffsetNumber count, LocationIndex hikeySize, OTuple hikey)
 {
-	int			chunksCount;
+	pub static mut CHUNKS_COUNT: std::os::raw::c_int = 0;
 	LocationIndex totalDataSize,
 				itemHeaderSize = O_PAGE_IS(p, LEAF) ? BTreeLeafTuphdrSize : BTreeNonLeafTuphdrSize;
-	chunk: &mut BTreePageChunk;
+	pub static mut B_TREE_PAGE_CHUNK: *mut chunk = std::ptr::null_mut();
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	Pointer		ptr,
 				hikeysPtr;
 	bool		chunkFixedKeys[BTREE_PAGE_MAX_CHUNKS];
-	bool		fixedKeys = true;
+	pub static mut FIXED_KEYS: bool = true;
 	OffsetNumber chunkOffsets[BTREE_PAGE_MAX_CHUNKS + 1];
 	LocationIndex itemsArray[BTREE_PAGE_MAX_CHUNK_ITEMS];
 	int			i,
@@ -1200,8 +1200,8 @@ btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 				dataFreeSpaceLeft,
 				hikeysEnd;
 	bool		isRightmost = O_PAGE_IS(p, RIGHTMOST);
-	LocationIndex chunkDataSize;
-	LocationIndex maxKeyLen;
+	pub static mut CHUNK_DATA_SIZE: LocationIndex = std::mem::zeroed();
+	pub static mut MAX_KEY_LEN: LocationIndex = std::mem::zeroed();
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 	VALGRIND_MAKE_MEM_DEFINED(p, ORIOLEDB_BLCKSZ);
@@ -1248,7 +1248,7 @@ btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 		LocationIndex nextKeySize,
 					hikeySizeDiff,
 					dataSpaceDiff;
-		float4		dataSizeRatio;
+		pub static mut DATA_SIZE_RATIO: float4 = std::mem::zeroed();
 
 		nextKeySize = item_get_key_size(desc, O_PAGE_IS(p, LEAF), &items[i]);
 		maxKeyLen = Max(maxKeyLen, nextKeySize);
@@ -1292,8 +1292,8 @@ btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 	ptr = (Pointer) p + hikeysEnd;
 	for (j = 0; j < chunksCount; j++)
 	{
-		OffsetNumber chunkItemsCount;
-		LocationIndex itemShift;
+		pub static mut CHUNK_ITEMS_COUNT: OffsetNumber = std::mem::zeroed();
+		pub static mut ITEM_SHIFT: LocationIndex = std::mem::zeroed();
 
 		chunkItemsCount = chunkOffsets[j + 1] - chunkOffsets[j];
 		itemShift = MAXALIGN(sizeof(LocationIndex) * chunkItemsCount);
@@ -1317,7 +1317,7 @@ btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 //
 	for (j = chunksCount - 1; j >= 0; j--)
 	{
-		OffsetNumber chunkItemsCount;
+		pub static mut CHUNK_ITEMS_COUNT: OffsetNumber = std::mem::zeroed();
 
 		chunkItemsCount = chunkOffsets[j + 1] - chunkOffsets[j];
 
@@ -1339,7 +1339,7 @@ btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 	fixedKeys = true;
 	for (j = 0; j < chunksCount; j++)
 	{
-		OffsetNumber chunkItemsCount;
+		pub static mut CHUNK_ITEMS_COUNT: OffsetNumber = std::mem::zeroed();
 
 		chunkItemsCount = chunkOffsets[j + 1] - chunkOffsets[j];
 		i = chunkOffsets[j];
@@ -1360,14 +1360,14 @@ btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 
 		if (j > 0)
 		{
-			OTuple		chunkHikeyTuple;
-			LocationIndex chunkHikeySize;
+			pub static mut CHUNK_HIKEY_TUPLE: OTuple = std::mem::zeroed();
+			pub static mut CHUNK_HIKEY_SIZE: LocationIndex = std::mem::zeroed();
 
 			chunkHikeyTuple.formatFlags = ITEM_GET_FLAGS(chunk->items[0]);
 			chunkHikeyTuple.data = (Pointer) chunk + ITEM_GET_OFFSET(chunk->items[0]) + itemHeaderSize;
 			if (O_PAGE_IS(p, LEAF))
 			{
-				bool		shouldFree;
+				pub static mut SHOULD_FREE: bool = false;
 
 				chunkHikeyTuple = o_btree_tuple_make_key(desc, chunkHikeyTuple, hikeysPtr, false, &shouldFree);
 				Assert(chunkHikeyTuple.data == hikeysPtr);
@@ -1415,11 +1415,11 @@ btree_page_reorg(desc: &mut BTreeDescr, Page p, items: &mut BTreePageItem,
 
 split_page_by_chunks(desc: &mut BTreeDescr, Page p)
 {
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	BTreePageItem items[BTREE_PAGE_MAX_CHUNK_ITEMS];
-	int			i = 0;
-	OFixedKey	hikey;
-	LocationIndex hikeySize;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut HIKEY: OFixedKey = std::mem::zeroed();
+	pub static mut HIKEY_SIZE: LocationIndex = std::mem::zeroed();
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
@@ -1448,12 +1448,12 @@ page_locator_find_real_item(Page p, partial: &mut PartialPageState,
 							locator: &mut BTreePageItemLocator)
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OffsetNumber offset;
+	pub static mut OFFSET: OffsetNumber = std::mem::zeroed();
 
 	while (locator->itemOffset >= locator->chunkItemsCount)
 	{
 		if (locator->chunkOffset >= header->chunksCount - 1)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		offset = locator->itemOffset - locator->chunkItemsCount;
 
@@ -1471,7 +1471,7 @@ page_locator_find_real_item(Page p, partial: &mut PartialPageState,
 		if (partial && partial->isPartial)
 		{
 			if (!partial_load_chunk(partial, p, locator->chunkOffset + 1, locator))
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 		}
 		else
 		{
@@ -1479,7 +1479,7 @@ page_locator_find_real_item(Page p, partial: &mut PartialPageState,
 		}
 		locator->itemOffset = offset;
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 // No existing callers

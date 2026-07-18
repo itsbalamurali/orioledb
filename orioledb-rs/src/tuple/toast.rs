@@ -42,8 +42,8 @@ static Pointer o_toast_get(descr: &mut OTableDescr,
 
 typedef struct
 {
-	pk: &mut OIndexDescr;
-	toast: &mut OIndexDescr;
+	pub static mut O_INDEX_DESCR: *mut pk = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut toast = std::ptr::null_mut();
 	uint32		version;		// base table version
 } OTableToastArg;
 
@@ -106,10 +106,10 @@ o_toast_cmp(desc: &mut BTreeDescr,
 			 *p2, BTreeKeyType k2)
 {
 	toastd: &mut OIndexDescr = (OIndexDescr *) desc->arg;
-	int			pkAttnum = toastd->nonLeafTupdesc->natts - TOAST_NON_LEAF_FIELDS_NUM;
-	int			i;
-	OTuple		pk1;
-	OTuple		pk2;
+	pub static mut PK_ATTNUM: std::os::raw::c_int = toastd->nonLeafTupdesc->natts - TOAST_NON_LEAF_FIELDS_NUM;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut PK1: OTuple = std::mem::zeroed();
+	pub static mut PK2: OTuple = std::mem::zeroed();
 	int16		attnum1,
 				attnum2;
 	int32		chunknum1,
@@ -131,8 +131,8 @@ o_toast_cmp(desc: &mut BTreeDescr,
 					v2;
 		bool		null1,
 					null2;
-		field: &mut OIndexField = &toastd->fields[i];
-		int			cmp;
+		pub static mut O_INDEX_FIELD: *mut field = &toastd->fields[i];
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		v1 = o_fastgetattr(pk1, i + 1, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null1);
 		v2 = o_fastgetattr(pk2, i + 1, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null2);
@@ -158,7 +158,7 @@ o_toast_cmp(desc: &mut BTreeDescr,
 	}
 	else
 	{
-		bool		null;
+		pub static mut NULL: bool = false;
 
 		// cppcheck-suppress unknownEvaluationOrder
 		attnum1 = DatumGetInt16(o_fastgetattr(pk1, pkAttnum + ATTN_POS, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null));
@@ -176,7 +176,7 @@ o_toast_cmp(desc: &mut BTreeDescr,
 	}
 	else
 	{
-		bool		null;
+		pub static mut NULL: bool = false;
 
 		// cppcheck-suppress unknownEvaluationOrder
 		attnum2 = DatumGetInt16(o_fastgetattr(pk2, pkAttnum + ATTN_POS, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null));
@@ -191,7 +191,7 @@ o_toast_cmp(desc: &mut BTreeDescr,
 		return (attnum1 < attnum2) ? -1 : 1;
 	if (chunknum1 != chunknum2)
 		return (chunknum1 < chunknum2) ? -1 : 1;
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 bool
@@ -200,29 +200,29 @@ o_toast_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 				   OTuple newTuple, OXid newOxid)
 {
 	if (action == BTreeOperationDelete)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!XACT_INFO_OXID_EQ(oldXactInfo, newOxid))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (oldDeleted && o_tuple_get_version(oldTuple) + 1 == o_tuple_get_version(newTuple))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!O_TUPLE_IS_NULL(newTuple) &&
 		o_tuple_get_version(oldTuple) >= o_tuple_get_version(newTuple))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 struct varlena *
 o_detoast(struct attr: &mut varlena)
 {
-	OToastExternal ote;
-	ORelOids	oids;
-	descr: &mut OTableDescr;
-	OFixedKey	key;
-	OSnapshot	oSnapshot;
+	pub static mut OTE: OToastExternal = std::mem::zeroed();
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut KEY: OFixedKey = std::mem::zeroed();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
 
 	memcpy(&ote, VARDATA_EXTERNAL(attr), O_TOAST_EXTERNAL_SZ);
 	oids.datoid = ote.datoid;
@@ -260,13 +260,13 @@ tableGetMaxChunkSize( *key,  *arg)
 	bool		isnull[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM] = {false};
 	int			i,
 				natts;
-	varattrib_4b data;
-	uint32		minTupleSize;
+	pub static mut DATA: varattrib_4b = std::mem::zeroed();
+	pub static mut MIN_TUPLE_SIZE: uint32 = std::mem::zeroed();
 
 	natts = primary->nonLeafTupdesc->natts;
 	for (i = 0; i < natts; i++)
 	{
-		int			attnum = i + 1;
+		pub static mut ATTNUM: std::os::raw::c_int = i + 1;
 
 		values[i] = o_fastgetattr(tkey->pk_tuple, attnum,
 								  primary->nonLeafTupdesc,
@@ -296,7 +296,7 @@ fn *
 tableGetNextKey( *key,  *arg)
 {
 	tkey: &mut OToastKey = (OToastKey *) key;
-	static OToastKey nextKey;
+	static mut NEXT_KEY: OToastKey = std::mem::zeroed();
 
 	nextKey = *tkey;
 	nextKey.attnum += 1;
@@ -309,7 +309,7 @@ static OTuple
 tableCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum, int length,  *arg)
 {
 	tkey: &mut OToastKey = (OToastKey *) key;
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	tkey->chunknum = chunknum;
 
@@ -318,26 +318,26 @@ tableCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum, int length
 								  length,
 								  (OTableToastArg *) arg);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTuple
 tableCreateKey( *key, uint32 chunknum,  *arg)
 {
 	tkey: &mut OToastKey = (OToastKey *) key;
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	tkey->chunknum = chunknum;
 
 	result = o_create_toast_key(*tkey, (OTableToastArg *) arg);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static bytea *
 get_data(toast: &mut OIndexDescr, OTuple tuple)
 {
-	int			natts = toast->leafTupdesc->natts;
+	pub static mut NATTS: std::os::raw::c_int = toast->leafTupdesc->natts;
 
 	return DatumGetByteaPP(PointerGetDatum(o_fastgetattr_ptr(tuple, natts, toast->leafTupdesc, &toast->leafSpec)));
 }
@@ -354,8 +354,8 @@ static uint32
 tableGetTupleChunknum(OTuple tuple,  *arg)
 {
 	toast: &mut OIndexDescr = ((OTableToastArg *) arg)->toast;
-	bool		isnull;
-	Datum		result;
+	pub static mut ISNULL: bool = false;
+	pub static mut RESULT: Datum = std::mem::zeroed();
 
 	result = o_fastgetattr(tuple,
 						   toast->leafTupdesc->natts + CHUNKN_POS - DATA_POS,
@@ -395,16 +395,16 @@ tableVersionCallback(OTuple tuple, OXid tupOxid, oSnapshot: &mut OSnapshot,  *ar
 	key: &mut OToastKey = (OToastKey *) arg;
 
 	if (oxidIsFinished)
-		return OTupleFetchNext;
+		pub static mut O_TUPLE_FETCH_NEXT: return = std::mem::zeroed();
 
 	if (!(COMMITSEQNO_IS_INPROGRESS(oSnapshot->csn) &&
 		  tupOxid == get_current_oxid_if_any()))
-		return OTupleFetchNext;
+		pub static mut O_TUPLE_FETCH_NEXT: return = std::mem::zeroed();
 
 	if (o_tuple_get_version(tuple) <= o_tuple_get_version(key->pk_tuple))
-		return OTupleFetchMatch;
+		pub static mut O_TUPLE_FETCH_MATCH: return = std::mem::zeroed();
 	else
-		return OTupleFetchNext;
+		pub static mut O_TUPLE_FETCH_NEXT: return = std::mem::zeroed();
 }
 
 ToastAPI	tableToastAPI = {
@@ -431,10 +431,10 @@ generic_toast_insert_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 {
 	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
 	uint32		max_length = api->getMaxChunkSize(key, arg);
-	uint32		offset = 0;
-	uint32		chunknum = 0;
-	bool		inserted;
-	BTreeModifyCallbackInfo callbackInfo = nullCallbackInfo;
+	pub static mut OFFSET: uint32 = 0;
+	pub static mut CHUNKNUM: uint32 = 0;
+	pub static mut INSERTED: bool = false;
+	pub static mut CALLBACK_INFO: BTreeModifyCallbackInfo = nullCallbackInfo;
 
 	inserted = false;
 
@@ -442,8 +442,8 @@ generic_toast_insert_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 
 	while (data_size > 0)
 	{
-		OTuple		tup;
-		int			length = 0;
+		pub static mut TUP: OTuple = std::mem::zeroed();
+		pub static mut LENGTH: std::os::raw::c_int = 0;
 
 		if (data_size < max_length)
 		{
@@ -484,7 +484,7 @@ generic_toast_insert_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 		data_size -= length;
 	}
 
-	return inserted;
+	pub static mut INSERTED: return = std::mem::zeroed();
 }
 
 //
@@ -510,15 +510,15 @@ generic_toast_sort_add(api: &mut ToastAPI,  *key,
 					   sortstate: &mut Tuplesortstate,  *arg)
 {
 	uint32		max_length = api->getMaxChunkSize(key, arg);
-	uint32		offset = 0;
-	uint32		chunknum = 0;
+	pub static mut OFFSET: uint32 = 0;
+	pub static mut CHUNKNUM: uint32 = 0;
 
 	Assert(data_size > 0);
 
 	while (data_size > 0)
 	{
-		OTuple		tup;
-		int			length = 0;
+		pub static mut TUP: OTuple = std::mem::zeroed();
+		pub static mut LENGTH: std::os::raw::c_int = 0;
 
 		if (data_size < max_length)
 		{
@@ -546,7 +546,7 @@ o_update_callback(descr: &mut BTreeDescr,
 				  UndoLocation location, lock_mode: &mut RowLockMode,
 				  hint: &mut BTreeLocationHint,  *arg)
 {
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -557,7 +557,7 @@ o_update_deleted_callback(descr: &mut BTreeDescr,
 						  UndoLocation location, lock_mode: &mut RowLockMode,
 						  hint: &mut BTreeLocationHint,  *arg)
 {
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -566,7 +566,7 @@ o_delete_callback(descr: &mut BTreeDescr,
 				  OTupleXactInfo xactInfo, UndoLocation location,
 				  lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,  *arg)
 {
-	return OBTreeCallbackActionDelete;
+	pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 }
 
 bool
@@ -578,8 +578,8 @@ generic_toast_update_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 	int			max_length = api->getMaxChunkSize(key, arg);
 	uint32		offset = 0,
 				length;
-	uint32		chunknum = 0;
-	bool		success = true;
+	pub static mut CHUNKNUM: uint32 = 0;
+	pub static mut SUCCESS: bool = true;
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = NULL,
 		.modifyDeletedCallback = o_update_deleted_callback,
@@ -592,8 +592,8 @@ generic_toast_update_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 
 	while (data_size > 0)
 	{
-		OBTreeModifyResult result;
-		OTuple		tup;
+		pub static mut RESULT: OBTreeModifyResult = std::mem::zeroed();
+		pub static mut TUP: OTuple = std::mem::zeroed();
 
 		if (data_size < max_length)
 		{
@@ -615,12 +615,12 @@ generic_toast_update_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 		if (result != OBTreeModifyResultInserted && result != OBTreeModifyResultUpdated)
 		{
 			pfree(tup.data);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 
 		if (desc->storageType == BTreeStoragePersistence && wal)
 		{
-			uint8		rec_type;
+			pub static mut REC_TYPE: uint8 = std::mem::zeroed();
 			uint32		version = GET_BTREE_VERSION(api, arg);
 			uint32		base_version = GET_BASE_BTREE_VERSION(api, arg);
 
@@ -641,7 +641,7 @@ generic_toast_update_optional_wal(api: &mut ToastAPI,  *key, Pointer data,
 	api->updateKey(key, chunknum, arg);
 	() generic_toast_delete_optional_wal(api, key, oxid, csn, arg, wal);
 
-	return success;
+	pub static mut SUCCESS: return = std::mem::zeroed();
 }
 
 bool
@@ -658,8 +658,8 @@ generic_toast_delete_optional_wal(api: &mut ToastAPI,  *key, OXid oxid,
 {
 	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
 		   *nextKey;
-	it: &mut BTreeIterator;
-	bool		deleted = false;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut DELETED: bool = false;
 	BTreeModifyCallbackInfo callbackInfo = {
 		.waitCallback = NULL,
 		.modifyDeletedCallback = NULL,
@@ -674,11 +674,11 @@ generic_toast_delete_optional_wal(api: &mut ToastAPI,  *key, OXid oxid,
 
 	do
 	{
-		BTreeLocationHint hint;
-		OTuple		walKey;
-		OTuple		tuple;
-		uint32		chunknum;
-		OTuple		nullTup;
+		pub static mut HINT: BTreeLocationHint = std::mem::zeroed();
+		pub static mut WAL_KEY: OTuple = std::mem::zeroed();
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
+		pub static mut CHUNKNUM: uint32 = std::mem::zeroed();
+		pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 
 		tuple = o_btree_iterator_fetch(it, NULL, nextKey, BTreeKeyBound, false, &hint);
 
@@ -709,7 +709,7 @@ generic_toast_delete_optional_wal(api: &mut ToastAPI,  *key, OXid oxid,
 
 			if (!api->deleteLogFullTuple)
 			{
-				bool		key_allocated;
+				pub static mut KEY_ALLOCATED: bool = false;
 
 				walKey = o_btree_tuple_make_key(desc, tuple, NULL, true,
 												&key_allocated);
@@ -731,7 +731,7 @@ generic_toast_delete_optional_wal(api: &mut ToastAPI,  *key, OXid oxid,
 
 	btree_iterator_free(it);
 
-	return deleted;
+	pub static mut DELETED: return = std::mem::zeroed();
 }
 
 bool
@@ -746,11 +746,11 @@ generic_toast_get(api: &mut ToastAPI,  *key, Size data_size,
 				  o_snapshot: &mut OSnapshot,  *arg)
 {
 	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
-	it: &mut BTreeIterator;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 		   *nextKey;
 	int			max_length = api->getMaxChunkSize(key, arg);
-	int			actual_size;
-	Pointer		data;
+	pub static mut ACTUAL_SIZE: std::os::raw::c_int = 0;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
 
 	nextKey = api->getNextKey(key, arg);
 
@@ -764,8 +764,8 @@ generic_toast_get(api: &mut ToastAPI,  *key, Size data_size,
 
 	do
 	{
-		OTuple		tup;
-		int			iter_data_size;
+		pub static mut TUP: OTuple = std::mem::zeroed();
+		pub static mut ITER_DATA_SIZE: std::os::raw::c_int = 0;
 
 		tup = o_btree_iterator_fetch(it, NULL, nextKey, BTreeKeyBound, false, NULL);
 
@@ -801,9 +801,9 @@ generic_toast_get(api: &mut ToastAPI,  *key, Size data_size,
 	if (actual_size != data_size)
 	{
 		pfree(data);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
-	return data;
+	pub static mut DATA: return = std::mem::zeroed();
 }
 
 //
@@ -819,9 +819,9 @@ generic_toast_get_any_common(api: &mut ToastAPI,
 							 it: &mut BTreeIterator,
 							 found_key: &mut Pointer)
 {
-	Pointer		nextKey;
-	OTuple		tuple;
-	StringInfoData str;
+	pub static mut NEXT_KEY: Pointer = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut STR: StringInfoData = std::mem::zeroed();
 
 	nextKey = api->getNextKey(key, arg);
 
@@ -829,7 +829,7 @@ generic_toast_get_any_common(api: &mut ToastAPI,
 
 	do
 	{
-		uint32		chunk_size;
+		pub static mut CHUNK_SIZE: uint32 = std::mem::zeroed();
 
 		tuple = o_btree_iterator_fetch(it, NULL, nextKey, BTreeKeyBound, false, NULL);
 
@@ -856,7 +856,7 @@ generic_toast_get_any_common(api: &mut ToastAPI,
 	} while (true);
 
 	if (*data_size == 0)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	return str.data;
 }
@@ -878,8 +878,8 @@ generic_toast_get_any_with_callback(api: &mut ToastAPI, Pointer key,
 									 *callback_arg)
 {
 	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
-	it: &mut BTreeIterator;
-	Pointer		data;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut DATA: Pointer = std::ptr::null_mut();
 
 	it = o_btree_iterator_create(desc, key, BTreeKeyBound,
 								 o_snapshot, ForwardScanDirection);
@@ -891,7 +891,7 @@ generic_toast_get_any_with_callback(api: &mut ToastAPI, Pointer key,
 
 	btree_iterator_free(it);
 
-	return data;
+	pub static mut DATA: return = std::mem::zeroed();
 }
 
 //
@@ -907,8 +907,8 @@ generic_toast_get_any_with_key(api: &mut ToastAPI,  *key, data_size: &mut Size,
 							   o_snapshot: &mut OSnapshot,  *arg, found_key: &mut Pointer)
 {
 	desc: &mut BTreeDescr = api->getBTreeDesc(arg);
-	it: &mut BTreeIterator;
-	Pointer		data;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut DATA: Pointer = std::ptr::null_mut();
 
 	it = o_btree_iterator_create(desc, key, BTreeKeyBound,
 								 o_snapshot, ForwardScanDirection);
@@ -920,7 +920,7 @@ generic_toast_get_any_with_key(api: &mut ToastAPI,  *key, data_size: &mut Size,
 
 	btree_iterator_free(it);
 
-	return data;
+	pub static mut DATA: return = std::mem::zeroed();
 }
 
 //
@@ -942,8 +942,8 @@ o_toast_insert(descr: &mut OTableDescr, OTuple pk, uint16 attn,
 			   Pointer data, Size data_size,
 			   OXid oxid, CommitSeqNo csn)
 {
-	OToastKey	tkey;
-	bool		result;
+	pub static mut TKEY: OToastKey = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 	OTableToastArg arg = {GET_PRIMARY(descr), descr->toast, descr->version};
 
 	Assert(ORelOidsIsEqual(descr->toast->tableOids, descr->oids));
@@ -957,7 +957,7 @@ o_toast_insert(descr: &mut OTableDescr, OTuple pk, uint16 attn,
 	result = generic_toast_insert(&tableToastAPI, &tkey, data,
 								  data_size, oxid, csn, &arg);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -965,7 +965,7 @@ o_toast_sort_add(descr: &mut OTableDescr, OTuple pk, uint16 attn,
 				 Pointer data, Size data_size,
 				 sortstate: &mut Tuplesortstate)
 {
-	OToastKey	tkey;
+	pub static mut TKEY: OToastKey = std::mem::zeroed();
 	OTableToastArg arg = {GET_PRIMARY(descr), descr->toast, O_TABLE_INVALID_VERSION};
 
 	tkey.pk_tuple = pk;
@@ -984,8 +984,8 @@ o_toast_delete(descr: &mut OTableDescr,
 			   OTuple pk, uint16 attn,
 			   OXid oxid, CommitSeqNo csn)
 {
-	OToastKey	tkey;
-	bool		result;
+	pub static mut TKEY: OToastKey = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 	OTableToastArg arg = {GET_PRIMARY(descr), descr->toast, descr->version};
 
 	Assert(ORelOidsIsEqual(descr->toast->tableOids, descr->oids));
@@ -999,7 +999,7 @@ o_toast_delete(descr: &mut OTableDescr,
 	result = generic_toast_delete(&tableToastAPI, (Pointer) &tkey,
 								  oxid, csn, &arg);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static Pointer
@@ -1007,8 +1007,8 @@ o_toast_get(descr: &mut OTableDescr,
 			OTuple pk, uint16 attn,
 			Size data_size, o_snapshot: &mut OSnapshot)
 {
-	OToastKey	tkey;
-	Pointer		result;
+	pub static mut TKEY: OToastKey = std::mem::zeroed();
+	pub static mut RESULT: Pointer = std::ptr::null_mut();
 	OTableToastArg arg = {GET_PRIMARY(descr), descr->toast, O_TABLE_INVALID_VERSION};
 
 	tkey.pk_tuple = pk;
@@ -1020,7 +1020,7 @@ o_toast_get(descr: &mut OTableDescr,
 	result = generic_toast_get(&tableToastAPI, (Pointer) &tkey, data_size,
 							   o_snapshot, &arg);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTuple
@@ -1029,15 +1029,15 @@ o_create_toast_tuple(OToastKey tkey, Pointer data_ptr, Size data_length,
 {
 	Datum		key[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM];
 	bool		isnull[INDEX_MAX_KEYS + TOAST_LEAF_FIELDS_NUM] = {false};
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 	int			i,
 				natts;
-	data: &mut bytea;
+	pub static mut BYTEA: *mut data = std::ptr::null_mut();
 
 	natts = arg->pk->nonLeafTupdesc->natts;
 	for (i = 0; i < natts; i++)
 	{
-		int			attnum = i + 1;
+		pub static mut ATTNUM: std::os::raw::c_int = i + 1;
 
 		key[i] = o_fastgetattr(tkey.pk_tuple, attnum,
 							   arg->pk->nonLeafTupdesc,
@@ -1057,7 +1057,7 @@ o_create_toast_tuple(OToastKey tkey, Pointer data_ptr, Size data_length,
 						  key, isnull, NULL);
 	pfree(data);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTuple
@@ -1074,7 +1074,7 @@ o_create_toast_key(OToastKey tkey,
 	natts = arg->pk->nonLeafTupdesc->natts;
 	for (i = 0; i < natts; i++)
 	{
-		int			attnum = i + 1;
+		pub static mut ATTNUM: std::os::raw::c_int = i + 1;
 
 		key[i] = o_fastgetattr(tkey.pk_tuple, attnum,
 							   arg->pk->nonLeafTupdesc,
@@ -1100,13 +1100,13 @@ o_toast_equal(primary: &mut BTreeDescr, Datum left, Datum right)
 		!VARATT_IS_EXTERNAL_ORIOLEDB(right))
 	{
 		// left or right is not orioledb TOAST value
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (left == right)
 	{
 		// easy case: it's same pointers
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	memcpy(&left_ote,
@@ -1121,7 +1121,7 @@ o_toast_equal(primary: &mut BTreeDescr, Datum left, Datum right)
 		left_ote.relnode != right_ote.relnode)
 	{
 		// values are not from the same index
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (left_ote.raw_size != right_ote.raw_size ||
@@ -1129,19 +1129,19 @@ o_toast_equal(primary: &mut BTreeDescr, Datum left, Datum right)
 		left_ote.data_size != right_ote.data_size)
 	{
 		// sizes are not equal
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (left_ote.attnum != right_ote.attnum ||
 		left_ote.csn != right_ote.csn)
 	{
 		// it's a different attribute
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// now we can make final check: compare primary keys
 	if (left_ote.formatFlags != right_ote.formatFlags)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	return memcmp(VARDATA_EXTERNAL(DatumGetPointer(left)) + O_TOAST_EXTERNAL_SZ,
 				  VARDATA_EXTERNAL(DatumGetPointer(right)) + O_TOAST_EXTERNAL_SZ,
@@ -1188,7 +1188,7 @@ o_get_raw_value(Datum value, free: &mut bool)
 Datum
 o_get_src_value(Datum value, free: &mut bool)
 {
-	struct result: &mut varlena;
+	pub static mut VARLENA: *mut struct result = std::ptr::null_mut();
 
 	result = (struct varlena *) DatumGetPointer(value);
 	*free = false;
@@ -1236,9 +1236,9 @@ create_o_toast_external(descr: &mut OTableDescr,
 						toasted: &mut OToastValue,
 						CommitSeqNo csn)
 {
-	Pointer		result;
+	pub static mut RESULT: Pointer = std::ptr::null_mut();
 	id: &mut OIndexDescr = GET_PRIMARY(descr);
-	OToastExternal ote;
+	pub static mut OTE: OToastExternal = std::mem::zeroed();
 	uint32		tupSize = o_tuple_size(idx_tup, &id->nonLeafSpec);
 
 	result = palloc0(VARHDRSZ_EXTERNAL + O_TOAST_EXTERNAL_SZ + tupSize);
@@ -1302,7 +1302,7 @@ toast_tuple_print(TupleDesc tupDesc, spec: &mut OTupleFixedFormatSpec,
 									   &nulls[chunkn_pos]);
 	if (is_tuple)
 	{
-		Datum		data;
+		pub static mut DATA: Datum = std::mem::zeroed();
 
 		datasz_pos = pk_natts + DATA_POS - 1;
 		data = o_fastgetattr(tup, pk_natts + DATA_POS, tupDesc, spec,

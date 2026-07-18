@@ -59,23 +59,23 @@ typedef enum OPathTag
 
 typedef struct OPath
 {
-	OPathTag	type;
+	pub static mut TYPE: OPathTag = std::mem::zeroed();
 } OPath;
 
 typedef struct OIndexPath
 {
-	OPath		o_path;
-	ScanDirection scandir;
-	OIndexNumber ix_num;
+	pub static mut O_PATH: OPath = std::mem::zeroed();
+	pub static mut SCANDIR: ScanDirection = std::mem::zeroed();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
 } OIndexPath;
 
 typedef struct OBitmapHeapPath
 {
-	OPath		o_path;
+	pub static mut O_PATH: OPath = std::mem::zeroed();
 } OBitmapHeapPath;
 
-set_rel_pathlist_hook_type old_set_rel_pathlist_hook = NULL;
-ea_counters: &mut OEACallsCounters = NULL;
+pub static mut OLD_SET_REL_PATHLIST_HOOK: set_rel_pathlist_hook_type = std::ptr::null_mut();
+pub static mut OEA_CALLS_COUNTERS: *mut ea_counters = std::ptr::null_mut();
 
 // custom scan
 static o_plan_custom_path: &mut Plan(root: &mut PlannerInfo, rel: &mut RelOptInfo,
@@ -135,7 +135,7 @@ is_o_custom_scan_state(scan: &mut CustomScanState)
 static Path *
 transform_path(src_path: &mut Path, descr: &mut OTableDescr)
 {
-	result: &mut CustomPath;
+	pub static mut CUSTOM_PATH: *mut result = std::ptr::null_mut();
 
 	Assert(IsA(src_path, IndexPath) || IsA(src_path, Path) ||
 		   IsA(src_path, BitmapHeapPath));
@@ -167,8 +167,8 @@ transform_path(src_path: &mut Path, descr: &mut OTableDescr)
 	else if (IsA(src_path, IndexPath))
 	{
 		ix_path: &mut IndexPath = (IndexPath *) src_path;
-		OIndexNumber ix_num;
-		index_descr: &mut OIndexDescr;
+		pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+		pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
 		new_path: &mut OIndexPath = palloc0(sizeof(OIndexPath));
 
 		// Find ix_num
@@ -205,11 +205,11 @@ orioledb_set_plain_rel_pathlist_hook(root: &mut PlannerInfo, rel: &mut RelOptInf
 
 		if (is_orioledb_rel(relation))
 		{
-			lc: &mut ListCell;
-			int			i;
-			int			nkeyfields;
-			ORelOids	oids;
-			o_table: &mut OTable;
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+			pub static mut I: std::os::raw::c_int = 0;
+			pub static mut NKEYFIELDS: std::os::raw::c_int = 0;
+			pub static mut OIDS: ORelOids = std::mem::zeroed();
+			pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
 
 			ORelOidsSetFromRel(oids, relation);
 			o_table = o_tables_get(oids);
@@ -226,16 +226,16 @@ orioledb_set_plain_rel_pathlist_hook(root: &mut PlannerInfo, rel: &mut RelOptInf
 
 				for (i = 0; i < nkeyfields; i++)
 				{
-					pk_field: &mut OTableIndexField;
+					pub static mut O_TABLE_INDEX_FIELD: *mut pk_field = std::ptr::null_mut();
 
 					pk_field = &o_table->indices[PrimaryIndexNumber].fields[i];
 
 					foreach(lc, rel->indexlist)
 					{
 						index: &mut IndexOptInfo = (IndexOptInfo *) lfirst(lc);
-						int			col;
-						bool		member = false;
-						int			ix_num = InvalidIndexNumber;
+						pub static mut COL: std::os::raw::c_int = 0;
+						pub static mut MEMBER: bool = false;
+						pub static mut IX_NUM: std::os::raw::c_int = InvalidIndexNumber;
 
 						// Don't add additional pkey fields to bridged indices
 						for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
@@ -258,8 +258,8 @@ orioledb_set_plain_rel_pathlist_hook(root: &mut PlannerInfo, rel: &mut RelOptInf
 
 						if (!member)
 						{
-							indexvar: &mut Expr;
-							const att_tup: &mut FormData_pg_attribute;
+							pub static mut EXPR: *mut indexvar = std::ptr::null_mut();
+							pub static mut FORM_DATA_PG_ATTRIBUTE: *mut const att_tup = std::ptr::null_mut();
 
 							index->ncolumns++;
 							index->indexkeys = (int *)
@@ -315,8 +315,8 @@ orioledb_set_rel_pathlist_hook(root: &mut PlannerInfo, rel: &mut RelOptInfo,
 		// orioledb relation
 		if (is_orioledb_rel(relation))
 		{
-			descr: &mut OTableDescr;
-			int			i;
+			pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+			pub static mut I: std::os::raw::c_int = 0;
 
 			descr = relation_get_descr(relation);
 			Assert(descr != NULL);
@@ -406,13 +406,13 @@ o_plan_custom_path(root: &mut PlannerInfo, rel: &mut RelOptInfo,
 {
 	o_path: &mut OPath = linitial(best_path->custom_private);
 	custom_scan: &mut CustomScan = makeNode(CustomScan);
-	plan: &mut Plan = &custom_scan->scan.plan;
-	qpqual: &mut List = NIL;
-	rte: &mut RangeTblEntry;
-	Oid			reloid;
-	Relation	relation;
-	descr: &mut OTableDescr;
-	custom_plan: &mut Plan;
+	pub static mut PLAN: *mut plan = &custom_scan->scan.plan;
+	pub static mut LIST: *mut qpqual = NIL;
+	pub static mut RANGE_TBL_ENTRY: *mut rte = std::ptr::null_mut();
+	pub static mut RELOID: Oid = std::mem::zeroed();
+	pub static mut RELATION: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut PLAN: *mut custom_plan = std::ptr::null_mut();
 
 	rte = planner_rt_fetch(rel->relid, root);
 	Assert(rte->rtekind == RTE_RELATION);
@@ -474,7 +474,7 @@ o_plan_custom_path(root: &mut PlannerInfo, rel: &mut RelOptInfo,
 	{
 		bh_scan: &mut BitmapHeapScan = (BitmapHeapScan *) custom_plan;
 		primary: &mut OIndexDescr = GET_PRIMARY(descr);
-		Oid			typeoid;
+		pub static mut TYPEOID: Oid = std::mem::zeroed();
 
 		custom_scan->scan.plan.targetlist =
 			copyObject(bh_scan->scan.plan.targetlist);
@@ -511,7 +511,7 @@ o_create_custom_scan_state(cscan: &mut CustomScan)
 	node: &mut Node = palloc0fast(sizeof(OCustomScanState));
 	ocstate: &mut OCustomScanState = (OCustomScanState *) node;
 	OPlanTag	plan_tag = intVal(linitial(cscan->custom_private));
-	custom_plan: &mut Plan;
+	pub static mut PLAN: *mut custom_plan = std::ptr::null_mut();
 
 	node->type = T_CustomScanState;
 	ocstate->css.methods = &o_scan_exec_methods;
@@ -577,7 +577,7 @@ o_create_custom_scan_state(cscan: &mut CustomScan)
 	}
 	ocstate->o_plan_state->type = plan_tag;
 
-	return node;
+	pub static mut NODE: return = std::mem::zeroed();
 }
 
 //
@@ -601,10 +601,10 @@ o_begin_custom_scan(node: &mut CustomScanState, estate: &mut EState, int eflags)
 	{
 		ix_plan_state: &mut OIndexPlanState =
 			(OIndexPlanState *) ocstate->o_plan_state;
-		scan_state: &mut OScanState = &ix_plan_state->ostate;
-		OIndexNumber ix_num = ix_plan_state->ostate.ixNum;
-		ix_descr: &mut OIndexDescr = descr->indices[ix_num];
-		Relation	index;
+		pub static mut O_SCAN_STATE: *mut scan_state = &ix_plan_state->ostate;
+		pub static mut IX_NUM: OIndexNumber = ix_plan_state->ostate.ixNum;
+		pub static mut O_INDEX_DESCR: *mut ix_descr = descr->indices[ix_num];
+		pub static mut INDEX: Relation = std::mem::zeroed();
 
 		O_LOAD_SNAPSHOT(&scan_state->oSnapshot, estate->es_snapshot);
 		ix_plan_state->ostate.cxt = AllocSetContextCreate(estate->es_query_cxt,
@@ -650,7 +650,7 @@ o_begin_custom_scan(node: &mut CustomScanState, estate: &mut EState, int eflags)
 
 		if (is_explain_analyze(ocstate->o_plan_state->plan_state))
 		{
-			int			i;
+			pub static mut I: std::os::raw::c_int = 0;
 
 			bitmap_state->eaCounters = palloc0(sizeof(OEACallsCounters) *
 											   descr->nIndices);
@@ -674,8 +674,8 @@ static TupleTableSlot *
 o_exec_custom_scan(node: &mut CustomScanState)
 {
 	ocstate: &mut OCustomScanState = (OCustomScanState *) node;
-	epqstate: &mut EPQState;
-	slot: &mut TupleTableSlot = NULL;
+	pub static mut EPQ_STATE: *mut epqstate = std::ptr::null_mut();
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
 
 	if (is_explain_analyze(ocstate->o_plan_state->plan_state))
 		ea_counters = &ocstate->eaCounters;
@@ -726,16 +726,16 @@ o_exec_custom_scan(node: &mut CustomScanState)
 
 				// Return empty slot if we haven't got a test tuple
 				if (TupIsNull(slot))
-					return NULL;
+					pub static mut NULL: return = std::mem::zeroed();
 
 				if (!o_exec_qual(node->ss.ps.ps_ExprContext,
 								 node->ss.ps.qual, slot))
-					return NULL;
+					pub static mut NULL: return = std::mem::zeroed();
 
 				slot = o_exec_project(node->ss.ps.ps_ProjInfo,
 									  node->ss.ps.ps_ExprContext, slot, NULL);
 
-				return slot;
+				pub static mut SLOT: return = std::mem::zeroed();
 			}
 		}
 
@@ -771,10 +771,10 @@ o_exec_custom_scan(node: &mut CustomScanState)
 				epqstate->relsubs_done[scanrelid - 1] = true;
 
 				if (TupIsNull(slot))
-					return NULL;
+					pub static mut NULL: return = std::mem::zeroed();
 				if (!o_exec_qual(node->ss.ps.ps_ExprContext,
 								 node->ss.ps.qual, slot))
-					return NULL;
+					pub static mut NULL: return = std::mem::zeroed();
 				return o_exec_project(node->ss.ps.ps_ProjInfo,
 									  node->ss.ps.ps_ExprContext, slot, NULL);
 			}
@@ -782,8 +782,8 @@ o_exec_custom_scan(node: &mut CustomScanState)
 
 		if (bitmap_state->scan == NULL)
 		{
-			bitmapqualplanstate: &mut PlanState = bitmap_state->bitmapqualplanstate;
-			Relation	rel = node->ss.ss_currentRelation;
+			pub static mut PLAN_STATE: *mut bitmapqualplanstate = bitmap_state->bitmapqualplanstate;
+			pub static mut REL: Relation = node->ss.ss_currentRelation;
 
 			bitmap_state->scan = o_make_bitmap_scan(bitmap_state,
 													&node->ss,
@@ -800,7 +800,7 @@ o_exec_custom_scan(node: &mut CustomScanState)
 	slot = o_exec_project(node->ss.ps.ps_ProjInfo, node->ss.ps.ps_ExprContext,
 						  slot, NULL);
 
-	return slot;
+	pub static mut SLOT: return = std::mem::zeroed();
 }
 
 //
@@ -818,7 +818,7 @@ o_rescan_custom_scan(node: &mut CustomScanState)
 
 		if (ix_plan_state->iss_NumRuntimeKeys != 0)
 		{
-			econtext: &mut ExprContext = ix_plan_state->iss_RuntimeContext;
+			pub static mut EXPR_CONTEXT: *mut econtext = ix_plan_state->iss_RuntimeContext;
 
 			ResetExprContext(econtext);
 			ExecIndexEvalRuntimeKeys(econtext,
@@ -849,7 +849,7 @@ o_rescan_custom_scan(node: &mut CustomScanState)
 	}
 	else if (ocstate->o_plan_state->type == O_BitmapHeapPlan)
 	{
-		bitmap_state: &mut OBitmapHeapPlanState;
+		pub static mut O_BITMAP_HEAP_PLAN_STATE: *mut bitmap_state = std::ptr::null_mut();
 
 		bitmap_state = (OBitmapHeapPlanState *) ocstate->o_plan_state;
 
@@ -874,7 +874,7 @@ o_end_custom_scan(node: &mut CustomScanState)
 
 	if (ocstate->o_plan_state->type == O_IndexPlan)
 	{
-		ix_plan_state: &mut OIndexPlanState;
+		pub static mut O_INDEX_PLAN_STATE: *mut ix_plan_state = std::ptr::null_mut();
 
 		ix_plan_state = (OIndexPlanState *) ocstate->o_plan_state;
 
@@ -907,26 +907,26 @@ o_end_custom_scan(node: &mut CustomScanState)
 
 typedef struct OExplainContext
 {
-	ancestors: &mut List;
-	es: &mut ExplainState;
-	ocstate: &mut OCustomScanState;
-	descr: &mut OTableDescr;
+	pub static mut LIST: *mut ancestors = std::ptr::null_mut();
+	pub static mut EXPLAIN_STATE: *mut es = std::ptr::null_mut();
+	pub static mut O_CUSTOM_SCAN_STATE: *mut ocstate = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
 } OExplainContext;
 
 static bool
 o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 {
-	bool		result;
+	pub static mut RESULT: bool = false;
 
 	if (planstate == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	switch (planstate->type)
 	{
 		case T_BitmapOrState:
 			{
 				node: &mut BitmapOrState = (BitmapOrState *) planstate;
-				int			saved_nplans = node->nplans;
+				pub static mut SAVED_NPLANS: std::os::raw::c_int = node->nplans;
 
 				node->nplans = 0;
 				ExplainNode(planstate, ec->ancestors, "Outer", NULL, ec->es);
@@ -937,7 +937,7 @@ o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 		case T_BitmapAndState:
 			{
 				node: &mut BitmapAndState = (BitmapAndState *) planstate;
-				int			saved_nplans = node->nplans;
+				pub static mut SAVED_NPLANS: std::os::raw::c_int = node->nplans;
 
 				node->nplans = 0;
 				ExplainNode(planstate, ec->ancestors, "Outer", NULL, ec->es);
@@ -947,7 +947,7 @@ o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 			}
 		case T_BitmapIndexScanState:
 			{
-				ocstate: &mut OCustomScanState = ec->ocstate;
+				pub static mut O_CUSTOM_SCAN_STATE: *mut ocstate = ec->ocstate;
 
 				ExplainNode(planstate, ec->ancestors, "Outer", NULL, ec->es);
 				switch (ec->es->format)
@@ -957,7 +957,7 @@ o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 						break;
 					case EXPLAIN_FORMAT_JSON:
 						{
-							int			i;
+							pub static mut I: std::os::raw::c_int = 0;
 
 							ec->es->str->len--;
 							for (i = ec->es->str->len; i > 0; i--)
@@ -976,7 +976,7 @@ o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 						break;
 					case EXPLAIN_FORMAT_XML:
 						{
-							int			i;
+							pub static mut I: std::os::raw::c_int = 0;
 
 							ec->es->str->len--;
 							for (i = ec->es->str->len; i > 0; i--)
@@ -994,18 +994,18 @@ o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 				}
 				if (is_explain_analyze(ocstate->o_plan_state->plan_state))
 				{
-					OIndexNumber ix_num;
-					bm_scan: &mut BitmapIndexScan;
-					o_bm_state: &mut OBitmapHeapPlanState;
-					descr: &mut OTableDescr = ec->descr;
-					eaCounters: &mut OEACallsCounters;
+					pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+					pub static mut BITMAP_INDEX_SCAN: *mut bm_scan = std::ptr::null_mut();
+					pub static mut O_BITMAP_HEAP_PLAN_STATE: *mut o_bm_state = std::ptr::null_mut();
+					pub static mut O_TABLE_DESCR: *mut descr = ec->descr;
+					pub static mut OEA_CALLS_COUNTERS: *mut eaCounters = std::ptr::null_mut();
 
 					bm_scan = ((BitmapIndexScan *) planstate->plan);
 					o_bm_state = (OBitmapHeapPlanState *) ocstate->o_plan_state;
 					eaCounters = o_bm_state->eaCounters;
 					for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 					{
-						indexDescr: &mut OIndexDescr = descr->indices[ix_num];
+						pub static mut O_INDEX_DESCR: *mut indexDescr = descr->indices[ix_num];
 
 						if (indexDescr->oids.reloid == bm_scan->indexid)
 							break;
@@ -1059,7 +1059,7 @@ o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 		default:
 			break;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1069,9 +1069,9 @@ o_explain_node(planstate: &mut PlanState, ec: &mut OExplainContext)
 o_explain_custom_scan(node: &mut CustomScanState, ancestors: &mut List, es: &mut ExplainState)
 {
 	ocstate: &mut OCustomScanState = (OCustomScanState *) node;
-	descr: &mut OTableDescr;
-	indexName: &mut char;
-	StringInfoData title;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut CHAR: *mut indexName = std::ptr::null_mut();
+	pub static mut TITLE: StringInfoData = std::mem::zeroed();
 
 	descr = relation_get_descr(node->ss.ss_currentRelation);
 
@@ -1081,7 +1081,7 @@ o_explain_custom_scan(node: &mut CustomScanState, ancestors: &mut List, es: &mut
 			(OIndexPlanState *) ocstate->o_plan_state;
 		bool		backward = (ix_plan_state->ostate.scanDir ==
 								BackwardScanDirection);
-		direction: &mut char = !backward ? "Forward" : "Backward";
+		pub static mut CHAR: *mut direction = !backward ? "Forward" : "Backward";
 
 		initStringInfo(&title);
 		indexName = descr->indices[ix_plan_state->ostate.ixNum]->name.data;
@@ -1148,7 +1148,7 @@ o_explain_custom_scan(node: &mut CustomScanState, ancestors: &mut List, es: &mut
 
 		if (bitmap_state->bitmapqualplanstate)
 		{
-			OExplainContext ec;
+			pub static mut EC: OExplainContext = std::mem::zeroed();
 
 			ExplainOpenGroup("Plans", "Plans", false, es);
 			ec.ancestors = list_copy(ancestors);

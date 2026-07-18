@@ -51,10 +51,10 @@ fn o_invalidate_comparator_cache(Oid opfamily, Oid lefttype,
 
 typedef struct
 {
-	OnCommitUndoStackItem header;
-	Oid			opfamily;
-	Oid			lefttype;
-	Oid			righttype;
+	pub static mut HEADER: OnCommitUndoStackItem = std::mem::zeroed();
+	pub static mut OPFAMILY: Oid = std::mem::zeroed();
+	pub static mut LEFTTYPE: Oid = std::mem::zeroed();
+	pub static mut RIGHTTYPE: Oid = std::mem::zeroed();
 } InvalidateComparatorUndoStackItem;
 
 static get_index_descr: &mut OIndexDescr(ORelOids ixOids, OIndexType ixType,
@@ -83,9 +83,9 @@ PG_FUNCTION_INFO_V1(orioledb_get_evicted_trees);
 
 typedef struct DeferredDescrInvalidation
 {
-	Oid			datoid;
-	Oid			reloid;
-	Oid			relfilenode;
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RELOID: Oid = std::mem::zeroed();
+	pub static mut RELFILENODE: Oid = std::mem::zeroed();
 } DeferredDescrInvalidation;
 
 //
@@ -97,51 +97,51 @@ typedef struct DeferredDescrInvalidation
 // invalidations inside a comparator is unsafe (it can read catalogs while
 // the caller holds page locks), so we save them and replay later.
 //
-static bool saving_inval_messages = false;
-static saved_descr_invals: &mut List = NIL;
+static mut SAVING_INVAL_MESSAGES: bool = false;
+static mut LIST: *mut saved_descr_invals = NIL;
 
 struct OComparatorKey
 {
-	Oid			opfamily;
-	Oid			lefttype;
-	Oid			righttype;
-	Oid			exacttype;
-	Oid			collation;
+	pub static mut OPFAMILY: Oid = std::mem::zeroed();
+	pub static mut LEFTTYPE: Oid = std::mem::zeroed();
+	pub static mut RIGHTTYPE: Oid = std::mem::zeroed();
+	pub static mut EXACTTYPE: Oid = std::mem::zeroed();
+	pub static mut COLLATION: Oid = std::mem::zeroed();
 };
 
 struct OComparator
 {
-	OComparatorKey key;
-	bool		haveSortSupport;
+	pub static mut KEY: OComparatorKey = std::mem::zeroed();
+	pub static mut HAVE_SORT_SUPPORT: bool = false;
 
 	// Filled when haveSortSupport == false
-	FmgrInfo	finfo;
+	pub static mut FINFO: FmgrInfo = std::mem::zeroed();
 
 	// Filled when haveSortSupport == true
-	MemoryContext ssup_cxt;
+	pub static mut SSUP_CXT: MemoryContext = std::mem::zeroed();
 		   *ssup_extra;
 	int			(*ssup_comparator) (Datum x, Datum y, SortSupport ssup);
 };
 
-static oTableDescrHash: &mut HTAB;
-static oIndexDescrHash: &mut HTAB;
-static comparatorCache: &mut HTAB;
-static exclusionFnCache: &mut HTAB;
-static hashFnCache: &mut HTAB;
+static mut HTAB: *mut oTableDescrHash = std::ptr::null_mut();
+static mut HTAB: *mut oIndexDescrHash = std::ptr::null_mut();
+static mut HTAB: *mut comparatorCache = std::ptr::null_mut();
+static mut HTAB: *mut exclusionFnCache = std::ptr::null_mut();
+static mut HTAB: *mut hashFnCache = std::ptr::null_mut();
 
 //
 // Backend-local hash of SharedRootInfo for trees backed by LocalPagePool
 // (temp tables).  Their pages carry BLKNO_LOCAL_BIT and are meaningless to
 // other backends, so they must not reach SYS_TREES_SHARED_ROOT_INFO.
 //
-static localSharedRootInfoHash: &mut HTAB = NULL;
+static mut HTAB: *mut localSharedRootInfoHash = std::ptr::null_mut();
 static OComparatorKey lastkey = {0};
-static lastcmp: &mut OComparator = NULL;
-static MemoryContext descrCxt = NULL;
-static Oid	last_exclusion_op = InvalidOid;
-static last_exclusion_fn: &mut OExclusionFn = NULL;
+static mut O_COMPARATOR: *mut lastcmp = std::ptr::null_mut();
+static mut DESCR_CXT: MemoryContext = std::ptr::null_mut();
+static mut LAST_EXCLUSION_OP: Oid = InvalidOid;
+static mut O_EXCLUSION_FN: *mut last_exclusion_fn = std::ptr::null_mut();
 static OHashFnKey last_hash_fn_key = {0};
-static last_hash_fn: &mut OHashFn = NULL;
+static mut O_HASH_FN: *mut last_hash_fn = std::ptr::null_mut();
 OHashFn		o_default_hash_fn = {.key = {.hash_fn_oid = O_DEFAULT_HASH_FN_OID}};
 
 fn o_find_toastable_attrs(tableDescr: &mut OTableDescr);
@@ -162,12 +162,12 @@ OTableFetchContext default_table_fetch_context = {.snapshot = &o_non_deleted_sna
 static SharedRootInfo *
 create_shared_root_info(pool: &mut PagePool, key: &mut SharedRootInfoKey)
 {
-	sharedRootInfo: &mut SharedRootInfo;
+	pub static mut SHARED_ROOT_INFO: *mut sharedRootInfo = std::ptr::null_mut();
 
 	sharedRootInfo = palloc0(sizeof(SharedRootInfo));
 	sharedRootInfo->key = *key;
 	init_shared_root_info(pool, sharedRootInfo);
-	return sharedRootInfo;
+	pub static mut SHARED_ROOT_INFO: return = std::mem::zeroed();
 }
 
 static HTAB *
@@ -175,7 +175,7 @@ get_local_shared_root_info_hash()
 {
 	if (localSharedRootInfoHash == NULL)
 	{
-		HASHCTL		ctl;
+		pub static mut CTL: HASHCTL = std::mem::zeroed();
 
 		MemSet(&ctl, 0, sizeof(ctl));
 		ctl.keysize = sizeof(SharedRootInfoKey);
@@ -185,35 +185,35 @@ get_local_shared_root_info_hash()
 											  8, &ctl,
 											  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 	}
-	return localSharedRootInfoHash;
+	pub static mut LOCAL_SHARED_ROOT_INFO_HASH: return = std::mem::zeroed();
 }
 
 static SharedRootInfo *
 find_local_shared_root_info(key: &mut SharedRootInfoKey)
 {
-	entry: &mut SharedRootInfo;
-	copy: &mut SharedRootInfo;
-	bool		found;
+	pub static mut SHARED_ROOT_INFO: *mut entry = std::ptr::null_mut();
+	pub static mut SHARED_ROOT_INFO: *mut copy = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	if (localSharedRootInfoHash == NULL)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	entry = (SharedRootInfo *) hash_search(localSharedRootInfoHash, key,
 										   HASH_FIND, &found);
 	if (!found)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	copy = (SharedRootInfo *) palloc(sizeof(SharedRootInfo));
 	memcpy(copy, entry, sizeof(SharedRootInfo));
-	return copy;
+	pub static mut COPY: return = std::mem::zeroed();
 }
 
 fn
 insert_local_shared_root_info(info: &mut SharedRootInfo)
 {
 	hash: &mut HTAB = get_local_shared_root_info_hash();
-	entry: &mut SharedRootInfo;
-	bool		found;
+	pub static mut SHARED_ROOT_INFO: *mut entry = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	entry = (SharedRootInfo *) hash_search(hash, &info->key, HASH_ENTER, &found);
 	Assert(!found);
@@ -223,21 +223,21 @@ insert_local_shared_root_info(info: &mut SharedRootInfo)
 static bool
 drop_local_shared_root_info(key: &mut SharedRootInfoKey)
 {
-	bool		found = false;
+	pub static mut FOUND: bool = false;
 
 	if (localSharedRootInfoHash == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	() hash_search(localSharedRootInfoHash, key, HASH_REMOVE, &found);
-	return found;
+	pub static mut FOUND: return = std::mem::zeroed();
 }
 
 EvictedTreeData *
 read_evicted_data(Oid datoid, Oid relnode, bool delete)
 {
-	SharedRootInfoKey key;
-	OTuple		keyTuple;
-	OTuple		result;
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	//
 // Don't do lookup for system trees.  This is essential for initialization
@@ -245,7 +245,7 @@ read_evicted_data(Oid datoid, Oid relnode, bool delete)
 // trees.
 //
 	if (datoid == SYS_TREES_DATOID)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	key.datoid = datoid;
 	key.relnode = relnode;
@@ -257,11 +257,11 @@ read_evicted_data(Oid datoid, Oid relnode, bool delete)
 									   &o_in_progress_snapshot, NULL,
 									   CurrentMemoryContext, NULL);
 	if (O_TUPLE_IS_NULL(result))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (delete)
 	{
-		bool		success PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		success = std::mem::zeroed();
 
 		success = o_btree_autonomous_delete(get_sys_tree(SYS_TREES_EVICTED_DATA),
 											keyTuple, BTreeKeyNonLeafKey, NULL);
@@ -274,8 +274,8 @@ read_evicted_data(Oid datoid, Oid relnode, bool delete)
 
 insert_evicted_data(data: &mut EvictedTreeData)
 {
-	OTuple		tuple;
-	bool		success PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		success = std::mem::zeroed();
 
 	tuple.formatFlags = 0;
 	tuple.data = (Pointer) data;
@@ -289,11 +289,11 @@ Datum
 orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 {
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
-	it: &mut BTreeIterator;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -315,11 +315,11 @@ orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 
 	while (true)
 	{
-		OTuple		tuple;
-		CommitSeqNo tupleCsn;
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
+		pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
 		Datum		values[4];
 		bool		nulls[4] = {false};
-		data: &mut EvictedTreeData;
+		pub static mut EVICTED_TREE_DATA: *mut data = std::ptr::null_mut();
 
 		tuple = o_btree_iterator_fetch(it, &tupleCsn, NULL,
 									   BTreeKeyNone, false, NULL);
@@ -356,23 +356,23 @@ orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 static bool
 o_btree_load_shmem_internal(desc: &mut BTreeDescr, bool checkpoint)
 {
-	SharedRootInfoKey key;
-	sharedRootInfo: &mut SharedRootInfo = NULL;
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut SHARED_ROOT_INFO: *mut sharedRootInfo = std::ptr::null_mut();
 	bool		was_evicted,
 				is_compressed,
 				init_extents,
-				inserted PG_USED_FOR_ASSERTS_ONLY;
-	int			lockNo;
-	bool		hasLock = false;
-	bool		is_temp;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: inserted = std::mem::zeroed();
+	pub static mut LOCK_NO: std::os::raw::c_int = 0;
+	pub static mut HAS_LOCK: bool = false;
+	pub static mut IS_TEMP: bool = false;
 
 	Assert(desc != NULL);
 	if (!ORelOidsIsValid(desc->oids) || IS_SYS_TREE_OIDS(desc->oids))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	// easy case: shared memory is initialized
 	if (ORootPageIsValid(desc) && OMetaPageIsValid(desc))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	is_temp = (desc->storageType == BTreeStorageTemporary);
 
@@ -395,7 +395,7 @@ o_btree_load_shmem_internal(desc: &mut BTreeDescr, bool checkpoint)
 // checkpointer due to concurrent deletion.  Just give up then.
 //
 		if (checkpoint && tree_is_under_checkpoint(desc))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		// ---
 // Reserve 8 pages:
@@ -430,12 +430,12 @@ o_btree_load_shmem_internal(desc: &mut BTreeDescr, bool checkpoint)
 			ppool_release_reserved(desc->ppool, PPOOL_RESERVE_META);
 		}
 		pfree(sharedRootInfo);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (sharedRootInfo == NULL)
 	{
-		OTuple		sharedRootInfoTuple;
+		pub static mut SHARED_ROOT_INFO_TUPLE: OTuple = std::mem::zeroed();
 
 		// tries to create SharedRootInfo
 		sharedRootInfo = create_shared_root_info(desc->ppool, &key);
@@ -526,13 +526,13 @@ o_btree_load_shmem_internal(desc: &mut BTreeDescr, bool checkpoint)
 	Assert(!sharedRootInfo->placeholder);
 	pfree(sharedRootInfo);
 	ppool_release_reserved(desc->ppool, PPOOL_RESERVE_META);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 
 o_btree_load_shmem(desc: &mut BTreeDescr)
 {
-	bool		result PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		result = std::mem::zeroed();
 
 	result = o_btree_load_shmem_internal(desc, false);
 	Assert(result == true);
@@ -557,18 +557,18 @@ o_btree_try_use_shmem(desc: &mut BTreeDescr)
 
 	if (!ORootPageIsValid(desc) || !OMetaPageIsValid(desc))
 	{
-		SharedRootInfoKey key;
-		shared: &mut SharedRootInfo = NULL;
+		pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+		pub static mut SHARED_ROOT_INFO: *mut shared = std::ptr::null_mut();
 
 		key.datoid = desc->oids.datoid;
 		key.relnode = desc->oids.relnode;
 
 		shared = o_find_shared_root_info(&key);
 		if (shared == NULL)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		if (shared->placeholder)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		Assert(OInMemoryBlknoIsValid(shared->rootInfo.rootPageBlkno));
 		Assert(OInMemoryBlknoIsValid(shared->rootInfo.metaPageBlkno));
@@ -585,7 +585,7 @@ o_btree_try_use_shmem(desc: &mut BTreeDescr)
 		}
 		pfree(shared);
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -596,13 +596,13 @@ o_tree_init_free_extents(desc: &mut BTreeDescr)
 {
 	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	uint64		num_free_blocks = pg_atomic_read_u64(&metaPageBlkno->numFreeBlocks);
-	File		file;
-	filename: &mut char;
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 	Assert(OCompressIsValid(desc->compress));
 
 	if (num_free_blocks == 0)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	filename = get_seq_buf_filename(&desc->freeBuf.tag);
 	file = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
@@ -610,7 +610,7 @@ o_tree_init_free_extents(desc: &mut BTreeDescr)
 
 	if (file >= 0)
 	{
-		extent: &mut FileExtent;
+		pub static mut FILE_EXTENT: *mut extent = std::ptr::null_mut();
 		off_t		offset = sizeof(CheckpointFileHeader),
 					bytes_read,
 					i;
@@ -636,10 +636,10 @@ o_tree_init_free_extents(desc: &mut BTreeDescr)
 		} while (num_free_blocks > 0 && bytes_read == ORIOLEDB_BLCKSZ);
 		FileClose(file);
 
-		return num_free_blocks == 0;
+		pub static mut NUM_FREE_BLOCKS: return = = 0;
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 fn
@@ -691,7 +691,7 @@ index_descr_free(tree: &mut OIndexDescr)
 fn
 index_descr_delete_from_hash(tree: &mut OIndexDescr)
 {
-	bool		found;
+	pub static mut FOUND: bool = false;
 
 	index_descr_free(tree);
 
@@ -708,7 +708,7 @@ index_descr_delete_from_hash(tree: &mut OIndexDescr)
 fn
 table_descr_free(descr: &mut OTableDescr)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	elog(DEBUG3, "index descr hash delete for (%u, %u, %u)",
 		 descr->oids.datoid,
@@ -745,7 +745,7 @@ table_descr_free(descr: &mut OTableDescr)
 
 o_free_tmp_table_descr(descr: &mut OTableDescr)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (descr->toast)
 	{
@@ -774,7 +774,7 @@ o_free_tmp_table_descr(descr: &mut OTableDescr)
 fn
 table_descr_delete_from_hash(descr: &mut OTableDescr)
 {
-	bool		found;
+	pub static mut FOUND: bool = false;
 
 	table_descr_free(descr);
 	() hash_search(oTableDescrHash, &descr->oids,
@@ -785,8 +785,8 @@ table_descr_delete_from_hash(descr: &mut OTableDescr)
 fn
 fill_table_descr_common_fields(descr: &mut OTableDescr, o_table: &mut OTable)
 {
-	MemoryContext old_context;
-	int			refcnt;
+	pub static mut OLD_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut REFCNT: std::os::raw::c_int = 0;
 
 	refcnt = descr->refcnt;
 	memset(descr, 0, sizeof(OTableDescr));
@@ -807,9 +807,9 @@ fill_table_descr_common_fields(descr: &mut OTableDescr, o_table: &mut OTable)
 static bool
 fill_table_descr(descr: &mut OTableDescr, o_table: &mut OTable, snapshot: &mut OSnapshot)
 {
-	MemoryContext old_context;
-	bool		was_saving;
-	bool		success;
+	pub static mut OLD_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut WAS_SAVING: bool = false;
+	pub static mut SUCCESS: bool = false;
 
 	//
 // Defer invalidation messages while filling the table descriptor. Index
@@ -828,16 +828,16 @@ fill_table_descr(descr: &mut OTableDescr, o_table: &mut OTable, snapshot: &mut O
 	o_table_free(o_table);
 
 	o_stop_saving_inval_messages(was_saving);
-	return success;
+	pub static mut SUCCESS: return = std::mem::zeroed();
 }
 
 
 o_fill_tmp_table_descr(descr: &mut OTableDescr, o_table: &mut OTable)
 {
-	MemoryContext old_context;
-	OIndexNumber cur_ix;
-	index: &mut OIndex;
-	indexDescr: &mut OIndexDescr;
+	pub static mut OLD_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut CUR_IX: OIndexNumber = std::mem::zeroed();
+	pub static mut O_INDEX: *mut index = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
 
 	descr->refcnt = 0;
 	fill_table_descr_common_fields(descr, o_table);
@@ -894,10 +894,10 @@ o_fill_tmp_table_descr(descr: &mut OTableDescr, o_table: &mut OTable)
 static OTableDescr *
 create_table_descr(ORelOids oids, OTableFetchContext ctx)
 {
-	descr: &mut OTableDescr;
-	bool		found;
-	o_table: &mut OTable;
-	bool		old_enable_stopevents;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut OLD_ENABLE_STOPEVENTS: bool = false;
 
 	old_enable_stopevents = enable_stopevents;
 	enable_stopevents = false;
@@ -907,7 +907,7 @@ create_table_descr(ORelOids oids, OTableFetchContext ctx)
 	if (o_table == NULL)
 	{
 		enable_stopevents = old_enable_stopevents;
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	descr = hash_search(oTableDescrHash,
@@ -925,11 +925,11 @@ create_table_descr(ORelOids oids, OTableFetchContext ctx)
 		() hash_search(oTableDescrHash, &oids,
 						   HASH_REMOVE, &found);
 		enable_stopevents = old_enable_stopevents;
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	enable_stopevents = old_enable_stopevents;
-	return descr;
+	pub static mut DESCR: return = std::mem::zeroed();
 }
 
 //
@@ -938,7 +938,7 @@ create_table_descr(ORelOids oids, OTableFetchContext ctx)
 OIndexNumber
 find_tree_in_descr(descr: &mut OTableDescr, ORelOids oids)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
@@ -946,16 +946,16 @@ find_tree_in_descr(descr: &mut OTableDescr, ORelOids oids)
 			descr->indices[i]->oids.reloid == oids.reloid &&
 			descr->indices[i]->oids.relnode == oids.relnode)
 		{
-			return i;
+			pub static mut I: return = std::mem::zeroed();
 		}
 	}
 
 	if (descr->toast->oids.datoid == oids.datoid &&
 		descr->toast->oids.reloid == oids.reloid &&
 		descr->toast->oids.relnode == oids.relnode)
-		return TOASTIndexNumber;
+		pub static mut TOAST_INDEX_NUMBER: return = std::mem::zeroed();
 
-	return InvalidIndexNumber;
+	pub static mut INVALID_INDEX_NUMBER: return = std::mem::zeroed();
 }
 
 //
@@ -999,9 +999,9 @@ o_fetch_table_descr(ORelOids oids)
 OTableDescr *
 o_fetch_table_descr_extended(ORelOids oids, OTableFetchContext ctx)
 {
-	table_descr: &mut OTableDescr = NULL;
-	bool		found = false;
-	int			refcnt = 0;
+	pub static mut O_TABLE_DESCR: *mut table_descr = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
+	pub static mut REFCNT: std::os::raw::c_int = 0;
 
 	table_descr = hash_search(oTableDescrHash, &oids, HASH_FIND, &found);
 	Assert((found && table_descr) || !found);
@@ -1019,7 +1019,7 @@ o_fetch_table_descr_extended(ORelOids oids, OTableFetchContext ctx)
 		table_descr->refcnt = refcnt;	// restore reference count after
 // possible reload
 
-	return table_descr;
+	pub static mut TABLE_DESCR: return = std::mem::zeroed();
 }
 
 //
@@ -1069,7 +1069,7 @@ OIndexDescr *
 o_fetch_index_descr_extended(ORelOids oids, OIndexType type, bool lock,
 							 OTableFetchContext ctx, OTableFetchContext base_ctx)
 {
-	index_descr: &mut OIndexDescr = NULL;
+	pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
 
 	if (lock)
 		o_tables_rel_lock_extended(&oids, AccessShareLock, true);
@@ -1081,14 +1081,14 @@ o_fetch_index_descr_extended(ORelOids oids, OIndexType type, bool lock,
 		o_tables_rel_unlock_extended(&oids, AccessShareLock, true);
 	}
 
-	return index_descr;
+	pub static mut INDEX_DESCR: return = std::mem::zeroed();
 }
 
 fn
 init_shared_root_info(pool: &mut PagePool, sharedRootInfo: &mut SharedRootInfo)
 {
-	meta_page: &mut BTreeMetaPage;
-	rootInfo: &mut BTreeRootInfo = &sharedRootInfo->rootInfo;
+	pub static mut B_TREE_META_PAGE: *mut meta_page = std::ptr::null_mut();
+	pub static mut B_TREE_ROOT_INFO: *mut rootInfo = &sharedRootInfo->rootInfo;
 	int			blkno,
 				bufnum;
 
@@ -1119,10 +1119,10 @@ init_shared_root_info(pool: &mut PagePool, sharedRootInfo: &mut SharedRootInfo)
 bool
 o_start_saving_inval_messages()
 {
-	bool		was_saving = saving_inval_messages;
+	pub static mut WAS_SAVING: bool = saving_inval_messages;
 
 	saving_inval_messages = true;
-	return was_saving;
+	pub static mut WAS_SAVING: return = std::mem::zeroed();
 }
 
 //
@@ -1158,14 +1158,14 @@ o_replay_saved_inval_messages()
 
 	while (saved_descr_invals != NIL)
 	{
-		invals: &mut List = saved_descr_invals;
-		lc: &mut ListCell;
+		pub static mut LIST: *mut invals = saved_descr_invals;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 		saved_descr_invals = NIL;
 
 		foreach(lc, invals)
 		{
-			pending_inval: &mut DeferredDescrInvalidation;
+			pub static mut DEFERRED_DESCR_INVALIDATION: *mut pending_inval = std::ptr::null_mut();
 
 			pending_inval = (DeferredDescrInvalidation *) lfirst(lc);
 			o_invalidate_descrs(pending_inval->datoid,
@@ -1182,9 +1182,9 @@ o_replay_saved_inval_messages()
 fn
 o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode)
 {
-	HASH_SEQ_STATUS scan_status;
-	tableDescr: &mut OTableDescr;
-	indexDescr: &mut OIndexDescr;
+	pub static mut SCAN_STATUS: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut tableDescr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
 
 	Assert(!have_locked_pages());
 
@@ -1194,7 +1194,7 @@ o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode)
 		hash_seq_init(&scan_status, oTableDescrHash);
 		while ((tableDescr = (OTableDescr *) hash_seq_search(&scan_status)) != NULL)
 		{
-			bool		delete = tableDescr->refcnt == 0;
+			pub static mut DELETE: bool = tableDescr->refcnt == 0;
 
 			Assert(!tableDescr->noInvalidation);
 
@@ -1217,12 +1217,12 @@ o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode)
 	else
 	{
 		ORelOids	oids = {datoid, reloid, relfilenode};
-		bool		found;
+		pub static mut FOUND: bool = false;
 
 		tableDescr = hash_search(oTableDescrHash, &oids, HASH_FIND, &found);
 		if (found)
 		{
-			bool		delete = tableDescr->refcnt == 0;
+			pub static mut DELETE: bool = tableDescr->refcnt == 0;
 
 			Assert(!tableDescr->noInvalidation);
 
@@ -1247,9 +1247,9 @@ o_invalidate_descrs_internal(Oid datoid, Oid reloid, Oid relfilenode)
 
 o_invalidate_descrs(Oid datoid, Oid reloid, Oid relfilenode)
 {
-	deferred: &mut DeferredDescrInvalidation;
-	MemoryContext oldcontext;
-	bool		was_saving;
+	pub static mut DEFERRED_DESCR_INVALIDATION: *mut deferred = std::ptr::null_mut();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut WAS_SAVING: bool = false;
 
 	//
 // If we are inside o_call_comparator(), save the invalidation message for
@@ -1281,11 +1281,11 @@ o_find_shared_root_info(key: &mut SharedRootInfoKey)
 {
 	OTuple		key_tuple,
 				result_tuple;
-	local: &mut SharedRootInfo;
+	pub static mut SHARED_ROOT_INFO: *mut local = std::ptr::null_mut();
 
 	local = find_local_shared_root_info(key);
 	if (local != NULL)
-		return local;
+		pub static mut LOCAL: return = std::mem::zeroed();
 
 	key_tuple.data = (Pointer) key;
 	key_tuple.formatFlags = 0;
@@ -1301,9 +1301,9 @@ o_find_shared_root_info(key: &mut SharedRootInfoKey)
 
 o_insert_shared_root_placeholder(Oid datoid, Oid relnode)
 {
-	OTuple		sharedRootInfoTuple;
+	pub static mut SHARED_ROOT_INFO_TUPLE: OTuple = std::mem::zeroed();
 	SharedRootInfo sharedRootInfo = {0};
-	bool		inserted PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		inserted = std::mem::zeroed();
 
 	sharedRootInfoTuple.formatFlags = 0;
 	sharedRootInfoTuple.data = (Pointer) &sharedRootInfo;
@@ -1324,8 +1324,8 @@ o_insert_shared_root_placeholder(Oid datoid, Oid relnode)
 
 cleanup_btree(OIndexKey ix_key, bool files, bool fsync)
 {
-	SharedRootInfoKey key;
-	shared: &mut SharedRootInfo = NULL;
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut SHARED_ROOT_INFO: *mut shared = std::ptr::null_mut();
 
 	key.datoid = ix_key.oids.datoid;
 	key.relnode = ix_key.oids.relnode;
@@ -1334,7 +1334,7 @@ cleanup_btree(OIndexKey ix_key, bool files, bool fsync)
 
 	if (shared)
 	{
-		bool		drop_result PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		drop_result = std::mem::zeroed();
 
 		drop_result = o_drop_shared_root_info(key.datoid, key.relnode);
 		Assert(drop_result);
@@ -1351,14 +1351,14 @@ cleanup_btree(OIndexKey ix_key, bool files, bool fsync)
 bool
 o_drop_shared_root_info(Oid datoid, Oid relnode)
 {
-	SharedRootInfoKey key;
-	OTuple		key_tuple;
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
 
 	key.datoid = datoid;
 	key.relnode = relnode;
 
 	if (drop_local_shared_root_info(&key))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	key_tuple.data = (Pointer) &key;
 	key_tuple.formatFlags = 0;
@@ -1371,10 +1371,10 @@ static OIndexDescr *
 get_index_descr(ORelOids ixOids, OIndexType ixType,
 				bool miss_ok, OTableFetchContext ctx,  *o_table_source, OTableSource source)
 {
-	result: &mut OIndexDescr;
-	oIndex: &mut OIndex;
-	MemoryContext mcxt;
-	bool		found = false;
+	pub static mut O_INDEX_DESCR: *mut result = std::ptr::null_mut();
+	pub static mut O_INDEX: *mut oIndex = std::ptr::null_mut();
+	pub static mut MCXT: MemoryContext = std::mem::zeroed();
+	pub static mut FOUND: bool = false;
 
 	result = hash_search(oIndexDescrHash, &ixOids, HASH_ENTER, &found);
 	Assert((found && result) || !found);
@@ -1382,7 +1382,7 @@ get_index_descr(ORelOids ixOids, OIndexType ixType,
 	found = found && (ctx.version == O_TABLE_INVALID_VERSION || result->version == ctx.version);
 
 	if (found)
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 
 	oIndex = o_indices_get_extended(ixOids, ixType, ctx);
 	Assert(oIndex || miss_ok);
@@ -1390,7 +1390,7 @@ get_index_descr(ORelOids ixOids, OIndexType ixType,
 	{
 		() hash_search(oIndexDescrHash, &ixOids, HASH_REMOVE, &found);
 		Assert(found);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 	mcxt = MemoryContextSwitchTo(descrCxt);
 	o_index_fill_descr(result, oIndex, o_table_source, source);
@@ -1401,15 +1401,15 @@ get_index_descr(ORelOids ixOids, OIndexType ixType,
 						  oIndex->createOxid, result);
 	free_o_index(oIndex);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
 recreate_index_descr(descr: &mut OIndexDescr)
 {
-	oIndex: &mut OIndex;
-	int			refcnt;
-	MemoryContext mcxt;
+	pub static mut O_INDEX: *mut oIndex = std::ptr::null_mut();
+	pub static mut REFCNT: std::os::raw::c_int = 0;
+	pub static mut MCXT: MemoryContext = std::mem::zeroed();
 
 	oIndex = o_indices_get(descr->oids, descr->desc.type);
 	if (!oIndex)
@@ -1462,10 +1462,10 @@ o_table_descr_fill_indices(descr: &mut OTableDescr, table: &mut OTable, snapshot
 	descr->indices = (OIndexDescr **) palloc0(sizeof(OIndexDescr *) * descr->nIndices);
 	for (cur_ix = 0; cur_ix < descr->nIndices; cur_ix++)
 	{
-		ORelOids	ixOids;
-		OIndexType	ixType;
-		uint32		version;
-		OTableFetchContext ctx;
+		pub static mut IX_OIDS: ORelOids = std::mem::zeroed();
+		pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
+		pub static mut VERSION: uint32 = std::mem::zeroed();
+		pub static mut CTX: OTableFetchContext = std::mem::zeroed();
 
 		//
 // NOTE: version here not: &mut is* the Postgres relcache/catversion. It's
@@ -1504,7 +1504,7 @@ o_table_descr_fill_indices(descr: &mut OTableDescr, table: &mut OTable, snapshot
 		ctx = build_fetch_context(snapshot, version);
 		descr->indices[cur_ix] = get_index_descr(ixOids, ixType, true, ctx, table, oTableSourceTable);
 		if (descr->indices[cur_ix] == NULL)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		descr->indices[cur_ix]->refcnt++;
 	}
 
@@ -1518,7 +1518,7 @@ o_table_descr_fill_indices(descr: &mut OTableDescr, table: &mut OTable, snapshot
 
 		descr->bridge = get_index_descr(table->bridge_oids, oIndexBridge, true, ctx, table, oTableSourceTable);
 		if (descr->bridge == NULL)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		descr->bridge->refcnt++;
 	}
 	else
@@ -1534,37 +1534,37 @@ o_table_descr_fill_indices(descr: &mut OTableDescr, table: &mut OTable, snapshot
 
 		descr->toast = get_index_descr(table->toast_oids, oIndexToast, true, ctx, table, oTableSourceTable);
 		if (descr->toast == NULL)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		descr->toast->refcnt++;
 	}
 	else
 		descr->toast = NULL;
 
 	o_find_toastable_attrs(descr);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static bool
 is_pk_attnum(tableDescr: &mut OTableDescr, AttrNumber attnum)
 {
 	pk: &mut OIndexDescr = GET_PRIMARY(tableDescr);
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < pk->nFields; i++)
 	{
 		if (attnum == pk->tableAttnums[i])
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 fn
 o_find_toastable_attrs(tableDescr: &mut OTableDescr)
 {
 	pk: &mut OIndexDescr = GET_PRIMARY(tableDescr);
-	TupleDesc	tupdesc = pk->leafTupdesc;
-	toastable: &mut List = NIL;
-	lc: &mut ListCell;
+	pub static mut TUPDESC: TupleDesc = pk->leafTupdesc;
+	pub static mut LIST: *mut toastable = NIL;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 	int			i,
 				ctid_off = pk->primaryIsCtid ? 1 : 0;
 
@@ -1614,7 +1614,7 @@ o_find_toastable_attrs(tableDescr: &mut OTableDescr)
 oFillFieldOpClassAndComparator(field: &mut OIndexField, Oid datoid, Oid opclassoid,
 							   Oid exacttype, Oid exclusion_op, Oid hash_fn_oid)
 {
-	opclass: &mut OOpclass;
+	pub static mut O_OPCLASS: *mut opclass = std::ptr::null_mut();
 
 	Assert(OidIsValid(datoid));
 	Assert(OidIsValid(opclassoid));
@@ -1655,15 +1655,15 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 		.exacttype = lefttype == righttype ? lefttype : InvalidOid,
 		.collation = collation
 	};
-	result: &mut OComparator;
-	OComparator comparator;
-	Oid			procOid;
+	pub static mut O_COMPARATOR: *mut result = std::ptr::null_mut();
+	pub static mut COMPARATOR: OComparator = std::mem::zeroed();
+	pub static mut PROC_OID: Oid = std::mem::zeroed();
 
 	//
 // At first, try to find existing comparator in cache.
 //
 	if ((result = o_find_cached_comparator(&key)) != NULL)
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 
 	//
 // If comparator isn't cached, then look for comparator with sort support
@@ -1677,7 +1677,7 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 	comparator.key = key;
 	if (OidIsValid(procOid))
 	{
-		SortSupportData ssup;
+		pub static mut SSUP: SortSupportData = std::mem::zeroed();
 
 		memset(&ssup, 0, sizeof(ssup));
 		ssup.ssup_cxt = descrCxt;
@@ -1698,14 +1698,14 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 //
 	if (!comparator.haveSortSupport)
 	{
-		MemoryContext oldcontext;
+		pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 
 		procOid =
 			get_opfamily_proc(opfamily, lefttype, righttype, BTORDER_PROC);
 		if (!OidIsValid(procOid))
 		{
-			HeapTuple	tup;
-			Form_pg_opfamily opfamilyForm;
+			pub static mut TUP: HeapTuple = std::mem::zeroed();
+			pub static mut OPFAMILY_FORM: Form_pg_opfamily = std::mem::zeroed();
 
 			tup = SearchSysCache1(OPFAMILYOID, ObjectIdGetDatum(opfamily));
 			Assert(HeapTupleIsValid(tup));
@@ -1747,9 +1747,9 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 static OComparator *
 o_find_opclass_comparator(opclass: &mut OOpclass, Oid collation, Oid exacttype)
 {
-	OComparatorKey key;
-	result: &mut OComparator;
-	OComparator comparator;
+	pub static mut KEY: OComparatorKey = std::mem::zeroed();
+	pub static mut O_COMPARATOR: *mut result = std::ptr::null_mut();
+	pub static mut COMPARATOR: OComparator = std::mem::zeroed();
 
 	Assert(opclass != NULL);
 
@@ -1763,7 +1763,7 @@ o_find_opclass_comparator(opclass: &mut OOpclass, Oid collation, Oid exacttype)
 // At first, try to find existing comparator in cache.
 //
 	if ((result = o_find_cached_comparator(&key)) != NULL)
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 
 	memset(&comparator, 0, sizeof(comparator));
 	comparator.key = key;
@@ -1777,8 +1777,8 @@ o_find_opclass_comparator(opclass: &mut OOpclass, Oid collation, Oid exacttype)
 	if (MyDatabaseId == opclass->key.common.datoid &&
 		OidIsValid(opclass->ssupOid))
 	{
-		SortSupportData ssup;
-		FmgrInfo	finfo;
+		pub static mut SSUP: SortSupportData = std::mem::zeroed();
+		pub static mut FINFO: FmgrInfo = std::mem::zeroed();
 
 		memset(&finfo, 0, sizeof(FmgrInfo));
 		memset(&ssup, 0, sizeof(ssup));
@@ -1822,12 +1822,12 @@ o_find_opclass_comparator(opclass: &mut OOpclass, Oid collation, Oid exacttype)
 static inline OComparator *
 o_find_cached_comparator(key: &mut OComparatorKey)
 {
-	result: &mut OComparator;
-	bool		found;
+	pub static mut O_COMPARATOR: *mut result = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	// compares with previous search
 	if (memcmp(key, &lastkey, sizeof(OComparatorKey)) == 0)
-		return lastcmp;
+		pub static mut LASTCMP: return = std::mem::zeroed();
 
 	// try to find in the cache
 	result = hash_search(comparatorCache, key, HASH_FIND, &found);
@@ -1835,10 +1835,10 @@ o_find_cached_comparator(key: &mut OComparatorKey)
 	{
 		memcpy(&lastkey, key, sizeof(OComparatorKey));
 		lastcmp = result;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 //
@@ -1847,7 +1847,7 @@ o_find_cached_comparator(key: &mut OComparatorKey)
 static inline OComparator *
 o_add_comparator_to_cache(comparator: &mut OComparator)
 {
-	cached: &mut OComparator;
+	pub static mut O_COMPARATOR: *mut cached = std::ptr::null_mut();
 
 	cached = hash_search(comparatorCache, &comparator->key, HASH_ENTER, NULL);
 	memcpy(cached, comparator, sizeof(OComparator));
@@ -1855,14 +1855,14 @@ o_add_comparator_to_cache(comparator: &mut OComparator)
 	memcpy(&lastkey, &comparator->key, sizeof(OComparatorKey));
 	lastcmp = cached;
 
-	return cached;
+	pub static mut CACHED: return = std::mem::zeroed();
 }
 
 fn
 o_invalidate_comparator_cache(Oid opfamily, Oid lefttype, Oid righttype)
 {
-	comparator: &mut OComparator;
-	HASH_SEQ_STATUS scan_status;
+	pub static mut O_COMPARATOR: *mut comparator = std::ptr::null_mut();
+	pub static mut SCAN_STATUS: HASH_SEQ_STATUS = std::mem::zeroed();
 	OComparatorKey key = {
 		.opfamily = opfamily,
 		.lefttype = lefttype,
@@ -1881,7 +1881,7 @@ o_invalidate_comparator_cache(Oid opfamily, Oid lefttype, Oid righttype)
 			key.lefttype == comparator->key.lefttype &&
 			key.righttype == comparator->key.righttype)
 		{
-			Oid			collation = comparator->key.collation;
+			pub static mut COLLATION: Oid = comparator->key.collation;
 
 			if (comparator->ssup_extra)
 				pfree(comparator->ssup_extra);
@@ -1911,9 +1911,9 @@ o_invalidate_comparator_callback(UndoLogType undoType, UndoLocation location,
 
 o_add_invalidate_comparator_undo_item(Oid opfamily, Oid lefttype, Oid righttype)
 {
-	UndoLocation location;
-	item: &mut InvalidateComparatorUndoStackItem;
-	LocationIndex size;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut INVALIDATE_COMPARATOR_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut SIZE: LocationIndex = std::mem::zeroed();
 
 	size = sizeof(InvalidateComparatorUndoStackItem);
 	item = (InvalidateComparatorUndoStackItem *) get_undo_record_unreserved(UndoLogSystem,
@@ -1933,14 +1933,14 @@ o_add_invalidate_comparator_undo_item(Oid opfamily, Oid lefttype, Oid righttype)
 int
 o_call_comparator(comparator: &mut OComparator, Datum left, Datum right)
 {
-	int			ret;
-	bool		was_saving;
+	pub static mut RET: std::os::raw::c_int = 0;
+	pub static mut WAS_SAVING: bool = false;
 
 	was_saving = o_start_saving_inval_messages();
 
 	if (comparator->haveSortSupport)
 	{
-		SortSupportData ssup;
+		pub static mut SSUP: SortSupportData = std::mem::zeroed();
 
 		memset(&ssup, 0, sizeof(ssup));
 		ASAN_UNPOISON_MEMORY_REGION(&ssup, sizeof(ssup));
@@ -1953,7 +1953,7 @@ o_call_comparator(comparator: &mut OComparator, Datum left, Datum right)
 	}
 	else
 	{
-		Datum		cmp;
+		pub static mut CMP: Datum = std::mem::zeroed();
 
 		// FIX: There should be a better way
 		if (o_is_syscache_hooks_set() && comparator->finfo.fn_addr == fmgr_sql)
@@ -1975,7 +1975,7 @@ o_call_comparator(comparator: &mut OComparator, Datum left, Datum right)
 
 	o_stop_saving_inval_messages(was_saving);
 
-	return ret;
+	pub static mut RET: return = std::mem::zeroed();
 }
 
 // Info needed to use an old-style comparison function as a sort comparator
@@ -1998,7 +1998,7 @@ static int
 comparison_shim(Datum x, Datum y, SortSupport ssup)
 {
 	extra: &mut SortShimExtra = (SortShimExtra *) ssup->ssup_extra;
-	Datum		result;
+	pub static mut RESULT: Datum = std::mem::zeroed();
 
 	extra->fcinfo.args[0].value = x;
 	extra->fcinfo.args[1].value = y;
@@ -2012,7 +2012,7 @@ comparison_shim(Datum x, Datum y, SortSupport ssup)
 	if (extra->fcinfo.isnull)
 		elog(ERROR, "function %u returned NULL", extra->flinfo.fn_oid);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -2026,7 +2026,7 @@ o_finish_sort_support_function(comparator: &mut OComparator, SortSupport ssup)
 	}
 	else
 	{
-		extra: &mut SortShimExtra;
+		pub static mut SORT_SHIM_EXTRA: *mut extra = std::ptr::null_mut();
 
 		extra = (SortShimExtra *) MemoryContextAlloc(ssup->ssup_cxt,
 													 SizeForSortShimExtra(2));
@@ -2047,7 +2047,7 @@ o_finish_sort_support_function(comparator: &mut OComparator, SortSupport ssup)
 
 o_tableam_descr_init()
 {
-	HASHCTL		ctl;
+	pub static mut CTL: HASHCTL = std::mem::zeroed();
 
 	descrCxt = AllocSetContextCreate(TopMemoryContext,
 									 "OrioleDB descriptors",
@@ -2097,16 +2097,16 @@ o_tableam_descr_init()
 static bool
 recreate_table_descr(descr: &mut OTableDescr)
 {
-	o_table: &mut OTable;
-	bool		old_enable_stopevents;
-	saved_ea_counters: &mut OEACallsCounters;
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut OLD_ENABLE_STOPEVENTS: bool = false;
+	pub static mut OEA_CALLS_COUNTERS: *mut saved_ea_counters = std::ptr::null_mut();
 
 	old_enable_stopevents = enable_stopevents;
 	enable_stopevents = false;
 
 	o_table = o_tables_get(descr->oids);
 	if (!o_table)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	saved_ea_counters = ea_counters;
 	ea_counters = NULL;
@@ -2115,25 +2115,25 @@ recreate_table_descr(descr: &mut OTableDescr)
 	{
 		ea_counters = saved_ea_counters;
 		enable_stopevents = old_enable_stopevents;
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	ea_counters = saved_ea_counters;
 
 	enable_stopevents = old_enable_stopevents;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 
 recreate_table_descr_by_oids(ORelOids oids)
 {
-	descr: &mut OTableDescr;
-	bool		found;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	descr = hash_search(oTableDescrHash, &oids, HASH_FIND, &found);
 
 	if (found)
 	{
-		indexDescr: &mut OIndexDescr;
+		pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
 
 		indexDescr = hash_search(oIndexDescrHash, &oids, HASH_FIND, &found);
 		if (found)
@@ -2161,12 +2161,12 @@ Datum
 orioledb_get_table_descrs(PG_FUNCTION_ARGS)
 {
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
-	HASH_SEQ_STATUS scan_status;
-	tableDescr: &mut OTableDescr;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut SCAN_STATUS: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut tableDescr = std::ptr::null_mut();
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -2202,12 +2202,12 @@ Datum
 orioledb_get_index_descrs(PG_FUNCTION_ARGS)
 {
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
-	HASH_SEQ_STATUS scan_status;
-	indexDescr: &mut OIndexDescr;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut SCAN_STATUS: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -2264,9 +2264,9 @@ o_invalidate_undo_item_callback(UndoLogType undoType, UndoLocation location,
 
 o_add_invalidate_undo_item(ORelOids oids, uint32 flags)
 {
-	UndoLocation location;
-	item: &mut InvalidateUndoStackItem;
-	LocationIndex size;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut INVALIDATE_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut SIZE: LocationIndex = std::mem::zeroed();
 
 	size = sizeof(InvalidateUndoStackItem);
 	item = (InvalidateUndoStackItem *) get_undo_record_unreserved(UndoLogSystem,
@@ -2288,13 +2288,13 @@ o_add_invalidate_undo_item(ORelOids oids, uint32 flags)
 static OExclusionFn *
 o_find_exclusion_op_fn(Oid exclusion_op)
 {
-	result: &mut OExclusionFn;
-	OExclusionFn exclusion_fn;
-	Oid			oprcode;
-	MemoryContext oldcontext;
+	pub static mut O_EXCLUSION_FN: *mut result = std::ptr::null_mut();
+	pub static mut EXCLUSION_FN: OExclusionFn = std::mem::zeroed();
+	pub static mut OPRCODE: Oid = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 
 	if ((result = o_find_cached_exclusion_fn(exclusion_op)) != NULL)
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 
 	memset(&exclusion_fn, 0, sizeof(exclusion_fn));
 	exclusion_fn.operator = exclusion_op;
@@ -2318,12 +2318,12 @@ o_find_exclusion_op_fn(Oid exclusion_op)
 static inline OExclusionFn *
 o_find_cached_exclusion_fn(Oid exclusion_op)
 {
-	result: &mut OExclusionFn;
-	bool		found;
+	pub static mut O_EXCLUSION_FN: *mut result = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	// compares with previous search
 	if (exclusion_op == last_exclusion_op)
-		return last_exclusion_fn;
+		pub static mut LAST_EXCLUSION_FN: return = std::mem::zeroed();
 
 	// try to find in the cache
 	result = hash_search(exclusionFnCache, &exclusion_op, HASH_FIND, &found);
@@ -2331,10 +2331,10 @@ o_find_cached_exclusion_fn(Oid exclusion_op)
 	{
 		last_exclusion_op = exclusion_op;
 		last_exclusion_fn = result;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 //
@@ -2343,7 +2343,7 @@ o_find_cached_exclusion_fn(Oid exclusion_op)
 static inline OExclusionFn *
 o_add_exclusion_fn_to_cache(exclusion_fn: &mut OExclusionFn)
 {
-	cached: &mut OExclusionFn;
+	pub static mut O_EXCLUSION_FN: *mut cached = std::ptr::null_mut();
 
 	cached = hash_search(exclusionFnCache, &exclusion_fn->operator, HASH_ENTER, NULL);
 	memcpy(cached, exclusion_fn, sizeof(OExclusionFn));
@@ -2351,14 +2351,14 @@ o_add_exclusion_fn_to_cache(exclusion_fn: &mut OExclusionFn)
 	last_exclusion_op = exclusion_fn->operator;
 	last_exclusion_fn = cached;
 
-	return cached;
+	pub static mut CACHED: return = std::mem::zeroed();
 }
 
 int
 o_call_exclusion_fn(exclusion_fn: &mut OExclusionFn, Datum left, Datum right, Oid collation)
 {
-	int			cmp;
-	Datum		ret;
+	pub static mut CMP: std::os::raw::c_int = 0;
+	pub static mut RET: Datum = std::mem::zeroed();
 
 	// FIX: There should be a better way
 	if (o_is_syscache_hooks_set() && exclusion_fn->finfo.fn_addr == fmgr_sql)
@@ -2366,7 +2366,7 @@ o_call_exclusion_fn(exclusion_fn: &mut OExclusionFn, Datum left, Datum right, Oi
 	ret = FunctionCall2Coll(&exclusion_fn->finfo, collation, left, right);
 	cmp = DatumGetBool(ret) ? 0 : 1;
 
-	return cmp;
+	pub static mut CMP: return = std::mem::zeroed();
 }
 
 
@@ -2385,12 +2385,12 @@ o_find_hash_fn(Oid hash_fn_oid, Oid datoid)
 		.datoid = datoid,
 		.hash_fn_oid = hash_fn_oid
 	};
-	result: &mut OHashFn;
-	OHashFn		hash_fn;
-	MemoryContext oldcontext;
+	pub static mut O_HASH_FN: *mut result = std::ptr::null_mut();
+	pub static mut HASH_FN: OHashFn = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 
 	if ((result = o_find_cached_hash_fn(&key)) != NULL)
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 
 	memset(&hash_fn, 0, sizeof(hash_fn));
 	hash_fn.key = key;
@@ -2413,12 +2413,12 @@ o_find_hash_fn(Oid hash_fn_oid, Oid datoid)
 static inline OHashFn *
 o_find_cached_hash_fn(key: &mut OHashFnKey)
 {
-	result: &mut OHashFn;
-	bool		found;
+	pub static mut O_HASH_FN: *mut result = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	// compares with previous search
 	if (memcmp(key, &last_hash_fn_key, sizeof(OHashFnKey)) == 0)
-		return last_hash_fn;
+		pub static mut LAST_HASH_FN: return = std::mem::zeroed();
 
 	// try to find in the cache
 	result = hash_search(hashFnCache, key, HASH_FIND, &found);
@@ -2426,10 +2426,10 @@ o_find_cached_hash_fn(key: &mut OHashFnKey)
 	{
 		memcpy(&last_hash_fn_key, key, sizeof(OHashFnKey));
 		last_hash_fn = result;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 //
@@ -2438,7 +2438,7 @@ o_find_cached_hash_fn(key: &mut OHashFnKey)
 static inline OHashFn *
 o_add_hash_fn_to_cache(hash_fn: &mut OHashFn)
 {
-	cached: &mut OHashFn;
+	pub static mut O_HASH_FN: *mut cached = std::ptr::null_mut();
 
 	cached = hash_search(hashFnCache, &hash_fn->key, HASH_ENTER, NULL);
 	memcpy(cached, hash_fn, sizeof(OHashFn));
@@ -2446,15 +2446,15 @@ o_add_hash_fn_to_cache(hash_fn: &mut OHashFn)
 	memcpy(&last_hash_fn_key, &hash_fn->key, sizeof(OHashFnKey));
 	last_hash_fn = cached;
 
-	return cached;
+	pub static mut CACHED: return = std::mem::zeroed();
 }
 
 uint32
 o_call_hash_fn(hash_fn: &mut OHashFn, Oid collation, Datum val)
 {
-	uint32		result;
-	Datum		ret;
-	bool		was_saving;
+	pub static mut RESULT: uint32 = std::mem::zeroed();
+	pub static mut RET: Datum = std::mem::zeroed();
+	pub static mut WAS_SAVING: bool = false;
 
 	was_saving = o_start_saving_inval_messages();
 
@@ -2466,7 +2466,7 @@ o_call_hash_fn(hash_fn: &mut OHashFn, Oid collation, Datum val)
 
 	o_stop_saving_inval_messages(was_saving);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 #if PG_VERSION_NUM >= 170000
@@ -2527,20 +2527,20 @@ ResOwnerPrintOTableDescr(Datum res)
 //
 typedef struct OTableDescrResOwnerItem
 {
-	struct next: &mut OTableDescrResOwnerItem;
-	ResourceOwner owner;
-	descr: &mut OTableDescr;
+	pub static mut O_TABLE_DESCR_RES_OWNER_ITEM: *mut struct next = std::ptr::null_mut();
+	pub static mut OWNER: ResourceOwner = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
 }			OTableDescrResOwnerItem;
 
-static OTableDescrResOwnerItem * otable_descr_resowner_items = NULL;
-static bool otable_descr_resowner_registered = false;
+static mut OTABLE_DESCR_RESOWNER_ITEMS: *mut OTableDescrResOwnerItem = std::ptr::null_mut();
+static mut OTABLE_DESCR_RESOWNER_REGISTERED: bool = false;
 
 fn
 ResOwnerReleaseOTableDescrCallback(ResourceReleasePhase phase,
 								   bool isCommit, bool isTopLevel,  *arg)
 {
 	OTableDescrResOwnerItem **prev;
-	item: &mut OTableDescrResOwnerItem;
+	pub static mut O_TABLE_DESCR_RES_OWNER_ITEM: *mut item = std::ptr::null_mut();
 
 	if (phase != RESOURCE_RELEASE_BEFORE_LOCKS)
 		return;
@@ -2567,7 +2567,7 @@ ResOwnerReleaseOTableDescrCallback(ResourceReleasePhase phase,
 
 ResourceOwnerRememberOTableDescr(ResourceOwner owner, descr: &mut OTableDescr)
 {
-	item: &mut OTableDescrResOwnerItem;
+	pub static mut O_TABLE_DESCR_RES_OWNER_ITEM: *mut item = std::ptr::null_mut();
 
 	if (!otable_descr_resowner_registered)
 	{
@@ -2587,7 +2587,7 @@ ResourceOwnerRememberOTableDescr(ResourceOwner owner, descr: &mut OTableDescr)
 ResourceOwnerForgetOTableDescr(ResourceOwner owner, descr: &mut OTableDescr)
 {
 	OTableDescrResOwnerItem **prev = &otable_descr_resowner_items;
-	item: &mut OTableDescrResOwnerItem = *prev;
+	pub static mut O_TABLE_DESCR_RES_OWNER_ITEM: *mut item = *prev;
 
 	while (item)
 	{
@@ -2657,20 +2657,20 @@ ResOwnerPrintOIndexDescr(Datum res)
 // See comment on OTableDescr's PG16 implementation above.
 typedef struct OIndexDescrResOwnerItem
 {
-	struct next: &mut OIndexDescrResOwnerItem;
-	ResourceOwner owner;
-	descr: &mut OIndexDescr;
+	pub static mut O_INDEX_DESCR_RES_OWNER_ITEM: *mut struct next = std::ptr::null_mut();
+	pub static mut OWNER: ResourceOwner = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut descr = std::ptr::null_mut();
 }			OIndexDescrResOwnerItem;
 
-static OIndexDescrResOwnerItem * oindex_descr_resowner_items = NULL;
-static bool oindex_descr_resowner_registered = false;
+static mut OINDEX_DESCR_RESOWNER_ITEMS: *mut OIndexDescrResOwnerItem = std::ptr::null_mut();
+static mut OINDEX_DESCR_RESOWNER_REGISTERED: bool = false;
 
 fn
 ResOwnerReleaseOIndexDescrCallback(ResourceReleasePhase phase,
 								   bool isCommit, bool isTopLevel,  *arg)
 {
 	OIndexDescrResOwnerItem **prev;
-	item: &mut OIndexDescrResOwnerItem;
+	pub static mut O_INDEX_DESCR_RES_OWNER_ITEM: *mut item = std::ptr::null_mut();
 
 	if (phase != RESOURCE_RELEASE_BEFORE_LOCKS)
 		return;
@@ -2697,7 +2697,7 @@ ResOwnerReleaseOIndexDescrCallback(ResourceReleasePhase phase,
 
 ResourceOwnerRememberOIndexDescr(ResourceOwner owner, descr: &mut OIndexDescr)
 {
-	item: &mut OIndexDescrResOwnerItem;
+	pub static mut O_INDEX_DESCR_RES_OWNER_ITEM: *mut item = std::ptr::null_mut();
 
 	if (!oindex_descr_resowner_registered)
 	{
@@ -2717,7 +2717,7 @@ ResourceOwnerRememberOIndexDescr(ResourceOwner owner, descr: &mut OIndexDescr)
 ResourceOwnerForgetOIndexDescr(ResourceOwner owner, descr: &mut OIndexDescr)
 {
 	OIndexDescrResOwnerItem **prev = &oindex_descr_resowner_items;
-	item: &mut OIndexDescrResOwnerItem = *prev;
+	pub static mut O_INDEX_DESCR_RES_OWNER_ITEM: *mut item = *prev;
 
 	while (item)
 	{

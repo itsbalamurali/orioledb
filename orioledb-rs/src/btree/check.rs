@@ -37,22 +37,22 @@ use pgrx::pg_sys;
 typedef struct
 {
 	// array of extents
-	extents: &mut FileExtent;
+	pub static mut FILE_EXTENT: *mut extents = std::ptr::null_mut();
 	// number of allocated extents
-	uint64		allocated;
+	pub static mut ALLOCATED: uint64 = std::mem::zeroed();
 	// number of valid extents in the array
-	uint64		size;
+	pub static mut SIZE: uint64 = std::mem::zeroed();
 	// number of blocks in file containing by extents in the array
-	uint64		blocksCount;
+	pub static mut BLOCKS_COUNT: uint64 = std::mem::zeroed();
 } ExtentsArray;
 
 typedef struct
 {
-	ExtentsArray busy;
-	desc: &mut BTreeDescr;
-	bool		hasError;
-	bool		emit_transient_notices;
-	OBTreeFindPageContext context;
+	pub static mut BUSY: ExtentsArray = std::mem::zeroed();
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
+	pub static mut HAS_ERROR: bool = false;
+	pub static mut EMIT_TRANSIENT_NOTICES: bool = false;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
 } BTreeCheckStatus;
 
 static int	file_extent_cmp(p1: &mut const, p2: &mut const);
@@ -79,12 +79,12 @@ check_btree(desc: &mut BTreeDescr, bool force_file_check, bool wait_for_checkpoi
 {
 	bool		is_sys_tree = IS_SYS_TREE_OIDS(desc->oids);
 	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
-	BTreeCheckStatus status;
-	ExtentsArray free_extents;
+	pub static mut STATUS: BTreeCheckStatus = std::mem::zeroed();
+	pub static mut FREE_EXTENTS: ExtentsArray = std::mem::zeroed();
 	uint64		data_file_len = pg_atomic_read_u64(&metaPageBlkno->datafileLength[0]);	// Fix for S3 mode
 	bool		is_compressed = OCompressIsValid(desc->compress);
-	uint32		checkpoint_number = 0;
-	bool		copy_blkno;
+	pub static mut CHECKPOINT_NUMBER: uint32 = 0;
+	pub static mut COPY_BLKNO: bool = false;
 
 	memset(&status, 0, sizeof(BTreeCheckStatus));
 	memset(&free_extents, 0, sizeof(ExtentsArray));
@@ -112,7 +112,7 @@ check_btree(desc: &mut BTreeDescr, bool force_file_check, bool wait_for_checkpoi
 		if (!wait_for_checkpoint)
 		{
 			elog(NOTICE, "Tree is under checkpoint now");
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 
 		//
@@ -140,23 +140,23 @@ check_btree(desc: &mut BTreeDescr, bool force_file_check, bool wait_for_checkpoi
 	check_walk_btree(&status, desc->rootInfo.rootPageBlkno, OInvalidInMemoryBlkno);
 
 	if (status.hasError)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (desc->storageType != BTreeStoragePersistence)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	// get free file extents
 	get_free_extents(desc, &free_extents, force_file_check,
 					 checkpoint_number - 1);
 
 	if (status.hasError)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	// check extents
 	status.hasError = !check_extents(&status.busy, &free_extents);
 
 	if (status.hasError)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (data_file_len > status.busy.blocksCount + free_extents.blocksCount)
 	{
@@ -189,10 +189,10 @@ check_btree(desc: &mut BTreeDescr, bool force_file_check, bool wait_for_checkpoi
 	if (checkpoint_number > 1)
 	{
 		// file extents sort check
-		SeqBufTag	tag;
+		pub static mut TAG: SeqBufTag = std::mem::zeroed();
 		ExtentsArray map_extents,
 					tmp_extents;
-		bool		found;
+		pub static mut FOUND: bool = false;
 
 		memset(&map_extents, 0, sizeof(ExtentsArray));
 		memset(&tmp_extents, 0, sizeof(ExtentsArray));
@@ -272,7 +272,7 @@ fn
 get_free_extents(desc: &mut BTreeDescr, free_extents: &mut ExtentsArray,
 				 bool force_file_check, uint32 chkp_num)
 {
-	SeqBufTag	chkp_tag;
+	pub static mut CHKP_TAG: SeqBufTag = std::mem::zeroed();
 	bool		is_compressed = OCompressIsValid(desc->compress);
 
 	chkp_tag.key.oids = desc->oids;
@@ -280,7 +280,7 @@ get_free_extents(desc: &mut BTreeDescr, free_extents: &mut ExtentsArray,
 
 	if (force_file_check)
 	{
-		bool		found;
+		pub static mut FOUND: bool = false;
 
 		//
 // Reads free blocks from map file.
@@ -299,8 +299,8 @@ get_free_extents(desc: &mut BTreeDescr, free_extents: &mut ExtentsArray,
 		//
 // Reads free blocks as normal process for uncompressed index.
 //
-		off_t		freebuf_offset;
-		uint32		num;
+		pub static mut FREEBUF_OFFSET: off_t = std::mem::zeroed();
+		pub static mut NUM: uint32 = std::mem::zeroed();
 
 		chkp_tag = desc->freeBuf.shared->tag;
 		freebuf_offset = seq_buf_get_offset(&desc->freeBuf);
@@ -342,8 +342,8 @@ get_free_extents(desc: &mut BTreeDescr, free_extents: &mut ExtentsArray,
 // unconsumed .tmp files.
 //
 		metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
-		uint32		num;
-		uint32		consumed_num = metaPage->freeBuf.tag.num;
+		pub static mut NUM: uint32 = std::mem::zeroed();
+		pub static mut CONSUMED_NUM: uint32 = metaPage->freeBuf.tag.num;
 
 		foreach_free_extent(desc, foreach_extent_append, ( *) free_extents);
 		for (num = consumed_num + 1; num <= chkp_num + 1; num++)
@@ -368,9 +368,9 @@ fn
 decode_free_extent_buf(const buf: &mut char, Size len, free_extents: &mut ExtentsArray,
 					   bool compressed)
 {
-	FileExtent	extent;
-	uint32		off;
-	Size		i = 0;
+	pub static mut EXTENT: FileExtent = std::mem::zeroed();
+	pub static mut OFF: uint32 = std::mem::zeroed();
+	pub static mut I: Size = 0;
 
 	while (i < len)
 	{
@@ -400,8 +400,8 @@ get_free_extents_from_file(tag: &mut SeqBufTag, off_t offset,
 {
 	char		buf[ORIOLEDB_BLCKSZ],
 			   *filename;
-	File		file;
-	off_t		bytes_read;
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut BYTES_READ: off_t = std::mem::zeroed();
 
 	filename = get_seq_buf_filename(tag);
 	file = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
@@ -438,8 +438,8 @@ get_free_extents_from_seqbuf_pending(seqBuf: &mut SeqBufDescPrivate,
 									 free_extents: &mut ExtentsArray,
 									 bool compressed)
 {
-	buf: &mut char;
-	Size		len;
+	pub static mut CHAR: *mut buf = std::ptr::null_mut();
+	pub static mut LEN: Size = 0;
 
 	if (!SEQ_BUF_SHARED_EXIST(seqBuf->shared))
 		return;
@@ -460,11 +460,11 @@ get_free_extents_from_seqbuf_pending(seqBuf: &mut SeqBufDescPrivate,
 static bool
 check_extents(busy: &mut ExtentsArray, free: &mut ExtentsArray)
 {
-	FileExtent	cur;
+	pub static mut CUR: FileExtent = std::mem::zeroed();
 	uint64		b,
 				f,
 				next_off;
-	bool		result = true;
+	pub static mut RESULT: bool = true;
 
 	qsort(busy->extents, busy->size, sizeof(FileExtent), file_extent_cmp);
 	qsort(free->extents, free->size, sizeof(FileExtent), file_extent_cmp);
@@ -522,7 +522,7 @@ check_extents(busy: &mut ExtentsArray, free: &mut ExtentsArray)
 		}
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -538,7 +538,7 @@ file_extent_cmp(p1: &mut const, p2: &mut const)
 		return v1.off > v2.off ? 1 : -1;
 	if (v1.len != v2.len)
 		return v1.len > v2.len ? 1 : -1;
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -547,8 +547,8 @@ file_extent_cmp(p1: &mut const, p2: &mut const)
 static bool
 is_sorted_by_off(array: &mut ExtentsArray)
 {
-	uint64		i;
-	bool		sorted = true;
+	pub static mut I: uint64 = std::mem::zeroed();
+	pub static mut SORTED: bool = true;
 
 	if (array->size > 1)
 	{
@@ -568,7 +568,7 @@ is_sorted_by_off(array: &mut ExtentsArray)
 		}
 	}
 
-	return sorted;
+	pub static mut SORTED: return = std::mem::zeroed();
 }
 
 //
@@ -577,8 +577,8 @@ is_sorted_by_off(array: &mut ExtentsArray)
 static bool
 is_sorted_by_len_off(array: &mut ExtentsArray)
 {
-	uint64		i;
-	bool		sorted = true;
+	pub static mut I: uint64 = std::mem::zeroed();
+	pub static mut SORTED: bool = true;
 
 	if (array->size > 1)
 	{
@@ -601,7 +601,7 @@ is_sorted_by_len_off(array: &mut ExtentsArray)
 		}
 	}
 
-	return sorted;
+	pub static mut SORTED: return = std::mem::zeroed();
 }
 
 //
@@ -635,9 +635,9 @@ check_walk_btree(status: &mut BTreeCheckStatus, OInMemoryBlkno blkno,
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	context: &mut OBTreeFindPageContext = &status->context;
-	FileExtent	extent;
-	uint64		rightLink;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &status->context;
+	pub static mut EXTENT: FileExtent = std::mem::zeroed();
+	pub static mut RIGHT_LINK: uint64 = std::mem::zeroed();
 
 	Assert(OInMemoryBlknoIsValid(blkno));
 
@@ -663,7 +663,7 @@ check_walk_btree(status: &mut BTreeCheckStatus, OInMemoryBlkno blkno,
 
 	if (!O_PAGE_IS(p, LEAF))
 	{
-		BTreePageItemLocator loc;
+		pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 		BTREE_PAGE_LOCATOR_FIRST(p, &loc);
 		while (BTREE_PAGE_LOCATOR_IS_VALID(p, &loc))
@@ -709,7 +709,7 @@ btree_check_compression_recursive(desc: &mut BTreeDescr, stats: &mut BTreeCompre
 {
 	char		buf[ORIOLEDB_BLCKSZ];
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	size_t		compressed_size;
+	pub static mut COMPRESSED_SIZE: size_t = std::mem::zeroed();
 
 	ppool_ucm_inc_usage(desc->ppool, blkno);
 
@@ -719,7 +719,7 @@ btree_check_compression_recursive(desc: &mut BTreeDescr, stats: &mut BTreeCompre
 
 	if (!O_PAGE_IS(p, LEAF))
 	{
-		BTreePageItemLocator loc;
+		pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 		BTREE_PAGE_LOCATOR_FIRST(p, &loc);
 		while (BTREE_PAGE_LOCATOR_IS_VALID(p, &loc))
@@ -765,7 +765,7 @@ btree_check_compression_recursive(desc: &mut BTreeDescr, stats: &mut BTreeCompre
 		}
 		else
 		{
-			int			i;
+			pub static mut I: std::os::raw::c_int = 0;
 
 			for (i = 0; i < stats->nranges; i++)
 			{
@@ -793,7 +793,7 @@ btree_check_compression_recursive(desc: &mut BTreeDescr, stats: &mut BTreeCompre
 
 check_btree_compression(desc: &mut BTreeDescr, stats: &mut BTreeCompressStats, OCompress lvl)
 {
-	OBTreeFindPageContext context;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
 	bool		recovery = is_recovery_in_progress();
 
 	o_tables_rel_lock_extended(&desc->oids, AccessShareLock, recovery);

@@ -72,8 +72,8 @@ init_seq_buf(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDescShare
 			 tag: &mut SeqBufTag, bool write, bool init_shared,
 			 int skip_len, evicted: &mut EvictedSeqBufData)
 {
-	bool		evicted_used = evicted != NULL;
-	bool		ok = true;
+	pub static mut EVICTED_USED: bool = evicted != NULL;
+	pub static mut OK: bool = true;
 
 	seqBufPrivate->shared = shared;
 	seqBufPrivate->file = -1;
@@ -81,7 +81,7 @@ init_seq_buf(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDescShare
 
 	if (init_shared)
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		SpinLockInit(&shared->lock);
 		SpinLockAcquire(&shared->lock);
@@ -125,15 +125,15 @@ init_seq_buf(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDescShare
 		seqBufPrivate->tag = shared->tag;
 	}
 
-	return ok;
+	pub static mut OK: return = std::mem::zeroed();
 }
 
 char *
 get_seq_buf_filename(tag: &mut SeqBufTag)
 {
-	result: &mut char;
-	typename: &mut char;
-	db_prefix: &mut char;
+	pub static mut CHAR: *mut result = std::ptr::null_mut();
+	pub static mut CHAR: *mut typename = std::ptr::null_mut();
+	pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 	o_get_prefixes_for_tablespace(tag->key.oids.datoid, tag->key.tablespace,
 								  NULL, &db_prefix);
@@ -144,13 +144,13 @@ get_seq_buf_filename(tag: &mut SeqBufTag)
 	else
 	{
 		Assert(false);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 	// this format is used by recovery_cleanup_old_files()
 	result = psprintf("%s/%u-%u.%s", db_prefix, tag->key.oids.relnode,
 					  tag->num, typename);
 	pfree(db_prefix);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static bool
@@ -164,9 +164,9 @@ seq_buf_tag_eq(t1: &mut SeqBufTag, t2: &mut SeqBufTag)
 		t1->key.oids.relnode == t2->key.oids.relnode &&
 		t1->num == t2->num &&
 		t1->type == t2->type)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	else
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -175,14 +175,14 @@ seq_buf_tag_eq(t1: &mut SeqBufTag, t2: &mut SeqBufTag)
 static bool
 seq_buf_check_open_file(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	SeqBufTag	old_tag = seqBufPrivate->tag;
-	int			flags;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut OLD_TAG: SeqBufTag = seqBufPrivate->tag;
+	pub static mut FLAGS: std::os::raw::c_int = 0;
 
 	while (true)
 	{
-		filename: &mut char;
-		bool		file_exists = seqBufPrivate->file > 0;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
+		pub static mut FILE_EXISTS: bool = seqBufPrivate->file > 0;
 
 		if (file_exists)
 		{
@@ -221,10 +221,10 @@ seq_buf_check_open_file(seqBufPrivate: &mut SeqBufDescPrivate)
 								   get_seq_buf_filename(&shared->tag),
 								   (seqBufPrivate->write ? "write" : "read"))));
 			seqBufPrivate->tag = old_tag;
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 
@@ -240,10 +240,10 @@ seq_buf_close_file(seqBufPrivate: &mut SeqBufDescPrivate)
 static bool
 seq_buf_wait_prev_page(shared: &mut SeqBufDescShared)
 {
-	SpinDelayStatus status;
+	pub static mut STATUS: SpinDelayStatus = std::mem::zeroed();
 
 	if (shared->prevPageState != SeqBufPrevPageInProgress)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	init_local_spin_delay(&status);
 	while (shared->prevPageState == SeqBufPrevPageInProgress)
@@ -253,14 +253,14 @@ seq_buf_wait_prev_page(shared: &mut SeqBufDescShared)
 		SpinLockAcquire(&shared->lock);
 	}
 	finish_spin_delay(&status);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static bool
 seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	off_t		offset;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut OFFSET: off_t = std::mem::zeroed();
 
 	if (seqBufPrivate->write)
 	{
@@ -276,7 +276,7 @@ seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 							errmsg("Error write seq buf %s at offset %u: %m",
 								   FilePathName(seqBufPrivate->file),
 								   (uint32) offset)));
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 	else
@@ -290,7 +290,7 @@ seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 		if (shared->freeBytesNum > 0)
 		{
 			// Read next page
-			int			nbytes;
+			pub static mut NBYTES: std::os::raw::c_int = 0;
 
 			offset = SEQBUF_FILE_OFFSET(shared, (off_t) shared->filePageNum + 1);
 
@@ -302,7 +302,7 @@ seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 								errmsg("Error read seq buf %s at offset %u: %m",
 									   FilePathName(seqBufPrivate->file),
 									   (uint32) offset)));
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 
 			if (shared->freeBytesNum >= SEQBUF_CHUNK_SIZE &&
@@ -314,7 +314,7 @@ seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 					 "Bytes read = %d is less than expected = %ld.",
 					 get_seq_buf_filename(&seqBufPrivate->tag), (uint32) offset,
 					 nbytes, SEQBUF_CHUNK_SIZE);
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 			else if (shared->freeBytesNum < SEQBUF_CHUNK_SIZE &&
 					 shared->freeBytesNum != nbytes)
@@ -324,7 +324,7 @@ seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 					 "Bytes read = %d is not equal than expected = " UINT64_FORMAT,
 					 get_seq_buf_filename(&seqBufPrivate->tag), (uint32) offset,
 					 nbytes, (uint64) shared->freeBytesNum);
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 
 			shared->freeBytesNum -= nbytes;
@@ -332,7 +332,7 @@ seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 			put_page_image(shared->pages[1 - shared->curPageNum], buf);
 		}
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -344,21 +344,21 @@ seq_buf_finish_prev_page(seqBufPrivate: &mut SeqBufDescPrivate)
 static bool
 seq_buf_switch_page(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	uint32		filePageNum = shared->filePageNum;
-	SeqBufPrevPageState resultState;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut FILE_PAGE_NUM: uint32 = shared->filePageNum;
+	pub static mut RESULT_STATE: SeqBufPrevPageState = std::mem::zeroed();
 
 	if (!seq_buf_check_open_file(seqBufPrivate))
 	{
 		SpinLockRelease(&shared->lock);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// Check if it's already switched after given page number...
 	if (shared->filePageNum != filePageNum)
 	{
 		SpinLockRelease(&shared->lock);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	//
@@ -369,7 +369,7 @@ seq_buf_switch_page(seqBufPrivate: &mut SeqBufDescPrivate)
 		shared->filePageNum != filePageNum)
 	{
 		SpinLockRelease(&shared->lock);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	if (shared->prevPageState == SeqBufPrevPageError)
@@ -377,7 +377,7 @@ seq_buf_switch_page(seqBufPrivate: &mut SeqBufDescPrivate)
 		if (!seq_buf_finish_prev_page(seqBufPrivate))
 		{
 			SpinLockRelease(&shared->lock);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 		shared->prevPageState = SeqBufPrevPageDone;
 	}
@@ -392,14 +392,14 @@ seq_buf_switch_page(seqBufPrivate: &mut SeqBufDescPrivate)
 	SpinLockRelease(&shared->lock);
 
 	resultState = seq_buf_finish_prev_page(seqBufPrivate) ? SeqBufPrevPageDone
-		: SeqBufPrevPageError;
+		pub static mut SEQ_BUF_PREV_PAGE_ERROR: : = std::mem::zeroed();
 
 	SpinLockAcquire(&shared->lock);
 	shared->prevPageState = resultState;
 	SpinLockRelease(&shared->lock);
 
 	// If even we didn't finish the next page, current page is OK.
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -408,9 +408,9 @@ seq_buf_switch_page(seqBufPrivate: &mut SeqBufDescPrivate)
 static inline bool
 seq_buf_rw(seqBufPrivate: &mut SeqBufDescPrivate, data: &mut char, Size data_size, bool write)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	Page		page;
-	bool		switched;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut SWITCHED: bool = false;
 
 	Assert(seqBufPrivate->write == write);
 
@@ -429,7 +429,7 @@ seq_buf_rw(seqBufPrivate: &mut SeqBufDescPrivate, data: &mut char, Size data_siz
 			shared->location += data_size;
 
 			SpinLockRelease(&shared->lock);
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 		switched = seq_buf_switch_page(seqBufPrivate);	// releases shared->lock
 	} while (switched);
@@ -485,8 +485,8 @@ seq_buf_read_file_extent(seqBufPrivate: &mut SeqBufDescPrivate, extent: &mut Fil
 uint64
 seq_buf_finalize(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	off_t		result;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut RESULT: off_t = std::mem::zeroed();
 
 	SpinLockAcquire(&shared->lock);
 	seq_buf_wait_prev_page(shared);
@@ -536,7 +536,7 @@ seq_buf_finalize(seqBufPrivate: &mut SeqBufDescPrivate)
 	if (result == 0)
 		seq_buf_remove_file(&seqBufPrivate->tag);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -557,20 +557,20 @@ seq_buf_finalize(seqBufPrivate: &mut SeqBufDescPrivate)
 Size
 seq_buf_max_pending_data_size()
 {
-	return SEQBUF_CHUNK_SIZE;
+	pub static mut SEQBUF_CHUNK_SIZE: return = std::mem::zeroed();
 }
 
 Size
 seq_buf_snapshot_pending_data(seqBufPrivate: &mut SeqBufDescPrivate, buf: &mut char)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	Page		page;
-	Size		len;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut LEN: Size = 0;
 
 	Assert(seqBufPrivate->write);
 
 	if (!SEQ_BUF_SHARED_EXIST(shared))
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 
 	SpinLockAcquire(&shared->lock);
 	seq_buf_wait_prev_page(shared);
@@ -595,7 +595,7 @@ seq_buf_snapshot_pending_data(seqBufPrivate: &mut SeqBufDescPrivate, buf: &mut c
 	}
 	SpinLockRelease(&shared->lock);
 
-	return len;
+	pub static mut LEN: return = std::mem::zeroed();
 }
 
 //
@@ -604,15 +604,15 @@ seq_buf_snapshot_pending_data(seqBufPrivate: &mut SeqBufDescPrivate, buf: &mut c
 uint64
 seq_buf_get_offset(seqBufPrivate: &mut SeqBufDescPrivate)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	uint64		offset;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut OFFSET: uint64 = std::mem::zeroed();
 
 	SpinLockAcquire(&shared->lock);
 	offset = SEQBUF_FILE_OFFSET(shared, (off_t) shared->filePageNum)
 		+ (shared->location - SEQBUF_DATA_OFF);
 	SpinLockRelease(&shared->lock);
 
-	return offset;
+	pub static mut OFFSET: return = std::mem::zeroed();
 }
 
 //
@@ -622,8 +622,8 @@ SeqBufReplaceResult
 seq_buf_try_replace(seqBufPrivate: &mut SeqBufDescPrivate, tag: &mut SeqBufTag,
 					size: &mut pg_atomic_uint64, Size data_size)
 {
-	shared: &mut SeqBufDescShared = seqBufPrivate->shared;
-	off_t		len;
+	pub static mut SEQ_BUF_DESC_SHARED: *mut shared = seqBufPrivate->shared;
+	pub static mut LEN: off_t = std::mem::zeroed();
 	SeqBufTag	old_tag = {0};
 
 	Assert(tag->type == 't');
@@ -642,7 +642,7 @@ seq_buf_try_replace(seqBufPrivate: &mut SeqBufDescPrivate, tag: &mut SeqBufTag,
 	{
 		// Already have newer sequential file
 		SpinLockRelease(&shared->lock);
-		return SeqBufReplaceAlready;
+		pub static mut SEQ_BUF_REPLACE_ALREADY: return = std::mem::zeroed();
 	}
 
 	old_tag = shared->tag;
@@ -654,7 +654,7 @@ seq_buf_try_replace(seqBufPrivate: &mut SeqBufDescPrivate, tag: &mut SeqBufTag,
 		{
 			shared->tag = old_tag;
 			SpinLockRelease(&shared->lock);
-			return SeqBufReplaceError;
+			pub static mut SEQ_BUF_REPLACE_ERROR: return = std::mem::zeroed();
 		}
 
 		if ((len = FileSize(seqBufPrivate->file)) < 0)
@@ -664,7 +664,7 @@ seq_buf_try_replace(seqBufPrivate: &mut SeqBufDescPrivate, tag: &mut SeqBufTag,
 			ereport(PANIC, (errcode_for_file_access(),
 							errmsg("could not seek to the end of file %s: %m",
 								   FilePathName(seqBufPrivate->file))));
-			return SeqBufReplaceError;
+			pub static mut SEQ_BUF_REPLACE_ERROR: return = std::mem::zeroed();
 		}
 		pg_atomic_write_u64(size, len / data_size);
 	}
@@ -682,7 +682,7 @@ seq_buf_try_replace(seqBufPrivate: &mut SeqBufDescPrivate, tag: &mut SeqBufTag,
 
 	SpinLockRelease(&shared->lock);
 
-	return SeqBufReplaceSuccess;
+	pub static mut SEQ_BUF_REPLACE_SUCCESS: return = std::mem::zeroed();
 }
 
 static bool
@@ -699,7 +699,7 @@ seq_buf_read_pages(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDes
 	shared->freeBytesNum = 0;
 
 	if (!seq_buf_check_open_file(seqBufPrivate))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	len = FileSize(seqBufPrivate->file);
 	if (len < header_off)
@@ -708,18 +708,18 @@ seq_buf_read_pages(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDes
 		ereport(PANIC, (errcode_for_file_access(),
 						errmsg("length %d of file %s is less than header %d: %m",
 							   len, FilePathName(seqBufPrivate->file), header_off)));
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (len < evicted_off)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (len == 0 && header_off == 0)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	len -= evicted_off;
 	if (len == 0 && header_off == 0)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	memset(buf_first, 0xFF, ORIOLEDB_BLCKSZ);
 	memset(buf_second, 0xFF, ORIOLEDB_BLCKSZ);
@@ -733,7 +733,7 @@ seq_buf_read_pages(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDes
 		ereport(PANIC, (errcode_for_file_access(),
 						errmsg("could not to read first page from file %s, read = %d, expected = %d: %m",
 							   FilePathName(seqBufPrivate->file), nbytes, should_read)));
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	free_bytes = len - nbytes;
 
@@ -750,7 +750,7 @@ seq_buf_read_pages(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDes
 			ereport(PANIC, (errcode_for_file_access(),
 							errmsg("could not to read second page from file %s, read = %d, expected = %d: %m",
 								   FilePathName(seqBufPrivate->file), nbytes, should_read)));
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 		free_bytes -= nbytes;
 	}
@@ -758,43 +758,43 @@ seq_buf_read_pages(seqBufPrivate: &mut SeqBufDescPrivate, shared: &mut SeqBufDes
 	put_page_image(shared->pages[0], buf_first);
 	put_page_image(shared->pages[1], buf_second);
 	shared->freeBytesNum = free_bytes;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static inline char *
 seq_buf_filename_if_exist(tag: &mut SeqBufTag)
 {
-	filename: &mut char;
-	struct stat not_used;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut NOT_USED: struct stat = std::mem::zeroed();
 
 	filename = get_seq_buf_filename(tag);
 	if (stat(filename, &not_used) == 0)
-		return filename;
+		pub static mut FILENAME: return = std::mem::zeroed();
 	pfree(filename);
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 bool
 seq_buf_file_exist(tag: &mut SeqBufTag)
 {
-	filename: &mut char;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 	if ((filename = seq_buf_filename_if_exist(tag)) == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	pfree(filename);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 bool
 seq_buf_remove_file(tag: &mut SeqBufTag)
 {
-	filename: &mut char;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 	if ((filename = seq_buf_filename_if_exist(tag)) == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	unlink(filename);
 	pfree(filename);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }

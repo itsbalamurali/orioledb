@@ -72,25 +72,24 @@ use pgrx::pg_sys;
 // Copyright (c) 2025-2026, Supabase Inc.
 
 
-PG_MODULE_MAGIC;
 
-static bool debug_disable_pools_limit = false;
-static Pointer shared_segment = NULL;
-static bool shared_segment_initialized = false;
-static int	free_tree_buffers_guc;
-static Size free_tree_buffers_count;
-static int	catalog_buffers_guc;
-static Size catalog_buffers_count;
-static Size main_buffers_offset;
+static mut DEBUG_DISABLE_POOLS_LIMIT: bool = false;
+static mut SHARED_SEGMENT: Pointer = std::ptr::null_mut();
+static mut SHARED_SEGMENT_INITIALIZED: bool = false;
+static mut FREE_TREE_BUFFERS_GUC: std::os::raw::c_int = 0;
+static mut FREE_TREE_BUFFERS_COUNT: Size = 0;
+static mut CATALOG_BUFFERS_GUC: std::os::raw::c_int = 0;
+static mut CATALOG_BUFFERS_COUNT: Size = 0;
+static mut MAIN_BUFFERS_OFFSET: Size = 0;
 
-Pointer		o_shared_buffers = NULL;
-page_descs: &mut OrioleDBPageDesc = NULL;
-local_ppool_pages: &mut Page = NULL;
-local_ppool_page_descs: &mut OrioleDBPageDesc = NULL;
+pub static mut O_SHARED_BUFFERS: Pointer = std::ptr::null_mut();
+pub static mut ORIOLE_DB_PAGE_DESC: *mut page_descs = std::ptr::null_mut();
+pub static mut PAGE: *mut local_ppool_pages = std::ptr::null_mut();
+pub static mut ORIOLE_DB_PAGE_DESC: *mut local_ppool_page_descs = std::ptr::null_mut();
 
 // Custom GUC variables
-int			orioledb_serializable_mode = O_SERIALIZABLE_TABLE_LOCK;
-bool		orioledb_debug_disable_multi_insert = false;
+pub static mut ORIOLEDB_SERIALIZABLE_MODE: std::os::raw::c_int = O_SERIALIZABLE_TABLE_LOCK;
+pub static mut ORIOLEDB_DEBUG_DISABLE_MULTI_INSERT: bool = false;
 
 static const struct config_enum_entry serializable_mode_options[] = {
 	{"table_lock", O_SERIALIZABLE_TABLE_LOCK, false},
@@ -99,97 +98,97 @@ static const struct config_enum_entry serializable_mode_options[] = {
 	{NULL, 0, false}
 };
 
-static int	main_buffers_guc;
-static int	undo_buffers_guc;
-static int	xid_buffers_guc;
-static int	rewind_buffers_guc;
-static int	temp_buffers_guc;
-int			max_procs;
-Size		orioledb_buffers_size;
-Size		orioledb_buffers_count;
-Size		orioledb_temp_buffers_count;
-static Size page_descs_size;
-Size		undo_circular_buffer_size;
-uint32		undo_buffers_count;
-double		regular_block_undo_circular_buffer_fraction;
-double		system_undo_circular_buffer_fraction;
-Size		xid_circular_buffer_size;
-uint32		xid_buffers_count;
-Size		rewind_circular_buffer_size;
-uint32		rewind_buffers_count;
-bool		remove_old_checkpoint_files = true;
-bool		skip_unmodified_trees = true;
-bool		debug_disable_bgwriter = false;
-bool		use_mmap = false;
-bool		use_device = false;
-bool		orioledb_use_sparse_files = false;
-device_filename: &mut char = NULL;
-Pointer		mmap_data = NULL;
-int			device_fd;
-int			device_length_guc = 0;
-Size		device_length = 0;
-double		o_checkpoint_completion_ratio;
-int			bgwriter_num_workers = 1;
-int			max_io_concurrency = 0;
-oProcData: &mut ODBProcData;
-int			default_compress = InvalidOCompress;
-int			default_primary_compress = InvalidOCompress;
-int			default_toast_compress = InvalidOCompress;
-bool		orioledb_table_description_compress = false;
-max_bridge_ctid_string: &mut char = NULL;
-BlockNumber max_bridge_ctid_blkno = 0;
-bool		orioledb_s3_mode = false;
-int			s3_num_workers = 3;
-int			s3_desired_size = 10000;
-int			s3_queue_size_guc;
-s3_host: &mut char = NULL;
-bool		s3_use_https = true;
-s3_region: &mut char = NULL;
-s3_prefix: &mut char = NULL;
-s3_accesskey: &mut char = NULL;
-s3_secretkey: &mut char = NULL;
-s3_cainfo: &mut char = NULL;
-bool		enable_rewind = false;
-int			rewind_max_time = 0;
-int			rewind_max_transactions = 0;
-int			logical_xid_buffers_guc = 64;
-bool		orioledb_strict_mode = false;
-XLogRecPtr	replay_until_lsn = InvalidXLogRecPtr;
-static replay_until_lsn_string: &mut char;
+static mut MAIN_BUFFERS_GUC: std::os::raw::c_int = 0;
+static mut UNDO_BUFFERS_GUC: std::os::raw::c_int = 0;
+static mut XID_BUFFERS_GUC: std::os::raw::c_int = 0;
+static mut REWIND_BUFFERS_GUC: std::os::raw::c_int = 0;
+static mut TEMP_BUFFERS_GUC: std::os::raw::c_int = 0;
+pub static mut MAX_PROCS: std::os::raw::c_int = 0;
+pub static mut ORIOLEDB_BUFFERS_SIZE: Size = 0;
+pub static mut ORIOLEDB_BUFFERS_COUNT: Size = 0;
+pub static mut ORIOLEDB_TEMP_BUFFERS_COUNT: Size = 0;
+static mut PAGE_DESCS_SIZE: Size = 0;
+pub static mut UNDO_CIRCULAR_BUFFER_SIZE: Size = 0;
+pub static mut UNDO_BUFFERS_COUNT: uint32 = std::mem::zeroed();
+pub static mut REGULAR_BLOCK_UNDO_CIRCULAR_BUFFER_FRACTION: double = std::mem::zeroed();
+pub static mut SYSTEM_UNDO_CIRCULAR_BUFFER_FRACTION: double = std::mem::zeroed();
+pub static mut XID_CIRCULAR_BUFFER_SIZE: Size = 0;
+pub static mut XID_BUFFERS_COUNT: uint32 = std::mem::zeroed();
+pub static mut REWIND_CIRCULAR_BUFFER_SIZE: Size = 0;
+pub static mut REWIND_BUFFERS_COUNT: uint32 = std::mem::zeroed();
+pub static mut REMOVE_OLD_CHECKPOINT_FILES: bool = true;
+pub static mut SKIP_UNMODIFIED_TREES: bool = true;
+pub static mut DEBUG_DISABLE_BGWRITER: bool = false;
+pub static mut USE_MMAP: bool = false;
+pub static mut USE_DEVICE: bool = false;
+pub static mut ORIOLEDB_USE_SPARSE_FILES: bool = false;
+pub static mut CHAR: *mut device_filename = std::ptr::null_mut();
+pub static mut MMAP_DATA: Pointer = std::ptr::null_mut();
+pub static mut DEVICE_FD: std::os::raw::c_int = 0;
+pub static mut DEVICE_LENGTH_GUC: std::os::raw::c_int = 0;
+pub static mut DEVICE_LENGTH: Size = 0;
+pub static mut O_CHECKPOINT_COMPLETION_RATIO: double = std::mem::zeroed();
+pub static mut BGWRITER_NUM_WORKERS: std::os::raw::c_int = 1;
+pub static mut MAX_IO_CONCURRENCY: std::os::raw::c_int = 0;
+pub static mut ODB_PROC_DATA: *mut oProcData = std::ptr::null_mut();
+pub static mut DEFAULT_COMPRESS: std::os::raw::c_int = InvalidOCompress;
+pub static mut DEFAULT_PRIMARY_COMPRESS: std::os::raw::c_int = InvalidOCompress;
+pub static mut DEFAULT_TOAST_COMPRESS: std::os::raw::c_int = InvalidOCompress;
+pub static mut ORIOLEDB_TABLE_DESCRIPTION_COMPRESS: bool = false;
+pub static mut CHAR: *mut max_bridge_ctid_string = std::ptr::null_mut();
+pub static mut MAX_BRIDGE_CTID_BLKNO: BlockNumber = 0;
+pub static mut ORIOLEDB_S3_MODE: bool = false;
+pub static mut S3_NUM_WORKERS: std::os::raw::c_int = 3;
+pub static mut S3_DESIRED_SIZE: std::os::raw::c_int = 10000;
+pub static mut S3_QUEUE_SIZE_GUC: std::os::raw::c_int = 0;
+pub static mut CHAR: *mut s3_host = std::ptr::null_mut();
+pub static mut S3_USE_HTTPS: bool = true;
+pub static mut CHAR: *mut s3_region = std::ptr::null_mut();
+pub static mut CHAR: *mut s3_prefix = std::ptr::null_mut();
+pub static mut CHAR: *mut s3_accesskey = std::ptr::null_mut();
+pub static mut CHAR: *mut s3_secretkey = std::ptr::null_mut();
+pub static mut CHAR: *mut s3_cainfo = std::ptr::null_mut();
+pub static mut ENABLE_REWIND: bool = false;
+pub static mut REWIND_MAX_TIME: std::os::raw::c_int = 0;
+pub static mut REWIND_MAX_TRANSACTIONS: std::os::raw::c_int = 0;
+pub static mut LOGICAL_XID_BUFFERS_GUC: std::os::raw::c_int = 64;
+pub static mut ORIOLEDB_STRICT_MODE: bool = false;
+pub static mut REPLAY_UNTIL_LSN: XLogRecPtr = InvalidXLogRecPtr;
+static mut CHAR: *mut replay_until_lsn_string = std::ptr::null_mut();
 
 // For page eviction/read checkpoint test only
-uint32		min_read_page_checkpoint = UINT32_MAX;
-uint32		max_read_page_checkpoint = 0;
+pub static mut MIN_READ_PAGE_CHECKPOINT: uint32 = UINT32_MAX;
+pub static mut MAX_READ_PAGE_CHECKPOINT: uint32 = 0;
 
 // Previous values of hooks to chain call them
-static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
+static mut PREV_SHMEM_STARTUP_HOOK: shmem_startup_hook_type = std::ptr::null_mut();
 fn (*prev_shmem_request_hook) () = NULL;
-static base_init_startup_hook_type prev_base_init_startup_hook = NULL;
-static get_relation_info_hook_type prev_get_relation_info_hook = NULL;
-database_size_hook_type prev_database_size_hook = NULL;
-static AcceptInvalidationMessagesHookType prev_AcceptInvalidationMessagesHook = NULL;
+static mut PREV_BASE_INIT_STARTUP_HOOK: base_init_startup_hook_type = std::ptr::null_mut();
+static mut PREV_GET_RELATION_INFO_HOOK: get_relation_info_hook_type = std::ptr::null_mut();
+pub static mut PREV_DATABASE_SIZE_HOOK: database_size_hook_type = std::ptr::null_mut();
+static mut PREV__ACCEPT_INVALIDATION_MESSAGES_HOOK: AcceptInvalidationMessagesHookType = std::ptr::null_mut();
 
 #if PG_VERSION_NUM < 180000
-static skip_tree_height_hook_type prev_skip_tree_height_hook = NULL;
+static mut PREV_SKIP_TREE_HEIGHT_HOOK: skip_tree_height_hook_type = std::ptr::null_mut();
 #endif
 
-CheckPoint_hook_type next_CheckPoint_hook = NULL;
+pub static mut NEXT__CHECK_POINT_HOOK: CheckPoint_hook_type = std::ptr::null_mut();
 static bool o_newlocale_from_collation();
 
 //
 // Temporary memory context for BTree operations. Helps us to avoid
 // excessive code complexity.
 //
-MemoryContext btree_insert_context = NULL;
+pub static mut BTREE_INSERT_CONTEXT: MemoryContext = std::ptr::null_mut();
 
 //
 // Memory context for btree sequential scans.  Scans needs to survive till
 // seq_scans_cleanup().
 //
-MemoryContext btree_seqscan_context = NULL;
+pub static mut BTREE_SEQSCAN_CONTEXT: MemoryContext = std::ptr::null_mut();
 
 static OPagePool page_pools[OPagePoolTypesCount];
-LocalPagePool local_ppool;
+pub static mut LOCAL_PPOOL: LocalPagePool = std::mem::zeroed();
 
 static size_t page_pools_size[OPagePoolTypesCount];
 
@@ -257,7 +256,7 @@ PG_FUNCTION_INFO_V1(orioledb_parallel_debug_stop);
 #ifdef IS_DEV
 typedef struct WalDescCtx
 {
-	StringInfo	buf;
+	pub static mut BUF: StringInfo = std::mem::zeroed();
 
 } WalDescCtx;
 
@@ -269,10 +268,10 @@ wal_desc_check_version(const r: &mut WalReaderState)
 	if (r->container.version > ORIOLEDB_WAL_VERSION)
 	{
 		// WAL from future version
-		return WALPARSE_BAD_VERSION;
+		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 static WalParseResult
@@ -331,7 +330,7 @@ wal_desc_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 			appendStringInfo(ctx->buf, ";");
 			break;
 	}
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 #endif
 
@@ -406,18 +405,18 @@ orioledb_enable_rewind_check_hook(newval: &mut bool,  **extra, GucSource source)
 	{
 		GUC_check_errcode(ERRCODE_FEATURE_NOT_SUPPORTED);
 		GUC_check_errdetail("Rewind is not supported on Windows.");
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 #elif !defined(HAVE_SETSID)
 	if (*newval)
 	{
 		GUC_check_errcode(ERRCODE_FEATURE_NOT_SUPPORTED);
 		GUC_check_errdetail("Rewind is not supported on systems without setsid(2).");
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 #endif
 	// Supported system or newval == false
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -428,19 +427,19 @@ orioledb_replay_until_lsn_check_hook(char **newval,  **extra, GucSource source)
 {
 	if (strcmp(*newval, "") != 0)
 	{
-		XLogRecPtr	lsn;
-		myextra: &mut XLogRecPtr;
-		bool		have_error = false;
+		pub static mut LSN: XLogRecPtr = std::mem::zeroed();
+		pub static mut X_LOG_REC_PTR: *mut myextra = std::ptr::null_mut();
+		pub static mut HAVE_ERROR: bool = false;
 
 		lsn = pg_lsn_in_internal(*newval, &have_error);
 		if (have_error)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		myextra = (XLogRecPtr *) guc_malloc(ERROR, sizeof(XLogRecPtr));
 		*myextra = lsn;
 		*extra = ( *) myextra;
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
@@ -453,9 +452,9 @@ orioledb_replay_until_lsn_assign_hook(const newval: &mut char,  *extra)
 
 _PG_init()
 {
-	Size		main_buffers_count;
-	int			i;
-	int			min_pool_size;
+	pub static mut MAIN_BUFFERS_COUNT: Size = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut MIN_POOL_SIZE: std::os::raw::c_int = 0;
 
 	if (!process_shared_preload_libraries_in_progress)
 		return;
@@ -1217,8 +1216,8 @@ _PG_init()
 
 	if (orioledb_s3_mode)
 	{
-		const check_errmsg: &mut char = NULL;
-		const check_errdetail: &mut char = NULL;
+		pub static mut CHAR: *mut const check_errmsg = std::ptr::null_mut();
+		pub static mut CHAR: *mut const check_errdetail = std::ptr::null_mut();
 
 		s3_put_lock_file();
 		if (!s3_check_control(&check_errmsg, &check_errdetail))
@@ -1334,7 +1333,7 @@ o_proc_shmem_init(Pointer ptr, bool found)
 	oProcData = (ODBProcData *) ptr;
 	if (!found)
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		for (i = 0; i < max_procs; i++)
 		{
@@ -1373,20 +1372,20 @@ o_proc_shmem_init(Pointer ptr, bool found)
 static Size
 ppools_shmem_needs()
 {
-	Size		size = 0;
-	int			i;
+	pub static mut SIZE: Size = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < OPagePoolTypesCount; i++)
 		size = add_size(size, page_pools_size[i]);
 	size = add_size(size, orioledb_buffers_size);
 	size = add_size(size, page_descs_size);
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 fn
 ppools_shmem_init(Pointer ptr, bool found)
 {
-	int64		i;
+	pub static mut I: int64 = std::mem::zeroed();
 	Pointer		page_pools_ptr[OPagePoolTypesCount];
 
 	for (i = 0; i < OPagePoolTypesCount; i++)
@@ -1425,14 +1424,14 @@ ppools_shmem_init(Pointer ptr, bool found)
 static Size
 orioledb_memsize()
 {
-	Size		size = 0;
+	pub static mut SIZE: Size = 0;
 	int			i,
 				count = sizeof(shmemItems) / sizeof(shmemItems[0]);
 
 	for (i = 0; i < count; i++)
 		size = add_size(size, CACHELINEALIGN(shmemItems[i].shmem_size()));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 fn
@@ -1466,8 +1465,8 @@ orioledb_shmem_request()
 fn
 orioledb_shmem_startup()
 {
-	Pointer		ptr;
-	bool		found;
+	pub static mut PTR: Pointer = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 	int			i,
 				count = sizeof(shmemItems) / sizeof(shmemItems[0]);
 
@@ -1516,14 +1515,14 @@ o_page_desc_init(desc: &mut OrioleDBPageDesc)
 uint64
 orioledb_device_alloc(struct descr: &mut BTreeDescr, uint32 size)
 {
-	uint64		result;
+	pub static mut RESULT: uint64 = std::mem::zeroed();
 
 	result = pg_atomic_fetch_add_u64(&checkpoint_state->mmapDataLength, size);
 
 	if (result + size > device_length)
 		elog(ERROR, "device file overflow");
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -1546,7 +1545,7 @@ orioledb_check_shmem()
 static int
 o_check_dir(const dir: &mut char)
 {
-	chkdir: &mut DIR;
+	pub static mut DIR: *mut chkdir = std::ptr::null_mut();
 
 	chkdir = opendir(dir);
 	if (chkdir == NULL)
@@ -1555,7 +1554,7 @@ o_check_dir(const dir: &mut char)
 	if (closedir(chkdir))
 		return -1;				// error executing closedir
 
-	return 1;
+	pub static mut 1: return = std::mem::zeroed();
 }
 
 //
@@ -1565,7 +1564,7 @@ o_check_dir(const dir: &mut char)
 
 o_verify_dir_exists_or_create(dirname: &mut char, created: &mut bool, found: &mut bool)
 {
-	const errstr: &mut char;
+	pub static mut CHAR: *mut const errstr = std::ptr::null_mut();
 
 	switch (o_check_dir(dirname))
 	{
@@ -1616,12 +1615,12 @@ orioledb_page_stats(PG_FUNCTION_ARGS)
 {
 	Datum		values[5];
 	bool		nulls[5];
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 
 	orioledb_check_shmem();
 
@@ -1676,12 +1675,12 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 	Datum		values[7];
 	bool		nulls[7];
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
-	int32		ppool_arg = OPagePoolMain;
-	OPagePoolType ppool_type;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut PPOOL_ARG: int32 = OPagePoolMain;
+	pub static mut PPOOL_TYPE: OPagePoolType = std::mem::zeroed();
 
 	// optional first argument: page pool type (int)
 	if (PG_NARGS() > 0 && !PG_ARGISNULL(0))
@@ -1736,7 +1735,7 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 	{
 		page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 		header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
-		uint64		state;
+		pub static mut STATE: uint64 = std::mem::zeroed();
 
 		MemSet(nulls, 0, sizeof(nulls));
 
@@ -1813,8 +1812,8 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 Datum
 orioledb_ucm_check(PG_FUNCTION_ARGS)
 {
-	bool		result = true;
-	int			i;
+	pub static mut RESULT: bool = true;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < OPagePoolTypesCount && result; i++)
 		result = ucm_check_map(&page_pools[i].ucm);
@@ -1840,7 +1839,7 @@ orioledb_usercache_hook(Datum arg, Oid arg1, Oid arg2, Oid arg3)
 
 o_invalidate_oids(ORelOids oids)
 {
-	SharedInvalidationMessage msg;
+	pub static mut MSG: SharedInvalidationMessage = std::mem::zeroed();
 
 	Assert(ORelOidsIsValid(oids));
 
@@ -1908,19 +1907,19 @@ get_ppool_by_blkno(OInMemoryBlkno blkno)
 OInMemoryBlkno
 get_dirty_pages_count_sum()
 {
-	OInMemoryBlkno result = 0;
-	int			i;
+	pub static mut RESULT: OInMemoryBlkno = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < OPagePoolTypesCount; i++)
 		result += ppool_dirty_pages_count((PagePool *) &page_pools[i]);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
 jsonb_push_key(JsonbParseState **state, key: &mut char)
 {
-	JsonbValue	jval;
+	pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 	memset(&jval, 0, sizeof(jval));
 	ASAN_UNPOISON_MEMORY_REGION(&jval, sizeof(jval));
@@ -1933,7 +1932,7 @@ jsonb_push_key(JsonbParseState **state, key: &mut char)
 
 jsonb_push_int8_key(JsonbParseState **state, key: &mut char, int64 value)
 {
-	JsonbValue	jval;
+	pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 	ASAN_UNPOISON_MEMORY_REGION(&jval, sizeof(jval));
 
@@ -1948,7 +1947,7 @@ jsonb_push_int8_key(JsonbParseState **state, key: &mut char, int64 value)
 
 jsonb_push_null_key(JsonbParseState **state, key: &mut char)
 {
-	JsonbValue	jval;
+	pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 	jsonb_push_key(state, key);
 
@@ -1960,7 +1959,7 @@ jsonb_push_null_key(JsonbParseState **state, key: &mut char)
 
 jsonb_push_bool_key(JsonbParseState **state, key: &mut char, bool value)
 {
-	JsonbValue	jval;
+	pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 	jsonb_push_key(state, key);
 
@@ -1976,7 +1975,7 @@ jsonb_push_bool_key(JsonbParseState **state, key: &mut char, bool value)
 jsonb_push_string_key(JsonbParseState **state, const key: &mut char,
 					  const value: &mut char)
 {
-	JsonbValue	jval;
+	pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 	jsonb_push_key(state, (char *) key);
 
@@ -1990,7 +1989,7 @@ jsonb_push_string_key(JsonbParseState **state, const key: &mut char,
 fn
 orioledb_error_cleanup_hook()
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	GET_CUR_PROCDATA()->waitingForOxid = false;
 	pg_atomic_write_u64(&GET_CUR_PROCDATA()->pendingSkUndoLoc,
@@ -2017,7 +2016,7 @@ orioledb_get_relation_info_hook(root: &mut PlannerInfo,
 								bool inhparent,
 								rel: &mut RelOptInfo)
 {
-	Relation	relation;
+	pub static mut RELATION: Relation = std::mem::zeroed();
 
 	relation = table_open(relationObjectId, NoLock);
 
@@ -2030,9 +2029,9 @@ orioledb_get_relation_info_hook(root: &mut PlannerInfo,
 
 		if (relation->rd_rel->relhasindex)
 		{
-			lc: &mut ListCell;
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 			descr: &mut OTableDescr = relation_get_descr(relation);
-			primary: &mut OIndexDescr;
+			pub static mut O_INDEX_DESCR: *mut primary = std::ptr::null_mut();
 
 			if (descr)
 			{
@@ -2041,13 +2040,13 @@ orioledb_get_relation_info_hook(root: &mut PlannerInfo,
 				foreach(lc, rel->indexlist)
 				{
 					info: &mut IndexOptInfo = lfirst_node(IndexOptInfo, lc);
-					bool		hasbitmap;
-					OIndexNumber ix_num;
-					index_descr: &mut OIndexDescr = NULL;
-					OInMemoryBlkno rootPageBlkno;
-					Page		root_page;
-					Relation	index;
-					options: &mut OBTOptions;
+					pub static mut HASBITMAP: bool = false;
+					pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+					pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
+					pub static mut ROOT_PAGE_BLKNO: OInMemoryBlkno = std::mem::zeroed();
+					pub static mut ROOT_PAGE: Page = std::mem::zeroed();
+					pub static mut INDEX: Relation = std::mem::zeroed();
+					pub static mut OBT_OPTIONS: *mut options = std::ptr::null_mut();
 
 					index = index_open(info->indexoid, AccessShareLock);
 
@@ -2112,8 +2111,8 @@ orioledb_get_relation_info_hook(root: &mut PlannerInfo,
 static bool
 orioledb_skip_tree_height_hook(Relation indexRelation)
 {
-	bool		result = false;
-	Relation	tbl;
+	pub static mut RESULT: bool = false;
+	pub static mut TBL: Relation = std::mem::zeroed();
 
 	tbl = table_open(indexRelation->rd_index->indrelid, NoLock);
 
@@ -2121,7 +2120,7 @@ orioledb_skip_tree_height_hook(Relation indexRelation)
 		result = true;
 
 	table_close(tbl, NoLock);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 #endif
 
@@ -2139,7 +2138,7 @@ orioledb_get_running_transactions_extension(extension: &mut RunningTransactionsE
 fn
 orioledb_wait_snapshot(extension: &mut RunningTransactionsExtension)
 {
-	OXid		oxid;
+	pub static mut OXID: OXid = std::mem::zeroed();
 
 	oxid = pg_atomic_read_u64(&xid_meta->runXmin);
 	while (oxid < extension->nextXid)
@@ -2166,7 +2165,7 @@ orioledb_parallel_debug_stop(PG_FUNCTION_ARGS)
 static bool
 o_newlocale_from_collation()
 {
-	return shared_segment_initialized;
+	pub static mut SHARED_SEGMENT_INITIALIZED: return = std::mem::zeroed();
 }
 
 bool
@@ -2175,7 +2174,7 @@ is_bump_memory_context(MemoryContext mcxt)
 #if PG_VERSION_NUM >= 170000
 	return IsA(mcxt, BumpContext);
 #else
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 #endif
 }
 
@@ -2184,10 +2183,10 @@ check_debug_max_bridge_ctid(char **newval,  **extra, GucSource source)
 {
 	if (strcmp(*newval, "") != 0)
 	{
-		myextra: &mut BlockNumber;
-		BlockNumber blockNumber;
-		badp: &mut char;
-		unsigned long cvt;
+		pub static mut BLOCK_NUMBER: *mut myextra = std::ptr::null_mut();
+		pub static mut BLOCK_NUMBER: BlockNumber = std::mem::zeroed();
+		pub static mut CHAR: *mut badp = std::ptr::null_mut();
+		pub static mut CVT: unsigned long = std::mem::zeroed();
 
 		errno = 0;
 		cvt = strtoul(*newval, &badp, 10);
@@ -2217,7 +2216,7 @@ check_debug_max_bridge_ctid(char **newval,  **extra, GucSource source)
 		*myextra = blockNumber;
 		*extra = ( *) myextra;
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn

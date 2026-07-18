@@ -57,21 +57,21 @@ btree_try_merge_pages(desc: &mut BTreeDescr,
 	Page		parent = O_GET_IN_MEMORY_PAGE(parent_blkno),
 				left = O_GET_IN_MEMORY_PAGE(left_blkno),
 				right = O_GET_IN_MEMORY_PAGE(right_blkno);
-	right_desc: &mut OrioleDBPageDesc;
+	pub static mut ORIOLE_DB_PAGE_DESC: *mut right_desc = std::ptr::null_mut();
 	left_header: &mut BTreePageHeader = (BTreePageHeader *) left;
-	FileExtent	right_extent;
-	CommitSeqNo csn;
-	CommitSeqNo headerCsn;
-	UndoLocation undo_loc;
-	uint32		checkpoint_number;
-	bool		copy_blkno;
-	bool		needsUndo;
+	pub static mut RIGHT_EXTENT: FileExtent = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut HEADER_CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut UNDO_LOC: UndoLocation = std::mem::zeroed();
+	pub static mut CHECKPOINT_NUMBER: uint32 = std::mem::zeroed();
+	pub static mut COPY_BLKNO: bool = false;
+	pub static mut NEEDS_UNDO: bool = false;
 	int			level = PAGE_GET_LEVEL(right);
 
 	if (RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(right)))
 	{
 		// concurrent split in progress
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (!get_checkpoint_number(desc, right_blkno,
@@ -80,7 +80,7 @@ btree_try_merge_pages(desc: &mut BTreeDescr,
 		//
 // page is concurrent to in progress checkpoint and can not be merged
 //
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	needsUndo = O_PAGE_IS(left, LEAF) && desc->undoType != UndoLogNone;
@@ -95,7 +95,7 @@ btree_try_merge_pages(desc: &mut BTreeDescr,
 
 	if (!can_be_merged(desc, left, right, csn))
 	{
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// all checks are done, errors do not expected after this line
@@ -245,7 +245,7 @@ btree_try_merge_pages(desc: &mut BTreeDescr,
 								   checkpoint_number);
 	}
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -262,16 +262,16 @@ btree_try_merge_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				parent,
 				right,
 				left;
-	OFixedKey	key;
-	int			level;
-	OBTreeFindPageContext find_context;
+	pub static mut KEY: OFixedKey = std::mem::zeroed();
+	pub static mut LEVEL: std::os::raw::c_int = 0;
+	pub static mut FIND_CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
 	OInMemoryBlkno parent_blkno,
 				target_blkno = OInvalidInMemoryBlkno,
 				right_blkno,
 				left_blkno;
-	uint32		parent_change_count;
-	bool		success = false;
-	bool		needsUndo = desc->undoType != UndoLogNone;
+	pub static mut PARENT_CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut SUCCESS: bool = false;
+	pub static mut NEEDS_UNDO: bool = desc->undoType != UndoLogNone;
 
 	//
 // Reserve the required undo size.  We are holding the page lock, so we
@@ -284,7 +284,7 @@ btree_try_merge_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 		// unable to reserve undo location, no opportunity to resume
 		unlock_page(blkno);
 		Assert(!have_locked_pages());
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// Step 1: get all the information from the parent page
@@ -335,7 +335,7 @@ btree_try_merge_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 
 		if (!page_is_locked(parent_blkno))
 		{
-			OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
+			pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult result = std::mem::zeroed();
 
 			// refind parent page if needed
 			if (!O_TUPLE_IS_NULL(key.tuple))
@@ -421,7 +421,7 @@ btree_try_merge_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 			}
 			else if (DOWNLINK_IS_IN_MEMORY(right_tuph->downlink))
 			{
-				int			io_num;
+				pub static mut IO_NUM: std::os::raw::c_int = 0;
 
 				Assert(DOWNLINK_IS_IN_MEMORY(right_tuph->downlink));
 				right_blkno = DOWNLINK_GET_IN_MEMORY_BLKNO(right_tuph->downlink);
@@ -481,7 +481,7 @@ btree_try_merge_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 			}
 			else if (DOWNLINK_IS_IN_MEMORY(left_tuph->downlink))
 			{
-				int			io_num;
+				pub static mut IO_NUM: std::os::raw::c_int = 0;
 
 				Assert(DOWNLINK_IS_IN_MEMORY(left_tuph->downlink));
 				left_blkno = DOWNLINK_GET_IN_MEMORY_BLKNO(left_tuph->downlink);
@@ -563,7 +563,7 @@ btree_try_merge_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 		release_undo_size(GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType));
 
 	Assert(!have_locked_pages());
-	return success;
+	pub static mut SUCCESS: return = std::mem::zeroed();
 }
 
 //
@@ -588,19 +588,19 @@ can_be_merged(desc: &mut BTreeDescr, Page left, Page right, CommitSeqNo csn)
 
 	// no need to compact page
 	if (space_free >= space_needed)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	// we can merge pages after the pages compaction
 	if (space_free + PAGE_GET_N_VACATED(left) +
 		PAGE_GET_N_VACATED(right) < space_needed)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (space_free + page_get_vacated_space(desc, left, csn) +
 		page_get_vacated_space(desc, right, csn) >= space_needed)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	// we can not merge this pages
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -617,11 +617,11 @@ merge_pages(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno,
 				rightHikey;
 	LocationIndex leftHikeySize,
 				rightHikeySize;
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	BTreePageItem items[BTREE_PAGE_MAX_CHUNK_ITEMS];
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	bool		leaf = O_PAGE_IS(left, LEAF);
-	bool		first;
+	pub static mut FIRST: bool = false;
 	char		newItem[Max(BTreeLeafTuphdrSize, BTreeNonLeafTuphdrSize) + O_BTREE_MAX_TUPLE_SIZE];
 
 	Assert(O_PAGE_IS(left, LEAF) == O_PAGE_IS(right, LEAF));
@@ -645,9 +645,9 @@ merge_pages(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno,
 	{
 		BTREE_PAGE_FOREACH_ITEMS(left, &loc)
 		{
-			tupHdr: &mut BTreeLeafTuphdr;
-			OTuple		tup;
-			bool		finished;
+			pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+			pub static mut TUP: OTuple = std::mem::zeroed();
+			pub static mut FINISHED: bool = false;
 
 			BTREE_PAGE_READ_LEAF_ITEM(tupHdr, tup, left, &loc);
 			finished = XACT_INFO_FINISHED_FOR_EVERYBODY(tupHdr->xactInfo);
@@ -679,9 +679,9 @@ merge_pages(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno,
 	{
 		BTREE_PAGE_FOREACH_ITEMS(right, &loc)
 		{
-			tupHdr: &mut BTreeLeafTuphdr;
-			OTuple		tup;
-			bool		finished;
+			pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+			pub static mut TUP: OTuple = std::mem::zeroed();
+			pub static mut FINISHED: bool = false;
 
 			BTREE_PAGE_READ_LEAF_ITEM(tupHdr, tup, right, &loc);
 			finished = XACT_INFO_FINISHED_FOR_EVERYBODY(tupHdr->xactInfo);
@@ -743,25 +743,25 @@ merge_pages(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno,
 bool
 is_page_too_sparse(desc: &mut BTreeDescr, Page p)
 {
-	LocationIndex space_free;
+	pub static mut SPACE_FREE: LocationIndex = std::mem::zeroed();
 
 	// we can not merge rootPageBlkno page
 	if (O_PAGE_IS(p, RIGHTMOST) && O_PAGE_IS(p, LEFTMOST))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	// page should not be under split
 	if (RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(p)))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (O_PAGE_IS(p, LEAF))
 	{
 		// if leaf have no items
 		if (BTREE_PAGE_ITEMS_COUNT(p) == 0)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		space_free = BTREE_PAGE_FREE_SPACE(p) + PAGE_GET_N_VACATED(p);
 		if (((double) space_free / ORIOLEDB_BLCKSZ) < O_MERGE_LEAF_FREE_RATIO)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		space_free = BTREE_PAGE_FREE_SPACE(p) + page_get_vacated_space(desc, p, 0);
 		return ((double) space_free / ORIOLEDB_BLCKSZ) >= O_MERGE_LEAF_FREE_RATIO;
@@ -770,7 +770,7 @@ is_page_too_sparse(desc: &mut BTreeDescr, Page p)
 	{
 		// if node have only one downlink
 		if (BTREE_PAGE_ITEMS_COUNT(p) == 1)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		space_free = BTREE_PAGE_FREE_SPACE(p);
 		return ((double) space_free / ORIOLEDB_BLCKSZ) >= O_MERGE_NODE_FREE_RATIO;

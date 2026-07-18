@@ -24,9 +24,9 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	TupleDesc	tupDesc;
-	id: &mut OIndexDescr;
-	bool		enforceUnique;
+	pub static mut TUP_DESC: TupleDesc = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut id = std::ptr::null_mut();
+	pub static mut ENFORCE_UNIQUE: bool = false;
 } OIndexBuildSortArg;
 
 fn
@@ -42,41 +42,41 @@ write_o_tuple( *ptr, OTuple tup, int tupsize)
 static OTuple
 read_o_tuple( *ptr)
 {
-	OTuple		tup;
+	pub static mut TUP: OTuple = std::mem::zeroed();
 	Pointer		p = (Pointer) ptr;
 
 	tup.formatFlags = *((uint8 *) p);
 	p += MAXIMUM_ALIGNOF;
 	tup.data = p;
 
-	return tup;
+	pub static mut TUP: return = std::mem::zeroed();
 }
 
 static int
 comparetup_orioledb_index(const a: &mut SortTuple, const b: &mut SortTuple, state: &mut Tuplesortstate)
 {
 	base: &mut TuplesortPublic = TuplesortstateGetPublic(state);
-	SortSupport sortKey = base->sortKeys;
-	OTuple		ltup;
-	OTuple		rtup;
-	TupleDesc	tupDesc;
-	bool		equal_hasnull = false;
-	int			nkey;
-	int32		compare;
-	AttrNumber	attno;
+	pub static mut SORT_KEY: SortSupport = base->sortKeys;
+	pub static mut LTUP: OTuple = std::mem::zeroed();
+	pub static mut RTUP: OTuple = std::mem::zeroed();
+	pub static mut TUP_DESC: TupleDesc = std::mem::zeroed();
+	pub static mut EQUAL_HASNULL: bool = false;
+	pub static mut NKEY: std::os::raw::c_int = 0;
+	pub static mut COMPARE: int32 = std::mem::zeroed();
+	pub static mut ATTNO: AttrNumber = std::mem::zeroed();
 	Datum		datum1,
 				datum2;
 	bool		isnull1,
 				isnull2;
 	arg: &mut OIndexBuildSortArg = (OIndexBuildSortArg *) base->arg;
-	spec: &mut OTupleFixedFormatSpec = &arg->id->leafSpec;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &arg->id->leafSpec;
 
 	// Compare the leading sort key
 	compare = ApplySortComparator(a->datum1, a->isnull1,
 								  b->datum1, b->isnull1,
 								  sortKey);
 	if (compare != 0)
-		return compare;
+		pub static mut COMPARE: return = std::mem::zeroed();
 
 	// Compare additional sort keys
 	ltup = read_o_tuple(a->tuple);
@@ -94,7 +94,7 @@ comparetup_orioledb_index(const a: &mut SortTuple, const b: &mut SortTuple, stat
 												datum2, isnull2,
 												sortKey);
 		if (compare != 0)
-			return compare;
+			pub static mut COMPARE: return = std::mem::zeroed();
 	}
 
 	// they are equal, so we only need to examine one null flag
@@ -143,7 +143,7 @@ comparetup_orioledb_index(const a: &mut SortTuple, const b: &mut SortTuple, stat
 				 errdetail("Duplicate keys exist.")));
 	}
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
@@ -151,9 +151,9 @@ writetup_orioledb_index(state: &mut Tuplesortstate, tape: &mut LogicalTape, stup
 {
 	base: &mut TuplesortPublic = TuplesortstateGetPublic(state);
 	arg: &mut OIndexBuildSortArg = (OIndexBuildSortArg *) base->arg;
-	spec: &mut OTupleFixedFormatSpec = &arg->id->leafSpec;
-	OTuple		tuple;
-	int			tuplen;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &arg->id->leafSpec;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut TUPLEN: std::os::raw::c_int = 0;
 
 	tuple = read_o_tuple(stup->tuple);
 	tuplen = o_tuple_size(tuple, spec) + sizeof(int) + 1;
@@ -171,10 +171,10 @@ readtup_orioledb_index(state: &mut Tuplesortstate, stup: &mut SortTuple,
 {
 	base: &mut TuplesortPublic = TuplesortstateGetPublic(state);
 	arg: &mut OIndexBuildSortArg = (OIndexBuildSortArg *) base->arg;
-	spec: &mut OTupleFixedFormatSpec = &arg->id->leafSpec;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &arg->id->leafSpec;
 	uint32		tuplen = len - sizeof(int) - 1;
 	Pointer		tup = (Pointer) tuplesort_readtup_alloc(state, MAXIMUM_ALIGNOF + tuplen);
-	OTuple		tuple;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	// read in the tuple proper
 	LogicalTapeReadExact(tape, tup + MAXIMUM_ALIGNOF, tuplen);
@@ -195,15 +195,15 @@ fn
 removeabbrev_orioledb_index(state: &mut Tuplesortstate, stups: &mut SortTuple,
 							int count)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	base: &mut TuplesortPublic = TuplesortstateGetPublic(state);
 	arg: &mut OIndexBuildSortArg = (OIndexBuildSortArg *) base->arg;
-	spec: &mut OTupleFixedFormatSpec = &arg->id->leafSpec;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &arg->id->leafSpec;
 
 	for (i = 0; i < count; i++)
 	{
-		stup: &mut SortTuple = &stups[i];
-		OTuple		tup;
+		pub static mut SORT_TUPLE: *mut stup = &stups[i];
+		pub static mut TUP: OTuple = std::mem::zeroed();
 
 		tup = read_o_tuple(stup->tuple);
 
@@ -224,10 +224,10 @@ tuplesort_begin_orioledb_index(idx: &mut OIndexDescr,
 	state: &mut Tuplesortstate = tuplesort_begin_common(workMem, coordinate,
 												   randomAccess);
 	base: &mut TuplesortPublic = TuplesortstateGetPublic(state);
-	MemoryContext oldcontext;
-	arg: &mut OIndexBuildSortArg;
-	int			sort_fields;
-	int			i;
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut O_INDEX_BUILD_SORT_ARG: *mut arg = std::ptr::null_mut();
+	pub static mut SORT_FIELDS: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (idx->unique)
 		sort_fields = idx->nKeyFields;
@@ -254,7 +254,7 @@ tuplesort_begin_orioledb_index(idx: &mut OIndexDescr,
 	{
 		if (!OIgnoreColumn(idx, i))
 		{
-			SortSupport sortKey = &base->sortKeys[i];
+			pub static mut SORT_KEY: SortSupport = &base->sortKeys[i];
 
 			sortKey->ssup_cxt = CurrentMemoryContext;
 			sortKey->ssup_collation = idx->fields[i].collation;
@@ -270,7 +270,7 @@ tuplesort_begin_orioledb_index(idx: &mut OIndexDescr,
 
 	MemoryContextSwitchTo(oldcontext);
 
-	return state;
+	pub static mut STATE: return = std::mem::zeroed();
 }
 
 Tuplesortstate *
@@ -283,12 +283,12 @@ tuplesort_begin_orioledb_toast(toast: &mut OIndexDescr,
 	state: &mut Tuplesortstate = tuplesort_begin_common(workMem, coordinate,
 												   randomAccess);
 	base: &mut TuplesortPublic = TuplesortstateGetPublic(state);
-	MemoryContext oldcontext;
-	arg: &mut OIndexBuildSortArg;
-	SortSupport sortKey;
-	OIndexField field;
-	int			key_fields;
-	int			i;
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut O_INDEX_BUILD_SORT_ARG: *mut arg = std::ptr::null_mut();
+	pub static mut SORT_KEY: SortSupport = std::mem::zeroed();
+	pub static mut FIELD: OIndexField = std::mem::zeroed();
+	pub static mut KEY_FIELDS: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	key_fields = primary->nKeyFields;
 
@@ -357,15 +357,15 @@ tuplesort_begin_orioledb_toast(toast: &mut OIndexDescr,
 
 	MemoryContextSwitchTo(oldcontext);
 
-	return state;
+	pub static mut STATE: return = std::mem::zeroed();
 }
 
 OTuple
 tuplesort_getotuple(state: &mut Tuplesortstate, bool forward)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(TuplesortstateGetPublic(state)->sortcontext);
-	SortTuple	stup;
-	OTuple		result;
+	pub static mut STUP: SortTuple = std::mem::zeroed();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	if (!tuplesort_gettuple_common(state, forward, &stup))
 		stup.tuple = NULL;
@@ -382,7 +382,7 @@ tuplesort_getotuple(state: &mut Tuplesortstate, bool forward)
 		result.formatFlags = 0;
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -390,13 +390,13 @@ tuplesort_putotuple(state: &mut Tuplesortstate, OTuple tup)
 {
 	base: &mut TuplesortPublic = TuplesortstateGetPublic(state);
 	arg: &mut OIndexBuildSortArg = (OIndexBuildSortArg *) base->arg;
-	spec: &mut OTupleFixedFormatSpec = &arg->id->leafSpec;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &arg->id->leafSpec;
 	MemoryContext oldcontext = MemoryContextSwitchTo(base->tuplecontext);
-	SortTuple	stup;
-	int			tupsize;
-	OTuple		written_tup;
+	pub static mut STUP: SortTuple = std::mem::zeroed();
+	pub static mut TUPSIZE: std::os::raw::c_int = 0;
+	pub static mut WRITTEN_TUP: OTuple = std::mem::zeroed();
 #if PG_VERSION_NUM >= 170000
-	Size		tuplen;
+	pub static mut TUPLEN: Size = 0;
 #endif
 
 	//

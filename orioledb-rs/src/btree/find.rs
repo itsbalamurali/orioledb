@@ -25,17 +25,17 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	context: &mut OBTreeFindPageContext;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = std::ptr::null_mut();
 		   *key;
-	BTreeKeyType keyType;
-	Page		pagePtr;
-	int			targetLevel;
-	OInMemoryBlkno blkno;
-	uint32		pageChangeCount;
-	partial: &mut PartialPageState;
-	bool		haveLock;
-	bool		inserted;
-	bool		tryLockFailed;
+	pub static mut KEY_TYPE: BTreeKeyType = std::mem::zeroed();
+	pub static mut PAGE_PTR: Page = std::mem::zeroed();
+	pub static mut TARGET_LEVEL: std::os::raw::c_int = 0;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut PAGE_CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut PARTIAL_PAGE_STATE: *mut partial = std::ptr::null_mut();
+	pub static mut HAVE_LOCK: bool = false;
+	pub static mut INSERTED: bool = false;
+	pub static mut TRY_LOCK_FAILED: bool = false;
 } OBTreeFindPageInternalContext;
 
 static bool follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext);
@@ -101,21 +101,21 @@ page_find_downlink(intCxt: &mut OBTreeFindPageInternalContext,
 				   loc: &mut BTreePageItemLocator,
 				   BTreeNonLeafTuphdr **tuphdr)
 {
-	context: &mut OBTreeFindPageContext = intCxt->context;
-	desc: &mut BTreeDescr = context->desc;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = intCxt->context;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
 		   *key = intCxt->key;
-	BTreeKeyType keyType = intCxt->keyType;
-	bool		itemFound = true;
+	pub static mut KEY_TYPE: BTreeKeyType = intCxt->keyType;
+	pub static mut ITEM_FOUND: bool = true;
 
 	if (fastPathDownlink)
 	{
-		OBTreeFastPathFindResult result;
+		pub static mut RESULT: OBTreeFastPathFindResult = std::mem::zeroed();
 
 		result = fastpath_find_downlink(intCxt->pagePtr, intCxt->blkno,
 										meta, loc, tuphdr);
 
 		if (result != OBTreeFastPathFindSlowpath)
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	if (intCxt->partial &&
@@ -123,7 +123,7 @@ page_find_downlink(intCxt: &mut OBTreeFindPageInternalContext,
 		!intCxt->partial->hikeysChunkIsLoaded)
 	{
 		if (!partial_load_hikeys_chunk(intCxt->partial, intCxt->pagePtr))
-			return OBTreeFastPathFindRetry;
+			pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 	}
 
 	//
@@ -135,13 +135,13 @@ page_find_downlink(intCxt: &mut OBTreeFindPageInternalContext,
 		if (follow_rightlink(intCxt))
 		{
 			if (intCxt->tryLockFailed)
-				return OBTreeFastPathFindFailure;
+				pub static mut OB_TREE_FAST_PATH_FIND_FAILURE: return = std::mem::zeroed();
 			if (intCxt->inserted)
-				return OBTreeFastPathFindFailure;
+				pub static mut OB_TREE_FAST_PATH_FIND_FAILURE: return = std::mem::zeroed();
 			Assert(context->index > 0);
 			Assert(!intCxt->haveLock);
 			step_upward_level(intCxt);
-			return OBTreeFastPathFindRetry;
+			pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 		}
 	}
 
@@ -178,8 +178,8 @@ page_find_downlink(intCxt: &mut OBTreeFindPageInternalContext,
 		{
 			Assert(!intCxt->haveLock);
 			if (BTREE_PAGE_FIND_IS(context, TRY_LOCK))
-				return OBTreeFastPathFindFailure;
-			return OBTreeFastPathFindRetry;
+				pub static mut OB_TREE_FAST_PATH_FIND_FAILURE: return = std::mem::zeroed();
+			pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 		}
 
 		if (BTREE_PAGE_FIND_IS(context, IMAGE) &&
@@ -194,14 +194,14 @@ page_find_downlink(intCxt: &mut OBTreeFindPageInternalContext,
 									loc->chunkOffset - 1, NULL))
 			{
 				Assert(!intCxt->haveLock);
-				return OBTreeFastPathFindRetry;
+				pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 			}
 		}
 	}
 
 	*tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(intCxt->pagePtr, loc);
 
-	return OBTreeFastPathFindOK;
+	pub static mut OB_TREE_FAST_PATH_FIND_OK: return = std::mem::zeroed();
 }
 
 static OBTreeFastPathFindResult
@@ -212,16 +212,16 @@ page_find_item(intCxt: &mut OBTreeFindPageInternalContext,
 			   loc: &mut BTreePageItemLocator,
 			   BTreeNonLeafTuphdr **tuphdr)
 {
-	context: &mut OBTreeFindPageContext = intCxt->context;
-	desc: &mut BTreeDescr = context->desc;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = intCxt->context;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
 		   *key = intCxt->key;
-	BTreeKeyType keyType = intCxt->keyType;
-	bool		itemFound = true;
+	pub static mut KEY_TYPE: BTreeKeyType = intCxt->keyType;
+	pub static mut ITEM_FOUND: bool = true;
 
 	if (fastpath && intCxt->partial->isPartial)
 	{
-		OBTreeFastPathFindResult result;
-		int			chunkIndex;
+		pub static mut RESULT: OBTreeFastPathFindResult = std::mem::zeroed();
+		pub static mut CHUNK_INDEX: std::os::raw::c_int = 0;
 
 		Assert(!BTREE_PAGE_FIND_IS(context, MODIFY));
 
@@ -260,7 +260,7 @@ page_find_item(intCxt: &mut OBTreeFindPageInternalContext,
 				if (level > 0)
 					*tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(intCxt->pagePtr, loc);
 
-				return OBTreeFastPathFindOK;
+				pub static mut OB_TREE_FAST_PATH_FIND_OK: return = std::mem::zeroed();
 			}
 			else
 			{
@@ -277,12 +277,12 @@ page_find_item(intCxt: &mut OBTreeFindPageInternalContext,
 //
 			Assert(!intCxt->haveLock);
 			if (BTREE_PAGE_FIND_IS(context, TRY_LOCK))
-				return OBTreeFastPathFindFailure;
-			return OBTreeFastPathFindRetry;
+				pub static mut OB_TREE_FAST_PATH_FIND_FAILURE: return = std::mem::zeroed();
+			pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 		}
 		else if (result == OBTreeFastPathFindFailure)
 		{
-			return OBTreeFastPathFindFailure;
+			pub static mut OB_TREE_FAST_PATH_FIND_FAILURE: return = std::mem::zeroed();
 		}
 		Assert(result == OBTreeFastPathFindSlowpath);
 	}
@@ -292,7 +292,7 @@ page_find_item(intCxt: &mut OBTreeFindPageInternalContext,
 		!intCxt->partial->hikeysChunkIsLoaded)
 	{
 		if (!partial_load_hikeys_chunk(intCxt->partial, intCxt->pagePtr))
-			return OBTreeFastPathFindRetry;
+			pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 	}
 
 	//
@@ -304,11 +304,11 @@ page_find_item(intCxt: &mut OBTreeFindPageInternalContext,
 		if (follow_rightlink(intCxt))
 		{
 			if (intCxt->tryLockFailed)
-				return OBTreeFastPathFindFailure;
+				pub static mut OB_TREE_FAST_PATH_FIND_FAILURE: return = std::mem::zeroed();
 			Assert(context->index > 0);
 			Assert(!intCxt->haveLock);
 			step_upward_level(intCxt);
-			return OBTreeFastPathFindRetry;
+			pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 		}
 	}
 
@@ -344,14 +344,14 @@ page_find_item(intCxt: &mut OBTreeFindPageInternalContext,
 //
 		Assert(!intCxt->haveLock);
 		if (BTREE_PAGE_FIND_IS(context, TRY_LOCK))
-			return OBTreeFastPathFindFailure;
-		return OBTreeFastPathFindRetry;
+			pub static mut OB_TREE_FAST_PATH_FIND_FAILURE: return = std::mem::zeroed();
+		pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 	}
 
 	if (level > 0)
 		*tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(intCxt->pagePtr, loc);
 
-	return OBTreeFastPathFindOK;
+	pub static mut OB_TREE_FAST_PATH_FIND_OK: return = std::mem::zeroed();
 }
 
 //
@@ -373,13 +373,13 @@ page_find_item(intCxt: &mut OBTreeFindPageInternalContext,
 fn
 refresh_parent_img_chunk(intCxt: &mut OBTreeFindPageInternalContext)
 {
-	context: &mut OBTreeFindPageContext = intCxt->context;
-	Pointer		src = intCxt->pagePtr;
-	locator: &mut BTreePageItemLocator = &context->items[context->index].locator;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = intCxt->context;
+	pub static mut SRC: Pointer = intCxt->pagePtr;
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut locator = &context->items[context->index].locator;
 	hdr: &mut BTreePageHeader = (BTreePageHeader *) src;
-	OffsetNumber chunkOffset = locator->chunkOffset;
-	LocationIndex chunkBegin;
-	LocationIndex chunkEnd;
+	pub static mut CHUNK_OFFSET: OffsetNumber = locator->chunkOffset;
+	pub static mut CHUNK_BEGIN: LocationIndex = std::mem::zeroed();
+	pub static mut CHUNK_END: LocationIndex = std::mem::zeroed();
 
 	chunkBegin = SHORT_GET_LOCATION(hdr->chunkDesc[chunkOffset].shortLocation);
 	if (chunkOffset + 1 < hdr->chunksCount)
@@ -430,18 +430,18 @@ static bool
 convert_fastpath_parent_to_img(context: &mut OBTreeFindPageContext,
 							   locator: &mut BTreePageItemLocator)
 {
-	OffsetNumber chunkOffset = locator->chunkOffset;
-	OffsetNumber itemOffset = locator->itemOffset;
+	pub static mut CHUNK_OFFSET: OffsetNumber = locator->chunkOffset;
+	pub static mut ITEM_OFFSET: OffsetNumber = locator->itemOffset;
 
 	if (!partial_load_hikeys_chunk(&context->parentPartial, context->parentImg))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!partial_load_chunk(&context->parentPartial, context->parentImg,
 							chunkOffset, locator))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	locator->itemOffset = itemOffset;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 // --
@@ -472,9 +472,9 @@ OFindPageResult
 find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 		  uint16 targetLevel)
 {
-	desc: &mut BTreeDescr = context->desc;
-	OBTreeFindPageInternalContext intCxt;
-	BTreePageItemLocator loc;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut INT_CXT: OBTreeFindPageInternalContext = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	bool		needLock = false,
 				fetchFlag = BTREE_PAGE_FIND_IS(context, FETCH),
 				modifyFlag = BTREE_PAGE_FIND_IS(context, MODIFY),
@@ -485,10 +485,10 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 				keepLokeyFlag = BTREE_PAGE_FIND_IS(context, KEEP_LOKEY),
 				keepParentFlag = BTREE_PAGE_FIND_IS(context, KEEP_PARENT),
 				downlinkLocationFlag = BTREE_PAGE_FIND_IS(context, DOWNLINK_LOCATION);
-	bool		shmemIsReloaded = false;
-	bool		loadHikeys;
-	FastpathFindDownlinkMeta fastpathMeta;
-	params: &mut Jsonb = NULL;
+	pub static mut SHMEM_IS_RELOADED: bool = false;
+	pub static mut LOAD_HIKEYS: bool = false;
+	pub static mut FASTPATH_META: FastpathFindDownlinkMeta = std::mem::zeroed();
+	pub static mut JSONB: *mut params = std::ptr::null_mut();
 
 	memset(&intCxt, 0, sizeof(intCxt));
 	ASAN_UNPOISON_MEMORY_REGION(&intCxt, sizeof(intCxt));
@@ -533,7 +533,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 	else
 	{
 		if (!o_btree_try_use_shmem(desc))
-			return OFindPageResultFailure;
+			pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 	}
 	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc));
 
@@ -542,12 +542,12 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 	intCxt.pageChangeCount = desc->rootInfo.rootPageChangeCount;
 	while (true)
 	{
-		nonLeafHdr: &mut BTreeNonLeafTuphdr = NULL;
-		int			level;
-		OInMemoryBlkno parentBlkno;
-		bool		wrongChangeCount = false;
-		Pointer		p;
-		bool		fastpath;
+		pub static mut B_TREE_NON_LEAF_TUPHDR: *mut nonLeafHdr = std::ptr::null_mut();
+		pub static mut LEVEL: std::os::raw::c_int = 0;
+		pub static mut PARENT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
+		pub static mut WRONG_CHANGE_COUNT: bool = false;
+		pub static mut P: Pointer = std::ptr::null_mut();
+		pub static mut FASTPATH: bool = false;
 
 		//
 // Local-pool slots are NULLed on eviction, unlike shared-pool slots
@@ -564,7 +564,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 			local_ppool_pages[intCxt.blkno & O_BLKNO_MASK] == NULL)
 		{
 			if (context->index == 0)
-				return OFindPageResultFailure;
+				pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 			step_upward_level(&intCxt);
 			continue;
 		}
@@ -591,14 +591,14 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 			if (tryFlag)
 			{
 				if (!try_lock_page(intCxt.blkno))
-					return OFindPageResultFailure;
+					pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 				intCxt.pagePtr = p;
 				intCxt.haveLock = true;
 				needLock = false;
 			}
 			else if (!O_TUPLE_IS_NULL(context->insertTuple))
 			{
-				OLockPageWithTupleResult result;
+				pub static mut RESULT: OLockPageWithTupleResult = std::mem::zeroed();
 
 				result = lock_page_with_tuple(desc,
 											  &intCxt.blkno,
@@ -615,7 +615,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 				}
 				else if (result == OLockPageWithTupleResultInserted)
 				{
-					return OFindPageResultInserted;
+					pub static mut O_FIND_PAGE_RESULT_INSERTED: return = std::mem::zeroed();
 				}
 				else
 				{
@@ -633,7 +633,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 		}
 		else
 		{
-			bool		useParentImg = false;
+			pub static mut USE_PARENT_IMG: bool = false;
 
 			if (imageFlag || fetchFlag)
 			{
@@ -697,7 +697,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 
 			if (tryFlag)
 			{
-				ReadPageResult result;
+				pub static mut RESULT: ReadPageResult = std::mem::zeroed();
 
 				result = btree_find_try_read_page(context, intCxt.blkno,
 												  intCxt.pageChangeCount,
@@ -712,12 +712,12 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 				}
 				else if (result == ReadPageResultFailed)
 				{
-					return OFindPageResultFailure;
+					pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 				}
 			}
 			else
 			{
-				bool		result;
+				pub static mut RESULT: bool = false;
 
 				result = btree_find_read_page(context, intCxt.blkno,
 											  intCxt.pageChangeCount,
@@ -773,7 +773,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 // flag.
 //
 			if (tryFlag && shmemIsReloaded)
-				return OFindPageResultFailure;
+				pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 
 			// Reload root information from the shared memory
 			desc->rootInfo.rootPageBlkno = OInvalidInMemoryBlkno;
@@ -782,7 +782,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 			if (tryFlag)
 			{
 				if (!o_btree_try_use_shmem(desc))
-					return OFindPageResultFailure;
+					pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 			}
 			else
 			{
@@ -809,7 +809,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 
 		if (level > targetLevel || (downlinkLocationFlag && level > 0))
 		{
-			OBTreeFastPathFindResult result;
+			pub static mut RESULT: OBTreeFastPathFindResult = std::mem::zeroed();
 
 			result = page_find_downlink(&intCxt, &fastpathMeta, level,
 										fastpath, &loc, &nonLeafHdr);
@@ -817,24 +817,24 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 			Assert(result != OBTreeFastPathFindSlowpath);
 
 			if (result == OBTreeFastPathFindFailure)
-				return OFindPageResultFailure;
+				pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 			else if (result == OBTreeFastPathFindRetry)
 				continue;
 			p = O_GET_IN_MEMORY_PAGE(intCxt.blkno);
 		}
 		else
 		{
-			OBTreeFastPathFindResult result;
+			pub static mut RESULT: OBTreeFastPathFindResult = std::mem::zeroed();
 
 			result = page_find_item(&intCxt, &fastpathMeta, level,
 									fastpath, &loc, &nonLeafHdr);
 
 			if (result == OBTreeFastPathFindFailure)
-				return OFindPageResultFailure;
+				pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 			else if (result == OBTreeFastPathFindRetry)
 			{
 				if (intCxt.inserted)
-					return OFindPageResultInserted;
+					pub static mut O_FIND_PAGE_RESULT_INSERTED: return = std::mem::zeroed();
 				continue;
 			}
 			p = O_GET_IN_MEMORY_PAGE(intCxt.blkno);
@@ -910,7 +910,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 //
 		if (keepLokeyFlag && level > targetLevel)
 		{
-			OTuple		lokey;
+			pub static mut LOKEY: OTuple = std::mem::zeroed();
 
 			//
 // A FETCH-mode descent locates the downlink via the fastpath,
@@ -954,7 +954,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 				unlock_page(intCxt.blkno);
 				intCxt.haveLock = false;
 			}
-			return OFindPageResultFailure;
+			pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 		}
 
 		if (level == targetLevel || ((imageFlag || fetchFlag) && level <= targetLevel))
@@ -977,7 +977,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 				{
 					// called from o_btree_normal_modify()
 					// try to fix incomplete split for leafs here
-					bool		relocked = false;
+					pub static mut RELOCKED: bool = false;
 
 					Assert(!noFixFlag);
 
@@ -997,7 +997,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 			}
 
 			O_TUPLE_SET_NULL(context->insertTuple);
-			return OFindPageResultSuccess;
+			pub static mut O_FIND_PAGE_RESULT_SUCCESS: return = std::mem::zeroed();
 		}
 		else if (!nonLeafHdr)
 		{
@@ -1012,7 +1012,7 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 //
 				if (intCxt.haveLock)
 					unlock_page(intCxt.blkno);
-				return OFindPageResultFailure;
+				pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 			}
 
 			if (intCxt.haveLock)
@@ -1103,13 +1103,13 @@ find_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 static bool
 follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 {
-	context: &mut OBTreeFindPageContext = intCxt->context;
-	desc: &mut BTreeDescr = context->desc;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = intCxt->context;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
 	BTreeKeyType keykind = (intCxt->keyType == BTreeKeyPageHiKey ?
 							BTreeKeyNonLeafKey :
 							intCxt->keyType);
 	int			followVal = (intCxt->keyType == BTreeKeyPageHiKey ? 1 : 0);
-	OTuple		pageHiKey;
+	pub static mut PAGE_HI_KEY: OTuple = std::mem::zeroed();
 
 	if (!O_PAGE_IS(intCxt->pagePtr, RIGHTMOST))
 		BTREE_PAGE_GET_HIKEY(pageHiKey, intCxt->pagePtr);
@@ -1127,7 +1127,7 @@ follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 				unlock_page(intCxt->blkno);
 				intCxt->haveLock = false;
 			}
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 
 		if (BTREE_PAGE_FIND_IS(context, KEEP_LOKEY))
@@ -1161,12 +1161,12 @@ follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 				{
 					intCxt->haveLock = false;
 					intCxt->tryLockFailed = true;
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			else if (!O_TUPLE_IS_NULL(context->insertTuple))
 			{
-				OLockPageWithTupleResult result;
+				pub static mut RESULT: OLockPageWithTupleResult = std::mem::zeroed();
 
 				result = lock_page_with_tuple(desc,
 											  &intCxt->blkno,
@@ -1178,12 +1178,12 @@ follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 				{
 					intCxt->haveLock = false;
 					intCxt->inserted = true;
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				}
 				else if (result == OLockPageWithTupleResultRefindNeeded)
 				{
 					intCxt->haveLock = false;
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				}
 				Assert(result == OLockPageWithTupleResultLocked);
 			}
@@ -1202,7 +1202,7 @@ follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 //
 				unlock_page(intCxt->blkno);
 				intCxt->haveLock = false;
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 			}
 		}
 		else
@@ -1216,7 +1216,7 @@ follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 									  intCxt->keyType,
 									  intCxt->partial,
 									  true))
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 			intCxt->pagePtr = useParentImg ? context->parentImg : context->img;
 			intCxt->pageChangeCount = O_PAGE_GET_CHANGE_COUNT(intCxt->pagePtr);
 			Assert(RIGHTLINK_GET_CHANGECOUNT(rightlink) ==
@@ -1225,7 +1225,7 @@ follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 		if (!O_PAGE_IS(intCxt->pagePtr, RIGHTMOST))
 			BTREE_PAGE_GET_HIKEY(pageHiKey, intCxt->pagePtr);
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -1234,7 +1234,7 @@ follow_rightlink(intCxt: &mut OBTreeFindPageInternalContext)
 fn
 step_upward_level(intCxt: &mut OBTreeFindPageInternalContext)
 {
-	context: &mut OBTreeFindPageContext = intCxt->context;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = intCxt->context;
 
 	if (intCxt->haveLock)
 	{
@@ -1254,10 +1254,10 @@ OFindPageResult
 refind_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 			uint16 level, OInMemoryBlkno _blkno, uint32 _pageChangeCount)
 {
-	desc: &mut BTreeDescr = context->desc;
-	OBTreeFindPageInternalContext intCxt;
-	BTreePageItemLocator loc;
-	bool		item_found = true;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut INT_CXT: OBTreeFindPageInternalContext = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut ITEM_FOUND: bool = true;
 
 	ASAN_UNPOISON_MEMORY_REGION(&intCxt, sizeof(intCxt));
 	intCxt.context = context;
@@ -1277,14 +1277,14 @@ refind_page(context: &mut OBTreeFindPageContext,  *key, BTreeKeyType keyType,
 	else
 	{
 		if (!o_btree_try_use_shmem(desc))
-			return OFindPageResultFailure;
+			pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 	}
 
 retry:
 
 	if (BTREE_PAGE_FIND_IS(context, MODIFY))
 	{
-		Pointer		p;
+		pub static mut P: Pointer = std::ptr::null_mut();
 
 		if (intCxt.pageChangeCount == InvalidOPageChangeCount)
 			return find_page(context, key, keyType, level);
@@ -1303,7 +1303,7 @@ retry:
 
 		if (!O_TUPLE_IS_NULL(context->insertTuple))
 		{
-			OLockPageWithTupleResult result;
+			pub static mut RESULT: OLockPageWithTupleResult = std::mem::zeroed();
 
 			result = lock_page_with_tuple(desc,
 										  &intCxt.blkno,
@@ -1312,7 +1312,7 @@ retry:
 										  context->insertTuple);
 
 			if (result == OLockPageWithTupleResultInserted)
-				return OFindPageResultInserted;
+				pub static mut O_FIND_PAGE_RESULT_INSERTED: return = std::mem::zeroed();
 			else if (result == OLockPageWithTupleResultRefindNeeded)
 				return find_page(context, key, keyType, level);
 			Assert(result == OLockPageWithTupleResultLocked);
@@ -1343,14 +1343,14 @@ retry:
 				o_btree_split_fix_for_right_page_and_unlock(desc, intCxt.blkno);
 				intCxt.haveLock = false;
 				o_btree_split_fix_and_unlock(desc, intCxt.blkno);
-				goto retry;
+				pub static mut RETRY: goto = std::mem::zeroed();
 			}
 		}
 	}
 	else if (BTREE_PAGE_FIND_IS(context, FETCH))
 	{
-		Pointer		img;
-		bool		success;
+		pub static mut IMG: Pointer = std::ptr::null_mut();
+		pub static mut SUCCESS: bool = false;
 
 		if (intCxt.pageChangeCount == InvalidOPageChangeCount)
 			return find_page(context, key, keyType, level);
@@ -1390,9 +1390,9 @@ retry:
 		if (follow_rightlink(&intCxt))
 		{
 			if (intCxt.tryLockFailed)
-				return OFindPageResultFailure;
+				pub static mut O_FIND_PAGE_RESULT_FAILURE: return = std::mem::zeroed();
 			if (intCxt.inserted)
-				return OFindPageResultInserted;
+				pub static mut O_FIND_PAGE_RESULT_INSERTED: return = std::mem::zeroed();
 			Assert(!intCxt.haveLock);
 			return find_page(context, key, keyType, level);
 		}
@@ -1436,17 +1436,17 @@ retry:
 	if (intCxt.partial)
 	{
 		if (!item_found)
-			goto retry;
+			pub static mut RETRY: goto = std::mem::zeroed();
 
 		if (!partial_load_chunk(intCxt.partial, intCxt.pagePtr,
 								loc.chunkOffset, NULL))
-			goto retry;
+			pub static mut RETRY: goto = std::mem::zeroed();
 	}
 
 	context->items[context->index].locator = loc;
 	context->items[context->index].blkno = intCxt.blkno;
 	context->items[context->index].pageChangeCount = intCxt.pageChangeCount;
-	return OFindPageResultSuccess;
+	pub static mut O_FIND_PAGE_RESULT_SUCCESS: return = std::mem::zeroed();
 }
 
 //
@@ -1460,17 +1460,17 @@ retry:
 bool
 find_right_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 {
-	desc: &mut BTreeDescr = context->desc;
-	BTreePageItemLocator loc;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	parentItem: &mut OBtreePageFindItem,
 			   *item;
-	int			level;
-	params: &mut Jsonb;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut LEVEL: std::os::raw::c_int = 0;
+	pub static mut JSONB: *mut params = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 	// Nothing to do with rightmost page
 	if (O_PAGE_IS(context->img, RIGHTMOST))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	//
 // Currenlty, the only user of this function is iterator, which is
@@ -1507,7 +1507,7 @@ find_right_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 		{
 			findResult = find_page(context, hikey, BTreeKeyNonLeafKey, level);
 			Assert(findResult == OFindPageResultSuccess);
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 		context->parentImgDeferred = false;
 	}
@@ -1525,9 +1525,9 @@ find_right_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 	// Try to load next page using next parent downlink
 	if (BTREE_PAGE_LOCATOR_IS_VALID(context->parentImg, &loc))
 	{
-		OTuple		internalTuple;
-		tuphdr: &mut BTreeNonLeafTuphdr = NULL;
-		bool		tup_loaded = true;
+		pub static mut INTERNAL_TUPLE: OTuple = std::mem::zeroed();
+		pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+		pub static mut TUP_LOADED: bool = true;
 
 		tup_loaded = partial_load_chunk(&context->parentPartial, context->parentImg,
 										loc.chunkOffset, NULL);
@@ -1544,7 +1544,7 @@ find_right_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 						&internalTuple, BTreeKeyNonLeafKey) == 0)
 		{
 			// Try to traverse downlink
-			bool		success;
+			pub static mut SUCCESS: bool = false;
 
 			item->blkno = DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink);
 			item->pageChangeCount = DOWNLINK_GET_IN_MEMORY_CHANGECOUNT(tuphdr->downlink);
@@ -1560,7 +1560,7 @@ find_right_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 				Assert(O_PAGE_GET_CHANGE_COUNT(context->img) == item->pageChangeCount);
 				BTREE_PAGE_LOCATOR_FIRST(context->img, &item->locator);
 				parentItem->locator = loc;
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 			}
 		}
 	}
@@ -1571,7 +1571,7 @@ find_right_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 //
 	findResult = find_page(context, hikey, BTreeKeyNonLeafKey, level);
 	Assert(findResult == OFindPageResultSuccess);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1586,7 +1586,7 @@ refresh_context_leaf_lokey(context: &mut OBTreeFindPageContext,
 {
 	if (BTREE_PAGE_LOCATOR_GET_OFFSET(context->parentImg, loc) > 0)
 	{
-		OTuple		lokey;
+		pub static mut LOKEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_READ_INTERNAL_TUPLE(lokey, context->parentImg, loc);
 		copy_fixed_key(context->desc, &context->leafLokey, lokey);
@@ -1604,15 +1604,15 @@ refresh_context_leaf_lokey(context: &mut OBTreeFindPageContext,
 bool
 find_left_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 {
-	tuphdr: &mut BTreeNonLeafTuphdr;
-	desc: &mut BTreeDescr = context->desc;
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
 	parentItem: &mut OBtreePageFindItem,
 			   *item;
-	int			level;
-	UndoLocation prevLoc;
-	params: &mut Jsonb;
-	OTuple		imgHikey;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut LEVEL: std::os::raw::c_int = 0;
+	pub static mut PREV_LOC: UndoLocation = std::mem::zeroed();
+	pub static mut JSONB: *mut params = std::ptr::null_mut();
+	pub static mut IMG_HIKEY: OTuple = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 	Assert(BTREE_PAGE_FIND_IS(context, KEEP_LOKEY));
 
@@ -1640,7 +1640,7 @@ find_left_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 	{
 		// Nothing to do with leftmost page
 		if (O_PAGE_IS(context->img, LEFTMOST))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		Assert(!O_TUPLE_IS_NULL(btree_find_context_lokey(context)));
 		copy_fixed_key(desc, hikey, btree_find_context_lokey(context));
@@ -1652,8 +1652,8 @@ find_left_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 		if (!BTREE_PAGE_FIND_IS(context, LOKEY_SIBLING) &&
 			!BTREE_PAGE_FIND_IS(context, LOKEY_UNDO))
 		{
-			BTreePageItemLocator loc = parentItem->locator;
-			bool		next_lokey_loaded = true;
+			pub static mut LOC: BTreePageItemLocator = parentItem->locator;
+			pub static mut NEXT_LOKEY_LOADED: bool = true;
 
 			Assert(loc.chunk == NULL ||
 				   ((Pointer) loc.chunk >= context->parentImg &&
@@ -1680,7 +1680,7 @@ find_left_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 //
 				if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 				{
-					bool		success;
+					pub static mut SUCCESS: bool = false;
 
 					item->blkno = DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink);
 					item->pageChangeCount = DOWNLINK_GET_IN_MEMORY_CHANGECOUNT(tuphdr->downlink);
@@ -1717,7 +1717,7 @@ find_left_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 							parentItem->locator = loc;
 							refresh_context_leaf_lokey(context, &loc);
 							BTREE_PAGE_LOCATOR_LAST(context->img, &item->locator);
-							return true;
+							pub static mut TRUE: return = std::mem::zeroed();
 						}
 					}
 				}
@@ -1756,12 +1756,12 @@ find_left_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 			BTREE_PAGE_LOCATOR_PREV(context->img, &item->locator);
 		}
 
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	// unreachable
 	Assert(false);
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -1773,7 +1773,7 @@ find_left_page(context: &mut OBTreeFindPageContext, hikey: &mut OFixedKey)
 OTuple
 btree_find_context_lokey(context: &mut OBTreeFindPageContext)
 {
-	BTreePageItemLocator ploc = context->items[context->index - 1].locator;
+	pub static mut PLOC: BTreePageItemLocator = context->items[context->index - 1].locator;
 
 	Assert(BTREE_PAGE_FIND_IS(context, KEEP_LOKEY));
 
@@ -1836,7 +1836,7 @@ btree_find_context_lokey(context: &mut OBTreeFindPageContext)
 bool
 btree_find_context_has_lokey(context: &mut OBTreeFindPageContext)
 {
-	BTreePageItemLocator ploc = context->items[context->index - 1].locator;
+	pub static mut PLOC: BTreePageItemLocator = context->items[context->index - 1].locator;
 
 	Assert(BTREE_PAGE_FIND_IS(context, KEEP_LOKEY));
 
@@ -1849,13 +1849,13 @@ btree_find_context_has_lokey(context: &mut OBTreeFindPageContext)
 static Pointer
 set_page_ptr(context: &mut OBTreeFindPageContext, bool parent)
 {
-	Pointer		pagePtr;
+	pub static mut PAGE_PTR: Pointer = std::ptr::null_mut();
 
 	if (!parent)
 		pagePtr = context->img = context->imgData;
 	else
 		pagePtr = context->parentImg = context->parentImgData;
-	return pagePtr;
+	pub static mut PAGE_PTR: return = std::mem::zeroed();
 }
 
 //
@@ -1869,10 +1869,10 @@ btree_find_read_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno,
 					 bool loadHikeysChunk)
 {
 	bool		keep_lokey = BTREE_PAGE_FIND_IS(context, KEEP_LOKEY);
-	lokey: &mut OFixedKey = keep_lokey ? &context->undoLokey : NULL;
+	pub static mut O_FIXED_KEY: *mut lokey = keep_lokey ? &context->undoLokey : NULL;
 	readCsn: &mut CommitSeqNo = BTREE_PAGE_FIND_IS(context, READ_CSN) ? &context->imgReadCsn : NULL;
-	bool		success;
-	Pointer		pagePtr;
+	pub static mut SUCCESS: bool = false;
+	pub static mut PAGE_PTR: Pointer = std::ptr::null_mut();
 
 	pagePtr = set_page_ptr(context, parent);
 
@@ -1886,11 +1886,11 @@ btree_find_read_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno,
 								readCsn);
 
 	if (!success)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (lokey && !O_TUPLE_IS_NULL(lokey->tuple))
 		BTREE_PAGE_FIND_SET(context, LOKEY_UNDO);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1904,8 +1904,8 @@ btree_find_try_read_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blk
 						 bool loadHikeysChunk)
 {
 	readCsn: &mut CommitSeqNo = BTREE_PAGE_FIND_IS(context, READ_CSN) ? &context->imgReadCsn : NULL;
-	ReadPageResult result;
-	Pointer		pagePtr;
+	pub static mut RESULT: ReadPageResult = std::mem::zeroed();
+	pub static mut PAGE_PTR: Pointer = std::ptr::null_mut();
 
 	pagePtr = set_page_ptr(context, parent);
 
@@ -1914,7 +1914,7 @@ btree_find_try_read_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blk
 								   key, keyType, partial, loadHikeysChunk,
 								   readCsn);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -1923,8 +1923,8 @@ btree_find_context_from_modify_to_read(context: &mut OBTreeFindPageContext,
 									   BTreeKeyType keyType,
 									   uint16 level)
 {
-	BTreePageItemLocator loc;
-	bool		success;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut SUCCESS: bool = false;
 
 	Assert(!BTREE_PAGE_FIND_IS(context, DOWNLINK_LOCATION));
 	Assert(BTREE_PAGE_FIND_IS(context, MODIFY));
@@ -1982,13 +1982,13 @@ bool
 btree_page_search(desc: &mut BTreeDescr, Page p, Pointer key, BTreeKeyType keyType,
 				  partial: &mut PartialPageState, locator: &mut BTreePageItemLocator)
 {
-	OffsetNumber chunkOffset;
+	pub static mut CHUNK_OFFSET: OffsetNumber = std::mem::zeroed();
 	bool		isLeaf = O_PAGE_IS(p, LEAF);
 
 	if (partial && partial->isPartial && !partial->hikeysChunkIsLoaded)
 	{
 		if (!partial_load_hikeys_chunk(partial, p))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (keyType == BTreeKeyPageHiKey && isLeaf)
@@ -1996,20 +1996,20 @@ btree_page_search(desc: &mut BTreeDescr, Page p, Pointer key, BTreeKeyType keyTy
 		BTREE_PAGE_LOCATOR_LAST(p, locator);
 		if (partial && !partial_load_chunk(partial, p,
 										   locator->chunkOffset, NULL))
-			return false;
-		return true;
+			pub static mut FALSE: return = std::mem::zeroed();
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	chunkOffset = btree_page_binary_search_chunks(desc, p, key, keyType);
 
 	if (partial && !partial_load_chunk(partial, p, chunkOffset, NULL))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	page_chunk_fill_locator(p, chunkOffset, locator);
 
 	btree_page_search_items(desc, p, key, keyType, locator);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -2024,9 +2024,9 @@ btree_page_binary_search_chunks(desc: &mut BTreeDescr, Page p,
 				high;
 	int			targetCmpVal,
 				result;
-	bool		nextkey;
+	pub static mut NEXTKEY: bool = false;
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OBTreeKeyCmp cmpFunc = desc->ops->cmp;
+	pub static mut CMP_FUNC: OBTreeKeyCmp = desc->ops->cmp;
 
 	Assert(header->chunksCount > 0);
 
@@ -2035,7 +2035,7 @@ btree_page_binary_search_chunks(desc: &mut BTreeDescr, Page p,
 	nextkey = (keyType != BTreeKeyPageHiKey);
 
 	if (high < low)
-		return low;
+		pub static mut LOW: return = std::mem::zeroed();
 
 	targetCmpVal = nextkey ? 0 : 1; // a target value of cmpFunc()
 
@@ -2048,7 +2048,7 @@ btree_page_binary_search_chunks(desc: &mut BTreeDescr, Page p,
 
 	while (high > low)
 	{
-		OTuple		midTup;
+		pub static mut MID_TUP: OTuple = std::mem::zeroed();
 
 		mid = low + ((high - low) / 2);
 		Assert(mid < header->chunksCount - 1);
@@ -2065,7 +2065,7 @@ btree_page_binary_search_chunks(desc: &mut BTreeDescr, Page p,
 			high = mid;
 	}
 
-	return low;
+	pub static mut LOW: return = std::mem::zeroed();
 }
 
 fn
@@ -2077,8 +2077,8 @@ btree_page_search_items(desc: &mut BTreeDescr, Page p, Pointer key,
 				high;
 	bool		isLeaf = O_PAGE_IS(p, LEAF),
 				nextkey;
-	OBTreeKeyCmp cmpFunc = desc->ops->cmp;
-	BTreeKeyType midkind;
+	pub static mut CMP_FUNC: OBTreeKeyCmp = desc->ops->cmp;
+	pub static mut MIDKIND: BTreeKeyType = std::mem::zeroed();
 	int			targetCmpVal,
 				result;
 
@@ -2128,7 +2128,7 @@ btree_page_search_items(desc: &mut BTreeDescr, Page p, Pointer key,
 			result = 1;
 		else
 		{
-			OTuple		midTup;
+			pub static mut MID_TUP: OTuple = std::mem::zeroed();
 
 			locator->itemOffset = mid;
 			BTREE_PAGE_READ_TUPLE(midTup, p, locator);

@@ -82,10 +82,10 @@ use pgrx::pg_sys;
 typedef struct oIdxLeader
 {
 	// parallel context itself
-	pcxt: &mut ParallelContext;
+	pub static mut PARALLEL_CONTEXT: *mut pcxt = std::ptr::null_mut();
 
 	// Recovery parallel context of recovery workers
-	recoveryContext: &mut ParallelRecoveryContext;
+	pub static mut PARALLEL_RECOVERY_CONTEXT: *mut recoveryContext = std::ptr::null_mut();
 
 	//
 // nparticipanttuplesorts is the exact number of worker processes
@@ -98,7 +98,7 @@ typedef struct oIdxLeader
 // indexes sortstates in each worker. There is some semantic discrepancy
 // here as name  nparticipanttuplesorts is inherited from PG unchanged.
 //
-	int			nparticipanttuplesorts;
+	pub static mut NPARTICIPANTTUPLESORTS: std::os::raw::c_int = 0;
 
 	//
 // Leader process convenience pointers to shared state (leader avoids TOC
@@ -107,10 +107,10 @@ typedef struct oIdxLeader
 // btshared is the shared state for entire build.  sharedsort is the
 // shared, tuplesort-managed state passed to each process tuplesort.
 //
-	btshared: &mut oIdxShared;
+	pub static mut O_IDX_SHARED: *mut btshared = std::ptr::null_mut();
 	Sharedsort **sharedsort;
-	walusage: &mut WalUsage;
-	bufferusage: &mut BufferUsage;
+	pub static mut WAL_USAGE: *mut walusage = std::ptr::null_mut();
+	pub static mut BUFFER_USAGE: *mut bufferusage = std::ptr::null_mut();
 } oIdxLeader;
 
 //
@@ -120,16 +120,16 @@ typedef struct oIdxLeader
 //
 typedef struct oIdxBuildState
 {
-	bool		isunique;
-	Relation	heap;
-	spool: &mut oIdxSpool;
-	double		reltuples;
+	pub static mut ISUNIQUE: bool = false;
+	pub static mut HEAP: Relation = std::mem::zeroed();
+	pub static mut O_IDX_SPOOL: *mut spool = std::ptr::null_mut();
+	pub static mut RELTUPLES: double = std::mem::zeroed();
 
 	// Oriole-specific
-	btleader: &mut oIdxLeader;
+	pub static mut O_IDX_LEADER: *mut btleader = std::ptr::null_mut();
 			(*worker_heap_sort_fn) (oIdxSpool *,  *, Sharedsort **, int worker_sortmem, bool progress);
-	OIndexNumber ix_num;
-	bool		isrebuild;
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+	pub static mut ISREBUILD: bool = false;
 } oIdxBuildState;
 
 fn _o_index_end_parallel(btleader: &mut oIdxLeader);
@@ -158,18 +158,18 @@ typedef struct NewColumnValue
 	bool		is_generated;	// is it a GENERATED expression?
 }			NewColumnValue;
 
-static bool in_indexes_rebuild = false;
+static mut IN_INDEXES_REBUILD: bool = false;
 
 bool
 is_in_indexes_rebuild()
 {
-	return in_indexes_rebuild;
+	pub static mut IN_INDEXES_REBUILD: return = std::mem::zeroed();
 }
 
 
 assign_new_oids(oTable: &mut OTable, Relation rel, bool drop_pkey)
 {
-	Oid			toast_relid;
+	pub static mut TOAST_RELID: Oid = std::mem::zeroed();
 
 	CheckTableForSerializableConflictIn(rel);
 
@@ -195,9 +195,9 @@ assign_new_oids(oTable: &mut OTable, Relation rel, bool drop_pkey)
 
 	PG_TRY();
 	{
-		indexIds: &mut List;
-		char		persistence;
-		indexId: &mut ListCell;
+		pub static mut LIST: *mut indexIds = std::ptr::null_mut();
+		pub static mut PERSISTENCE: char = std::mem::zeroed();
+		pub static mut LIST_CELL: *mut indexId = std::ptr::null_mut();
 
 		in_indexes_rebuild = true;
 
@@ -235,15 +235,15 @@ assign_new_oids(oTable: &mut OTable, Relation rel, bool drop_pkey)
 
 recreate_o_table(old_o_table: &mut OTable, o_table: &mut OTable)
 {
-	OSnapshot	oSnapshot;
-	OXid		oxid;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
 	int			oldTreesNum,
 				newTreesNum;
-	ORelOids	oldOids;
-	oldTrees: &mut OIndexKey;
-	ORelOids	newOids;
-	newTrees: &mut OIndexKey;
-	bool		is_temp;
+	pub static mut OLD_OIDS: ORelOids = std::mem::zeroed();
+	pub static mut O_INDEX_KEY: *mut oldTrees = std::ptr::null_mut();
+	pub static mut NEW_OIDS: ORelOids = std::mem::zeroed();
+	pub static mut O_INDEX_KEY: *mut newTrees = std::ptr::null_mut();
+	pub static mut IS_TEMP: bool = false;
 
 	Assert(old_o_table != NULL && o_table != NULL);
 
@@ -291,8 +291,8 @@ o_validate_index_elements(expressions: &mut List, predicate: &mut List)
 
 o_define_index_validate(ORelOids oids, Relation index, indexInfo: &mut IndexInfo, o_table: &mut OTable)
 {
-	int			nattrs;
-	OIndexType	ix_type;
+	pub static mut NATTRS: std::os::raw::c_int = 0;
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
 
 	if (o_table == NULL)
 	{
@@ -347,7 +347,7 @@ o_define_index_validate(ORelOids oids, Relation index, indexInfo: &mut IndexInfo
 
 rebuild_indices_insert_placeholders(descr: &mut OTableDescr)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	//
 // Placeholders guard concurrent access to shared SharedRootInfo during
@@ -370,8 +370,8 @@ rebuild_indices_insert_placeholders(descr: &mut OTableDescr)
 static Jsonb *
 index_build_params(index: &mut OTableIndex)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -383,7 +383,7 @@ index_build_params(index: &mut OTableIndex)
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 // --
@@ -402,22 +402,22 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 			   OIndexNumber old_ix_num, Oid oldTblRelnode,
 			   result: &mut IndexBuildResult)
 {
-	old_o_table: &mut OTable = NULL;
-	o_table: &mut OTable;
-	OIndexNumber ix_num;
-	table_index: &mut OTableIndex;
+	pub static mut O_TABLE: *mut old_o_table = std::ptr::null_mut();
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+	pub static mut O_TABLE_INDEX: *mut table_index = std::ptr::null_mut();
 	old_descr: &mut OTableDescr = NULL,
 			   *descr = NULL;
-	bool		reuse_relnode = old_ix_num != InvalidIndexNumber;
-	bool		is_build = false;
-	ORelOids	oids;
-	OIndexType	ix_type;
-	int16		indnatts;
-	int16		indnkeyatts;
-	Oid			tablespace;
-	OCompress	compress = InvalidOCompress;
-	uint8		fillfactor = BTREE_DEFAULT_FILLFACTOR;
-	options: &mut OBTOptions;
+	pub static mut REUSE_RELNODE: bool = old_ix_num != InvalidIndexNumber;
+	pub static mut IS_BUILD: bool = false;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
+	pub static mut INDNATTS: int16 = std::mem::zeroed();
+	pub static mut INDNKEYATTS: int16 = std::mem::zeroed();
+	pub static mut TABLESPACE: Oid = std::mem::zeroed();
+	pub static mut COMPRESS: OCompress = InvalidOCompress;
+	pub static mut FILLFACTOR: uint8 = BTREE_DEFAULT_FILLFACTOR;
+	pub static mut OBT_OPTIONS: *mut options = std::ptr::null_mut();
 	bool		setting_tbl_tablespace = OidIsValid(oldTblRelnode);
 
 	Assert(index == NULL || !(OidIsValid(indoid)));
@@ -435,7 +435,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 	{
 		if (options->compress_offset > 0)
 		{
-			str: &mut char;
+			pub static mut CHAR: *mut str = std::ptr::null_mut();
 
 			str = (char *) (((Pointer) options) + options->compress_offset);
 			if (str)
@@ -467,7 +467,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 	{
 		if (reindex)
 		{
-			int			i;
+			pub static mut I: std::os::raw::c_int = 0;
 
 			ix_num = InvalidIndexNumber;
 			for (i = 0; i < o_table->nindices; i++)
@@ -499,8 +499,8 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		}
 		else
 		{
-			ORelOids	primary_oids;
-			Oid			primary_tablespace;
+			pub static mut PRIMARY_OIDS: ORelOids = std::mem::zeroed();
+			pub static mut PRIMARY_TABLESPACE: Oid = std::mem::zeroed();
 
 			primary_oids = ix_type == oIndexPrimary ||
 				!old_o_table->has_primary ?
@@ -515,7 +515,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 			// Rebuild, assign new oids
 			if (ix_type == oIndexPrimary)
 			{
-				new_o_table: &mut OTable;
+				pub static mut O_TABLE: *mut new_o_table = std::ptr::null_mut();
 
 				new_o_table = o_tables_get(oids);
 				o_table = new_o_table;
@@ -604,9 +604,9 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 	}
 	else
 	{
-		OSnapshot	oSnapshot;
-		OXid		oxid;
-		bool		is_temp = o_table->persistence == RELPERSISTENCE_TEMP;
+		pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+		pub static mut OXID: OXid = std::mem::zeroed();
+		pub static mut IS_TEMP: bool = o_table->persistence == RELPERSISTENCE_TEMP;
 
 		fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 		o_tables_update(o_table, oxid, oSnapshot.csn);
@@ -629,8 +629,8 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		{
 			if (!setting_tbl_tablespace)
 			{
-				prefix: &mut char;
-				db_prefix: &mut char;
+				pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+				pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 				o_get_prefixes_for_tablespace(MyDatabaseId, tablespace,
 											  &prefix, &db_prefix);
@@ -642,8 +642,8 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		}
 		else if (!setting_tbl_tablespace)
 		{
-			prefix: &mut char;
-			db_prefix: &mut char;
+			pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+			pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 			o_get_prefixes_for_tablespace(MyDatabaseId, tablespace,
 										  &prefix, &db_prefix);
@@ -668,8 +668,8 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 //
 	if (!is_build && table_index->type != oIndexPrimary && o_table->tablespace != tablespace)
 	{
-		prefix: &mut char;
-		db_prefix: &mut char;
+		pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+		pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 		o_get_prefixes_for_tablespace(MyDatabaseId, tablespace,
 									  &prefix, &db_prefix);
@@ -689,7 +689,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		o_tables_table_meta_unlock(NULL, InvalidOid);
 		if (STOPEVENTS_ENABLED())
 		{
-			params: &mut Jsonb;
+			pub static mut JSONB: *mut params = std::ptr::null_mut();
 
 			params = index_build_params(table_index);
 			STOPEVENT(STOPEVENT_BUILD_INDEX_PLACEHOLDER_INSERTED, params);
@@ -743,28 +743,28 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 fn
 _o_index_begin_parallel(buildstate: &mut oIdxBuildState, bool isconcurrent, int request)
 {
-	pcxt: &mut ParallelContext = NULL;
-	recoveryContext: &mut ParallelRecoveryContext = NULL;
-	int			nworkers;
-	estimator: &mut shm_toc_estimator;
-	toc: &mut shm_toc;
-	seg: &mut dsm_segment;
-	int			scantuplesortstates;
-	Size		estbtshared;
-	Size		estsort = 0;
-	btshared: &mut oIdxShared;
+	pub static mut PARALLEL_CONTEXT: *mut pcxt = std::ptr::null_mut();
+	pub static mut PARALLEL_RECOVERY_CONTEXT: *mut recoveryContext = std::ptr::null_mut();
+	pub static mut NWORKERS: std::os::raw::c_int = 0;
+	pub static mut SHM_TOC_ESTIMATOR: *mut estimator = std::ptr::null_mut();
+	pub static mut SHM_TOC: *mut toc = std::ptr::null_mut();
+	pub static mut DSM_SEGMENT: *mut seg = std::ptr::null_mut();
+	pub static mut SCANTUPLESORTSTATES: std::os::raw::c_int = 0;
+	pub static mut ESTBTSHARED: Size = 0;
+	pub static mut ESTSORT: Size = 0;
+	pub static mut O_IDX_SHARED: *mut btshared = std::ptr::null_mut();
 	Sharedsort **sharedsort;
-	btspool: &mut oIdxSpool = buildstate->spool;
+	pub static mut O_IDX_SPOOL: *mut btspool = buildstate->spool;
 	btleader: &mut oIdxLeader = (oIdxLeader *) palloc0(sizeof(oIdxLeader));
-	walusage: &mut WalUsage = NULL;
-	bufferusage: &mut BufferUsage = NULL;
-	bool		leaderparticipates = true;
-	int			o_table_size = 0;
-	Pointer		o_table_serialized;
-	int			old_o_table_size = 0;
-	Pointer		old_o_table_serialized = NULL;
-	int			i;
-	int			nallindices;
+	pub static mut WAL_USAGE: *mut walusage = std::ptr::null_mut();
+	pub static mut BUFFER_USAGE: *mut bufferusage = std::ptr::null_mut();
+	pub static mut LEADERPARTICIPATES: bool = true;
+	pub static mut O_TABLE_SIZE: std::os::raw::c_int = 0;
+	pub static mut O_TABLE_SERIALIZED: Pointer = std::ptr::null_mut();
+	pub static mut OLD_O_TABLE_SIZE: std::os::raw::c_int = 0;
+	pub static mut OLD_O_TABLE_SERIALIZED: Pointer = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut NALLINDICES: std::os::raw::c_int = 0;
 	bool		in_recovery = is_recovery_in_progress();
 #ifdef DISABLE_LEADER_PARTICIPATION
 	leaderparticipates = false;
@@ -1089,7 +1089,7 @@ _o_index_parallel_estimate_shared(Size o_table_size)
 	Size		size = add_size(BUFFERALIGN(sizeof(oIdxShared)), o_table_size);
 
 	// c.f. shm_toc_allocate as to why BUFFERALIGN is used
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 //
@@ -1103,8 +1103,8 @@ _o_index_parallel_estimate_shared(Size o_table_size)
 fn
 _o_index_parallel_heapscan(buildstate: &mut oIdxBuildState)
 {
-	btshared: &mut oIdxShared = buildstate->btleader->btshared;
-	int			nparticipanttuplesorts;
+	pub static mut O_IDX_SHARED: *mut btshared = buildstate->btleader->btshared;
+	pub static mut NPARTICIPANTTUPLESORTS: std::os::raw::c_int = 0;
 	bool		in_recovery = is_recovery_in_progress();
 
 	//
@@ -1147,9 +1147,9 @@ _o_index_parallel_heapscan(buildstate: &mut oIdxBuildState)
 fn
 _o_index_leader_participate_as_worker(buildstate: &mut oIdxBuildState)
 {
-	btleader: &mut oIdxLeader = buildstate->btleader;
-	leaderworker: &mut oIdxSpool;
-	int			worker_sortmem;
+	pub static mut O_IDX_LEADER: *mut btleader = buildstate->btleader;
+	pub static mut O_IDX_SPOOL: *mut leaderworker = std::ptr::null_mut();
+	pub static mut WORKER_SORTMEM: std::os::raw::c_int = 0;
 
 	// Allocate memory and initialize private spool
 	leaderworker = (oIdxSpool *) palloc0(sizeof(oIdxSpool));
@@ -1199,14 +1199,14 @@ _o_index_parallel_build_main(seg: &mut dsm_segment, toc: &mut shm_toc)
 _o_index_parallel_build_inner(seg: &mut dsm_segment, toc: &mut shm_toc,
 							  recovery_o_table: &mut OTable, recovery_old_o_table: &mut OTable)
 {
-	btspool: &mut oIdxSpool;
-	btshared: &mut oIdxShared;
+	pub static mut O_IDX_SPOOL: *mut btspool = std::ptr::null_mut();
+	pub static mut O_IDX_SHARED: *mut btshared = std::ptr::null_mut();
 	Sharedsort **sharedsort;
-	walusage: &mut WalUsage;
-	bufferusage: &mut BufferUsage;
-	int			worker_sortmem;
-	int			i;
-	int			nallindices;
+	pub static mut WAL_USAGE: *mut walusage = std::ptr::null_mut();
+	pub static mut BUFFER_USAGE: *mut bufferusage = std::ptr::null_mut();
+	pub static mut WORKER_SORTMEM: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut NALLINDICES: std::os::raw::c_int = 0;
 
 #ifdef BTREE_BUILD_STATS
 	if (log_btree_build_stats)
@@ -1329,13 +1329,13 @@ fn
 build_secondary_index_worker_sort(btspool: &mut oIdxSpool,  *bt_shared, Sharedsort **sharedsort,
 								  int worker_sortmem, bool progress)
 {
-	SortCoordinate coordinate;
+	pub static mut COORDINATE: SortCoordinate = std::mem::zeroed();
 	indtuples: &mut double,
 				heaptuples;
 	btshared: &mut oIdxShared = (oIdxShared *) bt_shared;
-	ParallelOScanDesc poscan = &btshared->poscan;
-	o_table: &mut OTable;
-	idx: &mut OIndexDescr;
+	pub static mut POSCAN: ParallelOScanDesc = &btshared->poscan;
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut idx = std::ptr::null_mut();
 
 	indtuples = palloc0(sizeof(double));
 	// Initialize local tuplesort coordination state
@@ -1397,20 +1397,20 @@ bool
 scan_getnextslot_allattrs(scan: &mut BTreeSeqScan, descr: &mut OTableDescr,
 						  slot: &mut TupleTableSlot, ntuples: &mut double)
 {
-	OTuple		tup;
-	BTreeLocationHint hint;
-	CommitSeqNo tupleCsn;
+	pub static mut TUP: OTuple = std::mem::zeroed();
+	pub static mut HINT: BTreeLocationHint = std::mem::zeroed();
+	pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
 
 	tup = btree_seq_scan_getnext(scan, slot->tts_mcxt, &tupleCsn, &hint);
 
 	if (O_TUPLE_IS_NULL(tup))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	tts_orioledb_store_tuple(slot, tup, descr, tupleCsn,
 							 PrimaryIndexNumber, true, &hint);
 	slot_getallattrs(slot);
 	(*ntuples)++;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1425,7 +1425,7 @@ build_secondary_index_worker_heap_scan(descr: &mut OTableDescr, idx: &mut OIndex
 									   index_tuples: &mut double[])
 {
 		   *sscan;
-	primarySlot: &mut TupleTableSlot;
+	pub static mut TUPLE_TABLE_SLOT: *mut primarySlot = std::ptr::null_mut();
 
 	sscan = make_btree_seq_scan(&GET_PRIMARY(descr)->desc, &o_in_progress_snapshot, poscan);
 	primarySlot = MakeSingleTupleTableSlot(descr->tupdesc, &TTSOpsOrioleDB);
@@ -1434,7 +1434,7 @@ build_secondary_index_worker_heap_scan(descr: &mut OTableDescr, idx: &mut OIndex
 	*index_tuples[0] = 0;
 	while (scan_getnextslot_allattrs(sscan, descr, primarySlot, heap_tuples))
 	{
-		OTuple		secondaryTup;
+		pub static mut SECONDARY_TUP: OTuple = std::mem::zeroed();
 
 		if (o_is_index_predicate_satisfied(idx, primarySlot, idx->econtext))
 		{
@@ -1462,8 +1462,8 @@ build_secondary_index_worker_heap_scan(descr: &mut OTableDescr, idx: &mut OIndex
 static int
 o_calculate_index_workers(primary: &mut BTreeDescr, bool shmem_loaded, int nindices)
 {
-	int			parallel_workers;
-	BlockNumber table_blocks;
+	pub static mut PARALLEL_WORKERS: std::os::raw::c_int = 0;
+	pub static mut TABLE_BLOCKS: BlockNumber = std::mem::zeroed();
 
 	if (IsTransactionState())
 	{
@@ -1500,7 +1500,7 @@ o_calculate_index_workers(primary: &mut BTreeDescr, bool shmem_loaded, int nindi
 		parallel_workers = max_parallel_maintenance_workers;
 	}
 
-	return parallel_workers;
+	pub static mut PARALLEL_WORKERS: return = std::mem::zeroed();
 }
 
 //
@@ -1510,7 +1510,7 @@ static int
 o_estimate_parallel_workers(double table_pages, double index_pages,
 							int max_workers)
 {
-	int			parallel_workers = 0;
+	pub static mut PARALLEL_WORKERS: std::os::raw::c_int = 0;
 
 	//
 // If the number of pages being scanned is insufficient to justify a
@@ -1521,12 +1521,12 @@ o_estimate_parallel_workers(double table_pages, double index_pages,
 //
 	if ((table_pages >= 0 && table_pages < min_parallel_table_scan_size) ||
 		(index_pages >= 0 && index_pages < min_parallel_index_scan_size))
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 
 	if (table_pages >= 0)
 	{
-		int			heap_parallel_threshold;
-		int			heap_parallel_workers = 1;
+		pub static mut HEAP_PARALLEL_THRESHOLD: std::os::raw::c_int = 0;
+		pub static mut HEAP_PARALLEL_WORKERS: std::os::raw::c_int = 1;
 
 		//
 // Select the number of workers based on the log of the size of the
@@ -1549,8 +1549,8 @@ o_estimate_parallel_workers(double table_pages, double index_pages,
 
 	if (index_pages >= 0)
 	{
-		int			index_parallel_workers = 1;
-		int			index_parallel_threshold;
+		pub static mut INDEX_PARALLEL_WORKERS: std::os::raw::c_int = 1;
+		pub static mut INDEX_PARALLEL_THRESHOLD: std::os::raw::c_int = 0;
 
 		// same calculation as for heap_pages above
 		index_parallel_threshold = Max(min_parallel_index_scan_size, 1);
@@ -1571,7 +1571,7 @@ o_estimate_parallel_workers(double table_pages, double index_pages,
 	// In no case use more than caller supplied maximum number of workers
 	parallel_workers = Min(parallel_workers, max_workers);
 
-	return parallel_workers;
+	pub static mut PARALLEL_WORKERS: return = std::mem::zeroed();
 }
 
 
@@ -1583,17 +1583,17 @@ build_secondary_index(Oid oldTblRelnode, o_table: &mut OTable,
 	Tuplesortstate **sortstates;
 	Relation	tableRelation,
 				indexRelation = NULL;
-	CheckpointFileHeader fileHeader;
+	pub static mut FILE_HEADER: CheckpointFileHeader = std::mem::zeroed();
 
 	// Infrastructure for parallel build corresponds to _bt_spools_heapscan
-	btspool: &mut oIdxSpool = NULL;
+	pub static mut O_IDX_SPOOL: *mut btspool = std::ptr::null_mut();
 	oIdxBuildState buildstate = {0};
-	SortCoordinate coordinate = NULL;
-	uint64		ctid;
-	double		heap_tuples;
-	index_tuples: &mut double;
-	idx: &mut OIndexDescr;
-	int			i;
+	pub static mut COORDINATE: SortCoordinate = std::ptr::null_mut();
+	pub static mut CTID: uint64 = std::mem::zeroed();
+	pub static mut HEAP_TUPLES: double = std::mem::zeroed();
+	pub static mut DOUBLE: *mut index_tuples = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut idx = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 	bool		setting_tbl_tablespace = OidIsValid(oldTblRelnode);
 
 	index_tuples = palloc0(sizeof(double));
@@ -1764,14 +1764,14 @@ rebuild_indices_worker_sort(btspool: &mut oIdxSpool,  *bt_shared,
 							Sharedsort **sharedsort, int worker_sortmem,
 							bool progress)
 {
-	SortCoordinate coordinate;
+	pub static mut COORDINATE: SortCoordinate = std::mem::zeroed();
 	indtuples: &mut double,
 				heaptuples;
 	btshared: &mut oIdxShared = (oIdxShared *) bt_shared;
-	ParallelOScanDesc poscan = &btshared->poscan;
-	int			i;
-	int			nIndices = btspool->descr->nIndices;
-	int			nallindices = nIndices;
+	pub static mut POSCAN: ParallelOScanDesc = &btshared->poscan;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut N_INDICES: std::os::raw::c_int = btspool->descr->nIndices;
+	pub static mut NALLINDICES: std::os::raw::c_int = nIndices;
 	int			sortstate_sortmem;	// Memory per sort state
 
 	if (btspool->descr->toast)
@@ -1872,9 +1872,9 @@ rebuild_indices_worker_heap_scan(old_descr: &mut OTableDescr, descr: &mut OTable
 								 ctid: &mut uint64, bridge_ctid: &mut uint64)
 {
 		   *sscan;
-	idx: &mut OIndexDescr;
-	int			i;
-	primarySlot: &mut TupleTableSlot;
+	pub static mut O_INDEX_DESCR: *mut idx = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut TUPLE_TABLE_SLOT: *mut primarySlot = std::ptr::null_mut();
 
 	primarySlot = MakeSingleTupleTableSlot(old_descr->tupdesc, &TTSOpsOrioleDB);
 
@@ -1893,7 +1893,7 @@ rebuild_indices_worker_heap_scan(old_descr: &mut OTableDescr, descr: &mut OTable
 
 		for (i = PrimaryIndexNumber; i < descr->nIndices; i++)
 		{
-			OTuple		newTup;
+			pub static mut NEW_TUP: OTuple = std::mem::zeroed();
 
 			idx = descr->indices[i];
 
@@ -1916,7 +1916,7 @@ rebuild_indices_worker_heap_scan(old_descr: &mut OTableDescr, descr: &mut OTable
 				if (idx->bridging && bridge_ctid)
 				{
 					o_slot: &mut OTableSlot = (OTableSlot *) primarySlot;
-					BlockNumber max_block_number = MaxBlockNumber;
+					pub static mut MAX_BLOCK_NUMBER: BlockNumber = MaxBlockNumber;
 
 					if (BlockNumberIsValid(max_bridge_ctid_blkno))
 						max_block_number = max_bridge_ctid_blkno;
@@ -1966,22 +1966,22 @@ rebuild_indices(old_o_table: &mut OTable, old_descr: &mut OTableDescr,
 				result: &mut IndexBuildResult)
 {
 	Tuplesortstate **sortstates;
-	int			i;
-	Relation	tableRelation;
-	double		heap_tuples;
-	index_tuples: &mut double;
-	uint64		ctid;
-	uint64		bridge_ctid;
-	fileHeaders: &mut CheckpointFileHeader;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut TABLE_RELATION: Relation = std::mem::zeroed();
+	pub static mut HEAP_TUPLES: double = std::mem::zeroed();
+	pub static mut DOUBLE: *mut index_tuples = std::ptr::null_mut();
+	pub static mut CTID: uint64 = std::mem::zeroed();
+	pub static mut BRIDGE_CTID: uint64 = std::mem::zeroed();
+	pub static mut CHECKPOINT_FILE_HEADER: *mut fileHeaders = std::ptr::null_mut();
 	oIdxBuildState buildstate = {0};
-	btspool: &mut oIdxSpool = NULL;
-	coordinate: &mut SortCoordinate = NULL;
+	pub static mut O_IDX_SPOOL: *mut btspool = std::ptr::null_mut();
+	pub static mut SORT_COORDINATE: *mut coordinate = std::ptr::null_mut();
 	S3TaskLocation maxLocation = 0,
 				location = 0;
-	old_td: &mut BTreeDescr;
-	meta: &mut BTreeMetaPage;
-	int			nallindices = descr->nIndices;
-	int			leader_sortmem;
+	pub static mut B_TREE_DESCR: *mut old_td = std::ptr::null_mut();
+	pub static mut B_TREE_META_PAGE: *mut meta = std::ptr::null_mut();
+	pub static mut NALLINDICES: std::os::raw::c_int = descr->nIndices;
+	pub static mut LEADER_SORTMEM: std::os::raw::c_int = 0;
 
 	if (descr->toast)
 		nallindices++;
@@ -2212,8 +2212,8 @@ rebuild_indices(old_o_table: &mut OTable, old_descr: &mut OTableDescr,
 			}
 			if (i != 0 || o_table->has_primary)
 			{
-				table_index: &mut OTableIndex = &o_table->indices[i];
-				Relation	indexRelation;
+				pub static mut O_TABLE_INDEX: *mut table_index = &o_table->indices[i];
+				pub static mut INDEX_RELATION: Relation = std::mem::zeroed();
 
 				indexRelation = index_open(table_index->oids.reloid,
 										   ShareUpdateExclusiveLock);
@@ -2233,9 +2233,9 @@ rebuild_indices(old_o_table: &mut OTable, old_descr: &mut OTableDescr,
 
 drop_primary_index(Relation rel, o_table: &mut OTable)
 {
-	old_o_table: &mut OTable;
-	descr: &mut OTableDescr;
-	old_descr: &mut OTableDescr;
+	pub static mut O_TABLE: *mut old_o_table = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut old_descr = std::ptr::null_mut();
 
 	Assert(o_table->indices[PrimaryIndexNumber].type == oIndexPrimary);
 
@@ -2264,9 +2264,9 @@ drop_primary_index(Relation rel, o_table: &mut OTable)
 fn
 drop_secondary_index(o_table: &mut OTable, OIndexNumber ix_num)
 {
-	OSnapshot	oSnapshot;
-	OXid		oxid;
-	OIndexKey	deletedTrees;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut DELETED_TREES: OIndexKey = std::mem::zeroed();
 
 	Assert(o_table->indices[ix_num].type != oIndexInvalid);
 
@@ -2292,8 +2292,8 @@ drop_secondary_index(o_table: &mut OTable, OIndexNumber ix_num)
 
 o_index_drop(Relation tbl, OIndexNumber ix_num)
 {
-	ORelOids	oids;
-	o_table: &mut OTable;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
 
 	ORelOidsSetFromRel(oids, tbl);
 	o_table = o_tables_get(oids);
@@ -2317,8 +2317,8 @@ o_index_drop(Relation tbl, OIndexNumber ix_num)
 OIndexNumber
 o_find_ix_num_by_name(descr: &mut OTableDescr, ix_name: &mut char)
 {
-	OIndexNumber result = InvalidIndexNumber;
-	int			i;
+	pub static mut RESULT: OIndexNumber = InvalidIndexNumber;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(descr != NULL);
 
@@ -2330,5 +2330,5 @@ o_find_ix_num_by_name(descr: &mut OTableDescr, ix_name: &mut char)
 			break;
 		}
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }

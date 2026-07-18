@@ -30,11 +30,11 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	Oid			typeid;
-	Oid			opcid;
-	int			typlen;
-	int			align;
-	ArraySearchFunc func;
+	pub static mut TYPEID: Oid = std::mem::zeroed();
+	pub static mut OPCID: Oid = std::mem::zeroed();
+	pub static mut TYPLEN: std::os::raw::c_int = 0;
+	pub static mut ALIGN: std::os::raw::c_int = 0;
+	pub static mut FUNC: ArraySearchFunc = std::mem::zeroed();
 } ArraySearchDesc;
 
 static find_array_search_desc_by_typeid: &mut ArraySearchDesc(Oid typeid);
@@ -76,11 +76,11 @@ can_fastpath_find_downlink(context: &mut OBTreeFindPageContext,
 						   BTreeKeyType keyType,
 						   meta: &mut FastpathFindDownlinkMeta)
 {
-	desc: &mut BTreeDescr = context->desc;
-	id: &mut OIndexDescr;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut O_INDEX_DESCR: *mut id = std::ptr::null_mut();
 	Oid			types[FASTPATH_FIND_DOWNLINK_MAX_KEYS] = {InvalidOid};
-	int			i;
-	int			offset;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut OFFSET: std::os::raw::c_int = 0;
 
 	ASAN_UNPOISON_MEMORY_REGION(meta, sizeof(*meta));
 
@@ -121,7 +121,7 @@ can_fastpath_find_downlink(context: &mut OBTreeFindPageContext,
 	{
 		searchDesc: &mut ArraySearchDesc = find_array_search_desc_by_typeid(
 																	   TupleDescAttr(id->nonLeafTupdesc, i)->atttypid);
-		field: &mut OIndexField = &id->fields[i];
+		pub static mut O_INDEX_FIELD: *mut field = &id->fields[i];
 
 		//
 // The array-search routines compare raw datums, so they require the
@@ -161,7 +161,7 @@ can_fastpath_find_downlink(context: &mut OBTreeFindPageContext,
 static ArraySearchDesc *
 find_array_search_desc_by_typeid(Oid typeid)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < sizeof(arraySearchDescs) / sizeof(ArraySearchDesc); i++)
 	{
@@ -169,7 +169,7 @@ find_array_search_desc_by_typeid(Oid typeid)
 		{
 			if (!OidIsValid(arraySearchDescs[i].opcid))
 			{
-				bool		was_saving;
+				pub static mut WAS_SAVING: bool = false;
 
 				was_saving = o_start_saving_inval_messages();
 				arraySearchDescs[i].opcid = GetDefaultOpClass(typeid, BTREE_AM_OID);
@@ -178,7 +178,7 @@ find_array_search_desc_by_typeid(Oid typeid)
 			return &arraySearchDescs[i];
 		}
 	}
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 //
@@ -189,11 +189,11 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 					   inclusive: &mut bool, int numValues, types: &mut Oid,
 					   values: &mut Datum, flags: &mut uint8)
 {
-	TupleDesc	tupdesc;
-	spec: &mut OTupleFixedFormatSpec;
-	id: &mut OIndexDescr;
-	tuple: &mut OTuple;
-	int			i;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut id = std::ptr::null_mut();
+	pub static mut O_TUPLE: *mut tuple = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(!IS_SYS_TREE_OIDS(desc->oids));
 
@@ -213,7 +213,7 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 			flags[i] = (keyType == BTreeKeyNone) ? FASTPATH_FIND_DOWNLINK_FLAG_FIRST : FASTPATH_FIND_DOWNLINK_FLAG_LAST;
 			values[i] = (Datum) 0;
 		}
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	if (keyType == BTreeKeyBound ||
@@ -225,10 +225,10 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 
 		for (i = 0; i < num; i++)
 		{
-			uint8		f = bound->keys[i].flags;
+			pub static mut F: uint8 = bound->keys[i].flags;
 
 			if (bound->keys[i].type != types[i])
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 			if (f & O_VALUE_BOUND_UNBOUNDED)
 			{
@@ -242,7 +242,7 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 				bool		valueMinusInf = (f & O_VALUE_BOUND_LOWER) != 0;
 
 				flags[i] = (valueMinusInf == id->fields[i].ascending) ?
-					FASTPATH_FIND_DOWNLINK_FLAG_FIRST : FASTPATH_FIND_DOWNLINK_FLAG_LAST;
+					pub static mut FASTPATH_FIND_DOWNLINK_FLAG_LAST: FASTPATH_FIND_DOWNLINK_FLAG_FIRST : = std::mem::zeroed();
 				values[i] = (Datum) 0;
 			}
 			else if (f & O_VALUE_BOUND_NULL)
@@ -281,8 +281,8 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 //
 		if (num > 0 && num < numValues)
 		{
-			uint8		f = bound->keys[num - 1].flags;
-			uint8		fence;
+			pub static mut F: uint8 = bound->keys[num - 1].flags;
+			pub static mut FENCE: uint8 = std::mem::zeroed();
 
 			if (((f & O_VALUE_BOUND_LOWER) != 0) == ((f & O_VALUE_BOUND_INCLUSIVE) != 0))
 				fence = FASTPATH_FIND_DOWNLINK_FLAG_FIRST;
@@ -295,7 +295,7 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 				values[i] = (Datum) 0;
 			}
 		}
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	Assert(keyType == BTreeKeyLeafTuple ||
@@ -320,8 +320,8 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 
 	for (i = 0; i < numValues; i++)
 	{
-		bool		isnull;
-		int			attnum;
+		pub static mut ISNULL: bool = false;
+		pub static mut ATTNUM: std::os::raw::c_int = 0;
 
 		attnum = OIndexKeyAttnumToTupleAttnum(keyType, id, i + 1);
 		values[i] = o_fastgetattr(*tuple, attnum, tupdesc, spec, &isnull);
@@ -331,7 +331,7 @@ find_downlink_get_keys(desc: &mut BTreeDescr,  *key, BTreeKeyType keyType,
 		else
 			flags[i] = 0;
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 OBTreeFastPathFindResult
@@ -343,29 +343,29 @@ fastpath_find_downlink(Pointer pagePtr,
 {
 	imgHdr: &mut BTreePageHeader = (BTreePageHeader *) pagePtr;
 	hdr: &mut BTreePageHeader = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
-	int			lower;
-	int			upper;
-	int			count;
-	int			i;
-	int			chunkIndex;
-	int			itemIndex;
-	chunk: &mut BTreePageChunk;
+	pub static mut LOWER: std::os::raw::c_int = 0;
+	pub static mut UPPER: std::os::raw::c_int = 0;
+	pub static mut COUNT: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CHUNK_INDEX: std::os::raw::c_int = 0;
+	pub static mut ITEM_INDEX: std::os::raw::c_int = 0;
+	pub static mut B_TREE_PAGE_CHUNK: *mut chunk = std::ptr::null_mut();
 	int			chunkSize,
 				chunkItemsCount;
-	Pointer		base;
-	uint64		state;
+	pub static mut BASE: Pointer = std::ptr::null_mut();
+	pub static mut STATE: uint64 = std::mem::zeroed();
 	uint64		imageChangeCount = pg_atomic_read_u64(&imgHdr->o_header.state) & PAGE_STATE_CHANGE_COUNT_MASK;
 	uint32		imagePageChangeCount = O_PAGE_GET_CHANGE_COUNT(imgHdr);
-	OBTreeFastPathFindResult result;
-	static BTreeNonLeafTuphdr tuphdr;
+	pub static mut RESULT: OBTreeFastPathFindResult = std::mem::zeroed();
+	static mut TUPHDR: BTreeNonLeafTuphdr = std::mem::zeroed();
 
 	result = fastpath_find_chunk(pagePtr, blkno, meta, &chunkIndex);
 
 	if (result != OBTreeFastPathFindOK)
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 
 	if (!hdr->chunkDesc[chunkIndex].chunkKeysFixed)
-		return OBTreeFastPathFindSlowpath;
+		pub static mut OB_TREE_FAST_PATH_FIND_SLOWPATH: return = std::mem::zeroed();
 
 	chunk = (BTreePageChunk *) ((Pointer) hdr + SHORT_GET_LOCATION(hdr->chunkDesc[chunkIndex].shortLocation));
 	if (chunkIndex < imgHdr->chunksCount - 1)
@@ -395,7 +395,7 @@ fastpath_find_downlink(Pointer pagePtr,
 	if (chunkSize != MAXALIGN(sizeof(LocationIndex) * chunkItemsCount) +
 		MAXALIGN(sizeof(BTreeNonLeafTuphdr)) * chunkItemsCount +
 		meta->length * count)
-		return OBTreeFastPathFindSlowpath;
+		pub static mut OB_TREE_FAST_PATH_FIND_SLOWPATH: return = std::mem::zeroed();
 
 	lower = 0;
 	upper = count;
@@ -419,7 +419,7 @@ fastpath_find_downlink(Pointer pagePtr,
 	if (O_PAGE_STATE_READ_IS_BLOCKED(state) ||
 		(state & PAGE_STATE_CHANGE_COUNT_MASK) != imageChangeCount ||
 		O_PAGE_GET_CHANGE_COUNT(hdr) != imagePageChangeCount)
-		return OBTreeFastPathFindRetry;
+		pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 
 	if (chunkIndex == 0)
 	{
@@ -450,7 +450,7 @@ fastpath_find_downlink(Pointer pagePtr,
 		{
 			chunkIndex--;
 			if (!hdr->chunkDesc[chunkIndex].chunkKeysFixed)
-				return OBTreeFastPathFindSlowpath;
+				pub static mut OB_TREE_FAST_PATH_FIND_SLOWPATH: return = std::mem::zeroed();
 
 			chunk = (BTreePageChunk *) ((Pointer) hdr + SHORT_GET_LOCATION(hdr->chunkDesc[chunkIndex].shortLocation));
 			if (chunkIndex < imgHdr->chunksCount - 1)
@@ -480,7 +480,7 @@ fastpath_find_downlink(Pointer pagePtr,
 			if (chunkSize != MAXALIGN(sizeof(LocationIndex) * chunkItemsCount) +
 				MAXALIGN(sizeof(BTreeNonLeafTuphdr)) * chunkItemsCount +
 				meta->length * count)
-				return OBTreeFastPathFindSlowpath;
+				pub static mut OB_TREE_FAST_PATH_FIND_SLOWPATH: return = std::mem::zeroed();
 
 			itemIndex = chunkItemsCount - 1;
 
@@ -504,9 +504,9 @@ fastpath_find_downlink(Pointer pagePtr,
 	if (O_PAGE_STATE_READ_IS_BLOCKED(state) ||
 		(state & PAGE_STATE_CHANGE_COUNT_MASK) != imageChangeCount ||
 		O_PAGE_GET_CHANGE_COUNT(hdr) != imagePageChangeCount)
-		return OBTreeFastPathFindRetry;
+		pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 
-	return OBTreeFastPathFindOK;
+	pub static mut OB_TREE_FAST_PATH_FIND_OK: return = std::mem::zeroed();
 }
 
 OBTreeFastPathFindResult
@@ -517,18 +517,18 @@ fastpath_find_chunk(Pointer pagePtr,
 {
 	imgHdr: &mut BTreePageHeader = (BTreePageHeader *) pagePtr;
 	hdr: &mut BTreePageHeader = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
-	int			i;
-	int			lower;
-	int			upper;
-	int			count;
-	int			offset;
-	Pointer		base;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOWER: std::os::raw::c_int = 0;
+	pub static mut UPPER: std::os::raw::c_int = 0;
+	pub static mut COUNT: std::os::raw::c_int = 0;
+	pub static mut OFFSET: std::os::raw::c_int = 0;
+	pub static mut BASE: Pointer = std::ptr::null_mut();
 	uint64		imageChangeCount = pg_atomic_read_u64(&imgHdr->o_header.state) & PAGE_STATE_CHANGE_COUNT_MASK;
 	uint32		imagePageChangeCount = O_PAGE_GET_CHANGE_COUNT(imgHdr);
-	uint64		state;
+	pub static mut STATE: uint64 = std::mem::zeroed();
 
 	if (!O_PAGE_IS(pagePtr, HIKEYS_FIXED))
-		return OBTreeFastPathFindSlowpath;
+		pub static mut OB_TREE_FAST_PATH_FIND_SLOWPATH: return = std::mem::zeroed();
 
 	count = O_PAGE_IS(pagePtr, RIGHTMOST) ? imgHdr->chunksCount - 1 : imgHdr->chunksCount;
 
@@ -537,7 +537,7 @@ fastpath_find_chunk(Pointer pagePtr,
 	pg_read_barrier();
 
 	if (imgHdr->hikeysEnd - offset != count * meta->length)
-		return OBTreeFastPathFindSlowpath;
+		pub static mut OB_TREE_FAST_PATH_FIND_SLOWPATH: return = std::mem::zeroed();
 
 	base = (Pointer) hdr + offset;
 	lower = 0;
@@ -560,15 +560,15 @@ fastpath_find_chunk(Pointer pagePtr,
 
 	// Possible we need to visit the rightlink
 	if (*chunkIndex >= count)
-		return OBTreeFastPathFindSlowpath;
+		pub static mut OB_TREE_FAST_PATH_FIND_SLOWPATH: return = std::mem::zeroed();
 
 	state = pg_atomic_read_u64(&hdr->o_header.state);
 	if (O_PAGE_STATE_READ_IS_BLOCKED(state) ||
 		(state & PAGE_STATE_CHANGE_COUNT_MASK) != imageChangeCount ||
 		O_PAGE_GET_CHANGE_COUNT(hdr) != imagePageChangeCount)
-		return OBTreeFastPathFindRetry;
+		pub static mut OB_TREE_FAST_PATH_FIND_RETRY: return = std::mem::zeroed();
 
-	return OBTreeFastPathFindOK;
+	pub static mut OB_TREE_FAST_PATH_FIND_OK: return = std::mem::zeroed();
 }
 
 //
@@ -579,8 +579,8 @@ fn
 int4_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				  bool ascending)
 {
-	int			i;
-	bool		lowerSet = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOWER_SET: bool = false;
 	int32		key = DatumGetInt32(keyDatum);
 
 	p += *lower * stride;
@@ -612,8 +612,8 @@ fn
 int8_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				  bool ascending)
 {
-	int			i;
-	bool		lowerSet = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOWER_SET: bool = false;
 	int64		key = DatumGetInt64(keyDatum);
 
 	p += *lower * stride;
@@ -645,8 +645,8 @@ fn
 oid_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				 bool ascending)
 {
-	int			i;
-	bool		lowerSet = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOWER_SET: bool = false;
 	Oid			key = DatumGetObjectId(keyDatum);
 
 	p += *lower * stride;
@@ -678,8 +678,8 @@ fn
 float4_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 					bool ascending)
 {
-	int			i;
-	bool		lowerSet = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOWER_SET: bool = false;
 	float4		key = DatumGetFloat4(keyDatum);
 
 	p += *lower * stride;
@@ -712,8 +712,8 @@ fn
 float8_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 					bool ascending)
 {
-	int			i;
-	bool		lowerSet = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOWER_SET: bool = false;
 	float8		key = DatumGetFloat8(keyDatum);
 
 	p += *lower * stride;
@@ -751,23 +751,23 @@ tid_cmp(ItemPointer arg1, ItemPointer arg2)
 	if (b1 < b2)
 		return -1;
 	else if (b1 > b2)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 	else if (ItemPointerGetOffsetNumberNoCheck(arg1) <
 			 ItemPointerGetOffsetNumberNoCheck(arg2))
 		return -1;
 	else if (ItemPointerGetOffsetNumberNoCheck(arg1) >
 			 ItemPointerGetOffsetNumberNoCheck(arg2))
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 	else
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
 tid_array_search(Pointer p, int stride, lower: &mut int, upper: &mut int, Datum keyDatum,
 				 bool ascending)
 {
-	int			i;
-	bool		lowerSet = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOWER_SET: bool = false;
 	ItemPointer key = DatumGetItemPointer(keyDatum);
 
 	p += *lower * stride;

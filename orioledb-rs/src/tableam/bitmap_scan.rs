@@ -30,27 +30,27 @@ use pgrx::pg_sys;
 
 typedef struct BitmapSeqScanArg
 {
-	tbl_desc: &mut OTableDescr;
-	bitmap: &mut OKeyBitmap;
+	pub static mut O_TABLE_DESCR: *mut tbl_desc = std::ptr::null_mut();
+	pub static mut O_KEY_BITMAP: *mut bitmap = std::ptr::null_mut();
 } BitmapSeqScanArg;
 
 typedef struct BridgeIterator
 {
-	tidbitmap: &mut TIDBitmap;
+	pub static mut TID_BITMAP: *mut tidbitmap = std::ptr::null_mut();
 
 #if PG_VERSION_NUM >= 180000
-	tbmiterator: &mut TBMPrivateIterator;
-	TBMIterateResult tbmres;
+	pub static mut TBM_PRIVATE_ITERATOR: *mut tbmiterator = std::ptr::null_mut();
+	pub static mut TBMRES: TBMIterateResult = std::mem::zeroed();
 
 	OffsetNumber offsets[TBM_MAX_TUPLES_PER_PAGE];
-	int			iter_ntuples;
+	pub static mut ITER_NTUPLES: std::os::raw::c_int = 0;
 #else
-	tbmiterator: &mut TBMIterator;
-	tbmres: &mut TBMIterateResult;
+	pub static mut TBM_ITERATOR: *mut tbmiterator = std::ptr::null_mut();
+	pub static mut TBM_ITERATE_RESULT: *mut tbmres = std::ptr::null_mut();
 #endif
 
-	int			cur_tuple;
-	int			page_ntuples;
+	pub static mut CUR_TUPLE: std::os::raw::c_int = 0;
+	pub static mut PAGE_NTUPLES: std::os::raw::c_int = 0;
 } BridgeIterator;
 
 #if PG_VERSION_NUM >= 180000
@@ -88,8 +88,8 @@ typedef struct BridgeIterator
 // One streamed primary index scan (a single BitmapIndexScan node).
 typedef struct OBitmapStreamChild
 {
-	OScanState	ostate;
-	ix: &mut OIndexDescr;
+	pub static mut OSTATE: OScanState = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut ix = std::ptr::null_mut();
 	Relation	index;			// kept open for scandesc.indexRelation
 	bool		scandesc_ready; // scandesc + cxt were initialized
 	bool		empty;			// qual_ok false / empty array: no rows
@@ -97,16 +97,16 @@ typedef struct OBitmapStreamChild
 
 typedef struct OBitmapScan
 {
-	ss: &mut ScanState;
-	OSnapshot	oSnapshot;
-	MemoryContext cxt;
+	pub static mut SCAN_STATE: *mut ss = std::ptr::null_mut();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut CXT: MemoryContext = std::mem::zeroed();
 
-	Oid			typeoid;
+	pub static mut TYPEOID: Oid = std::mem::zeroed();
 
-	seq_scan: &mut BTreeSeqScan;
-	BitmapSeqScanArg arg;
+	pub static mut B_TREE_SEQ_SCAN: *mut seq_scan = std::ptr::null_mut();
+	pub static mut ARG: BitmapSeqScanArg = std::mem::zeroed();
 
-	BridgeIterator bridge_iter;
+	pub static mut BRIDGE_ITER: BridgeIterator = std::mem::zeroed();
 
 	//
 // Primary-scan streaming.  When the bitmap qual is a single
@@ -121,10 +121,10 @@ typedef struct OBitmapScan
 // overlapping branches), so a dedup bitmap carries the "already emitted"
 // bit.
 //
-	bool		stream_primary;
-	stream_children: &mut OBitmapStreamChild;
-	int			stream_nchildren;
-	int			stream_cur;
+	pub static mut STREAM_PRIMARY: bool = false;
+	pub static mut O_BITMAP_STREAM_CHILD: *mut stream_children = std::ptr::null_mut();
+	pub static mut STREAM_NCHILDREN: std::os::raw::c_int = 0;
+	pub static mut STREAM_CUR: std::os::raw::c_int = 0;
 	stream_dedup: &mut OKeyBitmap;	// NULL for a single child (no dup possible)
 } OBitmapScan;
 
@@ -165,7 +165,7 @@ uint64_to_int64(uint64 val)
 static uint64
 val_get_uint64(Datum val, Oid typeoid)
 {
-	ItemPointer iptr;
+	pub static mut IPTR: ItemPointer = std::mem::zeroed();
 
 	switch (typeoid)
 	{
@@ -179,14 +179,14 @@ val_get_uint64(Datum val, Oid typeoid)
 				ItemPointerGetOffsetNumberNoCheck(iptr);
 		default:
 			elog(ERROR, "Unsupported keybitmap type");
-			return 0;
+			pub static mut 0: return = std::mem::zeroed();
 	}
 }
 
 fn
 uint64_get_val(uint64 val, Oid typeoid, Pointer ptr)
 {
-	ItemPointer iptr;
+	pub static mut IPTR: ItemPointer = std::mem::zeroed();
 
 	switch (typeoid)
 	{
@@ -210,10 +210,10 @@ uint64_get_val(uint64 val, Oid typeoid, Pointer ptr)
 static uint64
 seconary_tuple_get_pk_data(OTuple tuple, ix_descr: &mut OIndexDescr)
 {
-	AttrNumber	attnum;
-	Form_pg_attribute attr;
-	Datum		val;
-	bool		is_null;
+	pub static mut ATTNUM: AttrNumber = std::mem::zeroed();
+	pub static mut ATTR: Form_pg_attribute = std::mem::zeroed();
+	pub static mut VAL: Datum = std::mem::zeroed();
+	pub static mut IS_NULL: bool = false;
 
 	Assert(ix_descr->nPrimaryFields == 1);
 	Assert(!O_TUPLE_IS_NULL(tuple));
@@ -232,13 +232,13 @@ seconary_tuple_get_pk_data(OTuple tuple, ix_descr: &mut OIndexDescr)
 static uint64
 primary_tuple_get_data(OTuple tuple, primary: &mut OIndexDescr, bool onlyPkey)
 {
-	AttrNumber	attnum;
-	Form_pg_attribute attr;
-	Datum		val;
-	bool		is_null;
-	BTreeKeyType keyType = onlyPkey ? BTreeKeyNonLeafKey : BTreeKeyLeafTuple;
-	TupleDesc	tupdesc = onlyPkey ? primary->nonLeafTupdesc : primary->leafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = onlyPkey ? &primary->nonLeafSpec : &primary->leafSpec;
+	pub static mut ATTNUM: AttrNumber = std::mem::zeroed();
+	pub static mut ATTR: Form_pg_attribute = std::mem::zeroed();
+	pub static mut VAL: Datum = std::mem::zeroed();
+	pub static mut IS_NULL: bool = false;
+	pub static mut KEY_TYPE: BTreeKeyType = onlyPkey ? BTreeKeyNonLeafKey : BTreeKeyLeafTuple;
+	pub static mut TUPDESC: TupleDesc = onlyPkey ? primary->nonLeafTupdesc : primary->leafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = onlyPkey ? &primary->nonLeafSpec : &primary->leafSpec;
 
 	Assert(primary->nFields == 1);
 
@@ -269,9 +269,9 @@ typedef enum OPkEncKind
 
 typedef struct OPkFixedType
 {
-	Oid			typeoid;
-	int8		width;
-	OPkEncKind	kind;
+	pub static mut TYPEOID: Oid = std::mem::zeroed();
+	pub static mut WIDTH: int8 = std::mem::zeroed();
+	pub static mut KIND: OPkEncKind = std::mem::zeroed();
 } OPkFixedType;
 
 //
@@ -303,12 +303,12 @@ static const OPkFixedType o_pk_fixed_types[] = {
 static const OPkFixedType *
 o_pk_fixed_lookup(Oid typeoid)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < lengthof(o_pk_fixed_types); i++)
 		if (o_pk_fixed_types[i].typeoid == typeoid)
 			return &o_pk_fixed_types[i];
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 // Encoded width of a fixed-size key column, or -1 if the type is unsupported.
@@ -323,8 +323,8 @@ o_pk_fixed_width(Oid typeoid)
 OKeyBitmapMode
 o_keybitmap_pk_mode(primary: &mut OIndexDescr, fixedKeyLen: &mut int)
 {
-	int			i;
-	int			len = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LEN: std::os::raw::c_int = 0;
 
 	//
 // For the primary index descriptor the PK columns are its own key fields
@@ -341,11 +341,11 @@ o_keybitmap_pk_mode(primary: &mut OIndexDescr, fixedKeyLen: &mut int)
 //
 	if (primary->nFields <= 1)
 	{
-		bool		ok = true;
+		pub static mut OK: bool = true;
 
 		for (i = 0; i < primary->nFields; i++)
 		{
-			Oid			t = primary->fields[i].inputtype;
+			pub static mut T: Oid = primary->fields[i].inputtype;
 
 			if (!(t == INT4OID || t == INT8OID || t == TIDOID))
 			{
@@ -354,7 +354,7 @@ o_keybitmap_pk_mode(primary: &mut OIndexDescr, fixedKeyLen: &mut int)
 			}
 		}
 		if (ok)
-			return O_KEYBITMAP_UINT64;
+			pub static mut O_KEYBITMAP_UINT64: return = std::mem::zeroed();
 	}
 
 	//
@@ -364,7 +364,7 @@ o_keybitmap_pk_mode(primary: &mut OIndexDescr, fixedKeyLen: &mut int)
 // decision and the encoding can never disagree.
 //
 	if (primary->primaryIsCtid)
-		return O_KEYBITMAP_NONE;
+		pub static mut O_KEYBITMAP_NONE: return = std::mem::zeroed();
 	for (i = 0; i < primary->nKeyFields; i++)
 	{
 		AttrNumber	attnum = OIndexKeyAttnumToTupleAttnum(BTreeKeyNonLeafKey,
@@ -374,14 +374,14 @@ o_keybitmap_pk_mode(primary: &mut OIndexDescr, fixedKeyLen: &mut int)
 		int			w = o_pk_fixed_width(typeoid);
 
 		if (w < 0 || !primary->fields[i].ascending)
-			return O_KEYBITMAP_NONE;
+			pub static mut O_KEYBITMAP_NONE: return = std::mem::zeroed();
 		len += w;
 	}
 	if (len == 0 || len > OKBM_FIXED_BYTES)
-		return O_KEYBITMAP_NONE;
+		pub static mut O_KEYBITMAP_NONE: return = std::mem::zeroed();
 	if (fixedKeyLen)
 		*fixedKeyLen = len;
-	return O_KEYBITMAP_FIXED;
+	pub static mut O_KEYBITMAP_FIXED: return = std::mem::zeroed();
 }
 
 //
@@ -408,7 +408,7 @@ o_pk_encode_one(Datum val, Oid typeoid, out: &mut uint8)
 	const t: &mut OPkFixedType = o_pk_fixed_lookup(typeoid);
 	int			i,
 				w;
-	uint64		u = 0;
+	pub static mut U: uint64 = 0;
 
 	if (t == NULL)
 		elog(ERROR, "unsupported fixed keybitmap type %u", typeoid);
@@ -419,7 +419,7 @@ o_pk_encode_one(Datum val, Oid typeoid, out: &mut uint8)
 		case PKENC_RAW:
 			// already memcmp-ordered (uuid, macaddr*): copy raw bytes
 			memcpy(out, DatumGetPointer(val), w);
-			return w;
+			pub static mut W: return = std::mem::zeroed();
 		case PKENC_UINT:
 			u = (w == 1) ? (uint8) DatumGetChar(val)
 				: (uint32) DatumGetObjectId(val);
@@ -464,7 +464,7 @@ o_pk_encode_one(Datum val, Oid typeoid, out: &mut uint8)
 			if (w == 4)
 			{
 				float		f = DatumGetFloat4(val);
-				uint32		bits;
+				pub static mut BITS: uint32 = std::mem::zeroed();
 
 				if (isnan(f))
 					bits = OKBM_FLOAT4_NAN;
@@ -478,7 +478,7 @@ o_pk_encode_one(Datum val, Oid typeoid, out: &mut uint8)
 			else
 			{
 				double		d = DatumGetFloat8(val);
-				uint64		bits;
+				pub static mut BITS: uint64 = std::mem::zeroed();
 
 				if (isnan(d))
 					bits = OKBM_FLOAT8_NAN;
@@ -496,14 +496,14 @@ o_pk_encode_one(Datum val, Oid typeoid, out: &mut uint8)
 		out[i] = (uint8) u;
 		u >>= BITS_PER_BYTE;
 	}
-	return w;
+	pub static mut W: return = std::mem::zeroed();
 }
 
 static Datum
 o_pk_decode_one(const in: &mut uint8, Oid typeoid, width: &mut int)
 {
 	const t: &mut OPkFixedType = o_pk_fixed_lookup(typeoid);
-	uint64		u = 0;
+	pub static mut U: uint64 = 0;
 	int			i,
 				w;
 
@@ -549,7 +549,7 @@ o_pk_decode_one(const in: &mut uint8, Oid typeoid, width: &mut int)
 			if (w == 4)
 			{
 				uint32		bits = (uint32) u;
-				float		f;
+				pub static mut F: float = std::mem::zeroed();
 
 				bits ^= (bits & OKBM_SIGNBIT32) ? OKBM_SIGNBIT32 : PG_UINT32_MAX;
 				memcpy(&f, &bits, sizeof(f));
@@ -557,8 +557,8 @@ o_pk_decode_one(const in: &mut uint8, Oid typeoid, width: &mut int)
 			}
 			else
 			{
-				uint64		bits = u;
-				double		d;
+				pub static mut BITS: uint64 = u;
+				pub static mut D: double = std::mem::zeroed();
 
 				bits ^= (bits & OKBM_SIGNBIT64) ? OKBM_SIGNBIT64 : PG_UINT64_MAX;
 				memcpy(&d, &bits, sizeof(d));
@@ -580,13 +580,13 @@ fn
 o_pk_encode_leaf(OTuple tuple, id: &mut OIndexDescr, out: &mut uint8)
 {
 	bool		isPrimary = (id->desc.type == oIndexPrimary);
-	int			npk = isPrimary ? id->nKeyFields : id->nPrimaryFields;
-	int			pk_from = id->nFields - id->nPrimaryFields;
+	pub static mut NPK: std::os::raw::c_int = isPrimary ? id->nKeyFields : id->nPrimaryFields;
+	pub static mut PK_FROM: std::os::raw::c_int = id->nFields - id->nPrimaryFields;
 	AttrNumber	attnums[INDEX_MAX_KEYS] = {0};
 	Oid			types[INDEX_MAX_KEYS] = {0};
-	int			i;
-	int			len = 0;
-	int			off;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LEN: std::os::raw::c_int = 0;
+	pub static mut OFF: std::os::raw::c_int = 0;
 
 	for (i = 0; i < npk; i++)
 	{
@@ -603,7 +603,7 @@ o_pk_encode_leaf(OTuple tuple, id: &mut OIndexDescr, out: &mut uint8)
 	off = OKBM_FIXED_BYTES - len;
 	for (i = 0; i < npk; i++)
 	{
-		bool		isnull;
+		pub static mut ISNULL: bool = false;
 		Datum		val = o_fastgetattr(tuple, attnums[i], id->leafTupdesc,
 										&id->leafSpec, &isnull);
 
@@ -617,9 +617,9 @@ o_pk_encode_nonleaf(OTuple tuple, primary: &mut OIndexDescr, out: &mut uint8)
 {
 	AttrNumber	attnums[INDEX_MAX_KEYS] = {0};
 	Oid			types[INDEX_MAX_KEYS] = {0};
-	int			i;
-	int			len = 0;
-	int			off;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LEN: std::os::raw::c_int = 0;
+	pub static mut OFF: std::os::raw::c_int = 0;
 
 	for (i = 0; i < primary->nKeyFields; i++)
 	{
@@ -632,7 +632,7 @@ o_pk_encode_nonleaf(OTuple tuple, primary: &mut OIndexDescr, out: &mut uint8)
 	off = OKBM_FIXED_BYTES - len;
 	for (i = 0; i < primary->nKeyFields; i++)
 	{
-		bool		isnull;
+		pub static mut ISNULL: bool = false;
 		Datum		val = o_fastgetattr(tuple, attnums[i], primary->nonLeafTupdesc,
 										&primary->nonLeafSpec, &isnull);
 
@@ -648,11 +648,11 @@ o_pk_decode_to_key(const keybytes: &mut uint8, primary: &mut OIndexDescr, key: &
 	bool		isnull[INDEX_MAX_KEYS];
 	AttrNumber	attnums[INDEX_MAX_KEYS] = {0};
 	Oid			types[INDEX_MAX_KEYS] = {0};
-	int			natts = primary->nonLeafTupdesc->natts;
-	int			i;
-	int			len = 0;
-	int			off;
-	OTuple		tup;
+	pub static mut NATTS: std::os::raw::c_int = primary->nonLeafTupdesc->natts;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LEN: std::os::raw::c_int = 0;
+	pub static mut OFF: std::os::raw::c_int = 0;
+	pub static mut TUP: OTuple = std::mem::zeroed();
 
 	//
 // Only the ordering key columns can be recovered from the encoded key.  A
@@ -678,7 +678,7 @@ o_pk_decode_to_key(const keybytes: &mut uint8, primary: &mut OIndexDescr, key: &
 	off = OKBM_FIXED_BYTES - len;
 	for (i = 0; i < primary->nKeyFields; i++)
 	{
-		int			w;
+		pub static mut W: std::os::raw::c_int = 0;
 
 		values[attnums[i] - 1] = o_pk_decode_one(keybytes + off, types[i], &w);
 		isnull[attnums[i] - 1] = false; // ordering key column is present
@@ -699,17 +699,17 @@ o_index_getbitmap(bitmap_state: &mut OBitmapHeapPlanState,
 				  bitmap: &mut OKeyBitmap, tbm_result: &mut TIDBitmap)
 {
 	OScanState	ostate = {0};
-	descr: &mut OTableDescr;
-	indexDescr: &mut OIndexDescr = NULL;
-	OIndexNumber ix_num;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
 	Relation	index,
 				table;
 	bitmap_ix_scan: &mut BitmapIndexScan = ((BitmapIndexScan *) node->ss.ps.plan);
 	OTuple		tuple = {0};
-	econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
-	MemoryContext mcxt = bitmap_state->scan->ss->ss_ScanTupleSlot->tts_mcxt;
-	double		nTuples = 0;
-	prev_ea_counters: &mut OEACallsCounters = ea_counters;
+	pub static mut EXPR_CONTEXT: *mut econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
+	pub static mut MCXT: MemoryContext = bitmap_state->scan->ss->ss_ScanTupleSlot->tts_mcxt;
+	pub static mut N_TUPLES: double = 0;
+	pub static mut OEA_CALLS_COUNTERS: *mut prev_ea_counters = ea_counters;
 
 	bitmap_state->o_plan_state.plan_state = &node->ss.ps;
 
@@ -800,7 +800,7 @@ o_index_getbitmap(bitmap_state: &mut OBitmapHeapPlanState,
 
 		_bt_preprocess_keys(&ostate.scandesc);
 		if (!so->qual_ok)
-			return nTuples;
+			pub static mut N_TUPLES: return = std::mem::zeroed();
 		ostate.numPrefixExactKeys =
 			o_adjust_num_prefix_exact_keys(so, ostate.numPrefixExactKeys);
 		if (so->numArrayKeys)
@@ -814,7 +814,7 @@ o_index_getbitmap(bitmap_state: &mut OBitmapHeapPlanState,
 
 		if (!O_TUPLE_IS_NULL(tuple))
 		{
-			uint64		data;
+			pub static mut DATA: uint64 = std::mem::zeroed();
 
 			if (!tbm_result)
 			{
@@ -844,15 +844,15 @@ o_index_getbitmap(bitmap_state: &mut OBitmapHeapPlanState,
 			{
 				if (indexDescr->desc.type != oIndexPrimary)
 				{
-					OBTreeKeyBound bound;
-					OTuple		ptup;
+					pub static mut BOUND: OBTreeKeyBound = std::mem::zeroed();
+					pub static mut PTUP: OTuple = std::mem::zeroed();
 					primary: &mut OIndexDescr = GET_PRIMARY(descr);
-					AttrNumber	attnum;
-					Datum		val;
-					bool		is_null;
-					TupleDesc	tupdesc = primary->leafTupdesc;
-					spec: &mut OTupleFixedFormatSpec = &primary->leafSpec;
-					ItemPointer bridge_iptr;
+					pub static mut ATTNUM: AttrNumber = std::mem::zeroed();
+					pub static mut VAL: Datum = std::mem::zeroed();
+					pub static mut IS_NULL: bool = false;
+					pub static mut TUPDESC: TupleDesc = primary->leafTupdesc;
+					pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &primary->leafSpec;
+					pub static mut BRIDGE_IPTR: ItemPointer = std::mem::zeroed();
 
 					// fetch primary index key from tuple and search raw tuple
 					o_fill_pindex_tuple_key_bound(&indexDescr->desc, tuple, &bound);
@@ -914,18 +914,18 @@ o_index_getbitmap(bitmap_state: &mut OBitmapHeapPlanState,
 	btendscan(&ostate.scandesc);
 
 	ea_counters = prev_ea_counters;
-	return nTuples;
+	pub static mut N_TUPLES: return = std::mem::zeroed();
 }
 
 fn
 exec_bitmap_index_state(bitmap_state: &mut OBitmapHeapPlanState, planstate: &mut PlanState,
 						OKeyBitmap **rbt_result, TIDBitmap **tbm_result)
 {
-	double		nTuples = 0;
-	node: &mut BitmapIndexScanState;
-	instrument: &mut Instrumentation;
-	options: &mut OBTOptions;
-	econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
+	pub static mut N_TUPLES: double = 0;
+	pub static mut BITMAP_INDEX_SCAN_STATE: *mut node = std::ptr::null_mut();
+	pub static mut INSTRUMENTATION: *mut instrument = std::ptr::null_mut();
+	pub static mut OBT_OPTIONS: *mut options = std::ptr::null_mut();
+	pub static mut EXPR_CONTEXT: *mut econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
 
 	node = (BitmapIndexScanState *) planstate;
 	instrument = node->ss.ps.instrument;
@@ -955,8 +955,8 @@ exec_bitmap_index_state(bitmap_state: &mut OBitmapHeapPlanState, planstate: &mut
 	if (node->biss_RelationDesc->rd_rel->relam != BTREE_AM_OID ||
 		(options && !options->orioledb_index))
 	{
-		bool		doscan;
-		IndexScanDesc scandesc;
+		pub static mut DOSCAN: bool = false;
+		pub static mut SCANDESC: IndexScanDesc = std::mem::zeroed();
 
 		if (*tbm_result == NULL)
 			*tbm_result = tbm_create(work_mem * 1024L, NULL);
@@ -1017,8 +1017,8 @@ exec_bitmap_index_state(bitmap_state: &mut OBitmapHeapPlanState, planstate: &mut
 fn
 add_rbt_to_tbm(bitmap_state: &mut OBitmapHeapPlanState, tbm: &mut TIDBitmap, rbt: &mut OKeyBitmap)
 {
-	seq_scan: &mut BTreeSeqScan;
-	BitmapSeqScanArg arg;
+	pub static mut B_TREE_SEQ_SCAN: *mut seq_scan = std::ptr::null_mut();
+	pub static mut ARG: BitmapSeqScanArg = std::mem::zeroed();
 	primary: &mut OIndexDescr = GET_PRIMARY(bitmap_state->scan->arg.tbl_desc);
 
 	arg.tbl_desc = bitmap_state->scan->arg.tbl_desc;
@@ -1030,9 +1030,9 @@ add_rbt_to_tbm(bitmap_state: &mut OBitmapHeapPlanState, tbm: &mut TIDBitmap, rbt
 
 	while (true)
 	{
-		OTuple		tuple;
-		BTreeLocationHint hint;
-		CommitSeqNo tupleCsn;
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
+		pub static mut HINT: BTreeLocationHint = std::mem::zeroed();
+		pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
 
 		tuple = btree_seq_scan_getnext(seq_scan, bitmap_state->scan->cxt, &tupleCsn,
 									   &hint);
@@ -1043,12 +1043,12 @@ add_rbt_to_tbm(bitmap_state: &mut OBitmapHeapPlanState, tbm: &mut TIDBitmap, rbt
 		}
 		else
 		{
-			AttrNumber	attnum;
-			Datum		val;
-			bool		is_null;
-			TupleDesc	tupdesc = primary->leafTupdesc;
-			spec: &mut OTupleFixedFormatSpec = &primary->leafSpec;
-			ItemPointer bridge_iptr;
+			pub static mut ATTNUM: AttrNumber = std::mem::zeroed();
+			pub static mut VAL: Datum = std::mem::zeroed();
+			pub static mut IS_NULL: bool = false;
+			pub static mut TUPDESC: TupleDesc = primary->leafTupdesc;
+			pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &primary->leafSpec;
+			pub static mut BRIDGE_IPTR: ItemPointer = std::mem::zeroed();
 
 			Assert(primary->nFields == 1);
 
@@ -1074,17 +1074,17 @@ o_exec_bitmapqual(bitmap_state: &mut OBitmapHeapPlanState, planstate: &mut PlanS
 		case T_BitmapAndState:
 			{
 				node: &mut BitmapAndState = (BitmapAndState *) planstate;
-				int			i;
-				instrument: &mut Instrumentation = node->ps.instrument;
+				pub static mut I: std::os::raw::c_int = 0;
+				pub static mut INSTRUMENTATION: *mut instrument = node->ps.instrument;
 
 				if (instrument)
 					InstrStartNode(instrument);
 
 				for (i = 0; i < node->nplans; i++)
 				{
-					subnode: &mut PlanState = node->bitmapplans[i];
-					rbt_subresult: &mut OKeyBitmap = NULL;
-					tbm_subresult: &mut TIDBitmap = NULL;
+					pub static mut PLAN_STATE: *mut subnode = node->bitmapplans[i];
+					pub static mut O_KEY_BITMAP: *mut rbt_subresult = std::ptr::null_mut();
+					pub static mut TID_BITMAP: *mut tbm_subresult = std::ptr::null_mut();
 
 					o_exec_bitmapqual(bitmap_state, subnode, &rbt_subresult, &tbm_subresult);
 
@@ -1156,17 +1156,17 @@ o_exec_bitmapqual(bitmap_state: &mut OBitmapHeapPlanState, planstate: &mut PlanS
 		case T_BitmapOrState:
 			{
 				node: &mut BitmapOrState = (BitmapOrState *) planstate;
-				int			i;
-				instrument: &mut Instrumentation = node->ps.instrument;
+				pub static mut I: std::os::raw::c_int = 0;
+				pub static mut INSTRUMENTATION: *mut instrument = node->ps.instrument;
 
 				if (instrument)
 					InstrStartNode(instrument);
 
 				for (i = 0; i < node->nplans; i++)
 				{
-					subnode: &mut PlanState = node->bitmapplans[i];
-					rbt_subresult: &mut OKeyBitmap = NULL;
-					tbm_subresult: &mut TIDBitmap = NULL;
+					pub static mut PLAN_STATE: *mut subnode = node->bitmapplans[i];
+					pub static mut O_KEY_BITMAP: *mut rbt_subresult = std::ptr::null_mut();
+					pub static mut TID_BITMAP: *mut tbm_subresult = std::ptr::null_mut();
 
 					if (IsA(subnode, BitmapIndexScanState))
 					{
@@ -1251,20 +1251,20 @@ static bool
 setup_primary_stream(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OBitmapScan,
 					 node: &mut BitmapIndexScanState, child: &mut OBitmapStreamChild)
 {
-	ostate: &mut OScanState = &child->ostate;
-	descr: &mut OTableDescr = scan->arg.tbl_desc;
-	indexDescr: &mut OIndexDescr = NULL;
-	OIndexNumber ix_num;
-	Relation	index;
+	pub static mut O_SCAN_STATE: *mut ostate = &child->ostate;
+	pub static mut O_TABLE_DESCR: *mut descr = scan->arg.tbl_desc;
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
+	pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+	pub static mut INDEX: Relation = std::mem::zeroed();
 	bitmap_ix_scan: &mut BitmapIndexScan = (BitmapIndexScan *) node->ss.ps.plan;
-	econtext: &mut ExprContext = scan->ss->ps.ps_ExprContext;
+	pub static mut EXPR_CONTEXT: *mut econtext = scan->ss->ps.ps_ExprContext;
 	options: &mut OBTOptions = (OBTOptions *) node->biss_RelationDesc->rd_options;
-	BTScanOpaque so;
+	pub static mut SO: BTScanOpaque = std::mem::zeroed();
 
 	// Non-orioledb (bridged) indexes go through the TIDBitmap path.
 	if (node->biss_RelationDesc->rd_rel->relam != BTREE_AM_OID ||
 		(options && !options->orioledb_index))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	index = index_open(bitmap_ix_scan->indexid, AccessShareLock);
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
@@ -1279,7 +1279,7 @@ setup_primary_stream(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OBitmap
 	if (indexDescr->desc.type != oIndexPrimary)
 	{
 		index_close(index, AccessShareLock);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	child->index = index;
@@ -1300,7 +1300,7 @@ setup_primary_stream(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OBitmap
 	if (!node->biss_RuntimeKeysReady)
 	{
 		child->empty = true;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	// Build the orioledb scan state (cf. o_index_getbitmap()).
@@ -1364,7 +1364,7 @@ setup_primary_stream(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OBitmap
 	if (!so->qual_ok)
 	{
 		child->empty = true;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	ostate->numPrefixExactKeys =
 		o_adjust_num_prefix_exact_keys(so, ostate->numPrefixExactKeys);
@@ -1372,7 +1372,7 @@ setup_primary_stream(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OBitmap
 		_bt_start_array_keys(&ostate->scandesc, ForwardScanDirection);
 	ostate->curKeyRange.empty = true;
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1394,21 +1394,21 @@ setup_primary_stream_qual(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OB
 		{
 			pfree(scan->stream_children);
 			scan->stream_children = NULL;
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 		scan->stream_nchildren = 1;
 		// a single scan never yields the same pk twice: no dedup needed
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else if (IsA(qual, BitmapOrState))
 	{
 		orstate: &mut BitmapOrState = (BitmapOrState *) qual;
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		// Only when every branch is itself a plain BitmapIndexScan.
 		for (i = 0; i < orstate->nplans; i++)
 			if (!IsA(orstate->bitmapplans[i], BitmapIndexScanState))
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 		scan->stream_children = MemoryContextAllocZero(scan->cxt,
 													   sizeof(OBitmapStreamChild) * orstate->nplans);
@@ -1419,11 +1419,11 @@ setup_primary_stream_qual(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OB
 									  &scan->stream_children[i]))
 			{
 				// tear down the children already set up, then fall back
-				int			j;
+				pub static mut J: std::os::raw::c_int = 0;
 
 				for (j = 0; j <= i; j++)
 				{
-					c: &mut OBitmapStreamChild = &scan->stream_children[j];
+					pub static mut O_BITMAP_STREAM_CHILD: *mut c = &scan->stream_children[j];
 
 					if (c->scandesc_ready)
 					{
@@ -1438,7 +1438,7 @@ setup_primary_stream_qual(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OB
 				}
 				pfree(scan->stream_children);
 				scan->stream_children = NULL;
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 			scan->stream_nchildren++;
 		}
@@ -1448,10 +1448,10 @@ setup_primary_stream_qual(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OB
 			scan->stream_dedup = o_keybitmap_create_fixed();
 		else
 			scan->stream_dedup = o_keybitmap_create();
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -1464,18 +1464,18 @@ setup_primary_stream_qual(bitmap_state: &mut OBitmapHeapPlanState, scan: &mut OB
 static TupleTableSlot *
 o_bitmap_stream_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 {
-	ss: &mut ScanState = &node->ss;
+	pub static mut SCAN_STATE: *mut ss = &node->ss;
 	descr: &mut OTableDescr = relation_get_descr(ss->ss_currentRelation);
 	primary: &mut OIndexDescr = GET_PRIMARY(scan->arg.tbl_desc);
-	MemoryContext tupleCxt = ss->ss_ScanTupleSlot->tts_mcxt;
-	slot: &mut TupleTableSlot;
+	pub static mut TUPLE_CXT: MemoryContext = ss->ss_ScanTupleSlot->tts_mcxt;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
 
 	while (scan->stream_cur < scan->stream_nchildren)
 	{
-		child: &mut OBitmapStreamChild = &scan->stream_children[scan->stream_cur];
+		pub static mut O_BITMAP_STREAM_CHILD: *mut child = &scan->stream_children[scan->stream_cur];
 		BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
-		CommitSeqNo tupleCsn;
-		OTuple		tuple;
+		pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 		if (child->empty)
 		{
@@ -1494,7 +1494,7 @@ o_bitmap_stream_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 		// Dedup across BitmapOr branches.
 		if (scan->stream_dedup)
 		{
-			bool		fresh;
+			pub static mut FRESH: bool = false;
 
 			if (o_keybitmap_pk_mode(primary, NULL) == O_KEYBITMAP_FIXED)
 			{
@@ -1519,7 +1519,7 @@ o_bitmap_stream_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 		slot = ss->ss_ScanTupleSlot;
 
 		if (o_exec_qual(ss->ps.ps_ExprContext, ss->ps.qual, slot))
-			return slot;
+			pub static mut SLOT: return = std::mem::zeroed();
 		// qual failed: keep scanning
 	}
 
@@ -1549,7 +1549,7 @@ o_make_bitmap_scan(bitmap_state: &mut OBitmapHeapPlanState, ss: &mut ScanState,
 	if (setup_primary_stream_qual(bitmap_state, scan, bitmapqualplanstate))
 	{
 		scan->stream_primary = true;
-		return scan;
+		pub static mut SCAN: return = std::mem::zeroed();
 	}
 
 	o_exec_bitmapqual(bitmap_state, bitmapqualplanstate,
@@ -1567,28 +1567,28 @@ o_make_bitmap_scan(bitmap_state: &mut OBitmapHeapPlanState, ss: &mut ScanState,
 		bridge_begin_iterate(&scan->bridge_iter);
 	}
 
-	return scan;
+	pub static mut SCAN: return = std::mem::zeroed();
 }
 
 TupleTableSlot *
 o_exec_bitmap_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 {
-	bool		fetched;
-	slot: &mut TupleTableSlot = NULL;
+	pub static mut FETCHED: bool = false;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
 	ocstate: &mut OCustomScanState = (OCustomScanState *) node;
 	bitmap_state: &mut OBitmapHeapPlanState =
 		(OBitmapHeapPlanState *) ocstate->o_plan_state;
-	bridge_iter: &mut BridgeIterator = &scan->bridge_iter;
+	pub static mut BRIDGE_ITERATOR: *mut bridge_iter = &scan->bridge_iter;
 
 	if (scan->stream_primary)
 		return o_bitmap_stream_fetch(scan, node);
 
 	do
 	{
-		OTuple		tuple;
-		BTreeLocationHint hint;
-		MemoryContext tupleCxt = node->ss.ss_ScanTupleSlot->tts_mcxt;
-		CommitSeqNo tupleCsn;
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
+		pub static mut HINT: BTreeLocationHint = std::mem::zeroed();
+		pub static mut TUPLE_CXT: MemoryContext = node->ss.ss_ScanTupleSlot->tts_mcxt;
+		pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
 #if PG_VERSION_NUM >= 180000
 		bool		page_exhausted = !BlockNumberIsValid(bridge_iter->tbmres.blockno);
 #else
@@ -1659,10 +1659,10 @@ o_exec_bitmap_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 			}
 			else
 			{
-				descr: &mut OTableDescr;
-				primary: &mut OIndexDescr;
-				uint64		value;
-				bool		in_bitmap;
+				pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+				pub static mut O_INDEX_DESCR: *mut primary = std::ptr::null_mut();
+				pub static mut VALUE: uint64 = std::mem::zeroed();
+				pub static mut IN_BITMAP: bool = false;
 
 				descr = relation_get_descr(node->ss.ss_currentRelation);
 				primary = GET_PRIMARY(descr);
@@ -1689,7 +1689,7 @@ o_exec_bitmap_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 											 true, &hint);
 					if (BRIDGE_RECHECK(bridge_iter))
 					{
-						tup_econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
+						pub static mut EXPR_CONTEXT: *mut tup_econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
 
 						//
 // Initialize bitmapqualorig_state lazily on first
@@ -1745,7 +1745,7 @@ o_exec_bitmap_fetch(scan: &mut OBitmapScan, node: &mut CustomScanState)
 	} while (!fetched || (!TupIsNull(slot) &&
 						  !o_exec_qual(node->ss.ps.ps_ExprContext,
 									   node->ss.ps.qual, slot)));
-	return slot;
+	pub static mut SLOT: return = std::mem::zeroed();
 }
 
 
@@ -1753,11 +1753,11 @@ o_free_bitmap_scan(scan: &mut OBitmapScan)
 {
 	if (scan->stream_primary)
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		for (i = 0; i < scan->stream_nchildren; i++)
 		{
-			c: &mut OBitmapStreamChild = &scan->stream_children[i];
+			pub static mut O_BITMAP_STREAM_CHILD: *mut c = &scan->stream_children[i];
 
 			if (c->scandesc_ready)
 			{
@@ -1851,10 +1851,10 @@ o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType, bool inclusive,
 {
 	barg: &mut BitmapSeqScanArg = (BitmapSeqScanArg *) arg;
 	bool		nonLeaf = (keyType == BTreeKeyNonLeafKey);
-	bool		found;
-	uint64		prev_value = 0;
-	uint64		res_value;
-	OTupleHeader tuphdr;
+	pub static mut FOUND: bool = false;
+	pub static mut PREV_VALUE: uint64 = 0;
+	pub static mut RES_VALUE: uint64 = std::mem::zeroed();
+	pub static mut TUPHDR: OTupleHeader = std::mem::zeroed();
 	primary: &mut OIndexDescr = GET_PRIMARY(barg->tbl_desc);
 
 	Assert(keyType == BTreeKeyLeafTuple || keyType == BTreeKeyNonLeafKey);
@@ -1873,7 +1873,7 @@ o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType, bool inclusive,
 
 			if (!inclusive)
 			{
-				int			i;
+				pub static mut I: std::os::raw::c_int = 0;
 
 				// smallest key strictly greater than prev
 				for (i = OKBM_FIXED_BYTES - 1; i >= 0; i--)
@@ -1882,7 +1882,7 @@ o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType, bool inclusive,
 				if (i < 0)
 				{
 					O_TUPLE_SET_NULL(key->tuple);
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				}
 			}
 		}
@@ -1892,10 +1892,10 @@ o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType, bool inclusive,
 		if (o_keybitmap_get_next_key(barg->bitmap, prevKey, outKey))
 		{
 			o_pk_decode_to_key(outKey, primary, key);
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 		O_TUPLE_SET_NULL(key->tuple);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (!O_TUPLE_IS_NULL(key->tuple))
@@ -1906,7 +1906,7 @@ o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType, bool inclusive,
 			if (prev_value == UINT64_MAX)
 			{
 				O_TUPLE_SET_NULL(key->tuple);
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 			prev_value++;
 		}
@@ -1935,7 +1935,7 @@ o_bitmap_get_next_key(key: &mut OFixedKey, BTreeKeyType keyType, bool inclusive,
 		O_TUPLE_SET_NULL(key->tuple);
 	}
 
-	return found;
+	pub static mut FOUND: return = std::mem::zeroed();
 }
 
 fn
@@ -1959,7 +1959,7 @@ bridge_iterate(iter: &mut BridgeIterator)
 	if (!BlockNumberIsValid(iter->tbmres.blockno))
 	{
 		if (!tbm_private_iterate(iter->tbmiterator, &iter->tbmres))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		if (!iter->tbmres.lossy)
 			iter->iter_ntuples = tbm_extract_page_tuple(&iter->tbmres,
 														iter->offsets,
@@ -1976,8 +1976,8 @@ bridge_iterate(iter: &mut BridgeIterator)
 fn
 bridge_next_page(scan: &mut OBitmapScan, bitmap_state: &mut OBitmapHeapPlanState)
 {
-	bridge: &mut OIndexDescr = scan->arg.tbl_desc->bridge;
-	iter: &mut BridgeIterator;
+	pub static mut O_INDEX_DESCR: *mut bridge = scan->arg.tbl_desc->bridge;
+	pub static mut BRIDGE_ITERATOR: *mut iter = std::ptr::null_mut();
 
 	Assert(scan->bridge_iter.tbmiterator != NULL);
 #if PG_VERSION_NUM >= 180000
@@ -2005,23 +2005,23 @@ bridge_next_page(scan: &mut OBitmapScan, bitmap_state: &mut OBitmapHeapPlanState
 // tbmres; but we have to follow any HOT chain starting at each such
 // offset.
 //
-		int			curoff;
+		pub static mut CUROFF: std::os::raw::c_int = 0;
 
 		iter->page_ntuples = BRIDGE_ITER_NTUPLES(iter);
 		for (curoff = 0; curoff < BRIDGE_ITER_NTUPLES(iter); curoff++)
 		{
 #if PG_VERSION_NUM >= 180000
-			OffsetNumber offnum = iter->offsets[curoff];
-			BlockNumber blockno = iter->tbmres.blockno;
+			pub static mut OFFNUM: OffsetNumber = iter->offsets[curoff];
+			pub static mut BLOCKNO: BlockNumber = iter->tbmres.blockno;
 #else
-			OffsetNumber offnum = iter->tbmres->offsets[curoff];
-			BlockNumber blockno = iter->tbmres->blockno;
+			pub static mut OFFNUM: OffsetNumber = iter->tbmres->offsets[curoff];
+			pub static mut BLOCKNO: BlockNumber = iter->tbmres->blockno;
 #endif
-			ItemPointerData iptr;
-			OBTreeKeyBound bridge_bound;
-			OTuple		bridge_tup;
-			uint64		data;
-			CommitSeqNo tupleCsn;
+			pub static mut IPTR: ItemPointerData = std::mem::zeroed();
+			pub static mut BRIDGE_BOUND: OBTreeKeyBound = std::mem::zeroed();
+			pub static mut BRIDGE_TUP: OTuple = std::mem::zeroed();
+			pub static mut DATA: uint64 = std::mem::zeroed();
+			pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
 
 			ItemPointerSet(&iptr, blockno, offnum);
 
@@ -2054,19 +2054,19 @@ bridge_next_page(scan: &mut OBitmapScan, bitmap_state: &mut OBitmapHeapPlanState
 // Bitmap is lossy, so we must examine each line pointer on the page.
 //
 
-		tbl_descr: &mut OTableDescr = scan->arg.tbl_desc;
-		it: &mut BTreeIterator;
-		ItemPointerData start_iptr;
-		ItemPointerData end_iptr;
-		OBTreeKeyBound start_bound;
-		OBTreeKeyBound end_bound;
-		primarySlot: &mut TupleTableSlot;
-		tup_econtext: &mut ExprContext = bitmap_state->scan->ss->ps.ps_ExprContext;
-		CommitSeqNo tupleCsn;
+		pub static mut O_TABLE_DESCR: *mut tbl_descr = scan->arg.tbl_desc;
+		pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+		pub static mut START_IPTR: ItemPointerData = std::mem::zeroed();
+		pub static mut END_IPTR: ItemPointerData = std::mem::zeroed();
+		pub static mut START_BOUND: OBTreeKeyBound = std::mem::zeroed();
+		pub static mut END_BOUND: OBTreeKeyBound = std::mem::zeroed();
+		pub static mut TUPLE_TABLE_SLOT: *mut primarySlot = std::ptr::null_mut();
+		pub static mut EXPR_CONTEXT: *mut tup_econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
+		pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
 #if PG_VERSION_NUM >= 180000
-		BlockNumber blockno = iter->tbmres.blockno;
+		pub static mut BLOCKNO: BlockNumber = iter->tbmres.blockno;
 #else
-		BlockNumber blockno = iter->tbmres->blockno;
+		pub static mut BLOCKNO: BlockNumber = iter->tbmres->blockno;
 #endif
 
 		ItemPointerSet(&start_iptr, blockno, 0);
@@ -2099,7 +2099,7 @@ bridge_next_page(scan: &mut OBitmapScan, bitmap_state: &mut OBitmapHeapPlanState
 													 (Pointer) &end_bound,
 													 BTreeKeyBound, true,
 													 NULL);
-			uint64		data;
+			pub static mut DATA: uint64 = std::mem::zeroed();
 
 			if (O_TUPLE_IS_NULL(tup))
 				break;

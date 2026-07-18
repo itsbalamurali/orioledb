@@ -31,34 +31,34 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	BTreeRootInfo rootInfo;
-	bool		initialized;
+	pub static mut ROOT_INFO: BTreeRootInfo = std::mem::zeroed();
+	pub static mut INITIALIZED: bool = false;
 } SysTreeShmemHeader;
 
 typedef struct
 {
-	int			keyLength;
+	pub static mut KEY_LENGTH: std::os::raw::c_int = 0;
 	int			(*keyLengthFunc) (desc: &mut BTreeDescr, OTuple tuple);
-	OBTreeKeyCmp cmpFunc;
-	int			tupleLength;
+	pub static mut CMP_FUNC: OBTreeKeyCmp = std::mem::zeroed();
+	pub static mut TUPLE_LENGTH: std::os::raw::c_int = 0;
 	int			(*tupleLengthFunc) (desc: &mut BTreeDescr, OTuple tuple);
 	JsonbValue *(*keyToJsonb) (desc: &mut BTreeDescr, OTuple key, JsonbParseState **state);
-	PrintFunc	keyPrint;
-	PrintFunc	tupPrint;
-	OPagePoolType poolType;
-	UndoLogType undoLogType;
-	BTreeStorageType storageType;
+	pub static mut KEY_PRINT: PrintFunc = std::mem::zeroed();
+	pub static mut TUP_PRINT: PrintFunc = std::mem::zeroed();
+	pub static mut POOL_TYPE: OPagePoolType = std::mem::zeroed();
+	pub static mut UNDO_LOG_TYPE: UndoLogType = std::mem::zeroed();
+	pub static mut STORAGE_TYPE: BTreeStorageType = std::mem::zeroed();
 	bool		(*needs_undo) (desc: &mut BTreeDescr, BTreeOperationType action,
 							   OTuple oldTuple, OTupleXactInfo oldXactInfo, bool oldDeleted,
 							   OTuple newTuple, OXid newOxid);
-	Pointer		extra;
+	pub static mut EXTRA: Pointer = std::ptr::null_mut();
 } SysTreeMeta;
 
 typedef struct
 {
-	BTreeDescr	descr;
-	BTreeOps	ops;
-	bool		initialized;
+	pub static mut DESCR: BTreeDescr = std::mem::zeroed();
+	pub static mut OPS: BTreeOps = std::mem::zeroed();
+	pub static mut INITIALIZED: bool = false;
 } SysTreeDescr;
 
 fn sys_tree_init_if_needed(int i);
@@ -419,7 +419,7 @@ static SysTreeMeta sysTreesMeta[] =
 	},
 };
 
-static sysTreesShmemHeaders: &mut SysTreeShmemHeader = NULL;
+static mut SYS_TREE_SHMEM_HEADER: *mut sysTreesShmemHeaders = std::ptr::null_mut();
 static SysTreeDescr sysTreesDescrs[SYS_TREES_NUM];
 
 PG_FUNCTION_INFO_V1(orioledb_sys_tree_structure);
@@ -432,14 +432,14 @@ PG_FUNCTION_INFO_V1(orioledb_sys_tree_rows);
 Size
 sys_trees_shmem_needs()
 {
-	Size		size = 0;
+	pub static mut SIZE: Size = 0;
 
 	StaticAssertStmt(SYS_TREES_NUM == sizeof(sysTreesMeta) / sizeof(SysTreeMeta),
 					 "mismatch between size of sysTreesMeta and SYS_TREES_NUM");
 
 	size = add_size(size, mul_size(sizeof(SysTreeShmemHeader), SYS_TREES_NUM));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 //
@@ -452,8 +452,8 @@ sys_trees_shmem_init(Pointer ptr, bool found)
 
 	if (!found)
 	{
-		int			i;
-		header: &mut SysTreeShmemHeader;
+		pub static mut I: std::os::raw::c_int = 0;
+		pub static mut SYS_TREE_SHMEM_HEADER: *mut header = std::ptr::null_mut();
 
 		for (i = 0; i < SYS_TREES_NUM; i++)
 		{
@@ -483,7 +483,7 @@ get_sys_tree_no_init(int tree_num)
 	Assert(tree_num >= 1 && tree_num <= SYS_TREES_NUM);
 
 	if (!sysTreesDescrs[tree_num - 1].initialized)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	return &sysTreesDescrs[tree_num - 1].descr;
 }
@@ -524,7 +524,7 @@ orioledb_sys_tree_structure(PG_FUNCTION_ARGS)
 	optionsArg: &mut VarChar = (VarChar *) PG_GETARG_VARCHAR_P(1);
 	int			depth = PG_GETARG_INT32(2);
 	BTreePrintOptions printOptions = {0};
-	StringInfoData buf;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 
 	check_tree_num_input(num);
 
@@ -545,7 +545,7 @@ orioledb_sys_tree_structure(PG_FUNCTION_ARGS)
 const text *
 inspect_sys_tree_structure(int systree, int depth)
 {
-	Datum		res;
+	pub static mut RES: Datum = std::mem::zeroed();
 	options: &mut text = cstring_to_text("");
 
 	res = DirectFunctionCall3(orioledb_sys_tree_structure,
@@ -562,7 +562,7 @@ orioledb_sys_tree_check(PG_FUNCTION_ARGS)
 {
 	int			num = PG_GETARG_INT32(0);
 	bool		force_map_check = PG_GETARG_OID(1);
-	bool		result = true;
+	pub static mut RESULT: bool = true;
 
 	check_tree_num_input(num);
 
@@ -591,15 +591,15 @@ orioledb_sys_tree_rows(PG_FUNCTION_ARGS)
 {
 	int			num = PG_GETARG_INT32(0);
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
-	it: &mut BTreeIterator;
-	td: &mut BTreeDescr;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut td = std::ptr::null_mut();
 	Datum		values[1];
 	bool		nulls[1] = {false};
-	Oid			funcrettype;
+	pub static mut FUNCRETTYPE: Oid = std::mem::zeroed();
 
 	check_tree_num_input(num);
 	orioledb_check_shmem();
@@ -628,13 +628,13 @@ orioledb_sys_tree_rows(PG_FUNCTION_ARGS)
 
 	do
 	{
-		bool		end;
-		OTuple		key;
-		bool		allocated;
-		state: &mut JsonbParseState = NULL;
-		res: &mut Jsonb;
-		tupHdr: &mut BTreeLeafTuphdr;
-		OTuple		tup;
+		pub static mut END: bool = false;
+		pub static mut KEY: OTuple = std::mem::zeroed();
+		pub static mut ALLOCATED: bool = false;
+		pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+		pub static mut JSONB: *mut res = std::ptr::null_mut();
+		pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+		pub static mut TUP: OTuple = std::mem::zeroed();
 
 		tup = btree_iterate_all(it, NULL, BTreeKeyNone, false, &end, NULL,
 								&tupHdr);
@@ -695,7 +695,7 @@ sys_tree_get_extra(int tree_num)
 fn
 sys_tree_init_if_needed(int i)
 {
-	header: &mut SysTreeShmemHeader;
+	pub static mut SYS_TREE_SHMEM_HEADER: *mut header = std::ptr::null_mut();
 
 	if (sysTreesDescrs[i].initialized)
 		return;
@@ -753,11 +753,11 @@ sys_tree_init_if_needed(int i)
 fn
 sys_tree_init(int i, bool init_shmem)
 {
-	pool: &mut PagePool;
-	header: &mut SysTreeShmemHeader;
-	meta: &mut SysTreeMeta;
-	descr: &mut BTreeDescr;
-	ops: &mut BTreeOps;
+	pub static mut PAGE_POOL: *mut pool = std::ptr::null_mut();
+	pub static mut SYS_TREE_SHMEM_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut SYS_TREE_META: *mut meta = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut B_TREE_OPS: *mut ops = std::ptr::null_mut();
 
 	header = &sysTreesShmemHeaders[i];
 	meta = &sysTreesMeta[i];
@@ -857,7 +857,7 @@ sys_tree_tuple_make_key(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
 		tuple.data = data;
 	}
 	*allocated = false;
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 static int
@@ -873,14 +873,14 @@ shared_root_info_key_cmp(desc: &mut BTreeDescr,
 	if (key1->datoid < key2->datoid)
 		return -1;
 	else if (key1->datoid > key2->datoid)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (key1->relnode < key2->relnode)
 		return -1;
 	else if (key1->relnode > key2->relnode)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
@@ -919,8 +919,8 @@ o_table_chunk_cmp(desc: &mut BTreeDescr,
 				   *p1, BTreeKeyType k1,
 				   *p2, BTreeKeyType k2)
 {
-	key1: &mut OTableChunkKey;
-	key2: &mut OTableChunkKey;
+	pub static mut O_TABLE_CHUNK_KEY: *mut key1 = std::ptr::null_mut();
+	pub static mut O_TABLE_CHUNK_KEY: *mut key2 = std::ptr::null_mut();
 
 	if (k1 == BTreeKeyBound)
 		key1 = (OTableChunkKey *) p1;
@@ -935,19 +935,19 @@ o_table_chunk_cmp(desc: &mut BTreeDescr,
 	if (key1->oids.datoid < key2->oids.datoid)
 		return -1;
 	else if (key1->oids.datoid > key2->oids.datoid)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (key1->oids.relnode < key2->oids.relnode)
 		return -1;
 	else if (key1->oids.relnode > key2->oids.relnode)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (key1->chunknum < key2->chunknum)
 		return -1;
 	else if (key1->chunknum > key2->chunknum)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 static int
@@ -1005,18 +1005,18 @@ o_table_chunk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 	new_tuple_key: &mut OTableChunkKey = (OTableChunkKey *) newTuple.data;
 
 	if (action == BTreeOperationDelete)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!XACT_INFO_OXID_EQ(oldXactInfo, newOxid))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (oldDeleted && old_tuple_key->version + 1 == new_tuple_key->version)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (new_tuple_key && old_tuple_key->version >= new_tuple_key->version)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static int
@@ -1024,8 +1024,8 @@ o_index_chunk_cmp(desc: &mut BTreeDescr,
 				   *p1, BTreeKeyType k1,
 				   *p2, BTreeKeyType k2)
 {
-	key1: &mut OIndexChunkKey;
-	key2: &mut OIndexChunkKey;
+	pub static mut O_INDEX_CHUNK_KEY: *mut key1 = std::ptr::null_mut();
+	pub static mut O_INDEX_CHUNK_KEY: *mut key2 = std::ptr::null_mut();
 
 	if (k1 == BTreeKeyBound)
 		key1 = (OIndexChunkKey *) p1;
@@ -1049,7 +1049,7 @@ o_index_chunk_cmp(desc: &mut BTreeDescr,
 	if (key1->chunknum != key2->chunknum)
 		return (key1->chunknum < key2->chunknum) ? -1 : 1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 static int
@@ -1101,7 +1101,7 @@ o_index_chunk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 						 OTuple oldTuple, OTupleXactInfo oldXactInfo, bool oldDeleted,
 						 OTuple newTuple, OXid newOxid)
 {
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1116,7 +1116,7 @@ free_tree_id_cmp(left: &mut FreeTreeTuple, right: &mut FreeTreeTuple)
 		return left->datoid < right->datoid ? -1 : 1;
 	if (left->relnode != right->relnode)
 		return left->relnode < right->relnode ? -1 : 1;
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -1136,12 +1136,12 @@ free_tree_off_len_cmp(desc: &mut BTreeDescr,
 	int			cmp = free_tree_id_cmp(left, right);
 
 	if (cmp != 0)
-		return cmp;
+		pub static mut CMP: return = std::mem::zeroed();
 
 	if (left->extent.offset != right->extent.offset)
 		return left->extent.offset < right->extent.offset ? -1 : 1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -1162,7 +1162,7 @@ free_tree_len_off_cmp(desc: &mut BTreeDescr,
 	int			cmp = free_tree_id_cmp(left, right);
 
 	if (cmp != 0)
-		return cmp;
+		pub static mut CMP: return = std::mem::zeroed();
 
 	if (left->extent.length != right->extent.length)
 		return left->extent.length < right->extent.length ? -1 : 1;
@@ -1170,7 +1170,7 @@ free_tree_len_off_cmp(desc: &mut BTreeDescr,
 	if (left->extent.offset != right->extent.offset)
 		return left->extent.offset < right->extent.offset ? -1 : 1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
@@ -1236,9 +1236,9 @@ o_sys_xid_undo_location_key_cmp(desc: &mut BTreeDescr,
 	if (TransactionIdPrecedes(*key1, *key2))
 		return -1;
 	else if (TransactionIdPrecedes(*key2, *key1))
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn

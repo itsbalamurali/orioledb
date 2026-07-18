@@ -32,7 +32,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static class_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut class_cache = std::ptr::null_mut();
 
 static Pointer o_class_cache_serialize_entry(Pointer entry,
 											 len: &mut int);
@@ -45,11 +45,11 @@ fn o_class_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 
 struct OClass
 {
-	OSysCacheKey1 key;
-	uint16		data_version;
-	Oid			reltype;
-	int			natts;
-	attrs: &mut FormData_pg_attribute;
+	pub static mut KEY: OSysCacheKey1 = std::mem::zeroed();
+	pub static mut DATA_VERSION: uint16 = std::mem::zeroed();
+	pub static mut RELTYPE: Oid = std::mem::zeroed();
+	pub static mut NATTS: std::os::raw::c_int = 0;
+	pub static mut FORM_DATA_PG_ATTRIBUTE: *mut attrs = std::ptr::null_mut();
 };
 
 O_SYS_CACHE_FUNCS(class_cache, OClass, 1);
@@ -77,10 +77,10 @@ O_SYS_CACHE_INIT_FUNC(class_cache)
 fn
 o_class_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	Relation	rel;
-	MemoryContext prev_context;
-	int			i;
-	Size		len;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LEN: Size = 0;
 	o_class: &mut OClass = (OClass *) *entry_ptr;
 	carg: &mut OClassArg = (OClassArg *) arg;
 	Oid			classoid = DatumGetObjectId(key->keys[0]);
@@ -158,7 +158,7 @@ o_class_cache_free_entry(Pointer entry)
 static Pointer
 o_class_cache_serialize_entry(Pointer entry, len: &mut int)
 {
-	StringInfoData str;
+	pub static mut STR: StringInfoData = std::mem::zeroed();
 	o_class: &mut OClass = (OClass *) entry;
 
 	if (o_class->data_version != ORIOLEDB_SYS_TREE_VERSION)
@@ -180,9 +180,9 @@ o_class_cache_serialize_entry(Pointer entry, len: &mut int)
 static Pointer
 o_class_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 {
-	Pointer		ptr = data;
+	pub static mut PTR: Pointer = data;
 	o_class: &mut OClass = (OClass *) data;
-	int			len;
+	pub static mut LEN: std::os::raw::c_int = 0;
 
 	o_class = (OClass *) palloc(sizeof(OClass));
 	len = offsetof(OClass, attrs);
@@ -206,10 +206,10 @@ o_class_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 TupleDesc
 o_class_cache_search_tupdesc(Oid cc_reloid)
 {
-	TupleDesc	result = NULL;
-	Oid			datoid;
-	XLogRecPtr	cur_lsn;
-	o_class: &mut OClass;
+	pub static mut RESULT: TupleDesc = std::ptr::null_mut();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut O_CLASS: *mut o_class = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 
@@ -217,10 +217,10 @@ o_class_cache_search_tupdesc(Oid cc_reloid)
 								   class_cache->nkeys);
 	if (o_class)
 	{
-		MemoryContext oldcxt;
+		pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
 
 #if PG_VERSION_NUM >= 180000
-		attrs: &mut Form_pg_attribute;
+		pub static mut FORM_PG_ATTRIBUTE: *mut attrs = std::ptr::null_mut();
 
 		// Prepare the pointer array in CurrentMemoryContext
 		attrs = (Form_pg_attribute *) palloc(o_class->natts * sizeof(Form_pg_attribute));
@@ -243,17 +243,17 @@ o_class_cache_search_tupdesc(Oid cc_reloid)
 
 		result->tdrefcount = 0;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
 o_class_cache_preload_for_column(Oid typoid)
 {
-	Oid			datoid;
-	XLogRecPtr	cur_lsn;
-	o_class: &mut OClass PG_USED_FOR_ASSERTS_ONLY;
-	bool		found;
-	char		typtype;
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: *mut o_class  OClass = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
+	pub static mut TYPTYPE: char = std::mem::zeroed();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 

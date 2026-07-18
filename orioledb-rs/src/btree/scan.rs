@@ -70,13 +70,13 @@ typedef enum
 
 typedef struct
 {
-	uint64		downlink;
-	CommitSeqNo csn;
+	pub static mut DOWNLINK: uint64 = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 } BTreeSeqScanDiskDownlink;
 
 struct BTreeSeqScan
 {
-	desc: &mut BTreeDescr;
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
 
 	char		leafImg[ORIOLEDB_BLCKSZ];
 	char		histImg[ORIOLEDB_BLCKSZ];
@@ -93,9 +93,9 @@ struct BTreeSeqScan
 // image can't back), and pages carrying historical/undo data are fully
 // materialized (IMAGE).
 //
-	bool		fetch;
-	PartialPageState leafPartial;
-	bool		leafPartialFailed;
+	pub static mut FETCH: bool = false;
+	pub static mut LEAF_PARTIAL: PartialPageState = std::mem::zeroed();
+	pub static mut LEAF_PARTIAL_FAILED: bool = false;
 
 	//
 // FETCH-mode partial read of the level-1 internal page.  When `fetch` is
@@ -110,7 +110,7 @@ struct BTreeSeqScan
 // modification; load_next_internal_page then re-reads the whole page
 // (IMAGE) and the walk continues on the full image.
 //
-	bool		intPartialFailed;
+	pub static mut INT_PARTIAL_FAILED: bool = false;
 
 	//
 // High key of the last downlink get_next_downlink() returned (the low
@@ -120,8 +120,8 @@ struct BTreeSeqScan
 // already-returned downlinks are not revisited.  haveIntResumeKey is
 // false before the first downlink of a scan.
 //
-	bool		haveIntResumeKey;
-	OFixedKey	intResumeKey;
+	pub static mut HAVE_INT_RESUME_KEY: bool = false;
+	pub static mut INT_RESUME_KEY: OFixedKey = std::mem::zeroed();
 
 	//
 // Key of the last leaf tuple emitted from the current partially-read leaf
@@ -132,40 +132,40 @@ struct BTreeSeqScan
 // those tuples a second time).  iterSkipKey asks the iterator to drop a
 // leading tuple that is <= this key (the resume point is inclusive).
 //
-	bool		haveLastLeafKey;
-	OFixedKey	lastLeafKey;
-	bool		iterSkipKey;
-	OFixedKey	iterSkipKeyVal;
+	pub static mut HAVE_LAST_LEAF_KEY: bool = false;
+	pub static mut LAST_LEAF_KEY: OFixedKey = std::mem::zeroed();
+	pub static mut ITER_SKIP_KEY: bool = false;
+	pub static mut ITER_SKIP_KEY_VAL: OFixedKey = std::mem::zeroed();
 
-	bool		initialized;
-	bool		checkpointNumberSet;
-	OSnapshot	oSnapshot;
-	OBTreeFindPageContext context;
-	OFixedKey	prevHikey;
-	BTreeLocationHint hint;
+	pub static mut INITIALIZED: bool = false;
+	pub static mut CHECKPOINT_NUMBER_SET: bool = false;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut PREV_HIKEY: OFixedKey = std::mem::zeroed();
+	pub static mut HINT: BTreeLocationHint = std::mem::zeroed();
 
-	BTreePageItemLocator intLoc;
+	pub static mut INT_LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	//
 // The page offset we started with according to `prevHikey`;
 //
-	OffsetNumber intStartOffset;
+	pub static mut INT_START_OFFSET: OffsetNumber = std::mem::zeroed();
 
-	BTreePageItemLocator leafLoc;
+	pub static mut LEAF_LOC: BTreePageItemLocator = std::mem::zeroed();
 
-	bool		haveHistImg;
-	BTreePageItemLocator histLoc;
+	pub static mut HAVE_HIST_IMG: bool = false;
+	pub static mut HIST_LOC: BTreePageItemLocator = std::mem::zeroed();
 
-	BTreeSeqScanStatus status;
-	MemoryContext mctx;
+	pub static mut STATUS: BTreeSeqScanStatus = std::mem::zeroed();
+	pub static mut MCTX: MemoryContext = std::mem::zeroed();
 
-	diskDownlinks: &mut BTreeSeqScanDiskDownlink;
+	pub static mut B_TREE_SEQ_SCAN_DISK_DOWNLINK: *mut diskDownlinks = std::ptr::null_mut();
 	int64		downlinksCount; // Used only for serial scan
-	int64		downlinkIndex;
-	int64		allocatedDownlinks;
+	pub static mut DOWNLINK_INDEX: int64 = std::mem::zeroed();
+	pub static mut ALLOCATED_DOWNLINKS: int64 = std::mem::zeroed();
 
-	iter: &mut BTreeIterator;
-	OTuple		iterEnd;
+	pub static mut B_TREE_ITERATOR: *mut iter = std::ptr::null_mut();
+	pub static mut ITER_END: OTuple = std::mem::zeroed();
 
 	//
 // Number of the last completed checkpoint when scan was started.  We need
@@ -173,32 +173,32 @@ struct BTreeSeqScan
 // finishes.  This means we shouldn't start using free blocks of later
 // checkpoints before this scan is finished.
 //
-	uint32		checkpointNumber;
+	pub static mut CHECKPOINT_NUMBER: uint32 = std::mem::zeroed();
 
-	metaPageBlkno: &mut BTreeMetaPage;
-	dlist_node	listNode;
+	pub static mut B_TREE_META_PAGE: *mut metaPageBlkno = std::ptr::null_mut();
+	pub static mut LIST_NODE: dlist_node = std::mem::zeroed();
 
-	OFixedKey	nextKey;
+	pub static mut NEXT_KEY: OFixedKey = std::mem::zeroed();
 
-	bool		needSampling;
-	BlockSampler sampler;
-	BlockNumber samplingNumber;
-	BlockNumber samplingNext;
+	pub static mut NEED_SAMPLING: bool = false;
+	pub static mut SAMPLER: BlockSampler = std::mem::zeroed();
+	pub static mut SAMPLING_NUMBER: BlockNumber = std::mem::zeroed();
+	pub static mut SAMPLING_NEXT: BlockNumber = std::mem::zeroed();
 
-	cb: &mut BTreeSeqScanCallbacks;
+	pub static mut B_TREE_SEQ_SCAN_CALLBACKS: *mut cb = std::ptr::null_mut();
 		   *arg;
 	bool		isSingleLeafPage;	// Scan couldn't read first internal page
 	OFixedKey	keyRangeLow,
 				keyRangeHigh;
-	bool		firstPageIsLoaded;
+	pub static mut FIRST_PAGE_IS_LOADED: bool = false;
 
 	// Private parallel worker info in a backend
-	ParallelOScanDesc poscan;
-	int			workerNumber;
-	dsmSeg: &mut dsm_segment;
+	pub static mut POSCAN: ParallelOScanDesc = std::mem::zeroed();
+	pub static mut WORKER_NUMBER: std::os::raw::c_int = 0;
+	pub static mut DSM_SEGMENT: *mut dsmSeg = std::ptr::null_mut();
 
 	// Ensures scan cleanup on transaction abort or resource owner release
-	ResourceOwner resowner;
+	pub static mut RESOWNER: ResourceOwner = std::mem::zeroed();
 };
 
 static dlist_head listOfScans = DLIST_STATIC_INIT(listOfScans);
@@ -232,7 +232,7 @@ static const ResourceOwnerDesc btree_seq_scan_resowner_desc =
 };
 #endif
 
-btreeScanShmem: &mut BTreeScanShmem;
+pub static mut B_TREE_SCAN_SHMEM: *mut btreeScanShmem = std::ptr::null_mut();
 
 Size
 btree_scan_shmem_needs()
@@ -275,14 +275,14 @@ static inline bool
 seq_leaf_partial_ensure(scan: &mut BTreeSeqScan, Page p, loc: &mut BTreePageItemLocator)
 {
 	if (!scan->leafPartial.isPartial || p != scan->leafImg)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!partial_load_chunk(&scan->leafPartial, p, loc->chunkOffset, NULL))
 	{
 		scan->leafPartialFailed = true;
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -296,14 +296,14 @@ seq_int_partial_ensure_hikeys(scan: &mut BTreeSeqScan)
 {
 	if (!scan->context.partial.isPartial ||
 		scan->context.partial.hikeysChunkIsLoaded)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!partial_load_hikeys_chunk(&scan->context.partial, scan->context.img))
 	{
 		scan->intPartialFailed = true;
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -316,26 +316,26 @@ static inline bool
 seq_int_partial_ensure(scan: &mut BTreeSeqScan, loc: &mut BTreePageItemLocator)
 {
 	if (!scan->context.partial.isPartial)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!partial_load_chunk(&scan->context.partial, scan->context.img,
 							loc->chunkOffset, NULL))
 	{
 		scan->intPartialFailed = true;
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
 load_first_historical_page(scan: &mut BTreeSeqScan)
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) scan->leafImg;
-	Pointer		key = NULL;
-	BTreeKeyType kind = BTreeKeyNone;
+	pub static mut KEY: Pointer = std::ptr::null_mut();
+	pub static mut KIND: BTreeKeyType = BTreeKeyNone;
 	OFixedKey	lokey,
 			   *lokeyPtr = &lokey;
-	OFixedKey	hikey;
+	pub static mut HIKEY: OFixedKey = std::mem::zeroed();
 
 	scan->haveHistImg = false;
 	if (!COMMITSEQNO_IS_NORMAL(scan->oSnapshot.csn))
@@ -407,7 +407,7 @@ fn
 load_next_historical_page(scan: &mut BTreeSeqScan)
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) scan->leafImg;
-	OFixedKey	prevHikey;
+	pub static mut PREV_HIKEY: OFixedKey = std::mem::zeroed();
 
 	copy_fixed_hikey(scan->desc, &prevHikey, scan->histImg);
 
@@ -443,8 +443,8 @@ static Jsonb *
 btree_lokey_stopevent_params(desc: &mut BTreeDescr, OTuple lokey,
 							 bool prevIsLeftmostOrNone)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
@@ -455,7 +455,7 @@ btree_lokey_stopevent_params(desc: &mut BTreeDescr, OTuple lokey,
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 //
@@ -472,8 +472,8 @@ load_next_internal_page(scan: &mut BTreeSeqScan, OTuple prevHikey,
 						const bool prevIsLeftmostOrNone,
 						bool isBitmapJump)
 {
-	bool		has_next = false;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut HAS_NEXT: bool = false;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 	CHECK_FOR_INTERRUPTS();
 	elog(DEBUG3, "load_next_internal_page");
@@ -491,7 +491,7 @@ load_next_internal_page(scan: &mut BTreeSeqScan, OTuple prevHikey,
 //
 	while (true)
 	{
-		bool		useFetch = scan->fetch && !page && !scan->intPartialFailed;
+		pub static mut USE_FETCH: bool = scan->fetch && !page && !scan->intPartialFailed;
 
 		if (useFetch)
 		{
@@ -595,7 +595,7 @@ load_next_internal_page(scan: &mut BTreeSeqScan, OTuple prevHikey,
 		}
 		else if (!O_TUPLE_IS_NULL(prevHikey))
 		{
-			OTuple		intTup;
+			pub static mut INT_TUP: OTuple = std::mem::zeroed();
 
 			if (*startOffset > 0)
 				BTREE_PAGE_READ_INTERNAL_TUPLE(intTup, page, intLoc);
@@ -630,13 +630,13 @@ load_next_internal_page(scan: &mut BTreeSeqScan, OTuple prevHikey,
 		load_first_historical_page(scan);
 		has_next = false;
 	}
-	return has_next;
+	pub static mut HAS_NEXT: return = std::mem::zeroed();
 }
 
 fn
 add_on_disk_downlink(scan: &mut BTreeSeqScan, uint64 downlink, CommitSeqNo csn)
 {
-	ParallelOScanDesc poscan = scan->poscan;
+	pub static mut POSCAN: ParallelOScanDesc = scan->poscan;
 
 	if (!poscan)
 	{
@@ -656,8 +656,8 @@ add_on_disk_downlink(scan: &mut BTreeSeqScan, uint64 downlink, CommitSeqNo csn)
 		// Parallel: write directly to shared DSM array
 		while (true)
 		{
-			uint64		index;
-			shared: &mut BTreeSeqScanDiskDownlink;
+			pub static mut INDEX: uint64 = std::mem::zeroed();
+			pub static mut B_TREE_SEQ_SCAN_DISK_DOWNLINK: *mut shared = std::ptr::null_mut();
 
 			LWLockAcquire(&poscan->downlinksPublish, LW_SHARED);
 
@@ -690,8 +690,8 @@ add_on_disk_downlink(scan: &mut BTreeSeqScan, uint64 downlink, CommitSeqNo csn)
 			// Re-check: another worker may have already grown it
 			if (poscan->dsmAllocated <= (uint64) index)
 			{
-				newSeg: &mut dsm_segment;
-				uint64		newAllocated = poscan->dsmAllocated * 2;
+				pub static mut DSM_SEGMENT: *mut newSeg = std::ptr::null_mut();
+				pub static mut NEW_ALLOCATED: uint64 = poscan->dsmAllocated * 2;
 				uint64		oldCount = pg_atomic_read_u64(&poscan->downlinksCount);
 
 				newSeg = dsm_create(MAXALIGN(newAllocated * sizeof(BTreeSeqScanDiskDownlink)), DSM_CREATE_NULL_IF_MAXSEGMENTS);
@@ -732,15 +732,15 @@ cmp_downlinks(p1: &mut const, p2: &mut const)
 	if (d1 < d2)
 		return -1;
 	else if (d1 == d2)
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	else
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 }
 
 fn
 switch_to_disk_scan(scan: &mut BTreeSeqScan)
 {
-	ParallelOScanDesc poscan = scan->poscan;
+	pub static mut POSCAN: ParallelOScanDesc = scan->poscan;
 
 	scan->status = BTreeSeqScanDisk;
 	BTREE_PAGE_LOCATOR_SET_INVALID(&scan->leafLoc);
@@ -821,7 +821,7 @@ switch_to_disk_scan(scan: &mut BTreeSeqScan)
 fn
 scan_make_iterator(scan: &mut BTreeSeqScan, OTuple keyRangeLow, OTuple keyRangeHigh)
 {
-	MemoryContext mctx;
+	pub static mut MCTX: MemoryContext = std::mem::zeroed();
 
 	mctx = MemoryContextSwitchTo(scan->mctx);
 	if (!O_TUPLE_IS_NULL(keyRangeLow))
@@ -856,8 +856,8 @@ get_current_downlink_key(scan: &mut BTreeSeqScan,
 						 downlink: &mut uint64,
 						 Page page)
 {
-	tuphdr: &mut BTreeNonLeafTuphdr;
-	OTuple		tuple;
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	//
 // Partial FETCH read of the internal page: materialize the chunk holding
@@ -941,7 +941,7 @@ fn
 internal_skip_to_next_key(scan: &mut BTreeSeqScan, Page page,
 						  intLoc: &mut BTreePageItemLocator, OTuple boundary)
 {
-	OFixedKey	probe;
+	pub static mut PROBE: OFixedKey = std::mem::zeroed();
 
 	// A leftmost gap has no key to probe with; fall back to sequential.
 	if (O_TUPLE_IS_NULL(boundary))
@@ -958,7 +958,7 @@ internal_skip_to_next_key(scan: &mut BTreeSeqScan, Page page,
 	// Beyond this page: let the caller descend to the covering page.
 	if (!O_PAGE_IS(page, RIGHTMOST))
 	{
-		OFixedKey	hikey;
+		pub static mut HIKEY: OFixedKey = std::mem::zeroed();
 
 		copy_fixed_hikey(scan->desc, &hikey, page);
 		if (o_btree_cmp(scan->desc, &probe.tuple, BTreeKeyNonLeafKey,
@@ -1004,13 +1004,13 @@ static bool
 get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 				  keyRangeLow: &mut OFixedKey, keyRangeHigh: &mut OFixedKey)
 {
-	ParallelOScanDesc poscan = scan->poscan;
+	pub static mut POSCAN: ParallelOScanDesc = scan->poscan;
 
 	if (!poscan)
 	{
 		// Non-parallel case
-		bool		pageIsLoaded = scan->firstPageIsLoaded;
-		bool		prevIsLeftmostOrNone = true;
+		pub static mut PAGE_IS_LOADED: bool = scan->firstPageIsLoaded;
+		pub static mut PREV_IS_LEFTMOST_OR_NONE: bool = true;
 
 		while (true)
 		{
@@ -1029,7 +1029,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 //
 				if (scan->cb && scan->cb->getNextKey)
 				{
-					OFixedKey	jumpKey;
+					pub static mut JUMP_KEY: OFixedKey = std::mem::zeroed();
 
 					if (scan->firstPageIsLoaded)
 						copy_fixed_hikey(scan->desc, &jumpKey, scan->context.img);
@@ -1042,7 +1042,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 						// Nothing left in the bitmap.
 						clear_fixed_key(keyRangeLow);
 						clear_fixed_key(keyRangeHigh);
-						return false;
+						pub static mut FALSE: return = std::mem::zeroed();
 					}
 
 					if (!load_next_internal_page(scan, jumpKey.tuple,
@@ -1056,7 +1056,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 						scan->isSingleLeafPage = true;
 						clear_fixed_key(keyRangeLow);
 						clear_fixed_key(keyRangeHigh);
-						return false;
+						pub static mut FALSE: return = std::mem::zeroed();
 					}
 
 					// A jump is a fresh descent; it never builds an iterator.
@@ -1084,11 +1084,11 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 						scan->isSingleLeafPage = true;
 						clear_fixed_key(keyRangeLow);
 						clear_fixed_key(keyRangeHigh);
-						return false;
+						pub static mut FALSE: return = std::mem::zeroed();
 					}
 
 					if (scan->iter)
-						return false;
+						pub static mut FALSE: return = std::mem::zeroed();
 				}
 			}
 
@@ -1102,7 +1102,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 //
 			if (pageIsLoaded && scan->intPartialFailed)
 			{
-				OTuple		resumeKey;
+				pub static mut RESUME_KEY: OTuple = std::mem::zeroed();
 
 				if (scan->haveIntResumeKey)
 					resumeKey = scan->intResumeKey.tuple;
@@ -1116,7 +1116,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 					scan->isSingleLeafPage = true;
 					clear_fixed_key(keyRangeLow);
 					clear_fixed_key(keyRangeHigh);
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				}
 				Assert(!scan->intPartialFailed);
 			}
@@ -1142,7 +1142,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 // and recompute this downlink (it has not been returned
 // yet).
 //
-					OTuple		resumeKey;
+					pub static mut RESUME_KEY: OTuple = std::mem::zeroed();
 
 					if (scan->haveIntResumeKey)
 						resumeKey = scan->intResumeKey.tuple;
@@ -1156,7 +1156,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 						scan->isSingleLeafPage = true;
 						clear_fixed_key(keyRangeLow);
 						clear_fixed_key(keyRangeHigh);
-						return false;
+						pub static mut FALSE: return = std::mem::zeroed();
 					}
 					Assert(!scan->intPartialFailed);
 					continue;
@@ -1179,11 +1179,11 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 					internal_skip_to_next_key(scan, scan->context.img,
 											  &scan->intLoc, keyRangeHigh->tuple);
 
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 			}
 
 			if (O_PAGE_IS(scan->context.img, RIGHTMOST))
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 			pageIsLoaded = false;
 		}
@@ -1193,9 +1193,9 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 		// Parallel case
 		while (true)
 		{
-			curPage: &mut BTreeIntPageParallelData;
-			nextPage: &mut BTreeIntPageParallelData;
-			BTreePageItemLocator loc;
+			pub static mut B_TREE_INT_PAGE_PARALLEL_DATA: *mut curPage = std::ptr::null_mut();
+			pub static mut B_TREE_INT_PAGE_PARALLEL_DATA: *mut nextPage = std::ptr::null_mut();
+			pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 			SpinLockAcquire(&poscan->intpageAccess);
 			curPage = CUR_PAGE(poscan);
@@ -1206,12 +1206,12 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 				SpinLockRelease(&poscan->intpageAccess);
 				scan->haveHistImg = false;
 				BTREE_PAGE_LOCATOR_SET_INVALID(&scan->leafLoc);
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 
 			if (curPage->status == OParallelScanPageInvalid)
 			{
-				bool		next_loaded;
+				pub static mut NEXT_LOADED: bool = false;
 
 				Assert(nextPage->status == OParallelScanPageInvalid);
 
@@ -1223,7 +1223,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 				{
 					Assert(O_PAGE_IS(nextPage->img, RIGHTMOST));
 					SpinLockRelease(&poscan->intpageAccess);
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				}
 				curPage->status = OParallelScanPageInProgress;
 				LWLockAcquire(&poscan->intpageLoad, LW_EXCLUSIVE);
@@ -1244,7 +1244,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 					clear_fixed_key(keyRangeHigh);
 					SpinLockRelease(&poscan->intpageAccess);
 					LWLockRelease(&poscan->intpageLoad);
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				}
 
 				SpinLockAcquire(&poscan->intpageAccess);
@@ -1256,7 +1256,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 				LWLockRelease(&poscan->intpageLoad);
 
 				if (scan->iter)
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				continue;
 			}
 			else if (curPage->status == OParallelScanPageInProgress)
@@ -1270,7 +1270,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 			if (nextPage->status == OParallelScanPageInvalid &&
 				!O_PAGE_IS(curPage->img, RIGHTMOST))
 			{
-				bool		next_loaded PG_USED_FOR_ASSERTS_ONLY;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		next_loaded = std::mem::zeroed();
 
 				copy_fixed_shmem_hikey(scan->desc, &nextPage->prevHikey, curPage->img);
 				nextPage->status = OParallelScanPageInProgress;
@@ -1294,7 +1294,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 				LWLockRelease(&poscan->intpageLoad);
 
 				if (scan->iter)
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				continue;
 			}
 
@@ -1321,7 +1321,7 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 				pg_atomic_fetch_add_u32(&poscan->downlinksWritersInProgress, 1);
 
 				SpinLockRelease(&poscan->intpageAccess);
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 			}
 			else
 			{
@@ -1343,8 +1343,8 @@ get_next_downlink(scan: &mut BTreeSeqScan, downlink: &mut uint64,
 fn
 check_in_memory_leaf_page(scan: &mut BTreeSeqScan, OTuple keyRangeLow, OTuple keyRangeHigh)
 {
-	OTuple		leafHikey;
-	bool		result = false;
+	pub static mut LEAF_HIKEY: OTuple = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 
 	if (!O_PAGE_IS(scan->leafImg, RIGHTMOST))
 		BTREE_PAGE_GET_HIKEY(leafHikey, scan->leafImg);
@@ -1382,11 +1382,11 @@ check_in_memory_leaf_page(scan: &mut BTreeSeqScan, OTuple keyRangeLow, OTuple ke
 static bool
 iterate_internal_page(scan: &mut BTreeSeqScan)
 {
-	uint64		downlink = 0;
+	pub static mut DOWNLINK: uint64 = 0;
 
 	while (get_next_downlink(scan, &downlink, &scan->keyRangeLow, &scan->keyRangeHigh))
 	{
-		bool		valid_downlink = true;
+		pub static mut VALID_DOWNLINK: bool = true;
 
 		if (scan->cb && scan->cb->isRangeValid)
 			valid_downlink = scan->cb->isRangeValid(scan->keyRangeLow.tuple, scan->keyRangeHigh.tuple,
@@ -1417,8 +1417,8 @@ iterate_internal_page(scan: &mut BTreeSeqScan)
 			}
 			else if (DOWNLINK_IS_IN_MEMORY(downlink))
 			{
-				ReadPageResult result;
-				leafPartial: &mut PartialPageState = NULL;
+				pub static mut RESULT: ReadPageResult = std::mem::zeroed();
+				pub static mut PARTIAL_PAGE_STATE: *mut leafPartial = std::ptr::null_mut();
 
 				if (scan->poscan)
 					pg_atomic_fetch_sub_u32(&scan->poscan->downlinksWritersInProgress, 1);
@@ -1455,7 +1455,7 @@ iterate_internal_page(scan: &mut BTreeSeqScan)
 				{
 					check_in_memory_leaf_page(scan, scan->keyRangeLow.tuple, scan->keyRangeHigh.tuple);
 					if (scan->iter)
-						return true;
+						pub static mut TRUE: return = std::mem::zeroed();
 
 					//
 // A leaf carrying historical/undo data is read whole: the
@@ -1478,7 +1478,7 @@ iterate_internal_page(scan: &mut BTreeSeqScan)
 							scan_make_iterator(scan, scan->keyRangeLow.tuple,
 											   scan->keyRangeHigh.tuple);
 							Assert(scan->iter);
-							return true;
+							pub static mut TRUE: return = std::mem::zeroed();
 						}
 					}
 
@@ -1487,13 +1487,13 @@ iterate_internal_page(scan: &mut BTreeSeqScan)
 					BTREE_PAGE_LOCATOR_FIRST(scan->leafImg, &scan->leafLoc);
 					O_TUPLE_SET_NULL(scan->nextKey.tuple);
 					load_first_historical_page(scan);
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				}
 				else
 				{
 					scan_make_iterator(scan, scan->keyRangeLow.tuple, scan->keyRangeHigh.tuple);
 					Assert(scan->iter);
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				}
 			}
 			else if (DOWNLINK_IS_IN_IO(downlink))
@@ -1512,7 +1512,7 @@ iterate_internal_page(scan: &mut BTreeSeqScan)
 				elog(DEBUG3, "DOWNLINK_IS_IN_IO");
 				scan_make_iterator(scan, scan->keyRangeLow.tuple, scan->keyRangeHigh.tuple);
 				Assert(scan->iter);
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 			}
 		}
 		else if (scan->poscan)
@@ -1522,25 +1522,25 @@ iterate_internal_page(scan: &mut BTreeSeqScan)
 	}
 
 	if (scan->iter)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	elog(DEBUG3, "Worker %d iterate_internal_page complete", scan->workerNumber);
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 static bool
 load_next_disk_leaf_page(scan: &mut BTreeSeqScan)
 {
-	FileExtent	extent;
-	bool		success;
-	header: &mut BTreePageHeader;
-	BTreeSeqScanDiskDownlink downlink;
-	ParallelOScanDesc poscan = scan->poscan;
+	pub static mut EXTENT: FileExtent = std::mem::zeroed();
+	pub static mut SUCCESS: bool = false;
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut DOWNLINK: BTreeSeqScanDiskDownlink = std::mem::zeroed();
+	pub static mut POSCAN: ParallelOScanDesc = scan->poscan;
 
 	if (!poscan)
 	{
 		if (scan->downlinkIndex >= scan->downlinksCount)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		downlink = scan->diskDownlinks[scan->downlinkIndex];
 	}
@@ -1555,7 +1555,7 @@ load_next_disk_leaf_page(scan: &mut BTreeSeqScan)
 				dsm_detach(scan->dsmSeg);
 				scan->dsmSeg = NULL;
 			}
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 		downlink = ((BTreeSeqScanDiskDownlink *) dsm_segment_address(scan->dsmSeg))[index];
 	}
@@ -1591,7 +1591,7 @@ load_next_disk_leaf_page(scan: &mut BTreeSeqScan)
 	scan->hint.pageChangeCount = InvalidOPageChangeCount;
 	O_TUPLE_SET_NULL(scan->nextKey.tuple);
 	load_first_historical_page(scan);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static inline bool
@@ -1608,9 +1608,9 @@ init_checkpoit_number(scan: &mut BTreeSeqScan)
 {
 	uint32		checkpointNumberBefore,
 				checkpointNumberAfter;
-	bool		checkpointConcurrent;
-	metaPage: &mut BTreeMetaPage;
-	desc: &mut BTreeDescr = scan->desc;
+	pub static mut CHECKPOINT_CONCURRENT: bool = false;
+	pub static mut B_TREE_META_PAGE: *mut metaPage = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut desc = scan->desc;
 
 	o_btree_load_shmem(scan->desc);
 	metaPage = BTREE_GET_META(scan->desc);
@@ -1646,9 +1646,9 @@ init_checkpoit_number(scan: &mut BTreeSeqScan)
 fn
 init_btree_seq_scan(scan: &mut BTreeSeqScan)
 {
-	ParallelOScanDesc poscan = scan->poscan;
-	BlockSampler sampler = scan->sampler;
-	desc: &mut BTreeDescr = scan->desc;
+	pub static mut POSCAN: ParallelOScanDesc = scan->poscan;
+	pub static mut SAMPLER: BlockSampler = scan->sampler;
+	pub static mut B_TREE_DESCR: *mut desc = scan->desc;
 
 	if (poscan)
 	{
@@ -1674,8 +1674,8 @@ init_btree_seq_scan(scan: &mut BTreeSeqScan)
 		// Scan leader
 		if (scan->workerNumber == 0)
 		{
-			uint32		numLeafPages;
-			uint64		allocSize;
+			pub static mut NUM_LEAF_PAGES: uint32 = std::mem::zeroed();
+			pub static mut ALLOC_SIZE: uint64 = std::mem::zeroed();
 
 			Assert(!(poscan->flags & O_PARALLEL_LEADER_STARTED));
 			poscan->flags |= O_PARALLEL_LEADER_STARTED;
@@ -1818,7 +1818,7 @@ make_btree_seq_scan_internal(desc: &mut BTreeDescr, oSnapshot: &mut OSnapshot,
 	ResourceOwnerRememberBTreeSeqScan(CurrentResourceOwner, scan);
 	scan->resowner = CurrentResourceOwner;
 
-	return scan;
+	pub static mut SCAN: return = std::mem::zeroed();
 }
 
 BTreeSeqScan *
@@ -1846,7 +1846,7 @@ btree_seq_scan_get_tuple_from_iterator(scan: &mut BTreeSeqScan,
 									   tupleCsn: &mut CommitSeqNo,
 									   hint: &mut BTreeLocationHint)
 {
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	while (true)
 	{
@@ -1878,31 +1878,31 @@ btree_seq_scan_get_tuple_from_iterator(scan: &mut BTreeSeqScan,
 		scan->iter = NULL;
 		scan->haveHistImg = false;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static bool
 adjust_location_with_next_key(scan: &mut BTreeSeqScan,
 							  Page p, loc: &mut BTreePageItemLocator)
 {
-	desc: &mut BTreeDescr = scan->desc;
+	pub static mut B_TREE_DESCR: *mut desc = scan->desc;
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	int			cmp;
-	OTuple		key;
+	pub static mut CMP: std::os::raw::c_int = 0;
+	pub static mut KEY: OTuple = std::mem::zeroed();
 
 	if (!BTREE_PAGE_LOCATOR_IS_VALID(p, loc))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!seq_leaf_partial_ensure(scan, p, loc))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	BTREE_PAGE_READ_LEAF_TUPLE(key, p, loc);
 
 	cmp = o_btree_cmp(desc, &key, BTreeKeyLeafTuple,
 					  &scan->nextKey.tuple, BTreeKeyNonLeafKey);
 	if (cmp == 0)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	if (cmp > 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	while (true)
 	{
@@ -1919,7 +1919,7 @@ adjust_location_with_next_key(scan: &mut BTreeSeqScan,
 		if (!page_locator_next_chunk(p, loc))
 		{
 			BTREE_PAGE_LOCATOR_SET_INVALID(loc);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 
@@ -1932,32 +1932,32 @@ adjust_location_with_next_key(scan: &mut BTreeSeqScan,
 // item and its hikey; materialize the current chunk before reading.
 //
 		if (!seq_leaf_partial_ensure(scan, p, loc))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		BTREE_PAGE_READ_LEAF_TUPLE(key, p, loc);
 		cmp = o_btree_cmp(desc,
 						  &key, BTreeKeyLeafTuple,
 						  &scan->nextKey.tuple, BTreeKeyNonLeafKey);
 		if (cmp == 0)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		if (cmp > 0)
 			break;
 		BTREE_PAGE_LOCATOR_NEXT(p, loc);
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 fn
 apply_next_key(scan: &mut BTreeSeqScan)
 {
-	desc: &mut BTreeDescr = scan->desc;
+	pub static mut B_TREE_DESCR: *mut desc = scan->desc;
 
 	Assert(BTREE_PAGE_LOCATOR_IS_VALID(scan->leafImg, &scan->leafLoc) ||
 		   (scan->haveHistImg && BTREE_PAGE_LOCATOR_IS_VALID(scan->histImg, &scan->histLoc)));
 
 	while (true)
 	{
-		OTuple		key;
+		pub static mut KEY: OTuple = std::mem::zeroed();
 		bool		leafResult,
 					histResult;
 
@@ -1979,7 +1979,7 @@ apply_next_key(scan: &mut BTreeSeqScan)
 			}
 			else
 			{
-				OTuple		histKey;
+				pub static mut HIST_KEY: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_READ_LEAF_TUPLE(histKey, scan->histImg, &scan->histLoc);
 				if (o_btree_cmp(desc,
@@ -2023,20 +2023,20 @@ static OTuple
 btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 								tupleCsn: &mut CommitSeqNo, hint: &mut BTreeLocationHint)
 {
-	OTuple		tuple;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	if (scan->iter)
 	{
 		tuple = btree_seq_scan_get_tuple_from_iterator(scan, tupleCsn, hint);
 		if (!O_TUPLE_IS_NULL(tuple))
-			return tuple;
+			pub static mut TUPLE: return = std::mem::zeroed();
 	}
 
 	while (true)
 	{
 		while (scan->haveHistImg)
 		{
-			OTuple		histTuple;
+			pub static mut HIST_TUPLE: OTuple = std::mem::zeroed();
 
 			while (!BTREE_PAGE_LOCATOR_IS_VALID(scan->histImg, &scan->histLoc))
 			{
@@ -2076,7 +2076,7 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 									   &scan->histLoc);
 			if (!BTREE_PAGE_LOCATOR_IS_VALID(scan->leafImg, &scan->leafLoc))
 			{
-				OTuple		leafHikey;
+				pub static mut LEAF_HIKEY: OTuple = std::mem::zeroed();
 
 				if (!O_PAGE_IS(scan->leafImg, RIGHTMOST))
 				{
@@ -2092,9 +2092,9 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 			}
 			else
 			{
-				tuphdr: &mut BTreeLeafTuphdr;
-				OTuple		leafTuple;
-				int			cmp;
+				pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+				pub static mut LEAF_TUPLE: OTuple = std::mem::zeroed();
+				pub static mut CMP: std::os::raw::c_int = 0;
 
 				BTREE_PAGE_READ_LEAF_ITEM(tuphdr, leafTuple,
 										  scan->leafImg, &scan->leafLoc);
@@ -2132,7 +2132,7 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 			{
 				if (hint)
 					*hint = scan->hint;
-				return tuple;
+				pub static mut TUPLE: return = std::mem::zeroed();
 			}
 		}
 
@@ -2142,7 +2142,7 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 
 		if (scan->leafPartialFailed)
 		{
-			OTuple		resumeLow;
+			pub static mut RESUME_LOW: OTuple = std::mem::zeroed();
 
 			//
 // A partial leaf chunk load lost its race with a concurrent page
@@ -2167,7 +2167,7 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 			scan_make_iterator(scan, resumeLow, scan->keyRangeHigh.tuple);
 			tuple = btree_seq_scan_get_tuple_from_iterator(scan, tupleCsn, hint);
 			if (!O_TUPLE_IS_NULL(tuple))
-				return tuple;
+				pub static mut TUPLE: return = std::mem::zeroed();
 			continue;
 		}
 
@@ -2183,7 +2183,7 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 																	   tupleCsn,
 																	   hint);
 						if (!O_TUPLE_IS_NULL(tuple))
-							return tuple;
+							pub static mut TUPLE: return = std::mem::zeroed();
 					}
 				}
 				else
@@ -2197,7 +2197,7 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 				{
 					scan->status = BTreeSeqScanFinished;
 					O_TUPLE_SET_NULL(tuple);
-					return tuple;
+					pub static mut TUPLE: return = std::mem::zeroed();
 				}
 			}
 			continue;
@@ -2230,20 +2230,20 @@ btree_seq_scan_getnext_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 		{
 			if (hint)
 				*hint = scan->hint;
-			return tuple;
+			pub static mut TUPLE: return = std::mem::zeroed();
 		}
 	}
 
 	// keep compiler quiet
 	O_TUPLE_SET_NULL(tuple);
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 OTuple
 btree_seq_scan_getnext(scan: &mut BTreeSeqScan, MemoryContext mctx,
 					   tupleCsn: &mut CommitSeqNo, hint: &mut BTreeLocationHint)
 {
-	OTuple		tuple;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	Assert(scan);
 	if (!scan->initialized)
@@ -2255,12 +2255,12 @@ btree_seq_scan_getnext(scan: &mut BTreeSeqScan, MemoryContext mctx,
 		tuple = btree_seq_scan_getnext_internal(scan, mctx, tupleCsn, hint);
 
 		if (!O_TUPLE_IS_NULL(tuple))
-			return tuple;
+			pub static mut TUPLE: return = std::mem::zeroed();
 	}
 	Assert(scan->status == BTreeSeqScanFinished);
 
 	O_TUPLE_SET_NULL(tuple);
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 static OTuple
@@ -2268,7 +2268,7 @@ btree_seq_scan_get_tuple_from_iterator_raw(scan: &mut BTreeSeqScan,
 										   end: &mut bool,
 										   hint: &mut BTreeLocationHint)
 {
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	if (!O_TUPLE_IS_NULL(scan->iterEnd))
 		result = btree_iterate_raw(scan->iter, &scan->iterEnd, BTreeKeyNonLeafKey,
@@ -2283,23 +2283,23 @@ btree_seq_scan_get_tuple_from_iterator_raw(scan: &mut BTreeSeqScan,
 		scan->iter = NULL;
 		scan->haveHistImg = false;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTuple
 btree_seq_scan_getnext_raw_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 									hint: &mut BTreeLocationHint)
 {
-	tupHdr: &mut BTreeLeafTuphdr;
-	OTuple		tuple;
+	pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	if (scan->iter)
 	{
-		bool		end;
+		pub static mut END: bool = false;
 
 		tuple = btree_seq_scan_get_tuple_from_iterator_raw(scan, &end, hint);
 		if (!end)
-			return tuple;
+			pub static mut TUPLE: return = std::mem::zeroed();
 	}
 
 	while (!BTREE_PAGE_LOCATOR_IS_VALID(scan->leafImg, &scan->leafLoc))
@@ -2311,11 +2311,11 @@ btree_seq_scan_getnext_raw_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 			{
 				if (scan->iter)
 				{
-					bool		end;
+					pub static mut END: bool = false;
 
 					tuple = btree_seq_scan_get_tuple_from_iterator_raw(scan, &end, hint);
 					if (!end)
-						return tuple;
+						pub static mut TUPLE: return = std::mem::zeroed();
 				}
 			}
 			else
@@ -2329,7 +2329,7 @@ btree_seq_scan_getnext_raw_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 			{
 				scan->status = BTreeSeqScanFinished;
 				O_TUPLE_SET_NULL(tuple);
-				return tuple;
+				pub static mut TUPLE: return = std::mem::zeroed();
 			}
 		}
 	}
@@ -2342,12 +2342,12 @@ btree_seq_scan_getnext_raw_internal(scan: &mut BTreeSeqScan, MemoryContext mctx,
 		if (hint)
 			*hint = scan->hint;
 
-		return tuple;
+		pub static mut TUPLE: return = std::mem::zeroed();
 	}
 	else
 	{
 		O_TUPLE_SET_NULL(tuple);
-		return tuple;
+		pub static mut TUPLE: return = std::mem::zeroed();
 	}
 }
 
@@ -2355,7 +2355,7 @@ OTuple
 btree_seq_scan_getnext_raw(scan: &mut BTreeSeqScan, MemoryContext mctx,
 						   end: &mut bool, hint: &mut BTreeLocationHint)
 {
-	OTuple		tuple;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	if (!scan->initialized)
 		init_btree_seq_scan(scan);
@@ -2368,14 +2368,14 @@ btree_seq_scan_getnext_raw(scan: &mut BTreeSeqScan, MemoryContext mctx,
 			scan->status == BTreeSeqScanDisk)
 		{
 			*end = false;
-			return tuple;
+			pub static mut TUPLE: return = std::mem::zeroed();
 		}
 	}
 	Assert(scan->status == BTreeSeqScanFinished);
 
 	O_TUPLE_SET_NULL(tuple);
 	*end = true;
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 //
@@ -2386,7 +2386,7 @@ btree_seq_scan_getnext_raw(scan: &mut BTreeSeqScan, MemoryContext mctx,
 fn
 free_btree_seq_scan_internal(scan: &mut BTreeSeqScan, bool fromResowner)
 {
-	desc: &mut BTreeDescr = scan->desc;
+	pub static mut B_TREE_DESCR: *mut desc = scan->desc;
 
 	START_CRIT_SECTION();
 
@@ -2479,13 +2479,13 @@ int
 meta_page_get_num_seq_scans(OInMemoryBlkno metaPageBlkno)
 {
 	metaPage: &mut BTreeMetaPage = (BTreeMetaPage *) O_GET_IN_MEMORY_PAGE(metaPageBlkno);
-	int			result = 0;
-	int			i;
+	pub static mut RESULT: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < NUM_SEQ_SCANS_ARRAY_SIZE; i++)
 		result += pg_atomic_read_u32(&metaPage->numSeqScans[i]);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 #if PG_VERSION_NUM >= 170000
@@ -2514,7 +2514,7 @@ static char *
 ResOwnerPrintBTreeSeqScan(Datum res)
 {
 	scan: &mut BTreeSeqScan = (BTreeSeqScan *) DatumGetPointer(res);
-	ORelOids	oids = scan->desc->oids;
+	pub static mut OIDS: ORelOids = scan->desc->oids;
 
 	return psprintf("OrioleDB BTreeSeqScans (%u, %u, %u)",
 					oids.datoid, oids.reloid, oids.relnode);

@@ -73,68 +73,68 @@ typedef enum WalkAction
 typedef struct WalkMessage
 {
 	// current action
-	WalkAction	action;
+	pub static mut ACTION: WalkAction = std::mem::zeroed();
 	union
 	{
 		struct
 		{
 			// is we must mark upward page as dirty
-			bool		parentDirty;
+			pub static mut PARENT_DIRTY: bool = false;
 
 			//
 // disk downlink to a written page, InvalidODiskDownlink if page
 // was not written to disk
 //
-			uint64		diskDownlink;
+			pub static mut DISK_DOWNLINK: uint64 = std::mem::zeroed();
 			// will be copied to upward level if needed
-			NextKeyType nextkeyType;
-			OFixedKey	nextkey;
+			pub static mut NEXTKEY_TYPE: NextKeyType = std::mem::zeroed();
+			pub static mut NEXTKEY: OFixedKey = std::mem::zeroed();
 			// is current internal tuple must be saved on image
-			bool		saveTuple;
+			pub static mut SAVE_TUPLE: bool = false;
 		}			upwards;
 		struct
 		{
 			// page to process
-			OInMemoryBlkno blkno;
-			uint32		pageChangeCount;
+			pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+			pub static mut PAGE_CHANGE_COUNT: uint32 = std::mem::zeroed();
 			// lokey of downwards page
-			OFixedKey	lokey;
+			pub static mut LOKEY: OFixedKey = std::mem::zeroed();
 		}			downwards;
 	}			content;
 } WalkMessage;
 
 typedef struct CheckpointWriteBack
 {
-	bool		isCompressed;
-	int			extentsNumber;
-	int			extentsAllocated;
-	int			checkpointFlags;
-	extents: &mut FileExtent;
+	pub static mut IS_COMPRESSED: bool = false;
+	pub static mut EXTENTS_NUMBER: std::os::raw::c_int = 0;
+	pub static mut EXTENTS_ALLOCATED: std::os::raw::c_int = 0;
+	pub static mut CHECKPOINT_FLAGS: std::os::raw::c_int = 0;
+	pub static mut FILE_EXTENT: *mut extents = std::ptr::null_mut();
 } CheckpointWriteBack;
 
 typedef struct
 {
-	ORelOids	oids;
-	Oid			tablespace;
-	OIndexType	type;
-	bool		freeExtents;
-	bool		cleanupMap;
-	bool		punchHoles;
-	uint32		lastMapChkpNum;
-	uint32		chkpNum;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut TABLESPACE: Oid = std::mem::zeroed();
+	pub static mut TYPE: OIndexType = std::mem::zeroed();
+	pub static mut FREE_EXTENTS: bool = false;
+	pub static mut CLEANUP_MAP: bool = false;
+	pub static mut PUNCH_HOLES: bool = false;
+	pub static mut LAST_MAP_CHKP_NUM: uint32 = std::mem::zeroed();
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
 } IndexIdItem;
 
 typedef struct
 {
-	postProcessList: &mut List;
-	int			flags;
+	pub static mut LIST: *mut postProcessList = std::ptr::null_mut();
+	pub static mut FLAGS: std::os::raw::c_int = 0;
 } CheckpointTablesArg;
 
 typedef struct
 {
-	extents: &mut FileExtent;
-	int			size;
-	int			allocated;
+	pub static mut FILE_EXTENT: *mut extents = std::ptr::null_mut();
+	pub static mut SIZE: std::os::raw::c_int = 0;
+	pub static mut ALLOCATED: std::os::raw::c_int = 0;
 } FileExtentsArray;
 
 //
@@ -149,18 +149,18 @@ typedef enum
 
 typedef struct
 {
-	UndoStackItem header;
+	pub static mut HEADER: UndoStackItem = std::mem::zeroed();
 	bool		lock;			// true for lock, false for unlock
 } SysTreesLockUndoStackItem;
 
-checkpoint_state: &mut CheckpointState = NULL;
-static MemoryContext chkp_main_context = NULL;
-static MemoryContext chkp_tree_context = NULL;
+pub static mut CHECKPOINT_STATE: *mut checkpoint_state = std::ptr::null_mut();
+static mut CHKP_MAIN_CONTEXT: MemoryContext = std::ptr::null_mut();
+static mut CHKP_TREE_CONTEXT: MemoryContext = std::ptr::null_mut();
 
-static xidFilename: &mut char = NULL;
-static uint32 xidFileCheckpointnum = 0;
-static File xidFile = -1;
-static S3TaskLocation maxLocation = 0;
+static mut CHAR: *mut xidFilename = std::ptr::null_mut();
+static mut XID_FILE_CHECKPOINTNUM: uint32 = 0;
+static mut XID_FILE: File = -1;
+static mut MAX_LOCATION: S3TaskLocation = 0;
 
 fn init_writeback(writeback: &mut CheckpointWriteBack, int flags, bool isCompressed);
 fn writeback_put_extent(writeback: &mut CheckpointWriteBack, extent: &mut FileExtent);
@@ -210,7 +210,7 @@ fn foreach_extent_append(desc: &mut BTreeDescr, FileExtent extent,  *arg);
 static inline 
 checkpoint_reset_stack(state: &mut CheckpointState)
 {
-	OffsetNumber i;
+	pub static mut I: OffsetNumber = std::mem::zeroed();
 
 	chkp_inc_changecount_before(state);
 
@@ -235,7 +235,7 @@ checkpoint_reset_stack(state: &mut CheckpointState)
 Size
 checkpoint_shmem_size()
 {
-	Size		size;
+	pub static mut SIZE: Size = 0;
 
 	size = offsetof(CheckpointState, xidRecQueue);
 	size = add_size(size, mul_size(sizeof(XidFileRec), XID_RECS_QUEUE_SIZE));
@@ -250,8 +250,8 @@ checkpoint_shmem_init(Pointer ptr, bool found)
 
 	if (!found)
 	{
-		int			i;
-		CheckpointControl control;
+		pub static mut I: std::os::raw::c_int = 0;
+		pub static mut CONTROL: CheckpointControl = std::mem::zeroed();
 
 		memset(checkpoint_state, 0, sizeof(*checkpoint_state));
 		checkpoint_state->curKeyType = CurKeyFinished;
@@ -334,7 +334,7 @@ checkpoint_shmem_init(Pointer ptr, bool found)
 		{
 			UndoLogType undoType = GetCheckpointableUndoLog(i);
 			undo_meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
-			undo_info: &mut CheckpointUndoInfo = &control.undoInfo[i];
+			pub static mut CHECKPOINT_UNDO_INFO: *mut undo_info = &control.undoInfo[i];
 
 			pg_atomic_write_u64(&undo_meta->lastUsedLocation, undo_info->lastUndoLocation);
 			pg_atomic_write_u64(&undo_meta->advanceReservedLocation, undo_info->lastUndoLocation);
@@ -444,10 +444,10 @@ perform_writeback(desc: &mut BTreeDescr, writeback: &mut CheckpointWriteBack)
 {
 	int			i,
 				len = 0;
-	uint64		offset = InvalidFileExtentOff;
-	double		progress = 0.0;
+	pub static mut OFFSET: uint64 = InvalidFileExtentOff;
+	pub static mut PROGRESS: double = 0.0;
 	uint		blcksz = (writeback->isCompressed || use_mmap) ? ORIOLEDB_COMP_BLCKSZ : ORIOLEDB_BLCKSZ;
-	uint32		chkpNum = checkpoint_state->lastCheckpointNumber + 1;
+	pub static mut CHKP_NUM: uint32 = checkpoint_state->lastCheckpointNumber + 1;
 
 	if (use_device && !use_mmap)
 	{
@@ -564,9 +564,9 @@ perform_writeback_and_relock(desc: &mut BTreeDescr,
 							 message: &mut WalkMessage,
 							 int level)
 {
-	ORelOids	treeOids = desc->oids;
-	OIndexType	type = desc->type;
-	indexDescr: &mut OIndexDescr;
+	pub static mut TREE_OIDS: ORelOids = desc->oids;
+	pub static mut TYPE: OIndexType = desc->type;
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
 
 	if (!IS_SYS_TREE_OIDS(treeOids))
 	{
@@ -589,14 +589,14 @@ perform_writeback_and_relock(desc: &mut BTreeDescr,
 		if (!indexDescr)
 		{
 			LWLockRelease(&checkpoint_state->oTablesMetaLock);
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 		}
 		desc = &indexDescr->desc;
 		if (!o_btree_load_shmem_checkpoint(desc))
 		{
 			o_tables_rel_unlock_extended(&treeOids, AccessShareLock, true);
 			LWLockRelease(&checkpoint_state->oTablesMetaLock);
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 		}
 
 		LWLockRelease(&checkpoint_state->oTablesMetaLock);
@@ -605,7 +605,7 @@ perform_writeback_and_relock(desc: &mut BTreeDescr,
 	{
 		perform_writeback(desc, writeback);
 	}
-	return desc;
+	pub static mut DESC: return = std::mem::zeroed();
 }
 
 fn
@@ -617,8 +617,8 @@ free_writeback(writeback: &mut CheckpointWriteBack)
 static inline List *
 add_index_id_item(list: &mut List, desc: &mut BTreeDescr)
 {
-	item: &mut IndexIdItem;
-	MemoryContext old_context;
+	pub static mut INDEX_ID_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut OLD_CONTEXT: MemoryContext = std::mem::zeroed();
 
 	Assert(!orioledb_s3_mode);
 	Assert(desc->storageType == BTreeStoragePersistence ||
@@ -655,7 +655,7 @@ add_index_id_item(list: &mut List, desc: &mut BTreeDescr)
 		pfree(item);
 	MemoryContextSwitchTo(old_context);
 
-	return list;
+	pub static mut LIST: return = std::mem::zeroed();
 }
 
 //
@@ -669,7 +669,7 @@ add_index_id_item(list: &mut List, desc: &mut BTreeDescr)
 static inline 
 wait_finish_active_commits(XLogRecPtr redo_pos)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < max_procs; i++)
 	{
@@ -693,7 +693,7 @@ unlink_xids_file(uint32 checkpointnum)
 fn
 open_xids_file()
 {
-	uint32		checkpointnum = checkpoint_state->xidQueueCheckpointNum;
+	pub static mut CHECKPOINTNUM: uint32 = checkpoint_state->xidQueueCheckpointNum;
 
 	if (xidFile < 0 || xidFileCheckpointnum != checkpointnum)
 	{
@@ -795,7 +795,7 @@ try_flush_xids_queue()
 write_to_xids_queue(rec: &mut XidFileRec)
 {
 	uint64		location = pg_atomic_fetch_add_u64(&checkpoint_state->xidRecLastPos, 1);
-	target: &mut XidFileRec = &checkpoint_state->xidRecQueue[location % XID_RECS_QUEUE_SIZE];
+	pub static mut XID_FILE_REC: *mut target = &checkpoint_state->xidRecQueue[location % XID_RECS_QUEUE_SIZE];
 
 	Assert(OXidIsValid(rec->oxid));
 
@@ -822,7 +822,7 @@ write_to_xids_queue(rec: &mut XidFileRec)
 fn
 before_writing_xids_file(int chkpnum)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (checkpoint_state->xidQueueCheckpointNum < chkpnum)
 	{
@@ -843,7 +843,7 @@ before_writing_xids_file(int chkpnum)
 fn
 close_xids_file()
 {
-	uint32		count;
+	pub static mut COUNT: uint32 = std::mem::zeroed();
 
 	open_xids_file();
 
@@ -878,7 +878,7 @@ close_xids_file()
 fn
 start_write_xids(uint32 chkpnum)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < max_procs; i++)
 	{
@@ -895,12 +895,12 @@ start_write_xids(uint32 chkpnum)
 fn
 finish_write_xids(uint32 chkpnum, bool shutdown)
 {
-	XidFileRec	xidRec;
+	pub static mut XID_REC: XidFileRec = std::mem::zeroed();
 	int			i,
 				j,
 				k;
-	int			total_recovery_workers = recovery_pool_size_guc + recovery_idx_pool_size_guc;
-	temp_file_loaded: &mut bool;
+	pub static mut TOTAL_RECOVERY_WORKERS: std::os::raw::c_int = recovery_pool_size_guc + recovery_idx_pool_size_guc;
+	pub static mut BOOL: *mut temp_file_loaded = std::ptr::null_mut();
 
 	memset(&xidRec, 0, sizeof(xidRec));
 	ASAN_UNPOISON_MEMORY_REGION(&xidRec, sizeof(xidRec));
@@ -954,7 +954,7 @@ finish_write_xids(uint32 chkpnum, bool shutdown)
 	while (recovery_undo_loc_flush->completedCheckpointNumber <
 		   recovery_undo_loc_flush->immediateRequestCheckpointNumber)
 	{
-		bool		all_workers_done = true;
+		pub static mut ALL_WORKERS_DONE: bool = true;
 
 		for (i = 0; i < total_recovery_workers; i++)
 		{
@@ -998,8 +998,8 @@ finish_write_xids(uint32 chkpnum, bool shutdown)
 fn
 checkpoint_write_pending_sk_fixups()
 {
-	XidFileRec	xidRec;
-	int			i;
+	pub static mut XID_REC: XidFileRec = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	memset(&xidRec, 0, sizeof(xidRec));
 	xidRec.kind = XidRecPendingSkFixup;
@@ -1010,9 +1010,9 @@ checkpoint_write_pending_sk_fixups()
 
 	for (i = 0; i < max_procs; i++)
 	{
-		UndoLocation pendingLoc;
-		OXid		oxid;
-		int			level;
+		pub static mut PENDING_LOC: UndoLocation = std::mem::zeroed();
+		pub static mut OXID: OXid = std::mem::zeroed();
+		pub static mut LEVEL: std::os::raw::c_int = 0;
 
 		//
 // If the backend is in the PK-applied/SK-pending window on a
@@ -1070,8 +1070,8 @@ checkpoint_write_pending_sk_fixups()
 
 checkpoint_write_rewind_item(rewindItem: &mut RewindItem)
 {
-	XidFileRec	xidRec;
-	int			i;
+	pub static mut XID_REC: XidFileRec = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	// Don't write subxids item
 	if (rewindItem->tag != REWIND_ITEM_TAG)
@@ -1102,12 +1102,12 @@ fn
 checkpoint_sys_trees(int flags, uint32 cur_chkp_num,
 					 chkp_tbl_arg: &mut CheckpointTablesArg)
 {
-	int			sys_tree_num;
+	pub static mut SYS_TREE_NUM: std::os::raw::c_int = 0;
 
 	for (sys_tree_num = 1; sys_tree_num <= SYS_TREES_NUM; sys_tree_num++)
 	{
-		desc: &mut BTreeDescr;
-		bool		success PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		success = std::mem::zeroed();
 
 		if (sys_tree_get_storage_type(sys_tree_num) == BTreeStorageInMemory ||
 			sys_tree_num == SYS_TREES_CHKP_NUM)
@@ -1146,8 +1146,8 @@ fn
 checkpoint_chkp_nums(int flags, uint32 cur_chkp_num,
 					 chkp_tbl_arg: &mut CheckpointTablesArg)
 {
-	desc: &mut BTreeDescr;
-	bool		success PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		success = std::mem::zeroed();
 
 	desc = get_sys_tree(SYS_TREES_CHKP_NUM);
 
@@ -1173,15 +1173,15 @@ o_get_latest_chkp_num(Oid datoid, Oid relnode, uint32 max_chkp_num,
 {
 	OTuple		key_tuple,
 				result_tuple;
-	SharedRootInfoKey key;
-	uint32		chkp_num;
-	result: &mut ChkpNumTuple;
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
+	pub static mut CHKP_NUM_TUPLE: *mut result = std::ptr::null_mut();
 
 	if (datoid == SYS_TREES_DATOID)
 	{
 		if (found)
 			*found = true;
-		return max_chkp_num;
+		pub static mut MAX_CHKP_NUM: return = std::mem::zeroed();
 	}
 
 	key.datoid = datoid;
@@ -1197,7 +1197,7 @@ o_get_latest_chkp_num(Oid datoid, Oid relnode, uint32 max_chkp_num,
 	{
 		if (found)
 			*found = false;
-		return max_chkp_num;
+		pub static mut MAX_CHKP_NUM: return = std::mem::zeroed();
 	}
 	if (found)
 		*found = true;
@@ -1212,7 +1212,7 @@ o_get_latest_chkp_num(Oid datoid, Oid relnode, uint32 max_chkp_num,
 		chkp_num = result->checkpointNumbers[1];
 	pfree(result_tuple.data);
 
-	return chkp_num;
+	pub static mut CHKP_NUM: return = std::mem::zeroed();
 }
 
 
@@ -1221,8 +1221,8 @@ o_update_latest_chkp_num(Oid datoid, Oid relnode, uint32 chkp_num)
 	OTuple		key_tuple,
 				tuple,
 				newTuple;
-	SharedRootInfoKey key;
-	ChkpNumTuple data;
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut DATA: ChkpNumTuple = std::mem::zeroed();
 	static BTreeModifyCallbackInfo callbackInfo =
 	{
 		.waitCallback = NULL,
@@ -1232,7 +1232,7 @@ o_update_latest_chkp_num(Oid datoid, Oid relnode, uint32 chkp_num)
 		.arg = NULL
 	};
 	desc: &mut BTreeDescr = get_sys_tree(SYS_TREES_CHKP_NUM);
-	OBTreeModifyResult result PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OBTreeModifyResult result = std::mem::zeroed();
 
 	elog(DEBUG1, "o_update_latest_chkp_num: (%u, %u) chkp_num=%u",
 		 datoid, relnode, chkp_num);
@@ -1283,8 +1283,8 @@ o_update_latest_chkp_num(Oid datoid, Oid relnode, uint32 chkp_num)
 
 o_delete_chkp_num(Oid datoid, Oid relnode)
 {
-	OTuple		key_tuple;
-	SharedRootInfoKey key;
+	pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
 	static BTreeModifyCallbackInfo nullCallbackInfo =
 	{
 		.waitCallback = NULL,
@@ -1328,18 +1328,18 @@ get_checkpoint_xlog_ptr()
 
 o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 {
-	CheckpointTablesArg chkp_tbl_arg;
-	CheckpointControl control;
-	int			old_enable_stopevents;
+	pub static mut CHKP_TBL_ARG: CheckpointTablesArg = std::mem::zeroed();
+	pub static mut CONTROL: CheckpointControl = std::mem::zeroed();
+	pub static mut OLD_ENABLE_STOPEVENTS: std::os::raw::c_int = 0;
 	uint32		cur_chkp_num = checkpoint_state->lastCheckpointNumber + 1,
 				prev_chkp_num = checkpoint_state->lastCheckpointNumber;
-	MemoryContext prev_context;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
 	my_proc_info: &mut ODBProcData = GET_CUR_PROCDATA();
 	UndoLocation checkpoint_start_loc[NUM_CHECKPOINTABLE_UNDO_LOGS],
 				checkpoint_end_loc[NUM_CHECKPOINTABLE_UNDO_LOGS];
 	OXid		checkpoint_xmin,
 				checkpoint_xmax;
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	orioledb_check_shmem();
 
@@ -1479,13 +1479,13 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 		if (orioledb_s3_mode && checkpoint_end_loc[i] > checkpoint_start_loc[i])
 		{
-			uint64		undoFileNum;
+			pub static mut UNDO_FILE_NUM: uint64 = std::mem::zeroed();
 
 			for (undoFileNum = checkpoint_start_loc[i] / UNDO_FILE_SIZE;
 				 undoFileNum <= (checkpoint_end_loc[i] - 1) / UNDO_FILE_SIZE;
 				 undoFileNum++)
 			{
-				S3TaskLocation location;
+				pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 				location = s3_schedule_undo_file_write(undoType,
 													   undoFileNum);
@@ -1500,8 +1500,8 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 	if (checkpoint_state->controlIdentifier == 0)
 	{
-		struct timeval tv;
-		uint64		controlIdentifier = 0;
+		pub static mut TV: struct timeval = std::mem::zeroed();
+		pub static mut CONTROL_IDENTIFIER: uint64 = 0;
 
 		gettimeofday(&tv, NULL);
 		controlIdentifier = ((uint64) tv.tv_sec) << 32;
@@ -1525,7 +1525,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	{
 		UndoLogType undoType = GetCheckpointableUndoLog(i);
 		undo_meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
-		undo_info: &mut CheckpointUndoInfo = &control.undoInfo[i];
+		pub static mut CHECKPOINT_UNDO_INFO: *mut undo_info = &control.undoInfo[i];
 
 		undo_info->lastUndoLocation = pg_atomic_read_u64(&undo_meta->lastUsedLocation);
 		undo_info->checkpointRetainStartLocation = checkpoint_start_loc[i];
@@ -1603,9 +1603,9 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	if ((!(flags & CHECKPOINT_IS_SHUTDOWN) || remove_old_checkpoint_files) &&
 		chkp_tbl_arg.postProcessList != NIL)
 	{
-		item: &mut IndexIdItem;
-		lc: &mut ListCell;
-		descr: &mut OIndexDescr;
+		pub static mut INDEX_ID_ITEM: *mut item = std::ptr::null_mut();
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+		pub static mut O_INDEX_DESCR: *mut descr = std::ptr::null_mut();
 
 		foreach(lc, chkp_tbl_arg.postProcessList)
 		{
@@ -1628,7 +1628,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 			if (item->cleanupMap)
 			{
-				SeqBufTag	cleanup_tag;
+				pub static mut CLEANUP_TAG: SeqBufTag = std::mem::zeroed();
 
 				cleanup_tag.type = 'm';
 				cleanup_tag.num = item->lastMapChkpNum;
@@ -1639,7 +1639,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 			if (item->punchHoles)
 			{
-				desc: &mut BTreeDescr;
+				pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
 
 				if (IS_SYS_TREE_OIDS(item->oids))
 				{
@@ -1647,7 +1647,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 				}
 				else
 				{
-					id: &mut OIndexDescr;
+					pub static mut O_INDEX_DESCR: *mut id = std::ptr::null_mut();
 
 					id = o_fetch_index_descr(item->oids, item->type,
 											 true, NULL);
@@ -1695,7 +1695,7 @@ checkpoint_init_new_seq_bufs(descr: &mut BTreeDescr, int chkpNum)
 	int			next_chkp_index = (chkpNum + 1) % 2;
 	SeqBufTag	next_chkp_tag = {0},
 				next_tmp_tag = {0};
-	bool		success;
+	pub static mut SUCCESS: bool = false;
 
 	if (orioledb_s3_mode)
 	{
@@ -1754,11 +1754,11 @@ checkpoint_init_new_seq_bufs(descr: &mut BTreeDescr, int chkpNum)
 static bool
 checkpoint_temporary_tree(int flags, descr: &mut BTreeDescr)
 {
-	meta_page: &mut BTreeMetaPage;
-	uint32		chkp_num = checkpoint_state->lastCheckpointNumber + 1;
-	int			cur_chkp_index = chkp_num % 2;
-	CheckpointWriteBack writeback;
-	uint64		root_downlink;
+	pub static mut B_TREE_META_PAGE: *mut meta_page = std::ptr::null_mut();
+	pub static mut CHKP_NUM: uint32 = checkpoint_state->lastCheckpointNumber + 1;
+	pub static mut CUR_CHKP_INDEX: std::os::raw::c_int = chkp_num % 2;
+	pub static mut WRITEBACK: CheckpointWriteBack = std::mem::zeroed();
+	pub static mut ROOT_DOWNLINK: uint64 = std::mem::zeroed();
 
 	Assert(!OCompressIsValid(descr->compress));
 
@@ -1774,7 +1774,7 @@ checkpoint_temporary_tree(int flags, descr: &mut BTreeDescr)
 	{
 		// Lock already released by perform_writeback_and_relock()
 		free_writeback(&writeback);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	descr = perform_writeback_and_relock(descr, &writeback,
@@ -1783,7 +1783,7 @@ checkpoint_temporary_tree(int flags, descr: &mut BTreeDescr)
 	if (!descr)
 	{
 		// Lock already released by perform_writeback_and_relock()
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	Assert(checkpoint_state->curKeyType == CurKeyGreatest);
@@ -1812,7 +1812,7 @@ checkpoint_temporary_tree(int flags, descr: &mut BTreeDescr)
 	checkpoint_state->completed = true;
 	chkp_inc_changecount_after(checkpoint_state);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1822,11 +1822,11 @@ static bool
 check_archive_done(const xlog: &mut char)
 {
 	char		archiveStatusPath[MAXPGPATH];
-	struct stat stat_buf;
+	pub static mut STAT_BUF: struct stat = std::mem::zeroed();
 
 	// The file is always deletable if archive_mode is "off".
 	if (!XLogArchivingActive())
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	//
 // During archive recovery, the file is deletable if archive_mode is not
@@ -1834,7 +1834,7 @@ check_archive_done(const xlog: &mut char)
 //
 	if (!XLogArchivingAlways() &&
 		GetRecoveryState() == RECOVERY_STATE_ARCHIVE)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	//
 // At this point of the logic, note that we are either a primary with
@@ -1845,18 +1845,18 @@ check_archive_done(const xlog: &mut char)
 	// First check for .done --- this means archiver is done with it
 	StatusFilePath(archiveStatusPath, xlog, ".done");
 	if (stat(archiveStatusPath, &stat_buf) == 0)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 static S3TaskLocation
 after_checkpoint_sync_wal()
 {
-	xldir: &mut DIR;
-	struct xlde: &mut dirent;
-	S3TaskLocation maxLocation = 0;
-	S3TaskLocation location;
+	pub static mut DIR: *mut xldir = std::ptr::null_mut();
+	pub static mut DIRENT: *mut struct xlde = std::ptr::null_mut();
+	pub static mut MAX_LOCATION: S3TaskLocation = 0;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	xldir = AllocateDir(XLOGDIR);
 
@@ -1875,15 +1875,15 @@ after_checkpoint_sync_wal()
 	}
 
 	FreeDir(xldir);
-	return maxLocation;
+	pub static mut MAX_LOCATION: return = std::mem::zeroed();
 }
 
 
 o_after_checkpoint_cleanup_hook(XLogRecPtr checkPointRedo, int flags)
 {
-	S3TaskLocation maxLocation = 0;
-	S3TaskLocation location;
-	uint32		chkpNum = checkpoint_state->lastCheckpointNumber;
+	pub static mut MAX_LOCATION: S3TaskLocation = 0;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
+	pub static mut CHKP_NUM: uint32 = checkpoint_state->lastCheckpointNumber;
 
 	// called at the end of was_in_recovery: &mut StartupXLOG = flags == 0;
 
@@ -1909,8 +1909,8 @@ o_after_checkpoint_cleanup_hook(XLogRecPtr checkPointRedo, int flags)
 
 	if (XLogInsertAllowed())
 	{
-		XLogRecPtr	switchpoint;
-		XLogSegNo	xlogsegno;
+		pub static mut SWITCHPOINT: XLogRecPtr = std::mem::zeroed();
+		pub static mut XLOGSEGNO: XLogSegNo = std::mem::zeroed();
 		char		xlogfilename[MAXFNAMELEN];
 
 		//
@@ -1944,9 +1944,9 @@ static uint64
 append_file_contents(File target, source_filename: &mut char, uint64 offset)
 {
 	char		buf[ORIOLEDB_BLCKSZ];
-	File		source;
-	uint64		len = 0;
-	uint32		block_len;
+	pub static mut SOURCE: File = std::mem::zeroed();
+	pub static mut LEN: uint64 = 0;
+	pub static mut BLOCK_LEN: uint32 = std::mem::zeroed();
 	uint64		target_offset = FileSize(target);
 
 	source = PathNameOpenFile(source_filename, O_RDONLY | PG_BINARY);
@@ -1969,14 +1969,14 @@ append_file_contents(File target, source_filename: &mut char, uint64 offset)
 	while (block_len == ORIOLEDB_BLCKSZ);
 
 	FileClose(source);
-	return len;
+	pub static mut LEN: return = std::mem::zeroed();
 }
 
 static uint64
 finalize_chkp_map(File chkp_file, uint64 len, input_filename: &mut char,
 				  uint64 input_offset, uint32 input_num)
 {
-	SeqBufTag	tmp_tag;
+	pub static mut TMP_TAG: SeqBufTag = std::mem::zeroed();
 
 	if (FileSize(chkp_file) != len)
 		ereport(FATAL, (errcode_for_file_access(),
@@ -1989,7 +1989,7 @@ finalize_chkp_map(File chkp_file, uint64 len, input_filename: &mut char,
 	input_num++;
 	while (input_num <= checkpoint_state->lastCheckpointNumber)
 	{
-		tmp_filename: &mut char;
+		pub static mut CHAR: *mut tmp_filename = std::ptr::null_mut();
 
 		tmp_tag.key.oids.datoid = checkpoint_state->datoid;
 		tmp_tag.key.oids.relnode = checkpoint_state->relnode;
@@ -2005,7 +2005,7 @@ finalize_chkp_map(File chkp_file, uint64 len, input_filename: &mut char,
 		input_num++;
 	}
 
-	return len;
+	pub static mut LEN: return = std::mem::zeroed();
 }
 
 //
@@ -2019,7 +2019,7 @@ uint32_offsets_cmp(a: &mut const, b: &mut const)
 
 	if (val1 != val2)
 		return val1 > val2 ? 1 : -1;
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -2036,7 +2036,7 @@ file_extents_len_off_cmp(a: &mut const, b: &mut const)
 	else if (val1->off != val2->off)
 		return val1->off > val2->off ? 1 : -1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -2053,7 +2053,7 @@ file_extents_off_len_cmp(a: &mut const, b: &mut const)
 	if (val1->len != val2->len)
 		return val1->len > val2->len ? 1 : -1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -2075,7 +2075,7 @@ file_extents_writeback_cmp(a: &mut const, b: &mut const)
 //
 		return val1->len > val2->len ? -1 : 1;
 	}
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -2084,14 +2084,14 @@ file_extents_writeback_cmp(a: &mut const, b: &mut const)
 fn
 sort_checkpoint_map_file(descr: &mut BTreeDescr, int cur_chkp_index)
 {
-	Pointer		free_blocks;
-	uint64		free_blocks_size;
-	File		file;
-	filename: &mut char;
+	pub static mut FREE_BLOCKS: Pointer = std::ptr::null_mut();
+	pub static mut FREE_BLOCKS_SIZE: uint64 = std::mem::zeroed();
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
 	CheckpointFileHeader header = {0};
 	bool		ferror = false,
 				is_compressed = OCompressIsValid(descr->compress);
-	int			read_size;
+	pub static mut READ_SIZE: std::os::raw::c_int = 0;
 
 	filename = get_seq_buf_filename(&descr->nextChkp[cur_chkp_index].tag);
 	file = PathNameOpenFile(filename, O_RDWR | PG_BINARY);
@@ -2161,12 +2161,12 @@ sort_checkpoint_map_file(descr: &mut BTreeDescr, int cur_chkp_index)
 fn
 sort_checkpoint_tmp_file(descr: &mut BTreeDescr, int cur_chkp_index)
 {
-	Pointer		free_blocks;
-	uint64		free_blocks_size;
-	File		file;
-	filename: &mut char;
+	pub static mut FREE_BLOCKS: Pointer = std::ptr::null_mut();
+	pub static mut FREE_BLOCKS_SIZE: uint64 = std::mem::zeroed();
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
 	bool		is_compressed = OCompressIsValid(descr->compress);
-	int			read_size;
+	pub static mut READ_SIZE: std::os::raw::c_int = 0;
 
 	filename = get_seq_buf_filename(&descr->tmpBuf[cur_chkp_index].tag);
 	file = PathNameOpenFile(filename, O_RDWR | PG_BINARY);
@@ -2243,8 +2243,8 @@ checkpoint_ix_init_state(state: &mut CheckpointState, descr: &mut BTreeDescr)
 free_extent_for_checkpoint(desc: &mut BTreeDescr, extent: &mut FileExtent, uint32 chkp_num)
 {
 	bufs: &mut SeqBufDescPrivate[2] = {&desc->nextChkp[chkp_num % 2], &desc->tmpBuf[chkp_num % 2]};
-	int			i;
-	bool		success;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut SUCCESS: bool = false;
 
 	if (orioledb_s3_mode)
 	{
@@ -2278,7 +2278,7 @@ free_extent_for_checkpoint(desc: &mut BTreeDescr, extent: &mut FileExtent, uint3
 		}
 		else
 		{
-			uint32		offset = extent->off;
+			pub static mut OFFSET: uint32 = extent->off;
 
 			Assert(extent->off < UINT32_MAX);
 			success = seq_buf_write_u32(bufs[i], offset);
@@ -2310,11 +2310,11 @@ page_is_under_checkpoint(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	int			level = PAGE_GET_LEVEL(p),
 				before_changecount,
 				after_changecount;
-	CurKeyType	cur_key;
-	OInMemoryBlkno blkno_on_checkpoint;
-	OInMemoryBlkno hikey_blkno_on_checkpoint;
-	OIndexType	type;
-	bool		result;
+	pub static mut CUR_KEY: CurKeyType = std::mem::zeroed();
+	pub static mut BLKNO_ON_CHECKPOINT: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut HIKEY_BLKNO_ON_CHECKPOINT: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut TYPE: OIndexType = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 
 	while (true)
 	{
@@ -2367,7 +2367,7 @@ page_is_under_checkpoint(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 		if (before_changecount != after_changecount)
 			continue;
 
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 }
 
@@ -2381,8 +2381,8 @@ tree_is_under_checkpoint(desc: &mut BTreeDescr)
 				relnode;
 	int			before_changecount,
 				after_changecount;
-	OIndexType	type;
-	bool		result;
+	pub static mut TYPE: OIndexType = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 
 	while (true)
 	{
@@ -2414,7 +2414,7 @@ tree_is_under_checkpoint(desc: &mut BTreeDescr)
 		if (before_changecount != after_changecount)
 			continue;
 
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 }
 
@@ -2438,8 +2438,8 @@ side_of_checkpoint_bound(descr: &mut BTreeDescr, Page page,
 						 OTuple cur_key, CurKeyType cur_key_type,
 						 OTuple lvl_hikey, CheckpointBound bound)
 {
-	int			cmp;
-	OTuple		hikey;
+	pub static mut CMP: std::os::raw::c_int = 0;
+	pub static mut HIKEY: OTuple = std::mem::zeroed();
 	bool		page_is_rightmost = O_PAGE_IS(page, RIGHTMOST);
 
 	Assert(cur_key_type == CurKeyValue || cur_key_type == CurKeyGreatest);
@@ -2450,8 +2450,8 @@ side_of_checkpoint_bound(descr: &mut BTreeDescr, Page page,
 	{
 		// left bound on rightmost pages
 		if (page_is_rightmost)
-			return 0;
-		return 1;
+			pub static mut 0: return = std::mem::zeroed();
+		pub static mut 1: return = std::mem::zeroed();
 	}
 
 	Assert(cur_key_type == CurKeyValue);
@@ -2459,7 +2459,7 @@ side_of_checkpoint_bound(descr: &mut BTreeDescr, Page page,
 	{
 		// case for rightmost page (no hikey to compare)
 		if (bound == CheckpointBoundRightmost)
-			return 0;
+			pub static mut 0: return = std::mem::zeroed();
 		return -1;
 	}
 
@@ -2471,10 +2471,10 @@ side_of_checkpoint_bound(descr: &mut BTreeDescr, Page page,
 	cmp = o_btree_cmp(descr, &hikey, BTreeKeyNonLeafKey, &cur_key, BTreeKeyNonLeafKey);
 
 	if (cmp == 0)
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 
 	if (cmp < 0)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	// need to check right bound
 	Assert(cmp > 0);
@@ -2487,7 +2487,7 @@ side_of_checkpoint_bound(descr: &mut BTreeDescr, Page page,
 	if (bound == CheckpointBoundRightmost)
 	{
 		// right bound to the end of the BTree level
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	}
 
 	//
@@ -2496,7 +2496,7 @@ side_of_checkpoint_bound(descr: &mut BTreeDescr, Page page,
 	Assert(!page_is_rightmost && bound == CheckpointBoundHikey);
 	cmp = o_btree_cmp(descr, &hikey, BTreeKeyNonLeafKey, &lvl_hikey, BTreeKeyNonLeafKey);
 	if (cmp <= 0)
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	return -1;
 }
 
@@ -2509,7 +2509,7 @@ chkp_ordering_cmp(OIndexType type1, Oid datoid1, Oid relnode1,
 {
 	if (datoid1 == SYS_TREES_DATOID && relnode1 == SYS_TREES_CHKP_NUM &&
 		!(datoid2 == SYS_TREES_DATOID && relnode2 == SYS_TREES_CHKP_NUM))
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (datoid2 == SYS_TREES_DATOID && relnode2 == SYS_TREES_CHKP_NUM &&
 		!(datoid1 == SYS_TREES_DATOID && relnode1 == SYS_TREES_CHKP_NUM))
@@ -2519,7 +2519,7 @@ chkp_ordering_cmp(OIndexType type1, Oid datoid1, Oid relnode1,
 		return -1;
 
 	if (datoid1 > SYS_TREES_DATOID && datoid2 <= SYS_TREES_DATOID)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 
 	if (type1 != type2)
 		return type1 < type2 ? -1 : 1;
@@ -2528,7 +2528,7 @@ chkp_ordering_cmp(OIndexType type1, Oid datoid1, Oid relnode1,
 	if (relnode1 != relnode2)
 		return relnode1 < relnode2 ? -1 : 1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -2538,8 +2538,8 @@ bool
 get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 					  checkpoint_number: &mut uint32, copy_blkno: &mut bool)
 {
-	CheckpointBound bound;
-	CurKeyType	cur_key_type;
+	pub static mut BOUND: CheckpointBound = std::mem::zeroed();
+	pub static mut CUR_KEY_TYPE: CurKeyType = std::mem::zeroed();
 	OFixedKey	lvl_hikey,
 				cur_key;
 	Page		page = O_GET_IN_MEMORY_PAGE(blkno);
@@ -2549,11 +2549,11 @@ get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				before_changecount,
 				after_changecount,
 				cmp;
-	uint32		last_checkpoint_number;
+	pub static mut LAST_CHECKPOINT_NUMBER: uint32 = std::mem::zeroed();
 	OInMemoryBlkno chkp_lvl_blkno,
 				chkp_lvl_hikey_blkno;
-	OIndexType	type;
-	bool		under_checkpoint;
+	pub static mut TYPE: OIndexType = std::mem::zeroed();
+	pub static mut UNDER_CHECKPOINT: bool = false;
 
 	while (true)
 	{
@@ -2596,7 +2596,7 @@ get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 			if (before_changecount != after_changecount)
 				continue;
 
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 
 		under_checkpoint = (chkp_lvl_blkno == blkno || chkp_lvl_hikey_blkno == blkno);
@@ -2620,7 +2620,7 @@ get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 			chkp_save_changecount_after(checkpoint_state, after_changecount);
 			if (before_changecount != after_changecount)
 				continue;
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 
 		// the checkpointer does not write any page
@@ -2628,14 +2628,14 @@ get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 		{
 			if (cur_key_type == CurKeyLeast)
 				*checkpoint_number = last_checkpoint_number + 1;
-			checkpoint_number: &mut else = last_checkpoint_number + 2;
+			pub static mut ELSE: *mut checkpoint_number = last_checkpoint_number + 2;
 			*copy_blkno = false;
 
 			chkp_save_changecount_after(checkpoint_state, after_changecount);
 			if (before_changecount != after_changecount)
 				continue;
 
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 
 		if (cur_key_type == CurKeyValue)
@@ -2659,16 +2659,16 @@ get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 		{
 			*checkpoint_number = last_checkpoint_number + 2;
 			*copy_blkno = true;
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 		else if (cmp < 0)
 		{
 			*checkpoint_number = last_checkpoint_number + 1;
 			*copy_blkno = false;
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 		Assert(cmp == 0);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 }
 
@@ -2678,7 +2678,7 @@ get_checkpoint_number(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 
 backend_set_autonomous_level(state: &mut CheckpointState, uint32 level)
 {
-	uint32		cur_level = ORIOLEDB_MAX_DEPTH;
+	pub static mut CUR_LEVEL: uint32 = ORIOLEDB_MAX_DEPTH;
 
 	// no sense in autonomous level for leafs
 	Assert(level != 0);
@@ -2707,20 +2707,20 @@ backend_set_autonomous_level(state: &mut CheckpointState, uint32 level)
 static bool
 checkpoint_ix(int flags, descr: &mut BTreeDescr)
 {
-	free_extents: &mut FileExtentsArray = NULL;
+	pub static mut FILE_EXTENTS_ARRAY: *mut free_extents = std::ptr::null_mut();
 	filename: &mut char,
 			   *finalize_filename;
-	meta_page: &mut BTreeMetaPage;
+	pub static mut B_TREE_META_PAGE: *mut meta_page = std::ptr::null_mut();
 	uint64		map_len = 0,
 				offset = 0,
 				root_downlink;
 	CheckpointFileHeader header = {0};
-	File		file = -1;
-	SeqBufTag	free_buf_tag;
+	pub static mut FILE: File = -1;
+	pub static mut FREE_BUF_TAG: SeqBufTag = std::mem::zeroed();
 	bool		is_compressed = OCompressIsValid(descr->compress);
-	CheckpointWriteBack writeback;
-	off_t		file_length;
-	uint32		chkpNum = checkpoint_state->lastCheckpointNumber + 1;
+	pub static mut WRITEBACK: CheckpointWriteBack = std::mem::zeroed();
+	pub static mut FILE_LENGTH: off_t = std::mem::zeroed();
+	pub static mut CHKP_NUM: uint32 = checkpoint_state->lastCheckpointNumber + 1;
 	int			cur_chkp_index = (chkpNum) % 2;
 
 	Assert(ORootPageIsValid(descr) && OMetaPageIsValid(descr));
@@ -2734,7 +2734,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 	{
 		// Lock already released by perform_writeback_and_relock()
 		free_writeback(&writeback);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	descr = perform_writeback_and_relock(descr, &writeback,
 										 checkpoint_state, NULL, 0);
@@ -2742,7 +2742,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 	if (!descr)
 	{
 		// Lock already released by perform_writeback_and_relock()
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	Assert(checkpoint_state->curKeyType == CurKeyGreatest);
@@ -2817,7 +2817,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 	}
 	else
 	{
-		SeqBufTag	next_chkp_tag;
+		pub static mut NEXT_CHKP_TAG: SeqBufTag = std::mem::zeroed();
 
 		memset(&next_chkp_tag, 0, sizeof(next_chkp_tag));
 		next_chkp_tag.key.oids = descr->oids;
@@ -2841,7 +2841,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 // We need to combine a *.map file content and the free_extents array
 // and remove all intersections
 //
-		map_extents: &mut FileExtent = NULL;
+		pub static mut FILE_EXTENT: *mut map_extents = std::ptr::null_mut();
 		off_t		map_extents_size,
 					write_offset = sizeof(CheckpointFileHeader);
 
@@ -2853,7 +2853,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 		if (map_extents_size > 0)
 		{
 			// read and sort *.map file data
-			off_t		map_extents_bytes;
+			pub static mut MAP_EXTENTS_BYTES: off_t = std::mem::zeroed();
 
 			map_extents_bytes = sizeof(FileExtent) * map_extents_size;
 
@@ -2899,7 +2899,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 		else
 		{
 			// create a new combined *.map file
-			cur: &mut FileExtent = NULL;
+			pub static mut FILE_EXTENT: *mut cur = std::ptr::null_mut();
 			char		write_buf[ORIOLEDB_BLCKSZ];
 			int			f_i = 0,
 						m_i = 0,
@@ -2972,7 +2972,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 		Assert(!is_compressed);
 		finalize_filename = seq_buf_file_exist(&free_buf_tag)
 			? get_seq_buf_filename(&free_buf_tag)
-			: NULL;
+			pub static mut NULL: : = std::mem::zeroed();
 		map_len = finalize_chkp_map(file, map_len, finalize_filename, offset,
 									free_buf_tag.num);
 		if (finalize_filename)
@@ -3018,7 +3018,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 	if (orioledb_s3_mode)
 	{
 		OIndexKey	key = {.oids = descr->oids,.tablespace = descr->tablespace};
-		S3TaskLocation location;
+		pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 		location = s3_schedule_file_part_write(chkpNum, key, -1, -1);
 		maxLocation = Max(maxLocation, location);
@@ -3033,7 +3033,7 @@ checkpoint_ix(int flags, descr: &mut BTreeDescr)
 		o_update_latest_chkp_num(descr->oids.datoid,
 								 descr->oids.relnode,
 								 chkpNum);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -3043,7 +3043,7 @@ static uint64
 checkpoint_btree(BTreeDescr **descrPtr, state: &mut CheckpointState,
 				 writeback: &mut CheckpointWriteBack)
 {
-	uint64		root_downlink;
+	pub static mut ROOT_DOWNLINK: uint64 = std::mem::zeroed();
 	MemoryContext tmp_context,
 				prev_context;
 
@@ -3065,7 +3065,7 @@ checkpoint_btree(BTreeDescr **descrPtr, state: &mut CheckpointState,
 	MemoryContextSwitchTo(prev_context);
 	MemoryContextDelete(tmp_context);
 
-	return root_downlink;
+	pub static mut ROOT_DOWNLINK: return = std::mem::zeroed();
 }
 
 //
@@ -3074,7 +3074,7 @@ checkpoint_btree(BTreeDescr **descrPtr, state: &mut CheckpointState,
 static inline uint32
 checkpointer_reset_autonomous_level(state: &mut CheckpointState)
 {
-	uint32		cur_level = ORIOLEDB_MAX_DEPTH;
+	pub static mut CUR_LEVEL: uint32 = ORIOLEDB_MAX_DEPTH;
 
 	//
 // CAS read of current autonomous level and setup it to default value
@@ -3082,7 +3082,7 @@ checkpointer_reset_autonomous_level(state: &mut CheckpointState)
 	while (!pg_atomic_compare_exchange_u32(&state->autonomousLevel,
 										   &cur_level,
 										   ORIOLEDB_MAX_DEPTH));
-	return cur_level;
+	pub static mut CUR_LEVEL: return = std::mem::zeroed();
 }
 
 //
@@ -3124,8 +3124,8 @@ checkpointer_update_autonomous(desc: &mut BTreeDescr, state: &mut CheckpointStat
 	// go upwards for the stack and setup autonomous flag if needed
 	for (i = autonomous_level; OInMemoryBlknoIsValid(state->stack[i].blkno); i++)
 	{
-		page_desc: &mut OrioleDBPageDesc;
-		header: &mut BTreePageHeader;
+		pub static mut ORIOLE_DB_PAGE_DESC: *mut page_desc = std::ptr::null_mut();
+		pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
 
 		if (!state->stack[i].autonomous)
 		{
@@ -3160,8 +3160,8 @@ checkpoint_lock_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 				img;
 	int			l,
 				page_level;
-	OInMemoryBlkno next_blkno;
-	bool		autonomous;
+	pub static mut NEXT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut AUTONOMOUS: bool = false;
 
 	lock_page(*blkno);
 	page = O_GET_IN_MEMORY_PAGE(*blkno);
@@ -3198,9 +3198,9 @@ checkpoint_lock_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	{
 		BTreePageItemLocator pageLoc,
 					imageLoc;
-		LocationIndex itemsize;
-		tuphdr: &mut BTreeNonLeafTuphdr;
-		uint64		downlink;
+		pub static mut ITEMSIZE: LocationIndex = std::mem::zeroed();
+		pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+		pub static mut DOWNLINK: uint64 = std::mem::zeroed();
 
 		BTREE_PAGE_LOCATOR_FIRST(page, &pageLoc);
 		itemsize = BTREE_PAGE_GET_ITEM_SIZE(page, &pageLoc);
@@ -3319,26 +3319,26 @@ checkpoint_try_merge_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	Page		parentPage = O_GET_IN_MEMORY_PAGE(parentBlkno),
 				rightPage,
 				page = O_GET_IN_MEMORY_PAGE(blkno);
-	BTreePageItemLocator loc;
-	tuphdr: &mut BTreeNonLeafTuphdr = NULL;
-	rpage_desc: &mut OrioleDBPageDesc = NULL;
-	OTuple		key PG_USED_FOR_ASSERTS_ONLY;
-	bool		mergeParent = false;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+	pub static mut ORIOLE_DB_PAGE_DESC: *mut rpage_desc = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OTuple		key = std::mem::zeroed();
+	pub static mut MERGE_PARENT: bool = false;
 
 	if (RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(page)))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (state->stack[level].hikeyBlkno == blkno)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!try_lock_page(parentBlkno))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (state->stack[level + 1].offset < 1 ||
 		state->stack[level + 1].offset >= BTREE_PAGE_ITEMS_COUNT(parentPage))
 	{
 		unlock_page(parentBlkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	BTREE_PAGE_OFFSET_GET_LOCATOR(parentPage, state->stack[level + 1].offset - 1, &loc);
@@ -3350,7 +3350,7 @@ checkpoint_try_merge_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 		DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink) != blkno)
 	{
 		unlock_page(parentBlkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	BTREE_PAGE_LOCATOR_NEXT(parentPage, &loc);
@@ -3361,7 +3361,7 @@ checkpoint_try_merge_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	if (!DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 	{
 		unlock_page(parentBlkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	rightBlkno = DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink);
@@ -3369,7 +3369,7 @@ checkpoint_try_merge_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	if (!try_lock_page(rightBlkno))
 	{
 		unlock_page(parentBlkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	rightPage = O_GET_IN_MEMORY_PAGE(rightBlkno);
@@ -3382,27 +3382,27 @@ checkpoint_try_merge_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	{
 		unlock_page(parentBlkno);
 		unlock_page(rightBlkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(rightPage)))
 	{
 		unlock_page(parentBlkno);
 		unlock_page(rightBlkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (btree_try_merge_pages(descr, parentBlkno, NULL, &mergeParent,
 							  blkno, &loc, rightBlkno, true))
 	{
 		checkpoint_reserve_undo(descr->undoType, true);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
 	{
 		unlock_page(parentBlkno);
 		unlock_page(rightBlkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 }
 
@@ -3413,13 +3413,13 @@ fn
 checkpoint_fix_split_and_lock_page(descr: &mut BTreeDescr, state: &mut CheckpointState,
 								   blkno: &mut OInMemoryBlkno, uint32 page_chage_count, int level)
 {
-	OInMemoryBlkno old_blkno;
+	pub static mut OLD_BLKNO: OInMemoryBlkno = std::mem::zeroed();
 
 	checkpoint_reserve_undo(descr->undoType, false);
 
 	while (true)
 	{
-		bool		relocked = false;
+		pub static mut RELOCKED: bool = false;
 
 		old_blkno = *blkno;
 
@@ -3494,8 +3494,8 @@ prepare_checkpoint_step_params(descr: &mut BTreeDescr,
 							   message: &mut WalkMessage,
 							   int level)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -3540,7 +3540,7 @@ prepare_checkpoint_step_params(descr: &mut BTreeDescr,
 	}
 	else if (message->action == WalkContinue)
 	{
-		pageInfo: &mut CheckpointPageInfo = &chkpState->stack[level];
+		pub static mut CHECKPOINT_PAGE_INFO: *mut pageInfo = &chkpState->stack[level];
 
 		jsonb_push_string_key(&state, "action", "walkContinue");
 		jsonb_push_bool_key(&state, "autonomous", pageInfo->autonomous);
@@ -3555,14 +3555,14 @@ prepare_checkpoint_step_params(descr: &mut BTreeDescr,
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 static Jsonb *
 prepare_checkpoint_table_start_params(ORelOids tableOids, ORelOids treeOids)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -3582,14 +3582,14 @@ prepare_checkpoint_table_start_params(ORelOids tableOids, ORelOids treeOids)
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 static Jsonb *
 prepare_checkpoint_tree_start_params(desc: &mut BTreeDescr)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -3598,7 +3598,7 @@ prepare_checkpoint_tree_start_params(desc: &mut BTreeDescr)
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 static uint64
@@ -3607,16 +3607,16 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 					  writeback: &mut CheckpointWriteBack,
 					  MemoryContext tmp_context)
 {
-	WalkMessage message;
-	Page		page;
-	uint64		downlink;
+	pub static mut MESSAGE: WalkMessage = std::mem::zeroed();
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut DOWNLINK: uint64 = std::mem::zeroed();
 	int			level,
 				i;
-	descr: &mut BTreeDescr = *descrPtr;
-	OInMemoryBlkno blkno = descr->rootInfo.rootPageBlkno;
-	uint32		page_chage_count = InvalidOPageChangeCount;
+	pub static mut B_TREE_DESCR: *mut descr = *descrPtr;
+	pub static mut BLKNO: OInMemoryBlkno = descr->rootInfo.rootPageBlkno;
+	pub static mut PAGE_CHAGE_COUNT: uint32 = InvalidOPageChangeCount;
 	uint		blcksz = OCompressIsValid(descr->compress) ? ORIOLEDB_COMP_BLCKSZ : ORIOLEDB_BLCKSZ;
-	uint32		chkpNum = checkpoint_state->lastCheckpointNumber + 1;
+	pub static mut CHKP_NUM: uint32 = checkpoint_state->lastCheckpointNumber + 1;
 
 	memset(&message, 0, sizeof(WalkMessage));
 
@@ -3664,7 +3664,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 			descr = perform_writeback_and_relock(descr, writeback, state,
 												 &message, level);
 			if (!descr)
-				return InvalidDiskDownlink;
+				pub static mut INVALID_DISK_DOWNLINK: return = std::mem::zeroed();
 			*descrPtr = descr;
 		}
 
@@ -3672,8 +3672,8 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 		{
 			bool		was_dirty,
 						parent_dirty;
-			Page		img;
-			page_desc: &mut OrioleDBPageDesc = NULL;
+			pub static mut IMG: Page = std::mem::zeroed();
+			pub static mut ORIOLE_DB_PAGE_DESC: *mut page_desc = std::ptr::null_mut();
 
 			Assert(level > 0);
 			level--;
@@ -3755,7 +3755,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 //
 			if (level == 0)
 			{
-				int			ionum;
+				pub static mut IONUM: std::os::raw::c_int = 0;
 
 				page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 				ionum = page_desc->ionum;
@@ -3801,7 +3801,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 
 					if (!DiskDownlinkIsValid(downlink))
 					{
-						uint64		offset = page_desc->fileExtent.off;
+						pub static mut OFFSET: uint64 = page_desc->fileExtent.off;
 
 						if (orioledb_s3_mode)
 							offset &= S3_OFFSET_MASK;
@@ -3869,8 +3869,8 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 		}
 		else if (message.action == WalkUpwards)
 		{
-			tuphdr: &mut BTreeNonLeafTuphdr;
-			Page		img;
+			pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+			pub static mut IMG: Page = std::mem::zeroed();
 			bool		save_item,
 						valid_doff;
 
@@ -3904,7 +3904,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 				}
 				else
 				{
-					BTreePageItemLocator loc;
+					pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 					BTREE_PAGE_LOCATOR_LAST(img, &loc);
 					state->stack[level].nextkeyType = NextKeyValue;
@@ -3928,7 +3928,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 				if (!save_item)
 				{
 					// make downlink
-					BTreePageItemLocator loc;
+					pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 					Assert(valid_doff);
 					BTREE_PAGE_LOCATOR_LAST(img, &loc);
@@ -3970,9 +3970,9 @@ checkpoint_image_add_item(page_info: &mut CheckpointPageInfo,
 						  OTuple key,
 						  uint key_size)
 {
-	Page		img = page_info->image;
+	pub static mut IMG: Page = page_info->image;
 	int			img_count = BTREE_PAGE_ITEMS_COUNT(img);
-	uint		item_size;
+	pub static mut ITEM_SIZE: uint = std::mem::zeroed();
 
 	if (type == StackImageAddHikey)
 	{
@@ -3983,18 +3983,18 @@ checkpoint_image_add_item(page_info: &mut CheckpointPageInfo,
 		if (!page_info->autonomous || img_count == 0 ||
 			page_fits_hikey(img, item_size))
 		{
-			OTuple		hikey;
+			pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 			page_resize_hikey(img, item_size);
 			BTREE_PAGE_SET_HIKEY_FLAGS(img, key.formatFlags);
 			BTREE_PAGE_GET_HIKEY(hikey, img);
 			memcpy(hikey.data, key.data, key_size);
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 	}
 	else
 	{
-		BTreePageItemLocator loc;
+		pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 		// downlink insert case
 		Assert(type == StackImageAddDownlink);
@@ -4009,18 +4009,18 @@ checkpoint_image_add_item(page_info: &mut CheckpointPageInfo,
 
 			if (key_size != 0)
 			{
-				Pointer		image_key;
+				pub static mut IMAGE_KEY: Pointer = std::ptr::null_mut();
 
 				image_key = BTREE_PAGE_LOCATOR_GET_ITEM(img, &loc) + BTreeNonLeafTuphdrSize;
 				memcpy(image_key, key.data, key_size);
 				BTREE_PAGE_SET_ITEM_FLAGS(img, &loc, key.formatFlags);
 			}
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 	}
 
 	Assert(page_info->autonomous);
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -4032,12 +4032,12 @@ checkpoint_image_add_item(page_info: &mut CheckpointPageInfo,
 static BTreeNonLeafTuphdr
 autonomous_image_split(descr: &mut BTreeDescr, page_info: &mut CheckpointPageInfo)
 {
-	BTreeNonLeafTuphdr result;
-	OFixedKey	saved_key;
-	OTuple		hikey;
-	Page		img = page_info->image;
-	int			key_len;
-	BTreePageItemLocator loc;
+	pub static mut RESULT: BTreeNonLeafTuphdr = std::mem::zeroed();
+	pub static mut SAVED_KEY: OFixedKey = std::mem::zeroed();
+	pub static mut HIKEY: OTuple = std::mem::zeroed();
+	pub static mut IMG: Page = page_info->image;
+	pub static mut KEY_LEN: std::os::raw::c_int = 0;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	Assert(page_info->autonomous);
 	// page must contain a full node tuple (downlink + key)
@@ -4062,7 +4062,7 @@ autonomous_image_split(descr: &mut BTreeDescr, page_info: &mut CheckpointPageInf
 	BTREE_PAGE_SET_HIKEY_FLAGS(img, saved_key.tuple.formatFlags);
 	BTREE_PAGE_GET_HIKEY(hikey, img);
 	memcpy(hikey.data, saved_key.tuple.data, key_len);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -4072,11 +4072,11 @@ static uint64
 autonomous_image_write(descr: &mut BTreeDescr, state: &mut CheckpointState,
 					   writeback: &mut CheckpointWriteBack, int level, uint32 flags)
 {
-	Page		img = state->stack[level].image;
-	img_header: &mut BTreePageHeader;
-	uint64		downlink;
-	uint32		chkpNum = state->lastCheckpointNumber + 1;
-	FileExtent	extent;
+	pub static mut IMG: Page = state->stack[level].image;
+	pub static mut B_TREE_PAGE_HEADER: *mut img_header = std::ptr::null_mut();
+	pub static mut DOWNLINK: uint64 = std::mem::zeroed();
+	pub static mut CHKP_NUM: uint32 = state->lastCheckpointNumber + 1;
+	pub static mut EXTENT: FileExtent = std::mem::zeroed();
 
 	// prepare the image header
 	img_header = (BTreePageHeader *) img;
@@ -4107,7 +4107,7 @@ autonomous_image_write(descr: &mut BTreeDescr, state: &mut CheckpointState,
 
 	// the next page no more can be leftmost for the current level
 	state->stack[level].autonomousLeftmost = false;
-	return downlink;
+	pub static mut DOWNLINK: return = std::mem::zeroed();
 }
 
 //
@@ -4117,13 +4117,13 @@ static inline
 update_lowest_level_hikey(descr: &mut BTreeDescr, state: &mut CheckpointState, int to_level,
 						  OTuple hikey)
 {
-	page_info: &mut CheckpointPageInfo;
-	bool		autonomous;
-	int			i;
+	pub static mut CHECKPOINT_PAGE_INFO: *mut page_info = std::ptr::null_mut();
+	pub static mut AUTONOMOUS: bool = false;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < to_level; i++)
 	{
-		OTuple		pageHikey;
+		pub static mut PAGE_HIKEY: OTuple = std::mem::zeroed();
 
 		page_info = &state->stack[i];
 		if (O_TUPLE_IS_NULL(hikey))
@@ -4165,15 +4165,15 @@ fn
 checkpoint_stack_image_split_flush(descr: &mut BTreeDescr, state: &mut CheckpointState,
 								   writeback: &mut CheckpointWriteBack, int level)
 {
-	uint64		downlink = 0;
-	int			cur_level;
-	bool		inserted = false;
+	pub static mut DOWNLINK: uint64 = 0;
+	pub static mut CUR_LEVEL: std::os::raw::c_int = 0;
+	pub static mut INSERTED: bool = false;
 	header: &mut BTreeNonLeafTuphdr,
 				savedHeader;
 	OFixedKey	hikey[2];
 	LocationIndex hikeySize[2];
-	OTuple		curKey;
-	LocationIndex curKeySize;
+	pub static mut CUR_KEY: OTuple = std::mem::zeroed();
+	pub static mut CUR_KEY_SIZE: LocationIndex = std::mem::zeroed();
 
 	O_TUPLE_SET_NULL(curKey);
 	curKeySize = 0;
@@ -4183,9 +4183,9 @@ checkpoint_stack_image_split_flush(descr: &mut BTreeDescr, state: &mut Checkpoin
 
 	while (true)
 	{
-		BTreePageItemLocator curLoc;
-		curItem: &mut CheckpointPageInfo = &state->stack[cur_level];
-		uint32		flags = curItem->autonomousLeftmost ? O_BTREE_FLAG_LEFTMOST : 0;
+		pub static mut CUR_LOC: BTreePageItemLocator = std::mem::zeroed();
+		pub static mut CHECKPOINT_PAGE_INFO: *mut curItem = &state->stack[cur_level];
+		pub static mut FLAGS: uint32 = curItem->autonomousLeftmost ? O_BTREE_FLAG_LEFTMOST : 0;
 
 		//
 // It might happen that "checkpointed" tree grow up higher than
@@ -4194,7 +4194,7 @@ checkpoint_stack_image_split_flush(descr: &mut BTreeDescr, state: &mut Checkpoin
 //
 		if (BTREE_PAGE_ITEMS_COUNT(curItem->image) == 0)
 		{
-			BTreePageItemLocator loc;
+			pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 			init_page_first_chunk(descr, curItem->image, 0);
 
@@ -4268,7 +4268,7 @@ checkpoint_stack_image_add_item(descr: &mut BTreeDescr, state: &mut CheckpointSt
 								writeback: &mut CheckpointWriteBack, int level,
 								StackImageAddType type, OTuple item, int item_size)
 {
-	bool		inserted PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		inserted = std::mem::zeroed();
 
 	if (checkpoint_image_add_item(&state->stack[level], type, item, item_size))
 		return;
@@ -4291,8 +4291,8 @@ autonomous_stack_flush_to_disk(descr: &mut BTreeDescr, state: &mut CheckpointSta
 							   writeback: &mut CheckpointWriteBack,
 							   int to_level, OTuple hikey, int hikey_size)
 {
-	uint64		downlink;
-	int			cur_level;
+	pub static mut DOWNLINK: uint64 = std::mem::zeroed();
+	pub static mut CUR_LEVEL: std::os::raw::c_int = 0;
 
 	//
 // Finds the lowest level on which images has tuples.
@@ -4312,10 +4312,10 @@ autonomous_stack_flush_to_disk(descr: &mut BTreeDescr, state: &mut CheckpointSta
 //
 	for (; cur_level < to_level; cur_level++)
 	{
-		tuphdr: &mut BTreeNonLeafTuphdr;
-		Page		parent_img = state->stack[cur_level + 1].image;
-		int			flags;
-		BTreePageItemLocator loc;
+		pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+		pub static mut PARENT_IMG: Page = state->stack[cur_level + 1].image;
+		pub static mut FLAGS: std::os::raw::c_int = 0;
+		pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 		// write the autonomous image with given hikey
 		checkpoint_stack_image_add_item(descr, state, writeback, cur_level,
@@ -4347,22 +4347,22 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 						 writeback: &mut CheckpointWriteBack,
 						 int level, message: &mut WalkMessage)
 {
-	page_desc: &mut OrioleDBPageDesc = NULL;
-	OTuple		write_hikey;
+	pub static mut ORIOLE_DB_PAGE_DESC: *mut page_desc = std::ptr::null_mut();
+	pub static mut WRITE_HIKEY: OTuple = std::mem::zeroed();
 	Page		page,
 				img;
-	uint64		downlink;
+	pub static mut DOWNLINK: uint64 = std::mem::zeroed();
 	int			page_count,
 				ionum;
-	OInMemoryBlkno blkno;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
 	bool		was_dirty,
 				autonomous,
 				write_img,
 				write_rightmost,
 				prev_less = false,
 				tuple_processed;
-	BTreePageItemLocator loc;
-	uint32		chkpNum = state->lastCheckpointNumber + 1;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut CHKP_NUM: uint32 = state->lastCheckpointNumber + 1;
 
 	autonomous = state->stack[level].autonomous;
 	blkno = state->stack[level].blkno;
@@ -4383,8 +4383,8 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	tuple_processed = false;
 	while (BTREE_PAGE_LOCATOR_IS_VALID(page, &loc))
 	{
-		tuphdr: &mut BTreeNonLeafTuphdr;
-		OTuple		key;
+		pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+		pub static mut KEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_READ_INTERNAL_ITEM(tuphdr, key, page, &loc);
 		Assert(tuphdr != NULL);
@@ -4400,7 +4400,7 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 
 		if (state->stack[level].nextkeyType != NextKeyNone)
 		{
-			int			cmp;
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			Assert(state->stack[level].nextkeyType == NextKeyValue);
 			if (O_TUPLE_IS_NULL(key))
@@ -4423,8 +4423,8 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 // The key we met is less than nextkey.  That may happen due
 // to concurrent inserts.  So, skip it.
 //
-				OTuple		hikey;
-				OTuple		levelHikey;
+				pub static mut HIKEY: OTuple = std::mem::zeroed();
+				pub static mut LEVEL_HIKEY: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_LOCATOR_NEXT(page, &loc);
 				prev_less = true;
@@ -4480,8 +4480,8 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 			if (!state->stack[level].autonomousTupleExist)
 			{
 				// we need to add a new downlink to img
-				OTuple		downlink_key;
-				uint		downlink_key_size;
+				pub static mut DOWNLINK_KEY: OTuple = std::mem::zeroed();
+				pub static mut DOWNLINK_KEY_SIZE: uint = std::mem::zeroed();
 				bool		nextkey = state->stack[level].nextkeyType == NextKeyValue,
 							first_off = BTREE_PAGE_LOCATOR_GET_OFFSET(page, &loc) == 0,
 							page_key = !autonomous || !(nextkey || first_off);
@@ -4559,7 +4559,7 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 
 		if (DOWNLINK_IS_IN_MEMORY(downlink))
 		{
-			BTreePageItemLocator nextLoc = loc;
+			pub static mut NEXT_LOC: BTreePageItemLocator = loc;
 
 			BTREE_PAGE_LOCATOR_NEXT(page, &nextLoc);
 			if (BTREE_PAGE_LOCATOR_IS_VALID(page, &nextLoc))
@@ -4588,7 +4588,7 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 					clear_fixed_key(&message->content.downwards.lokey);
 				else
 				{
-					lokey: &mut OFixedKey = &message->content.downwards.lokey;
+					pub static mut O_FIXED_KEY: *mut lokey = &message->content.downwards.lokey;
 
 					copy_from_fixed_shmem_key(lokey, &state->stack[level].lokey);
 				}
@@ -4621,8 +4621,8 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 
 			if (BTREE_PAGE_ITEMS_COUNT(state->stack[level - 1].image) > 0)
 			{
-				OTuple		hikey;
-				int			hikey_size;
+				pub static mut HIKEY: OTuple = std::mem::zeroed();
+				pub static mut HIKEY_SIZE: std::os::raw::c_int = 0;
 
 				//
 // Lowest levels of the stack have autonomous images with
@@ -4678,7 +4678,7 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 			}
 			else
 			{
-				OTuple		nullTup;
+				pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 
 				chkp_inc_changecount_before(state);
 				state->curKeyType = CurKeyGreatest;
@@ -4739,9 +4739,9 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	if (autonomous && !write_rightmost && state->stack[level].bound == CheckpointBoundHikey)
 	{
 		// we may need to write the autonomous image if hikeys is equal
-		int			cmp;
-		OTuple		hikey;
-		OTuple		levelHikey;
+		pub static mut CMP: std::os::raw::c_int = 0;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
+		pub static mut LEVEL_HIKEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, page);
 		levelHikey = fixed_shmem_key_get_tuple(&state->stack[level].hikey);
@@ -4825,7 +4825,7 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	// but first add a hikey to the image if needed
 	if (!write_rightmost)
 	{
-		int			hikey_len;
+		pub static mut HIKEY_LEN: std::os::raw::c_int = 0;
 
 		if (!O_TUPLE_IS_NULL(write_hikey))
 		{
@@ -4851,8 +4851,8 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	message->content.upwards.saveTuple = false;
 	if (autonomous)
 	{
-		uint64		written_downlink;
-		uint32		flags = 0;
+		pub static mut WRITTEN_DOWNLINK: uint64 = std::mem::zeroed();
+		pub static mut FLAGS: uint32 = 0;
 
 		if (state->stack[level].autonomousLeftmost)
 			flags |= O_BTREE_FLAG_LEFTMOST;
@@ -4868,8 +4868,8 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 	{
 		img_header: &mut BTreePageHeader,
 				   *page_header;
-		uint64		written_downlink;
-		bool		parent_dirty;
+		pub static mut WRITTEN_DOWNLINK: uint64 = std::mem::zeroed();
+		pub static mut PARENT_DIRTY: bool = false;
 
 		page_header = (BTreePageHeader *) page;
 		img_header = (BTreePageHeader *) img;
@@ -4923,7 +4923,7 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 
 			if (!DiskDownlinkIsValid(written_downlink))
 			{
-				uint64		offset = page_desc->fileExtent.off;
+				pub static mut OFFSET: uint64 = page_desc->fileExtent.off;
 
 				if (orioledb_s3_mode)
 					offset &= S3_OFFSET_MASK;
@@ -4975,8 +4975,8 @@ checkpoint_internal_pass(descr: &mut BTreeDescr, state: &mut CheckpointState,
 fn
 prepare_leaf_page(descr: &mut BTreeDescr, state: &mut CheckpointState)
 {
-	Page		page;
-	OInMemoryBlkno blkno = state->stack[0].blkno;
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut BLKNO: OInMemoryBlkno = state->stack[0].blkno;
 
 	//
 // Update checkpoint bound key.
@@ -5008,13 +5008,13 @@ prepare_leaf_page(descr: &mut BTreeDescr, state: &mut CheckpointState)
 static bool
 check_tree_needs_checkpointing(OIndexType type, ORelOids treeOids, Oid tablespace)
 {
-	SharedRootInfoKey key;
-	OTuple		keyTuple;
-	OTuple		resultTuple;
-	int			lockNo;
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut RESULT_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut LOCK_NO: std::os::raw::c_int = 0;
 
 	if (!skip_unmodified_trees)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	//
 // Check if we need to deal with this tree.  If tress have no shared root
@@ -5056,7 +5056,7 @@ check_tree_needs_checkpointing(OIndexType type, ORelOids treeOids, Oid tablespac
 			checkpoint_state->curKeyType = CurKeyFinished;
 			chkp_inc_changecount_after(checkpoint_state);
 			LWLockRelease(&checkpoint_state->oSharedRootInfoInsertLocks[lockNo]);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 	LWLockRelease(&checkpoint_state->oSharedRootInfoInsertLocks[lockNo]);
@@ -5066,7 +5066,7 @@ check_tree_needs_checkpointing(OIndexType type, ORelOids treeOids, Oid tablespac
 		 treeOids.datoid, treeOids.relnode,
 		 !O_TUPLE_IS_NULL(resultTuple));
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
@@ -5074,11 +5074,11 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 						   ORelOids tableOids, Oid tablespace,  *arg)
 {
 	tbl_arg: &mut CheckpointTablesArg = (CheckpointTablesArg *) arg;
-	descr: &mut OIndexDescr;
+	pub static mut O_INDEX_DESCR: *mut descr = std::ptr::null_mut();
 	uint32		chkpNum = (checkpoint_state->lastCheckpointNumber + 1);
-	int			cur_chkp_index = chkpNum % 2;
-	MemoryContext prev_context;
-	bool		loaded = false;
+	pub static mut CUR_CHKP_INDEX: std::os::raw::c_int = chkpNum % 2;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut LOADED: bool = false;
 
 	prev_context = MemoryContextSwitchTo(chkp_tree_context);
 
@@ -5114,10 +5114,10 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 	}
 	if (loaded)
 	{
-		td: &mut BTreeDescr = &descr->desc;
+		pub static mut B_TREE_DESCR: *mut td = &descr->desc;
 		meta: &mut BTreeMetaPage = BTREE_GET_META(td);
-		bool		success;
-		bool		skip = false;
+		pub static mut SUCCESS: bool = false;
+		pub static mut SKIP: bool = false;
 
 		elog(DEBUG3, "CHKP %u, (%u, %u, %u) => (%u, %u, %u)",
 			 type, treeOids.datoid, treeOids.reloid, treeOids.relnode,
@@ -5226,7 +5226,7 @@ uint32
 get_cur_checkpoint_number(oids: &mut ORelOids, OIndexType type,
 						  checkpoint_concurrent: &mut bool)
 {
-	OIndexType	chkp_tree_type = oIndexInvalid;
+	pub static mut CHKP_TREE_TYPE: OIndexType = oIndexInvalid;
 	Oid			datoid = InvalidOid,
 				relnode = InvalidOid;
 	int			before_changecount,
@@ -5252,7 +5252,7 @@ get_cur_checkpoint_number(oids: &mut ORelOids, OIndexType type,
 
 		if (OidIsValid(datoid))
 		{
-			int			cmp;
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			// datoid, relnode and ix_num setups inside changecount section
 			Assert(OidIsValid(relnode));
@@ -5278,7 +5278,7 @@ get_cur_checkpoint_number(oids: &mut ORelOids, OIndexType type,
 			break;
 	} while (true);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -5290,7 +5290,7 @@ can_use_checkpoint_extents(desc: &mut BTreeDescr, uint32 chkp_num)
 	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
 
 	if (chkp_num > checkpoint_state->lastCheckpointNumber)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	//
 // Prevent situtation when checkpoint was finished and new sequential scan
@@ -5299,8 +5299,8 @@ can_use_checkpoint_extents(desc: &mut BTreeDescr, uint32 chkp_num)
 	pg_read_barrier();
 
 	if (pg_atomic_read_u32(&metaPageBlkno->numSeqScans[(chkp_num - 1) % NUM_SEQ_SCANS_ARRAY_SIZE]) != 0)
-		return false;
-	return true;
+		pub static mut FALSE: return = std::mem::zeroed();
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static inline 
@@ -5378,7 +5378,7 @@ checkpointable_tree_fill_seq_buffers(td: &mut BTreeDescr, bool init,
 		shareds: &mut SeqBufDescShared[3] = {&meta_page->nextChkp[chkp_index],
 			&meta_page->tmpBuf[chkp_index],
 		&meta_page->freeBuf};
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		for (i = 0; i < (is_compressed ? 2 : 3); i++)
 			init_seq_buf_pages(td, shareds[i]);
@@ -5398,30 +5398,30 @@ checkpointable_tree_fill_seq_buffers(td: &mut BTreeDescr, bool init,
 						  &prev_chkp_tag, false, init,
 						  prev_chkp_tag.type == 'm' ? sizeof(CheckpointFileHeader) : 0,
 						  evicted_free))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (!init_seq_buf(&td->nextChkp[chkp_index],
 					  &meta_page->nextChkp[chkp_index],
 					  &cur_chkp_tag, true, init, sizeof(CheckpointFileHeader), evicted_next))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!init_seq_buf(&td->nextChkp[1 - chkp_index],
 					  &meta_page->nextChkp[1 - chkp_index],
 					  NULL, true, false, sizeof(CheckpointFileHeader), NULL))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!init_seq_buf(&td->tmpBuf[chkp_index],
 					  &meta_page->tmpBuf[chkp_index],
 					  &tmp_tag, true, init, 0, evicted_tmp))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!init_seq_buf(&td->tmpBuf[1 - chkp_index],
 					  &meta_page->tmpBuf[1 - chkp_index],
 					  NULL, true, false, 0, NULL))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -5437,9 +5437,9 @@ evictable_tree_init_meta(desc: &mut BTreeDescr, EvictedTreeData **evicted_data,
 						 map_chkp_num: &mut uint32, bool clear_tree)
 {
 	CheckpointFileHeader file_header = {0};
-	meta_page: &mut BTreeMetaPage;
-	uint32		chkp_num = *map_chkp_num;
-	bool		result = false;
+	pub static mut B_TREE_META_PAGE: *mut meta_page = std::ptr::null_mut();
+	pub static mut CHKP_NUM: uint32 = *map_chkp_num;
+	pub static mut RESULT: bool = false;
 
 	Assert(TREE_HAS_OIDS(desc));
 	Assert(evicted_data);
@@ -5463,9 +5463,9 @@ evictable_tree_init_meta(desc: &mut BTreeDescr, EvictedTreeData **evicted_data,
 	}
 	else
 	{
-		prev_chkp_fname: &mut char;
-		File		prev_chkp_file;
-		SeqBufTag	prev_chkp_tag;
+		pub static mut CHAR: *mut prev_chkp_fname = std::ptr::null_mut();
+		pub static mut PREV_CHKP_FILE: File = std::mem::zeroed();
+		pub static mut PREV_CHKP_TAG: SeqBufTag = std::mem::zeroed();
 		bool		prev_chkp_file_exist,
 					ferror = false,
 					found;
@@ -5595,9 +5595,9 @@ evictable_tree_init_meta(desc: &mut BTreeDescr, EvictedTreeData **evicted_data,
 
 	if (DiskDownlinkIsValid(file_header.rootDownlink))
 	{
-		root_desc: &mut OrioleDBPageDesc;
+		pub static mut ORIOLE_DB_PAGE_DESC: *mut root_desc = std::ptr::null_mut();
 		char		buf[ORIOLEDB_BLCKSZ];
-		bool		rerror;
+		pub static mut RERROR: bool = false;
 
 		lock_page(desc->rootInfo.rootPageBlkno);
 		page_block_reads(desc->rootInfo.rootPageBlkno);
@@ -5627,19 +5627,19 @@ evictable_tree_init_meta(desc: &mut BTreeDescr, EvictedTreeData **evicted_data,
 		unlock_page(desc->rootInfo.rootPageBlkno);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 // TODO: move this method ?
 bool
 tbl_data_exists(oids: &mut ORelOids, Oid tablespace)
 {
-	filename: &mut char;
-	File		file;
-	SharedRootInfoKey key;
-	OTuple		keyTuple;
-	OTuple		resultTuple;
-	db_prefix: &mut char;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut RESULT_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 	OIndexKey	ix_key = {.oids = *oids,.tablespace = tablespace};
 
 	key.datoid = oids->datoid;
@@ -5654,7 +5654,7 @@ tbl_data_exists(oids: &mut ORelOids, Oid tablespace)
 	if (!O_TUPLE_IS_NULL(resultTuple))
 	{
 		pfree(resultTuple.data);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	o_get_prefixes_for_tablespace(ix_key.oids.datoid, ix_key.tablespace,
@@ -5669,10 +5669,10 @@ tbl_data_exists(oids: &mut ORelOids, Oid tablespace)
 	if (file >= 0)
 	{
 		FileClose(file);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -5683,11 +5683,11 @@ evictable_tree_init(desc: &mut BTreeDescr, bool init_shmem, was_evicted: &mut bo
 {
 	uint32		chkp_num,
 				map_chkp_num;
-	int			chkp_index;
+	pub static mut CHKP_INDEX: std::os::raw::c_int = 0;
 	SeqBufTag	tmp_tag = {0};
-	bool		checkpoint_concurrent;
-	meta_page: &mut BTreeMetaPage;
-	evicted_tree_data: &mut EvictedTreeData = NULL;
+	pub static mut CHECKPOINT_CONCURRENT: bool = false;
+	pub static mut B_TREE_META_PAGE: *mut meta_page = std::ptr::null_mut();
+	pub static mut EVICTED_TREE_DATA: *mut evicted_tree_data = std::ptr::null_mut();
 	bool		is_compressed = OCompressIsValid(desc->compress);
 
 	btree_open_smgr(desc);
@@ -5711,7 +5711,7 @@ evictable_tree_init(desc: &mut BTreeDescr, bool init_shmem, was_evicted: &mut bo
 		shareds: &mut SeqBufDescShared[3] = {&meta_page->nextChkp[chkp_index],
 			&meta_page->tmpBuf[chkp_index],
 		&meta_page->freeBuf};
-		int			i = 0;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		//
 // BTreeStorageTemporary trees do not maintain a .map file, so skip
@@ -5775,11 +5775,11 @@ evictable_tree_init(desc: &mut BTreeDescr, bool init_shmem, was_evicted: &mut bo
 
 checkpointable_tree_init(desc: &mut BTreeDescr, bool init_shmem, was_evicted: &mut bool)
 {
-	bool		checkpoint_concurrent;
-	uint32		chkp_num;
-	uint32		map_chkp_num;
-	evicted_tree_data: &mut EvictedTreeData = NULL;
-	bool		map_file_exists = false;
+	pub static mut CHECKPOINT_CONCURRENT: bool = false;
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
+	pub static mut MAP_CHKP_NUM: uint32 = std::mem::zeroed();
+	pub static mut EVICTED_TREE_DATA: *mut evicted_tree_data = std::ptr::null_mut();
+	pub static mut MAP_FILE_EXISTS: bool = false;
 
 	chkp_num = get_cur_checkpoint_number(&desc->oids, desc->type,
 										 &checkpoint_concurrent);
@@ -5839,7 +5839,7 @@ file_extents_array_init()
 {
 	result: &mut FileExtentsArray = palloc0(sizeof(FileExtentsArray));
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
@@ -5878,8 +5878,8 @@ fn
 foreach_extent_append(desc: &mut BTreeDescr, FileExtent extent,  *arg)
 {
 	array: &mut FileExtentsArray = (FileExtentsArray *) arg;
-	prev: &mut FileExtent = array->size > 0 ? &array->extents[array->size - 1] : NULL;
-	bool		append;
+	pub static mut FILE_EXTENT: *mut prev = array->size > 0 ? &array->extents[array->size - 1] : NULL;
+	pub static mut APPEND: bool = false;
 
 	if (prev != NULL && prev->off + prev->len > extent.off)
 	{
@@ -5928,8 +5928,8 @@ systrees_lock_callback(UndoLogType undoType, UndoLocation location,
 fn
 add_systrees_lock_undo(bool lock)
 {
-	UndoLocation location;
-	item: &mut SysTreesLockUndoStackItem;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut SYS_TREES_LOCK_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
 	LocationIndex size = sizeof(SysTreesLockUndoStackItem);
 
 	item = (SysTreesLockUndoStackItem *) get_undo_record_unreserved(UndoLogSystem,

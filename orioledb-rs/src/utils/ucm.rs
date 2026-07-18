@@ -23,7 +23,7 @@ use pgrx::pg_sys;
 #define UCM_LEVEL_BITS		4
 #define UCM_LEVEL_MASK		0xF
 
-bool		skip_ucm = false;
+pub static mut SKIP_UCM: bool = false;
 
 static int	init_ucm_non_leaf_recursive(map: &mut UsageCountMap, int i);
 fn ucm_inc_recursive(map: &mut UsageCountMap, int i, int prev, int next);
@@ -35,10 +35,10 @@ static bool ucm_check_recursive(map: &mut UsageCountMap, int i);
 Size
 estimate_ucm_space(map: &mut UsageCountMap, OInMemoryBlkno offset, OInMemoryBlkno size)
 {
-	int			n_leaf_groups;
-	int			n_leaf_vars;
-	int			n_non_leaf_vars;
-	int			n;
+	pub static mut N_LEAF_GROUPS: std::os::raw::c_int = 0;
+	pub static mut N_LEAF_VARS: std::os::raw::c_int = 0;
+	pub static mut N_NON_LEAF_VARS: std::os::raw::c_int = 0;
+	pub static mut N: std::os::raw::c_int = 0;
 
 	map->offset = offset;
 	map->size = size;
@@ -65,7 +65,7 @@ estimate_ucm_space(map: &mut UsageCountMap, OInMemoryBlkno offset, OInMemoryBlkn
 static int
 get_value_frame(uint32 value)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	uint32		mask = UCM_LEVEL_MASK,
 				one = 1,
 				result = 0;
@@ -79,7 +79,7 @@ get_value_frame(uint32 value)
 		mask <<= UCM_LEVEL_BITS;
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static int
@@ -87,8 +87,8 @@ init_ucm_non_leaf_recursive(map: &mut UsageCountMap, int i)
 {
 	if (i < map->nonLeaf)
 	{
-		int			j;
-		uint32		value;
+		pub static mut J: std::os::raw::c_int = 0;
+		pub static mut VALUE: uint32 = std::mem::zeroed();
 
 		value = 0;
 		for (j = (i + 1) * UCM_BRANCH_FACTOR; j < (i + 2) * UCM_BRANCH_FACTOR; j++)
@@ -96,7 +96,7 @@ init_ucm_non_leaf_recursive(map: &mut UsageCountMap, int i)
 			value += get_value_frame(init_ucm_non_leaf_recursive(map, j));
 		}
 		pg_atomic_init_u32(&map->ucm[i], value);
-		return value;
+		pub static mut VALUE: return = std::mem::zeroed();
 	}
 	else if (i < map->total)
 	{
@@ -104,7 +104,7 @@ init_ucm_non_leaf_recursive(map: &mut UsageCountMap, int i)
 	}
 	else
 	{
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	}
 }
 
@@ -114,8 +114,8 @@ init_ucm_non_leaf_recursive(map: &mut UsageCountMap, int i)
 
 init_ucm(map: &mut UsageCountMap, Pointer ptr, bool found)
 {
-	int			i;
-	OInMemoryBlkno blkno;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
 
 	map->epoch = (pg_atomic_uint32 *) ptr;
 	ptr += PG_CACHE_LINE_SIZE;
@@ -186,7 +186,7 @@ ucm_inc_recursive(map: &mut UsageCountMap, int i, int32 prev, int32 next)
 	{
 		if ((val & prev_mask) < prev_one || (val & next_mask) > (next_mask - next_one))
 		{
-			SpinDelayStatus delayStatus;
+			pub static mut DELAY_STATUS: SpinDelayStatus = std::mem::zeroed();
 
 			init_local_spin_delay(&delayStatus);
 
@@ -289,11 +289,11 @@ page_try_change_usage_count(map: &mut UsageCountMap, OInMemoryBlkno blkno,
 									   newState))
 	{
 		ucm_inc(map, blkno - map->offset, oldUsageCount, newUsageCount);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
 	{
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 }
 
@@ -307,7 +307,7 @@ ucm_check_recursive(map: &mut UsageCountMap, int i)
 					j_max;
 		uint32		expected = 0,
 					value;
-		bool		result = true;
+		pub static mut RESULT: bool = true;
 
 		value = pg_atomic_read_u32(&map->ucm[i]);
 		j_max = Min((i + 2) * UCM_BRANCH_FACTOR, map->total);
@@ -323,14 +323,14 @@ ucm_check_recursive(map: &mut UsageCountMap, int i)
 				 i, expected, value);
 			result = false;
 		}
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 	else if (i < map->total)
 	{
 		int			group_num = i - map->nonLeaf,
 					blkno,
 					blkno_max;
-		bool		result = true;
+		pub static mut RESULT: bool = true;
 		uint32		expected = 0,
 					value,
 					usageCount;
@@ -362,24 +362,24 @@ ucm_check_recursive(map: &mut UsageCountMap, int i)
 			result = false;
 		}
 
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 	else
 	{
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	}
 }
 
 bool
 ucm_check_map(map: &mut UsageCountMap)
 {
-	bool		result = true;
-	int			i;
+	pub static mut RESULT: bool = true;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < UCM_BRANCH_FACTOR; i++)
 		result = result && ucm_check_recursive(map, i);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 bool
@@ -387,7 +387,7 @@ ucm_epoch_needs_shift(map: &mut UsageCountMap)
 {
 	uint32		mask,
 				epoch;
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	epoch = pg_atomic_read_u32(map->epoch);
 	mask = 0xFFFFFFFF;
@@ -401,9 +401,9 @@ ucm_epoch_needs_shift(map: &mut UsageCountMap)
 	for (i = 0; i < UCM_BRANCH_FACTOR; i++)
 	{
 		if (pg_atomic_read_u32(&map->ucm[i]) & mask)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 
@@ -424,13 +424,13 @@ OInMemoryBlkno
 ucm_next_blkno(map: &mut UsageCountMap, OInMemoryBlkno init_blkno,
 			   uint32 mask_src)
 {
-	int64		location;
-	int64		i;
+	pub static mut LOCATION: int64 = std::mem::zeroed();
+	pub static mut I: int64 = std::mem::zeroed();
 	int64		factor,
 				base;
-	int64		num_iterations;
-	uint32		mask;
-	uint32		epoch;
+	pub static mut NUM_ITERATIONS: int64 = std::mem::zeroed();
+	pub static mut MASK: uint32 = std::mem::zeroed();
+	pub static mut EPOCH: uint32 = std::mem::zeroed();
 
 	epoch = pg_atomic_read_u32(map->epoch);
 
@@ -459,8 +459,8 @@ retry:
 		{
 			// Work with pages themselves
 			header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(location + map->offset);
-			uint64		state;
-			uint32		usageCount;
+			pub static mut STATE: uint64 = std::mem::zeroed();
+			pub static mut USAGE_COUNT: uint32 = std::mem::zeroed();
 
 			state = pg_atomic_read_u64(&header->state);
 			usageCount = O_PAGE_STATE_GET_USAGE_COUNT(state);
@@ -487,7 +487,7 @@ retry:
 		else
 		{
 			// Not found, so step over
-			int64		j;
+			pub static mut J: int64 = std::mem::zeroed();
 
 			if (num_iterations > 2 * UCM_BRANCH_FACTOR)
 			{
@@ -497,7 +497,7 @@ retry:
 //
 				if (base == 0)
 				{
-					uint32		next_epoch;
+					pub static mut NEXT_EPOCH: uint32 = std::mem::zeroed();
 
 					if (epoch == UCM_USAGE_LEVELS - 1)
 						next_epoch = 0;
@@ -507,7 +507,7 @@ retry:
 					pg_atomic_compare_exchange_u32(map->epoch,
 												   &epoch,
 												   next_epoch);
-					goto retry;
+					pub static mut RETRY: goto = std::mem::zeroed();
 				}
 				factor *= UCM_BRANCH_FACTOR;
 				i = (i / UCM_BRANCH_FACTOR) - 1;
@@ -526,12 +526,12 @@ retry:
 OInMemoryBlkno
 ucm_occupy_free_page(map: &mut UsageCountMap)
 {
-	int64		location;
-	int64		i;
+	pub static mut LOCATION: int64 = std::mem::zeroed();
+	pub static mut I: int64 = std::mem::zeroed();
 	int64		factor,
 				base;
-	int64		num_iterations;
-	uint32		mask;
+	pub static mut NUM_ITERATIONS: int64 = std::mem::zeroed();
+	pub static mut MASK: uint32 = std::mem::zeroed();
 
 	mask = UCM_LEVEL_MASK << (UCM_FREE_PAGES_LEVEL * UCM_LEVEL_BITS);
 	location = 0;
@@ -547,16 +547,16 @@ ucm_occupy_free_page(map: &mut UsageCountMap)
 		if (factor == 1 && location < map->size)
 		{
 			// Work with pages themselves
-			OInMemoryBlkno blkno = location + map->offset;
+			pub static mut BLKNO: OInMemoryBlkno = location + map->offset;
 			header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
-			uint64		state;
+			pub static mut STATE: uint64 = std::mem::zeroed();
 
 			state = pg_atomic_read_u64(&header->state);
 			if (O_PAGE_STATE_GET_USAGE_COUNT(state) == UCM_FREE_PAGES_LEVEL &&
 				page_try_change_usage_count(map, blkno,
 											state, UCM_INVALID_LEVEL))
 			{
-				return blkno;
+				pub static mut BLKNO: return = std::mem::zeroed();
 			}
 		}
 
@@ -570,7 +570,7 @@ ucm_occupy_free_page(map: &mut UsageCountMap)
 		else
 		{
 			// Not found, so step over
-			int64		j;
+			pub static mut J: int64 = std::mem::zeroed();
 
 			if (num_iterations > 2 * UCM_BRANCH_FACTOR && base != 0)
 			{

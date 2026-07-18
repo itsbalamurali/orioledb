@@ -41,10 +41,10 @@ read_page_from_undo(desc: &mut BTreeDescr, Page img, UndoLocation undo_loc,
 					CommitSeqNo csn,  *key, BTreeKeyType keyType,
 					lokey: &mut OFixedKey)
 {
-	header: &mut BTreePageHeader;
-	CommitSeqNo page_csn;
-	UndoLocation rec_undo_location;
-	bool		is_left = true;
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut PAGE_CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut REC_UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut IS_LEFT: bool = true;
 	UndoLogType undoType PG_USED_FOR_ASSERTS_ONLY = GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType);
 
 	Assert(UndoLocationIsValid(undo_loc));
@@ -91,15 +91,15 @@ try_copy_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageChangeCoun
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	uint64		state1,
 				state2;
-	bool		hiKeysEndOK PG_USED_FOR_ASSERTS_ONLY = true;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		hiKeysEndOK = true;
 #ifdef USE_ASSERT_CHECKING
-	ORelOids	pageOids;
+	pub static mut PAGE_OIDS: ORelOids = std::mem::zeroed();
 #endif
-	ppool: &mut PagePool;
+	pub static mut PAGE_POOL: *mut ppool = std::ptr::null_mut();
 
 	state1 = pg_atomic_read_u64(&(O_PAGE_HEADER(p)->state));
 	if (O_PAGE_STATE_READ_IS_BLOCKED(state1))
-		return ReadPageResultFailed;
+		pub static mut READ_PAGE_RESULT_FAILED: return = std::mem::zeroed();
 
 	pg_read_barrier();
 
@@ -145,10 +145,10 @@ try_copy_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageChangeCoun
 
 	if ((state1 & PAGE_STATE_CHANGE_COUNT_MASK) != (state2 & PAGE_STATE_CHANGE_COUNT_MASK) ||
 		O_PAGE_STATE_READ_IS_BLOCKED(state2))
-		return ReadPageResultFailed;
+		pub static mut READ_PAGE_RESULT_FAILED: return = std::mem::zeroed();
 
 	if (O_PAGE_GET_CHANGE_COUNT(p) != pageChangeCount)
-		return ReadPageResultWrongPageChangeCount;
+		pub static mut READ_PAGE_RESULT_WRONG_PAGE_CHANGE_COUNT: return = std::mem::zeroed();
 
 	Assert(hiKeysEndOK);
 
@@ -171,7 +171,7 @@ try_copy_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageChangeCoun
 	ppool = get_ppool_by_blkno(blkno);
 	ppool_ucm_inc_usage(ppool, blkno);
 
-	return ReadPageResultOK;
+	pub static mut READ_PAGE_RESULT_OK: return = std::mem::zeroed();
 }
 
 //
@@ -184,15 +184,15 @@ copy_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageChangeCount,
 {
 	while (true)
 	{
-		ReadPageResult result;
+		pub static mut RESULT: ReadPageResult = std::mem::zeroed();
 
 		result = try_copy_page(desc, blkno, pageChangeCount, dest,
 							   partial, loadHikeysChunk, readCsn);
 
 		if (result == ReadPageResultOK)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		else if (result == ReadPageResultWrongPageChangeCount)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		() page_wait_for_read_enable(blkno);
 	}
 }
@@ -210,9 +210,9 @@ o_btree_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				  bool loadHikeysChunk, undoLocation: &mut UndoLocation,
 				  readCsn: &mut CommitSeqNo)
 {
-	Page		p;
-	header: &mut BTreePageHeader;
-	bool		read_undo;
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut READ_UNDO: bool = false;
 
 	Assert(pageChangeCount != InvalidOPageChangeCount);
 
@@ -224,7 +224,7 @@ o_btree_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 //
 	if (O_PAGE_IS_LOCAL(blkno) &&
 		local_ppool_pages[blkno & O_BLKNO_MASK] == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	p = O_GET_IN_MEMORY_PAGE(blkno);
 	header = (BTreePageHeader *) p;
@@ -262,12 +262,12 @@ o_btree_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 //
 	if (!copy_page(desc, blkno, pageChangeCount, img, partial,
 				   loadHikeysChunk, readCsn))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	header = (BTreePageHeader *) img;
 
 	if (read_undo && COMMITSEQNO_IS_NORMAL(csn) && header->csn >= csn)
 	{
-		UndoLocation pageUndoLoc;
+		pub static mut PAGE_UNDO_LOC: UndoLocation = std::mem::zeroed();
 
 		//
 // Differential page-level undo images reconstruct the historical page
@@ -278,7 +278,7 @@ o_btree_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 //
 		if (partial && partial->isPartial &&
 			!partial_load_full_page(partial, img))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		pageUndoLoc = read_page_from_undo(desc, img, header->undoLocation, csn,
 										  key, keyType, lokey);
@@ -290,13 +290,13 @@ o_btree_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 			*undoLocation = pageUndoLoc;
 		if (readCsn)
 			*readCsn = header->csn;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	if (undoLocation)
 		*undoLocation = InvalidUndoLocation;
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -308,10 +308,10 @@ o_btree_try_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageCh
 					  partial: &mut PartialPageState, bool loadHikeysChunk,
 					  readCsn: &mut CommitSeqNo)
 {
-	Page		p;
-	header: &mut BTreePageHeader;
-	bool		read_undo;
-	ReadPageResult result;
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut READ_UNDO: bool = false;
+	pub static mut RESULT: ReadPageResult = std::mem::zeroed();
 
 	Assert(pageChangeCount != InvalidOPageChangeCount);
 
@@ -323,7 +323,7 @@ o_btree_try_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageCh
 //
 	if (O_PAGE_IS_LOCAL(blkno) &&
 		local_ppool_pages[blkno & O_BLKNO_MASK] == NULL)
-		return ReadPageResultFailed;
+		pub static mut READ_PAGE_RESULT_FAILED: return = std::mem::zeroed();
 
 	p = O_GET_IN_MEMORY_PAGE(blkno);
 	header = (BTreePageHeader *) p;
@@ -340,7 +340,7 @@ o_btree_try_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageCh
 	result = try_copy_page(desc, blkno, pageChangeCount, img, partial,
 						   loadHikeysChunk, readCsn);
 	if (result != ReadPageResultOK)
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 
 	header = (BTreePageHeader *) img;
 	if (read_undo && COMMITSEQNO_IS_NORMAL(csn) && header->csn >= csn)
@@ -348,7 +348,7 @@ o_btree_try_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageCh
 		// See o_btree_read_page(): differential undo images need a full page.
 		if (partial && partial->isPartial &&
 			!partial_load_full_page(partial, img))
-			return ReadPageResultFailed;
+			pub static mut READ_PAGE_RESULT_FAILED: return = std::mem::zeroed();
 
 		read_page_from_undo(desc, img, header->undoLocation, csn,
 							key, keyType, NULL);
@@ -358,7 +358,7 @@ o_btree_try_read_page(desc: &mut BTreeDescr, OInMemoryBlkno blkno, uint32 pageCh
 			*readCsn = header->csn;
 	}
 
-	return ReadPageResultOK;
+	pub static mut READ_PAGE_RESULT_OK: return = std::mem::zeroed();
 }
 
 
@@ -462,13 +462,13 @@ LocationIndex
 page_get_vacated_skip_item(desc: &mut BTreeDescr, Page p, CommitSeqNo csn,
 						   LocationIndex offset)
 {
-	LocationIndex vacatedBytes = 0;
-	BTreePageItemLocator loc;
+	pub static mut VACATED_BYTES: LocationIndex = 0;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
-		header: &mut BTreeLeafTuphdr;
-		OTuple		tuple;
+		pub static mut B_TREE_LEAF_TUPHDR: *mut header = std::ptr::null_mut();
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 		if (BTREE_PAGE_LOCATOR_GET_OFFSET(p, &loc) == offset)
 			continue;
@@ -483,7 +483,7 @@ page_get_vacated_skip_item(desc: &mut BTreeDescr, Page p, CommitSeqNo csn,
 			}
 			else
 			{
-				LocationIndex itemCompactedSize;
+				pub static mut ITEM_COMPACTED_SIZE: LocationIndex = std::mem::zeroed();
 
 				itemCompactedSize = BTreeLeafTuphdrSize + MAXALIGN(o_btree_len(desc, tuple, OTupleLength));
 				vacatedBytes += BTREE_PAGE_GET_ITEM_SIZE(p, &loc) - itemCompactedSize;
@@ -491,7 +491,7 @@ page_get_vacated_skip_item(desc: &mut BTreeDescr, Page p, CommitSeqNo csn,
 		}
 	}
 
-	return vacatedBytes;
+	pub static mut VACATED_BYTES: return = std::mem::zeroed();
 }
 
 //
@@ -508,7 +508,7 @@ page_cut_first_key(Page node)
 {
 	tuphdr: &mut BTreeNonLeafTuphdr,
 				tmp;
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	Assert(!O_PAGE_IS(node, LEAF));
 	BTREE_PAGE_LOCATOR_FIRST(node, &loc);
@@ -543,11 +543,11 @@ put_page_image(OInMemoryBlkno blkno, Page img)
 
 o_btree_page_calculate_statistics(desc: &mut BTreeDescr, Pointer p)
 {
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	if (O_PAGE_IS(p, LEAF))
 	{
-		int			nVacated = 0;
+		pub static mut N_VACATED: std::os::raw::c_int = 0;
 
 		// Bridge tuples not treated as vacated
 		if (desc->type == oIndexBridge)
@@ -555,8 +555,8 @@ o_btree_page_calculate_statistics(desc: &mut BTreeDescr, Pointer p)
 
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
-			tupHdr: &mut BTreeLeafTuphdr;
-			OTuple		tuple;
+			pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+			pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 			BTREE_PAGE_READ_LEAF_ITEM(tupHdr, tuple, p, &loc);
 
@@ -570,7 +570,7 @@ o_btree_page_calculate_statistics(desc: &mut BTreeDescr, Pointer p)
 	}
 	else
 	{
-		int			nOnDisk = 0;
+		pub static mut N_ON_DISK: std::os::raw::c_int = 0;
 
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
@@ -586,7 +586,7 @@ o_btree_page_calculate_statistics(desc: &mut BTreeDescr, Pointer p)
 
 copy_fixed_tuple(desc: &mut BTreeDescr, dst: &mut OFixedTuple, OTuple src)
 {
-	int			tuplen;
+	pub static mut TUPLEN: std::os::raw::c_int = 0;
 
 	if (O_TUPLE_IS_NULL(src))
 	{
@@ -622,7 +622,7 @@ copy_fixed_key_with_len(dst: &mut OFixedKey, OTuple src, int tuplen)
 
 copy_fixed_key(desc: &mut BTreeDescr, dst: &mut OFixedKey, OTuple src)
 {
-	int			tuplen;
+	pub static mut TUPLEN: std::os::raw::c_int = 0;
 
 	if (O_TUPLE_IS_NULL(src))
 	{
@@ -639,7 +639,7 @@ copy_fixed_key(desc: &mut BTreeDescr, dst: &mut OFixedKey, OTuple src)
 copy_fixed_page_key(desc: &mut BTreeDescr, dst: &mut OFixedKey,
 					Page p, loc: &mut BTreePageItemLocator)
 {
-	OTuple		src;
+	pub static mut SRC: OTuple = std::mem::zeroed();
 
 	BTREE_PAGE_READ_TUPLE(src, p, loc);
 	copy_fixed_key(desc, dst, src);
@@ -648,7 +648,7 @@ copy_fixed_page_key(desc: &mut BTreeDescr, dst: &mut OFixedKey,
 
 copy_fixed_hikey(desc: &mut BTreeDescr, dst: &mut OFixedKey, Page p)
 {
-	OTuple		src;
+	pub static mut SRC: OTuple = std::mem::zeroed();
 
 	BTREE_PAGE_GET_HIKEY(src, p);
 	copy_fixed_key(desc, dst, src);
@@ -702,7 +702,7 @@ copy_fixed_shmem_key(desc: &mut BTreeDescr, dst: &mut OFixedShmemKey, OTuple src
 copy_fixed_shmem_page_key(desc: &mut BTreeDescr, dst: &mut OFixedShmemKey,
 						  Page p, loc: &mut BTreePageItemLocator)
 {
-	OTuple		src;
+	pub static mut SRC: OTuple = std::mem::zeroed();
 
 	BTREE_PAGE_READ_TUPLE(src, p, loc);
 	copy_fixed_shmem_key(desc, dst, src);
@@ -711,7 +711,7 @@ copy_fixed_shmem_page_key(desc: &mut BTreeDescr, dst: &mut OFixedShmemKey,
 
 copy_fixed_shmem_hikey(desc: &mut BTreeDescr, dst: &mut OFixedShmemKey, Page p)
 {
-	OTuple		src;
+	pub static mut SRC: OTuple = std::mem::zeroed();
 
 	BTREE_PAGE_GET_HIKEY(src, p);
 	copy_fixed_shmem_key(desc, dst, src);
@@ -728,7 +728,7 @@ clear_fixed_shmem_key(dst: &mut OFixedShmemKey)
 OTuple
 fixed_shmem_key_get_tuple(src: &mut OFixedShmemKey)
 {
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	if (src->notNull)
 	{
@@ -740,15 +740,15 @@ fixed_shmem_key_get_tuple(src: &mut OFixedShmemKey)
 		result.data = NULL;
 		result.formatFlags = 0;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 OTuple
 page_get_hikey(Page p)
 {
-	chunkDesc: &mut BTreePageChunkDesc;
+	pub static mut B_TREE_PAGE_CHUNK_DESC: *mut chunkDesc = std::ptr::null_mut();
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	Assert(!O_PAGE_IS(p, RIGHTMOST));
 
@@ -757,13 +757,13 @@ page_get_hikey(Page p)
 	result.formatFlags = chunkDesc->hikeyFlags;
 	result.data = (Pointer) p + SHORT_GET_LOCATION(chunkDesc->hikeyShortLocation);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 int
 page_get_hikey_size(Page p)
 {
-	chunkDesc: &mut BTreePageChunkDesc;
+	pub static mut B_TREE_PAGE_CHUNK_DESC: *mut chunkDesc = std::ptr::null_mut();
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	Assert(!O_PAGE_IS(p, RIGHTMOST));
@@ -775,7 +775,7 @@ page_get_hikey_size(Page p)
 
 page_set_hikey_flags(Page p, uint8 flags)
 {
-	chunkDesc: &mut BTreePageChunkDesc;
+	pub static mut B_TREE_PAGE_CHUNK_DESC: *mut chunkDesc = std::ptr::null_mut();
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 
 	Assert(!O_PAGE_IS(p, RIGHTMOST));
@@ -797,7 +797,7 @@ page_fits_hikey(Page p, LocationIndex newHikeySize)
 	hikeyLocation = SHORT_GET_LOCATION(header->chunkDesc[0].hikeyShortLocation);
 	dataLocation = SHORT_GET_LOCATION(header->chunkDesc[0].shortLocation);
 	if (hikeyLocation + newHikeySize <= dataLocation)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	dataShift = hikeyLocation + newHikeySize - dataLocation;
 	return (header->dataSize + dataShift <= ORIOLEDB_BLCKSZ);
@@ -836,9 +836,9 @@ page_resize_hikey(Page p, LocationIndex newHikeySize)
 
 btree_page_update_max_key_len(desc: &mut BTreeDescr, Page p)
 {
-	LocationIndex maxKeyLen;
+	pub static mut MAX_KEY_LEN: LocationIndex = std::mem::zeroed();
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	if (!O_PAGE_IS(p, RIGHTMOST))
 		maxKeyLen = BTREE_PAGE_GET_HIKEY_SIZE(p);
@@ -847,7 +847,7 @@ btree_page_update_max_key_len(desc: &mut BTreeDescr, Page p)
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
-		LocationIndex keyLen;
+		pub static mut KEY_LEN: LocationIndex = std::mem::zeroed();
 
 		if (!O_PAGE_IS(p, LEAF))
 		{
@@ -856,7 +856,7 @@ btree_page_update_max_key_len(desc: &mut BTreeDescr, Page p)
 		}
 		else
 		{
-			OTuple		tuple;
+			pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 			BTREE_PAGE_READ_TUPLE(tuple, p, &loc);
 			keyLen = o_btree_len(desc, tuple, OTupleKeyLengthNoVersion);

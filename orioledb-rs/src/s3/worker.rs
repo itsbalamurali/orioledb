@@ -47,25 +47,25 @@ static S3TaskLocation s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key,
 
 typedef struct S3WorkerCtl
 {
-	pg_atomic_uint32 fileChecksumsCnt;
-	ConditionVariable fileChecksumsFlushedCV;
+	pub static mut FILE_CHECKSUMS_CNT: pg_atomic_uint32 = std::mem::zeroed();
+	pub static mut FILE_CHECKSUMS_FLUSHED_CV: ConditionVariable = std::mem::zeroed();
 
 	// S3 workers are in progress of putting PostgreSQL files into S3 bucket
 	pg_atomic_flag workersInProgress[FLEXIBLE_ARRAY_MEMBER];
 } S3WorkerCtl;
 
-static volatile workers_locations: &mut S3TaskLocation = NULL;
-static workers_file_checksums: &mut S3FileChecksum = NULL;
+static mut S3_TASK_LOCATION: *mut volatile workers_locations = std::ptr::null_mut();
+static mut S3_FILE_CHECKSUM: *mut workers_file_checksums = std::ptr::null_mut();
 
-static workers_ctl: &mut S3WorkerCtl = NULL;
-static checksum_state: &mut S3ChecksumState = NULL;
+static mut S3_WORKER_CTL: *mut workers_ctl = std::ptr::null_mut();
+static mut S3_CHECKSUM_STATE: *mut checksum_state = std::ptr::null_mut();
 
-static int	worker_num;
+static mut WORKER_NUM: std::os::raw::c_int = 0;
 
 Size
 s3_workers_shmem_needs()
 {
-	Size		size;
+	pub static mut SIZE: Size = 0;
 
 	size = CACHELINEALIGN(offsetof(S3WorkerCtl, workersInProgress) +
 						  sizeof(pg_atomic_flag) * s3_num_workers);
@@ -76,13 +76,13 @@ s3_workers_shmem_needs()
 											s3_num_workers *
 											WORKERS_FILE_CHECKSUMS_MAX_LEN)));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 
 s3_workers_init_shmem(Pointer ptr, bool found)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	workers_ctl = (S3WorkerCtl *) ptr;
 	ptr += CACHELINEALIGN(offsetof(S3WorkerCtl, workersInProgress) +
@@ -110,7 +110,7 @@ s3_workers_init_shmem(Pointer ptr, bool found)
 
 register_s3worker(int num)
 {
-	BackgroundWorker worker;
+	pub static mut WORKER: BackgroundWorker = std::mem::zeroed();
 
 	// Set up background worker parameters
 	memset(&worker, 0, sizeof(worker));
@@ -179,7 +179,7 @@ s3_workers_checkpoint_init()
 
 s3_workers_checkpoint_finish()
 {
-	int			file;
+	pub static mut FILE: std::os::raw::c_int = 0;
 
 	s3_workers_wait_for_flush();
 
@@ -191,9 +191,9 @@ s3_workers_checkpoint_finish()
 
 	for (int i = 0; i < s3_num_workers; i++)
 	{
-		int			worker_file;
+		pub static mut WORKER_FILE: std::os::raw::c_int = 0;
 		char		worker_filename[MAXPGPATH];
-		Size		readBytes;
+		pub static mut READ_BYTES: Size = 0;
 		char		buffer[8192];
 
 		snprintf(worker_filename, sizeof(worker_filename), "%s.%d",
@@ -275,14 +275,14 @@ fn
 s3process_task(uint64 taskLocation)
 {
 	task: &mut S3Task = (S3Task *) s3_queue_get_task(taskLocation);
-	objectname: &mut char;
+	pub static mut CHAR: *mut objectname = std::ptr::null_mut();
 
 	Assert(workers_ctl != NULL);
 
 	if (task->type == S3TaskTypeWriteFile)
 	{
-		filename: &mut char = task->typeSpecific.writeFile.filename;
-		long		result;
+		pub static mut CHAR: *mut filename = task->typeSpecific.writeFile.filename;
+		pub static mut RESULT: long = std::mem::zeroed();
 
 		if (filename[0] == '.' && filename[1] == '/')
 			filename += 2;
@@ -302,7 +302,7 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWriteEmptyDir)
 	{
-		dirname: &mut char = task->typeSpecific.writeEmptyDir.dirname;
+		pub static mut CHAR: *mut dirname = task->typeSpecific.writeEmptyDir.dirname;
 
 		if (dirname[0] == '.' && dirname[1] == '/')
 			dirname += 2;
@@ -319,8 +319,8 @@ s3process_task(uint64 taskLocation)
 	else if (task->type == S3TaskTypeReadFilePart &&
 			 task->typeSpecific.filePart.segNum < 0)
 	{
-		filename: &mut char;
-		SeqBufTag	chkp_tag;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
+		pub static mut CHKP_TAG: SeqBufTag = std::mem::zeroed();
 
 		memset(&chkp_tag, 0, sizeof(chkp_tag));
 		chkp_tag.key = task->typeSpecific.filePart.key;
@@ -343,8 +343,8 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeReadFilePart)
 	{
-		filename: &mut char;
-		S3HeaderTag tag;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
+		pub static mut TAG: S3HeaderTag = std::mem::zeroed();
 
 		filename = btree_filename(task->typeSpecific.filePart.key,
 								  task->typeSpecific.filePart.segNum,
@@ -373,8 +373,8 @@ s3process_task(uint64 taskLocation)
 	else if (task->type == S3TaskTypeWriteFilePart &&
 			 task->typeSpecific.filePart.segNum >= 0)
 	{
-		filename: &mut char;
-		S3HeaderTag tag;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
+		pub static mut TAG: S3HeaderTag = std::mem::zeroed();
 
 		filename = btree_filename(task->typeSpecific.filePart.key,
 								  task->typeSpecific.filePart.segNum,
@@ -413,8 +413,8 @@ s3process_task(uint64 taskLocation)
 	else if (task->type == S3TaskTypeWriteFilePart &&
 			 task->typeSpecific.filePart.segNum < 0)
 	{
-		filename: &mut char;
-		SeqBufTag	chkp_tag;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
+		pub static mut CHKP_TAG: SeqBufTag = std::mem::zeroed();
 
 		memset(&chkp_tag, 0, sizeof(chkp_tag));
 		chkp_tag.key = task->typeSpecific.filePart.key;
@@ -437,7 +437,7 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWriteWALFile)
 	{
-		filename: &mut char;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 		filename = psprintf(XLOGDIR "/%s", task->typeSpecific.walFilename);
 		objectname = psprintf("wal/%s", task->typeSpecific.walFilename);
@@ -449,8 +449,8 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWriteUndoFile)
 	{
-		uint64		fileNum = task->typeSpecific.writeUndoFile.fileNum;
-		filename: &mut char;
+		pub static mut FILE_NUM: uint64 = task->typeSpecific.writeUndoFile.fileNum;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 		if (task->typeSpecific.writeUndoFile.undoType == UndoLogRegular)
 		{
@@ -493,8 +493,8 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWriteRootFile)
 	{
-		filename: &mut char = task->typeSpecific.writeRootFile.filename;
-		long		result;
+		pub static mut CHAR: *mut filename = task->typeSpecific.writeRootFile.filename;
+		pub static mut RESULT: long = std::mem::zeroed();
 
 		if (filename[0] == '.' && filename[1] == '/')
 			filename += 2;
@@ -512,9 +512,9 @@ s3process_task(uint64 taskLocation)
 	}
 	else if (task->type == S3TaskTypeWritePGFile)
 	{
-		filename: &mut char = task->typeSpecific.writePGFile.filename;
-		Pointer		data;
-		uint64		size;
+		pub static mut CHAR: *mut filename = task->typeSpecific.writePGFile.filename;
+		pub static mut DATA: Pointer = std::ptr::null_mut();
+		pub static mut SIZE: uint64 = std::mem::zeroed();
 
 		if (filename[0] == '.' && filename[1] == '/')
 			filename += 2;
@@ -529,7 +529,7 @@ s3process_task(uint64 taskLocation)
 
 		if (data != NULL)
 		{
-			entry: &mut S3FileChecksum;
+			pub static mut S3_FILE_CHECKSUM: *mut entry = std::ptr::null_mut();
 
 			pg_atomic_test_set_flag(&workers_ctl->workersInProgress[worker_num]);
 
@@ -569,10 +569,10 @@ s3process_task(uint64 taskLocation)
 S3TaskLocation
 s3_schedule_file_write(uint32 chkpNum, filename: &mut char, bool delete)
 {
-	task: &mut S3Task;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
 	int			filenameLen,
 				taskLen;
-	S3TaskLocation location;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	filenameLen = strlen(filename);
 	taskLen = INTALIGN(offsetof(S3Task, typeSpecific.writeFile.filename) + filenameLen + 1);
@@ -589,7 +589,7 @@ s3_schedule_file_write(uint32 chkpNum, filename: &mut char, bool delete)
 
 	pfree(task);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -598,10 +598,10 @@ s3_schedule_file_write(uint32 chkpNum, filename: &mut char, bool delete)
 S3TaskLocation
 s3_schedule_empty_dir_write(uint32 chkpNum, dirname: &mut char)
 {
-	task: &mut S3Task;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
 	int			dirnameLen,
 				taskLen;
-	S3TaskLocation location;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	dirnameLen = strlen(dirname);
 	taskLen = INTALIGN(offsetof(S3Task, typeSpecific.writeEmptyDir.dirname) +
@@ -618,7 +618,7 @@ s3_schedule_empty_dir_write(uint32 chkpNum, dirname: &mut char)
 
 	pfree(task);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -628,8 +628,8 @@ S3TaskLocation
 s3_schedule_file_part_write(uint32 chkpNum, OIndexKey key,
 							int32 segNum, int32 partNum)
 {
-	task: &mut S3Task;
-	S3TaskLocation location;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 	S3HeaderTag tag = {.key = key,.checkpointNum = chkpNum,.segNum = segNum};
 
 	if (partNum >= 0 && !s3_header_mark_part_scheduled_for_write(tag, partNum))
@@ -650,7 +650,7 @@ s3_schedule_file_part_write(uint32 chkpNum, OIndexKey key,
 
 	pfree(task);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -660,16 +660,16 @@ static S3TaskLocation
 s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 						   int32 partNum)
 {
-	task: &mut S3Task;
-	S3TaskLocation location;
-	S3PartStatus status;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
+	pub static mut STATUS: S3PartStatus = std::mem::zeroed();
 	S3HeaderTag tag = {
 		.key = key,
 		.checkpointNum = chkpNum,
 		.segNum = segNum
 	};
-	prefix: &mut char;
-	db_prefix: &mut char;
+	pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+	pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 	o_get_prefixes_for_tablespace(key.oids.datoid, key.tablespace,
 								  &prefix, &db_prefix);
@@ -688,7 +688,7 @@ s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 	}
 	else if (status == S3PartStatusLoaded)
 	{
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	}
 	Assert(status == S3PartStatusNotLoaded);
 
@@ -707,7 +707,7 @@ s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 
 	pfree(task);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -716,10 +716,10 @@ s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 S3TaskLocation
 s3_schedule_wal_file_write(filename: &mut char)
 {
-	task: &mut S3Task;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
 	int			filenameLen,
 				taskLen;
-	S3TaskLocation location;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	filenameLen = strlen(filename);
 	taskLen = INTALIGN(offsetof(S3Task, typeSpecific.walFilename) + filenameLen + 1);
@@ -734,7 +734,7 @@ s3_schedule_wal_file_write(filename: &mut char)
 
 	pfree(task);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -743,8 +743,8 @@ s3_schedule_wal_file_write(filename: &mut char)
 S3TaskLocation
 s3_schedule_undo_file_write(UndoLogType undoType, uint64 fileNum)
 {
-	task: &mut S3Task;
-	S3TaskLocation location;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	task = (S3Task *) palloc0(sizeof(S3Task));
 	task->type = S3TaskTypeWriteUndoFile;
@@ -758,7 +758,7 @@ s3_schedule_undo_file_write(UndoLogType undoType, uint64 fileNum)
 
 	pfree(task);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -771,10 +771,10 @@ s3_schedule_downlink_load(desc: &mut BTreeDescr, uint64 downlink)
 	uint16		len = DOWNLINK_GET_DISK_LEN(downlink);
 	off_t		byte_offset,
 				read_size;
-	uint32		chkpNum;
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
 	int32		segNum,
 				partNum;
-	S3TaskLocation result = 0;
+	pub static mut RESULT: S3TaskLocation = 0;
 
 	chkpNum = S3_GET_CHKP_NUM(offset);
 	offset &= S3_OFFSET_MASK;
@@ -793,7 +793,7 @@ s3_schedule_downlink_load(desc: &mut BTreeDescr, uint64 downlink)
 	while (true)
 	{
 		OIndexKey	key = {.oids = desc->oids,.tablespace = desc->tablespace};
-		S3TaskLocation location;
+		pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 		segNum = byte_offset / ORIOLEDB_SEGMENT_SIZE;
 		partNum = (byte_offset % ORIOLEDB_SEGMENT_SIZE) / ORIOLEDB_S3_PART_SIZE;
@@ -801,7 +801,7 @@ s3_schedule_downlink_load(desc: &mut BTreeDescr, uint64 downlink)
 		result = Max(result, location);
 		if (byte_offset % ORIOLEDB_S3_PART_SIZE + read_size > ORIOLEDB_S3_PART_SIZE)
 		{
-			uint64		shift = ORIOLEDB_S3_PART_SIZE - byte_offset % ORIOLEDB_S3_PART_SIZE;
+			pub static mut SHIFT: uint64 = ORIOLEDB_S3_PART_SIZE - byte_offset % ORIOLEDB_S3_PART_SIZE;
 
 			byte_offset += shift;
 			read_size -= shift;
@@ -812,7 +812,7 @@ s3_schedule_downlink_load(desc: &mut BTreeDescr, uint64 downlink)
 		}
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -821,10 +821,10 @@ s3_schedule_downlink_load(desc: &mut BTreeDescr, uint64 downlink)
 S3TaskLocation
 s3_schedule_root_file_write(filename: &mut char, bool delete)
 {
-	task: &mut S3Task;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
 	int			filenameLen,
 				taskLen;
-	S3TaskLocation location;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	filenameLen = strlen(filename);
 	taskLen = INTALIGN(offsetof(S3Task, typeSpecific.writeRootFile.filename) + filenameLen + 1);
@@ -840,7 +840,7 @@ s3_schedule_root_file_write(filename: &mut char, bool delete)
 
 	pfree(task);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -849,10 +849,10 @@ s3_schedule_root_file_write(filename: &mut char, bool delete)
 S3TaskLocation
 s3_schedule_pg_file_write(uint32 chkpNum, filename: &mut char)
 {
-	task: &mut S3Task;
+	pub static mut S3_TASK: *mut task = std::ptr::null_mut();
 	int			filenameLen,
 				taskLen;
-	S3TaskLocation location;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	Assert(workers_ctl != NULL);
 
@@ -872,13 +872,13 @@ s3_schedule_pg_file_write(uint32 chkpNum, filename: &mut char)
 
 	pg_atomic_fetch_add_u32(&workers_ctl->fileChecksumsCnt, 1);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 
 s3_load_file_part(uint32 chkpNum, OIndexKey key, int32 segNum, int32 partNum)
 {
-	S3TaskLocation location;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	location = s3_schedule_file_part_read(chkpNum, key, segNum, partNum);
 
@@ -889,7 +889,7 @@ s3_load_file_part(uint32 chkpNum, OIndexKey key, int32 segNum, int32 partNum)
 
 s3_load_map_file(uint32 chkpNum, OIndexKey key)
 {
-	S3TaskLocation location;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	location = s3_schedule_file_part_read(chkpNum, key, -1, 0);
 
@@ -947,7 +947,7 @@ s3worker_main(Datum main_arg)
 
 		while (true)
 		{
-			uint64		taskLocation;
+			pub static mut TASK_LOCATION: uint64 = std::mem::zeroed();
 
 			if (ShutdownRequestPending)
 				break;

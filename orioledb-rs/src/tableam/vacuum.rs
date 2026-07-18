@@ -71,30 +71,30 @@ typedef enum
 typedef struct LVRelState
 {
 	// Target heap relation and its indexes
-	Relation	rel;
-	descr: &mut OTableDescr;
-	indrels: &mut Relation;
-	int			nindexes;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut RELATION: *mut indrels = std::ptr::null_mut();
+	pub static mut NINDEXES: std::os::raw::c_int = 0;
 
 	// Buffer access strategy and parallel vacuum state
-	BufferAccessStrategy bstrategy;
-	pvs: &mut ParallelVacuumState;
+	pub static mut BSTRATEGY: BufferAccessStrategy = std::mem::zeroed();
+	pub static mut PARALLEL_VACUUM_STATE: *mut pvs = std::ptr::null_mut();
 
 	// Consider index vacuuming bypass optimization?
-	bool		consider_bypass_optimization;
+	pub static mut CONSIDER_BYPASS_OPTIMIZATION: bool = false;
 
 	// Doing index vacuuming, index cleanup, rel truncation?
-	bool		do_index_vacuuming;
-	bool		do_index_cleanup;
+	pub static mut DO_INDEX_VACUUMING: bool = false;
+	pub static mut DO_INDEX_CLEANUP: bool = false;
 
 	// Error reporting state
-	dbname: &mut char;
-	relnamespace: &mut char;
-	relname: &mut char;
+	pub static mut CHAR: *mut dbname = std::ptr::null_mut();
+	pub static mut CHAR: *mut relnamespace = std::ptr::null_mut();
+	pub static mut CHAR: *mut relname = std::ptr::null_mut();
 	indname: &mut char;		// Current index name
 	BlockNumber blkno;			// used only for heap operations
 	OffsetNumber offnum;		// used only for heap operations
-	VacErrPhase phase;
+	pub static mut PHASE: VacErrPhase = std::mem::zeroed();
 	bool		verbose;		// VACUUM VERBOSE?
 
 	//
@@ -109,7 +109,7 @@ typedef struct LVRelState
 //
 #if PG_VERSION_NUM >= 170000
 	dead_items: &mut TidStore;		// TIDs whose index tuples we'll delete
-	dead_items_info: &mut VacDeadItemsInfo;
+	pub static mut VAC_DEAD_ITEMS_INFO: *mut dead_items_info = std::ptr::null_mut();
 #else
 	dead_items: &mut VacDeadItems;	// TIDs whose index tuples we'll delete
 #endif
@@ -129,7 +129,7 @@ typedef struct LVRelState
 	IndexBulkDeleteResult **indstats;
 
 	// Instrumentation counters
-	int			num_index_scans;
+	pub static mut NUM_INDEX_SCANS: std::os::raw::c_int = 0;
 	// Counters that follow are only for scanned_pages
 	int64		tuples_deleted; // # deleted from table
 	int64		lpdead_items;	// # deleted from indexes
@@ -139,8 +139,8 @@ typedef struct LVRelState
 
 #if PG_VERSION_NUM >= 170000
 	// State maintained by lazy_scan_heap()
-	BlockNumber current_block;
-	int			offsets_count;
+	pub static mut CURRENT_BLOCK: BlockNumber = std::mem::zeroed();
+	pub static mut OFFSETS_COUNT: std::os::raw::c_int = 0;
 	OffsetNumber current_offsets[MaxOffsetNumber];
 #endif
 } LVRelState;
@@ -148,9 +148,9 @@ typedef struct LVRelState
 // Struct for saving and restoring vacuum error information.
 typedef struct LVSavedErrInfo
 {
-	BlockNumber blkno;
-	OffsetNumber offnum;
-	VacErrPhase phase;
+	pub static mut BLKNO: BlockNumber = std::mem::zeroed();
+	pub static mut OFFNUM: OffsetNumber = std::mem::zeroed();
+	pub static mut PHASE: VacErrPhase = std::mem::zeroed();
 } LVSavedErrInfo;
 
 fn dead_items_reset(vacrel: &mut LVRelState);
@@ -171,7 +171,7 @@ fn restore_vacuum_error_info(vacrel: &mut LVRelState,
 fn
 vacuum_error_callback( *arg)
 {
-	errinfo: &mut LVRelState = arg;
+	pub static mut LV_REL_STATE: *mut errinfo = arg;
 
 	switch (errinfo->phase)
 	{
@@ -232,9 +232,9 @@ fn
 vac_open_bridged_indexes(Relation relation, LOCKMODE lockmode,
 						 nindexes: &mut int, Relation **Irel)
 {
-	indexoidlist: &mut List;
-	indexoidscan: &mut ListCell;
-	int			i;
+	pub static mut LIST: *mut indexoidlist = std::ptr::null_mut();
+	pub static mut LIST_CELL: *mut indexoidscan = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(lockmode != NoLock);
 
@@ -245,7 +245,7 @@ vac_open_bridged_indexes(Relation relation, LOCKMODE lockmode,
 
 	if (i > 0)
 		*Irel = (Relation *) palloc(i * sizeof(Relation));
-	Irel: &mut else = NULL;
+	pub static mut ELSE: *mut Irel = std::ptr::null_mut();
 
 	//
 // Collect all ready indexes, including orioledb-managed btree indexes.
@@ -261,7 +261,7 @@ vac_open_bridged_indexes(Relation relation, LOCKMODE lockmode,
 	foreach(indexoidscan, indexoidlist)
 	{
 		Oid			indexoid = lfirst_oid(indexoidscan);
-		Relation	indrel;
+		pub static mut INDREL: Relation = std::mem::zeroed();
 
 		indrel = index_open(indexoid, lockmode);
 
@@ -290,20 +290,20 @@ fn
 dead_items_alloc(vacrel: &mut LVRelState, int nworkers)
 {
 #if PG_VERSION_NUM >= 170000
-	dead_items_info: &mut VacDeadItemsInfo;
+	pub static mut VAC_DEAD_ITEMS_INFO: *mut dead_items_info = std::ptr::null_mut();
 	int			vac_work_mem = AmAutoVacuumWorkerProcess() &&
 		autovacuum_work_mem != -1 ?
-		autovacuum_work_mem : maintenance_work_mem;
+		pub static mut MAINTENANCE_WORK_MEM: autovacuum_work_mem : = std::mem::zeroed();
 #else
-	dead_items: &mut VacDeadItems;
-	int64		max_items;
+	pub static mut VAC_DEAD_ITEMS: *mut dead_items = std::ptr::null_mut();
+	pub static mut MAX_ITEMS: int64 = std::mem::zeroed();
 	int			vac_work_mem = IsAutoVacuumWorkerProcess() &&
 		autovacuum_work_mem != -1 ?
-		autovacuum_work_mem : maintenance_work_mem;
+		pub static mut MAINTENANCE_WORK_MEM: autovacuum_work_mem : = std::mem::zeroed();
 
 	if (vacrel->nindexes > 0)
 	{
-		BlockNumber rel_pages = vacrel->rel_pages;
+		pub static mut REL_PAGES: BlockNumber = vacrel->rel_pages;
 
 		max_items = MAXDEADITEMS(vac_work_mem * 1024L);
 		max_items = Min(max_items, INT_MAX);
@@ -428,7 +428,7 @@ add_dead_item(vacrel: &mut LVRelState, ItemPointer item)
 fn
 add_dead_item(vacrel: &mut LVRelState, ItemPointer item)
 {
-	dead_items: &mut VacDeadItems = vacrel->dead_items;
+	pub static mut VAC_DEAD_ITEMS: *mut dead_items = vacrel->dead_items;
 
 	dead_items->items[dead_items->num_items++] = *item;
 }
@@ -448,8 +448,8 @@ lazy_cleanup_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
 					   double reltuples, bool estimated_count,
 					   vacrel: &mut LVRelState)
 {
-	IndexVacuumInfo ivinfo;
-	LVSavedErrInfo saved_err_info;
+	pub static mut IVINFO: IndexVacuumInfo = std::mem::zeroed();
+	pub static mut SAVED_ERR_INFO: LVSavedErrInfo = std::mem::zeroed();
 
 	ivinfo.index = indrel;
 	ivinfo.heaprel = vacrel->rel;
@@ -480,7 +480,7 @@ lazy_cleanup_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
 	pfree(vacrel->indname);
 	vacrel->indname = NULL;
 
-	return istat;
+	pub static mut ISTAT: return = std::mem::zeroed();
 }
 
 //
@@ -489,8 +489,8 @@ lazy_cleanup_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
 fn
 lazy_cleanup_all_indexes(vacrel: &mut LVRelState)
 {
-	double		reltuples = vacrel->new_rel_tuples;
-	bool		estimated_count = vacrel->scanned_pages < vacrel->rel_pages;
+	pub static mut RELTUPLES: double = vacrel->new_rel_tuples;
+	pub static mut ESTIMATED_COUNT: bool = vacrel->scanned_pages < vacrel->rel_pages;
 #if PG_VERSION_NUM >= 170000
 	const int	progress_start_index[] = {
 		PROGRESS_VACUUM_PHASE,
@@ -526,8 +526,8 @@ lazy_cleanup_all_indexes(vacrel: &mut LVRelState)
 	{
 		for (int idx = 0; idx < vacrel->nindexes; idx++)
 		{
-			Relation	indrel = vacrel->indrels[idx];
-			istat: &mut IndexBulkDeleteResult = vacrel->indstats[idx];
+			pub static mut INDREL: Relation = vacrel->indrels[idx];
+			pub static mut INDEX_BULK_DELETE_RESULT: *mut istat = vacrel->indstats[idx];
 
 			vacrel->indstats[idx] =
 				lazy_cleanup_one_index(indrel, istat, reltuples,
@@ -571,8 +571,8 @@ static IndexBulkDeleteResult *
 lazy_vacuum_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
 					  double reltuples, vacrel: &mut LVRelState)
 {
-	IndexVacuumInfo ivinfo;
-	LVSavedErrInfo saved_err_info;
+	pub static mut IVINFO: IndexVacuumInfo = std::mem::zeroed();
+	pub static mut SAVED_ERR_INFO: LVSavedErrInfo = std::mem::zeroed();
 
 	ivinfo.index = indrel;
 	ivinfo.heaprel = vacrel->rel;
@@ -608,7 +608,7 @@ lazy_vacuum_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
 	pfree(vacrel->indname);
 	vacrel->indname = NULL;
 
-	return istat;
+	pub static mut ISTAT: return = std::mem::zeroed();
 }
 
 //
@@ -622,7 +622,7 @@ lazy_vacuum_one_index(Relation indrel, istat: &mut IndexBulkDeleteResult,
 fn
 lazy_vacuum_all_indexes(vacrel: &mut LVRelState)
 {
-	double		old_live_tuples = vacrel->rel->rd_rel->reltuples;
+	pub static mut OLD_LIVE_TUPLES: double = vacrel->rel->rd_rel->reltuples;
 #if PG_VERSION_NUM >= 170000
 	const int	progress_start_index[] = {
 		PROGRESS_VACUUM_PHASE,
@@ -660,8 +660,8 @@ lazy_vacuum_all_indexes(vacrel: &mut LVRelState)
 	{
 		for (int idx = 0; idx < vacrel->nindexes; idx++)
 		{
-			Relation	indrel = vacrel->indrels[idx];
-			istat: &mut IndexBulkDeleteResult = vacrel->indstats[idx];
+			pub static mut INDREL: Relation = vacrel->indrels[idx];
+			pub static mut INDEX_BULK_DELETE_RESULT: *mut istat = vacrel->indstats[idx];
 
 			vacrel->indstats[idx] = lazy_vacuum_one_index(indrel, istat,
 														  old_live_tuples,
@@ -729,20 +729,20 @@ lazy_vacuum_all_indexes(vacrel: &mut LVRelState)
 fn
 lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 {
-	OBTreeFindPageContext context;
-	descr: &mut OTableDescr = vacrel->descr;
-	bridge: &mut OIndexDescr = descr->bridge;
-	BlockNumber vacuumed_pages = 0;
-	LVSavedErrInfo saved_err_info;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = vacrel->descr;
+	pub static mut O_INDEX_DESCR: *mut bridge = descr->bridge;
+	pub static mut VACUUMED_PAGES: BlockNumber = 0;
+	pub static mut SAVED_ERR_INFO: LVSavedErrInfo = std::mem::zeroed();
 #if PG_VERSION_NUM >= 170000
-	iter: &mut TidStoreIter;
-	iter_result: &mut TidStoreIterResult;
+	pub static mut TID_STORE_ITER: *mut iter = std::ptr::null_mut();
+	pub static mut TID_STORE_ITER_RESULT: *mut iter_result = std::ptr::null_mut();
 #endif
-	OBTreeKeyBound bound;
+	pub static mut BOUND: OBTreeKeyBound = std::mem::zeroed();
 	ItemPointerData walBuffer[BTREE_PAGE_MAX_ITEMS];
-	int			walBufferIndex = 0;
-	bool		have_page = false;
-	int			i;
+	pub static mut WAL_BUFFER_INDEX: std::os::raw::c_int = 0;
+	pub static mut HAVE_PAGE: bool = false;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	init_page_find_context(&context, &bridge->desc,
 						   COMMITSEQNO_INPROGRESS,
@@ -773,17 +773,17 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 	iter = TidStoreBeginIterate(vacrel->dead_items);
 	while ((iter_result = TidStoreIterateNext(iter)) != NULL)
 	{
-		ItemPointerData iptr;
-		BlockNumber blkno;
-		OTuple		tuple;
+		pub static mut IPTR: ItemPointerData = std::mem::zeroed();
+		pub static mut BLKNO: BlockNumber = std::mem::zeroed();
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
 #if PG_VERSION_NUM >= 180000
-		int			num_offsets;
+		pub static mut NUM_OFFSETS: std::os::raw::c_int = 0;
 		OffsetNumber offsets[MaxOffsetNumber];
 
 		vacuum_delay_point(false);
 #else
-		int			num_offsets = iter_result->num_offsets;
-		offsets: &mut OffsetNumber = iter_result->offsets;
+		pub static mut NUM_OFFSETS: std::os::raw::c_int = iter_result->num_offsets;
+		pub static mut OFFSET_NUMBER: *mut offsets = iter_result->offsets;
 
 		vacuum_delay_point();
 #endif
@@ -798,17 +798,17 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 		ItemPointerSetBlockNumber(&iptr, blkno);
 		for (i = 0; i < num_offsets; i++)
 		{
-			item: &mut OBtreePageFindItem;
-			Page		p;
+			pub static mut O_BTREE_PAGE_FIND_ITEM: *mut item = std::ptr::null_mut();
+			pub static mut P: Page = std::mem::zeroed();
 
 			ItemPointerSetOffsetNumber(&iptr, offsets[i]);
 			bound.keys[0].value = ItemPointerGetDatum(&iptr);
 #else
 	for (i = 0; i < vacrel->dead_items->num_items; i++)
 	{
-		ItemPointerData iptr = vacrel->dead_items->items[i];
-		BlockNumber blkno;
-		OTuple		tuple;
+		pub static mut IPTR: ItemPointerData = vacrel->dead_items->items[i];
+		pub static mut BLKNO: BlockNumber = std::mem::zeroed();
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 		blkno = ItemPointerGetBlockNumber(&iptr);
 		vacrel->blkno = blkno;
@@ -816,13 +816,13 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 		bound.keys[0].value = ItemPointerGetDatum(&iptr);
 
 		{
-			item: &mut OBtreePageFindItem;
-			Page		p;
+			pub static mut O_BTREE_PAGE_FIND_ITEM: *mut item = std::ptr::null_mut();
+			pub static mut P: Page = std::mem::zeroed();
 #endif
 
 			if (!have_page)
 			{
-				OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 				findResult = find_page(&context, &bound, BTreeKeyBound, 0);
 				Assert(findResult == OFindPageResultSuccess);
@@ -832,7 +832,7 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 			}
 			else
 			{
-				bool		pageMatch;
+				pub static mut PAGE_MATCH: bool = false;
 
 				item = &context.items[context.index];
 				p = O_GET_IN_MEMORY_PAGE(item->blkno);
@@ -842,7 +842,7 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 				}
 				else
 				{
-					OTuple		pageHiKey;
+					pub static mut PAGE_HI_KEY: OTuple = std::mem::zeroed();
 
 					BTREE_PAGE_GET_HIKEY(pageHiKey, p);
 					pageMatch = (o_btree_cmp(&bridge->desc,
@@ -852,7 +852,7 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 
 				if (pageMatch)
 				{
-					bool		found;
+					pub static mut FOUND: bool = false;
 
 					found = btree_page_search(&bridge->desc, p,
 											  (Pointer) &bound, BTreeKeyBound,
@@ -863,11 +863,11 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 				}
 				else
 				{
-					OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+					pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 					if (have_page)
 					{
-						int			j;
+						pub static mut J: std::os::raw::c_int = 0;
 
 						if (bridge->desc.storageType == BTreeStoragePersistence)
 						{
@@ -919,7 +919,7 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 
 	if (have_page)
 	{
-		int			j;
+		pub static mut J: std::os::raw::c_int = 0;
 
 		if (bridge->desc.storageType == BTreeStoragePersistence)
 		{
@@ -973,7 +973,7 @@ lazy_vacuum_bridge_index(vacrel: &mut LVRelState)
 fn
 lazy_vacuum(vacrel: &mut LVRelState)
 {
-	bool		bypass;
+	pub static mut BYPASS: bool = false;
 
 	//
 // Consider bypassing index vacuuming (and heap vacuuming) entirely.
@@ -997,7 +997,7 @@ lazy_vacuum(vacrel: &mut LVRelState)
 	bypass = false;
 	if (vacrel->consider_bypass_optimization && vacrel->rel_pages > 0)
 	{
-		BlockNumber threshold;
+		pub static mut THRESHOLD: BlockNumber = std::mem::zeroed();
 
 		Assert(vacrel->num_index_scans == 0);
 		Assert(vacrel->lpdead_items == NUM_ITEMS(vacrel));
@@ -1067,13 +1067,13 @@ lazy_vacuum(vacrel: &mut LVRelState)
 fn
 lazy_scan_bridge_index(vacrel: &mut LVRelState)
 {
-	OBTreeFindPageContext context;
-	descr: &mut OTableDescr = vacrel->descr;
-	bridge: &mut OIndexDescr = descr->bridge;
-	OFixedKey	hikey;
-	BTreePageItemLocator loc;
-	int64		blocksScanned = 0;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = vacrel->descr;
+	pub static mut O_INDEX_DESCR: *mut bridge = descr->bridge;
+	pub static mut HIKEY: OFixedKey = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut BLOCKS_SCANNED: int64 = 0;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 	Assert(bridge != NULL);
 
@@ -1091,8 +1091,8 @@ lazy_scan_bridge_index(vacrel: &mut LVRelState)
 
 	do
 	{
-		Page		p = context.img;
-		bool		firstDead = true;
+		pub static mut P: Page = context.img;
+		pub static mut FIRST_DEAD: bool = true;
 
 		// Report as block scanned, update error traceback information
 
@@ -1107,11 +1107,11 @@ lazy_scan_bridge_index(vacrel: &mut LVRelState)
 			 BTREE_PAGE_LOCATOR_IS_VALID(p, &loc);
 			 BTREE_PAGE_LOCATOR_NEXT(p, &loc))
 		{
-			tupHdr: &mut BTreeLeafTuphdr;
-			OTuple		tup;
-			ItemPointer iptr;
-			bool		isnull;
-			bool		tuple_can_be_vaccumed;
+			pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+			pub static mut TUP: OTuple = std::mem::zeroed();
+			pub static mut IPTR: ItemPointer = std::mem::zeroed();
+			pub static mut ISNULL: bool = false;
+			pub static mut TUPLE_CAN_BE_VACCUMED: bool = false;
 
 			BTREE_PAGE_READ_LEAF_ITEM(tupHdr, tup, p, &loc);
 
@@ -1192,16 +1192,16 @@ lazy_scan_bridge_index(vacrel: &mut LVRelState)
 fn
 update_relstats_all_indexes(vacrel: &mut LVRelState)
 {
-	indrels: &mut Relation = vacrel->indrels;
-	int			nindexes = vacrel->nindexes;
+	pub static mut RELATION: *mut indrels = vacrel->indrels;
+	pub static mut NINDEXES: std::os::raw::c_int = vacrel->nindexes;
 	IndexBulkDeleteResult **indstats = vacrel->indstats;
 
 	Assert(vacrel->do_index_cleanup);
 
 	for (int idx = 0; idx < nindexes; idx++)
 	{
-		Relation	indrel = indrels[idx];
-		istat: &mut IndexBulkDeleteResult = indstats[idx];
+		pub static mut INDREL: Relation = indrels[idx];
+		pub static mut INDEX_BULK_DELETE_RESULT: *mut istat = indstats[idx];
 
 		if (istat == NULL || istat->estimated_count)
 			continue;
@@ -1226,20 +1226,20 @@ orioledb_vacuum_bridged_indexes(Relation rel, descr: &mut OTableDescr,
 								struct params: &mut VacuumParams,
 								BufferAccessStrategy bstrategy)
 {
-	vacrel: &mut LVRelState;
+	pub static mut LV_REL_STATE: *mut vacrel = std::ptr::null_mut();
 	char	  **indnames = NULL;
-	bool		verbose;
-	bool		instrument;
-	PGRUsage	ru0;
-	TimestampTz starttime = 0;
+	pub static mut VERBOSE: bool = false;
+	pub static mut INSTRUMENT: bool = false;
+	pub static mut RU0: PGRUsage = std::mem::zeroed();
+	pub static mut STARTTIME: TimestampTz = 0;
 	PgStat_Counter startreadtime = 0,
 				startwritetime = 0;
-	WalUsage	startwalusage = pgWalUsage;
-	BufferUsage startbufferusage = pgBufferUsage;
+	pub static mut STARTWALUSAGE: WalUsage = pgWalUsage;
+	pub static mut STARTBUFFERUSAGE: BufferUsage = pgBufferUsage;
 	BlockNumber orig_rel_pages,
 				new_rel_pages;
-	bridge: &mut OIndexDescr;
-	ErrorContextCallback errcallback;
+	pub static mut O_INDEX_DESCR: *mut bridge = std::ptr::null_mut();
+	pub static mut ERRCALLBACK: ErrorContextCallback = std::mem::zeroed();
 
 	verbose = (params->options & VACOPT_VERBOSE) != 0;
 	instrument = (verbose || (AmAutoVacuumWorkerProcess() &&
@@ -1417,12 +1417,12 @@ orioledb_vacuum_bridged_indexes(Relation rel, descr: &mut OTableDescr,
 			TimestampDifferenceExceeds(starttime, endtime,
 									   params->log_min_duration))
 		{
-			long		secs_dur;
-			int			usecs_dur;
-			WalUsage	walusage;
-			BufferUsage bufferusage;
-			StringInfoData buf;
-			msgfmt: &mut char;
+			pub static mut SECS_DUR: long = std::mem::zeroed();
+			pub static mut USECS_DUR: std::os::raw::c_int = 0;
+			pub static mut WALUSAGE: WalUsage = std::mem::zeroed();
+			pub static mut BUFFERUSAGE: BufferUsage = std::mem::zeroed();
+			pub static mut BUF: StringInfoData = std::mem::zeroed();
+			pub static mut CHAR: *mut msgfmt = std::ptr::null_mut();
 			double		read_rate = 0,
 						write_rate = 0;
 
@@ -1472,7 +1472,7 @@ orioledb_vacuum_bridged_indexes(Relation rel, descr: &mut OTableDescr,
 							 (long long) vacrel->lpdead_items);
 			for (int i = 0; i < vacrel->nindexes; i++)
 			{
-				istat: &mut IndexBulkDeleteResult = vacrel->indstats[i];
+				pub static mut INDEX_BULK_DELETE_RESULT: *mut istat = vacrel->indstats[i];
 
 				if (!istat)
 					continue;

@@ -46,46 +46,46 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static proc_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut proc_cache = std::ptr::null_mut();
 
 typedef struct sql_func_data
 {
-	src: &mut char;
+	pub static mut CHAR: *mut src = std::ptr::null_mut();
 	bool		returnsTuple;	// true if returning whole tuple result
 	bool		readonly_func;	// true to run in "read only" mode
 	bool		lazyEval;		// true if using lazyEval for result query
-	int			jf_natts;
-	int			nnqtlists;
+	pub static mut JF_NATTS: std::os::raw::c_int = 0;
+	pub static mut NNQTLISTS: std::os::raw::c_int = 0;
 
-	bool		has_argnames;
+	pub static mut HAS_ARGNAMES: bool = false;
 
-	jf_targetList: &mut List;
-	jf_atts: &mut Oid;
+	pub static mut LIST: *mut jf_targetList = std::ptr::null_mut();
+	pub static mut OID: *mut jf_atts = std::ptr::null_mut();
 
 	char	  **argnames;
 
-	nqtlists: &mut int;
+	pub static mut INT: *mut nqtlists = std::ptr::null_mut();
 	Node	 ***qtlists;
 } sql_func_data;
 
 struct OProc
 {
-	OSysCacheKey1 key;
-	uint16		data_version;
+	pub static mut KEY: OSysCacheKey1 = std::mem::zeroed();
+	pub static mut DATA_VERSION: uint16 = std::mem::zeroed();
 	Oid			rettype;		// actual return type
 	bool		strict;			// T if function is "strict"
 	bool		retset;			// T if function returns a set
-	Oid			prolang;
-	Oid			proowner;
-	int16		nargs;
+	pub static mut PROLANG: Oid = std::mem::zeroed();
+	pub static mut PROOWNER: Oid = std::mem::zeroed();
+	pub static mut NARGS: int16 = std::mem::zeroed();
 
-	proname: &mut char;
-	prosrc: &mut char;
-	probin: &mut char;
-	argtypes: &mut Oid;
-	sql_func: &mut sql_func_data;
+	pub static mut CHAR: *mut proname = std::ptr::null_mut();
+	pub static mut CHAR: *mut prosrc = std::ptr::null_mut();
+	pub static mut CHAR: *mut probin = std::ptr::null_mut();
+	pub static mut OID: *mut argtypes = std::ptr::null_mut();
+	pub static mut SQL_FUNC_DATA: *mut sql_func = std::ptr::null_mut();
 
-	MemoryContext cxt;
+	pub static mut CXT: MemoryContext = std::mem::zeroed();
 };
 
 #define pg_analyze_and_rewrite_params pg_analyze_and_rewrite_withcb
@@ -135,7 +135,7 @@ typedef struct
 // to it via the "next" fields.  This sublist structure is needed to keep
 // track of where the original query boundaries are.
 //
-	func_state: &mut List;
+	pub static mut LIST: *mut func_state = std::ptr::null_mut();
 
 	MemoryContext fcontext;		// memory context holding this struct and all
 // subsidiary data
@@ -144,7 +144,7 @@ typedef struct
 	SubTransactionId subxid;	// subxid in which cache was made
 } SQLFunctionCache;
 
-typedef SQLFunctionCachePtr: &mut SQLFunctionCache;
+pub static mut SQL_FUNCTION_CACHE: *mut typedef SQLFunctionCachePtr = std::ptr::null_mut();
 
 fn init_sql_fcache(FunctionCallInfo fcinfo, Oid collation,
 							bool lazyEvalOK, out_sql_func: &mut sql_func_data,
@@ -183,16 +183,16 @@ O_SYS_CACHE_INIT_FUNC(proc_cache)
 fn
 o_proc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	proctup;
-	Form_pg_proc procform;
+	pub static mut PROCTUP: HeapTuple = std::mem::zeroed();
+	pub static mut PROCFORM: Form_pg_proc = std::mem::zeroed();
 	o_proc: &mut OProc = (OProc *) *entry_ptr;
 	parg: &mut OProcArg = (OProcArg *) arg;
-	bool		lazyEvalOK = false;
-	SQLFunctionCachePtr fcache;
-	MemoryContext oldcontext;
-	int			i;
+	pub static mut LAZY_EVAL_OK: bool = false;
+	pub static mut FCACHE: SQLFunctionCachePtr = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 	Oid			procoid = DatumGetObjectId(key->keys[0]);
-	Oid			fncollation = parg->collation;
+	pub static mut FNCOLLATION: Oid = parg->collation;
 	List	  **processed = parg->processed;
 
 	proctup = SearchSysCache1(PROCOID, key->keys[0]);
@@ -232,8 +232,8 @@ o_proc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer
 
 	if (o_proc->prolang == SQLlanguageId)
 	{
-		finfo: &mut FmgrInfo;
-		FunctionCallInfo fcinfo;
+		pub static mut FMGR_INFO: *mut finfo = std::ptr::null_mut();
+		pub static mut FCINFO: FunctionCallInfo = std::mem::zeroed();
 
 		finfo = palloc0(sizeof(FmgrInfo));
 		fcinfo = palloc0(SizeForFunctionCallInfo(2));
@@ -273,11 +273,11 @@ o_proc_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer
 
 		for (i = 0; i < o_proc->sql_func->nnqtlists; i++)
 		{
-			int			j;
+			pub static mut J: std::os::raw::c_int = 0;
 
 			for (j = 0; j < o_proc->sql_func->nqtlists[i]; j++)
 			{
-				pstmt: &mut PlannedStmt;
+				pub static mut PLANNED_STMT: *mut pstmt = std::ptr::null_mut();
 
 				pstmt = castNode(PlannedStmt, o_proc->sql_func->qtlists[i][j]);
 
@@ -311,7 +311,7 @@ o_proc_cache_serialize_entry(Pointer entry, len: &mut int)
 {
 	int			i,
 				j;
-	StringInfoData str;
+	pub static mut STR: StringInfoData = std::mem::zeroed();
 	o_proc: &mut OProc = (OProc *) entry;
 
 	if (o_proc->data_version != ORIOLEDB_SYS_TREE_VERSION)
@@ -331,7 +331,7 @@ o_proc_cache_serialize_entry(Pointer entry, len: &mut int)
 
 	if (o_proc->prolang == SQLlanguageId)
 	{
-		sql_func: &mut sql_func_data = o_proc->sql_func;
+		pub static mut SQL_FUNC_DATA: *mut sql_func = o_proc->sql_func;
 
 		o_serialize_string(sql_func->src, &str);
 		appendBinaryStringInfo(&str, ((Pointer) sql_func) +
@@ -367,10 +367,10 @@ o_proc_cache_serialize_entry(Pointer entry, len: &mut int)
 static Pointer
 o_proc_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 {
-	Pointer		ptr = data;
-	o_proc: &mut OProc;
-	int			len;
-	MemoryContext old_mcxt;
+	pub static mut PTR: Pointer = data;
+	pub static mut O_PROC: *mut o_proc = std::ptr::null_mut();
+	pub static mut LEN: std::os::raw::c_int = 0;
+	pub static mut OLD_MCXT: MemoryContext = std::mem::zeroed();
 	int			i,
 				j;
 
@@ -400,7 +400,7 @@ o_proc_cache_deserialize_entry(MemoryContext mcxt, Pointer data, Size length)
 
 	if (o_proc->prolang == SQLlanguageId)
 	{
-		sql_func: &mut sql_func_data;
+		pub static mut SQL_FUNC_DATA: *mut sql_func = std::ptr::null_mut();
 
 		sql_func = (sql_func_data *) palloc0(sizeof(sql_func_data));
 		o_proc->sql_func = sql_func;
@@ -483,8 +483,8 @@ typedef enum
 
 typedef struct execution_state
 {
-	struct next: &mut execution_state;
-	ExecStatus	status;
+	pub static mut EXECUTION_STATE: *mut struct next = std::ptr::null_mut();
+	pub static mut STATUS: ExecStatus = std::mem::zeroed();
 	bool		setsResult;		// true if this query produces func's result
 	bool		lazyEval;		// true if should fetch one row at a time
 	stmt: &mut PlannedStmt;			// plan for this query
@@ -502,22 +502,22 @@ init_execution_state(queryTree_list: &mut List,
 					 SQLFunctionCachePtr fcache,
 					 bool lazyEvalOK)
 {
-	eslist: &mut List = NIL;
-	lasttages: &mut execution_state = NULL;
-	lc1: &mut ListCell;
+	pub static mut LIST: *mut eslist = NIL;
+	pub static mut EXECUTION_STATE: *mut lasttages = std::ptr::null_mut();
+	pub static mut LIST_CELL: *mut lc1 = std::ptr::null_mut();
 
 	foreach(lc1, queryTree_list)
 	{
 		qtlist: &mut List = lfirst_node(List, lc1);
-		firstes: &mut execution_state = NULL;
-		preves: &mut execution_state = NULL;
-		lc2: &mut ListCell;
+		pub static mut EXECUTION_STATE: *mut firstes = std::ptr::null_mut();
+		pub static mut EXECUTION_STATE: *mut preves = std::ptr::null_mut();
+		pub static mut LIST_CELL: *mut lc2 = std::ptr::null_mut();
 
 		foreach(lc2, qtlist)
 		{
 			queryTree: &mut Query = lfirst_node(Query, lc2);
-			stmt: &mut PlannedStmt;
-			newes: &mut execution_state;
+			pub static mut PLANNED_STMT: *mut stmt = std::ptr::null_mut();
+			pub static mut EXECUTION_STATE: *mut newes = std::ptr::null_mut();
 
 			// Plan the query if needed
 			if (queryTree->commandType == CMD_UTILITY)
@@ -609,7 +609,7 @@ init_execution_state(queryTree_list: &mut List,
 			fcache->lazyEval = lasttages->lazyEval = true;
 	}
 
-	return eslist;
+	pub static mut ESLIST: return = std::mem::zeroed();
 }
 
 fn
@@ -621,7 +621,7 @@ jf_cleanTupType_init_entry(TupleDesc desc,
 						   int attdim,
 						   Oid jf_atttypid)
 {
-	Form_pg_attribute att;
+	pub static mut ATT: Form_pg_attribute = std::mem::zeroed();
 
 	//
 // sanity checks
@@ -690,9 +690,9 @@ jf_cleanTupType_init_entry(TupleDesc desc,
 static SQLFunctionParseInfoPtr
 o_prepare_sql_fn_parse_info(o_proc: &mut OProc, call_expr: &mut Node, Oid inputCollation)
 {
-	SQLFunctionParseInfoPtr pinfo;
-	int			nargs;
-	sql_func: &mut sql_func_data = o_proc->sql_func;
+	pub static mut PINFO: SQLFunctionParseInfoPtr = std::mem::zeroed();
+	pub static mut NARGS: std::os::raw::c_int = 0;
+	pub static mut SQL_FUNC_DATA: *mut sql_func = o_proc->sql_func;
 
 	pinfo = (SQLFunctionParseInfoPtr) palloc0(sizeof(SQLFunctionParseInfo));
 
@@ -709,15 +709,15 @@ o_prepare_sql_fn_parse_info(o_proc: &mut OProc, call_expr: &mut Node, Oid inputC
 	pinfo->nargs = nargs = o_proc->nargs;
 	if (nargs > 0)
 	{
-		argOidVect: &mut Oid;
-		int			argnum;
+		pub static mut OID: *mut argOidVect = std::ptr::null_mut();
+		pub static mut ARGNUM: std::os::raw::c_int = 0;
 
 		argOidVect = (Oid *) palloc(nargs * sizeof(Oid));
 		memcpy(argOidVect, o_proc->argtypes, nargs * sizeof(Oid));
 
 		for (argnum = 0; argnum < nargs; argnum++)
 		{
-			Oid			argtype = argOidVect[argnum];
+			pub static mut ARGTYPE: Oid = argOidVect[argnum];
 
 			if (IsPolymorphicType(argtype))
 			{
@@ -744,7 +744,7 @@ o_prepare_sql_fn_parse_info(o_proc: &mut OProc, call_expr: &mut Node, Oid inputC
 	else
 		pinfo->argnames = NULL;
 
-	return pinfo;
+	pub static mut PINFO: return = std::mem::zeroed();
 }
 
 #if PG_VERSION_NUM >= 180000
@@ -757,8 +757,8 @@ o_prepare_sql_fn_parse_info(o_proc: &mut OProc, call_expr: &mut Node, Oid inputC
 static List *
 get_sql_fn_result_tlist(queryTreeList: &mut List)
 {
-	parse: &mut Query = NULL;
-	lc: &mut ListCell;
+	pub static mut QUERY: *mut parse = std::ptr::null_mut();
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 	foreach(lc, queryTreeList)
 	{
@@ -778,7 +778,7 @@ get_sql_fn_result_tlist(queryTreeList: &mut List)
 			 parse->returningList)
 		return parse->returningList;
 	else
-		return NIL;
+		pub static mut NIL: return = std::mem::zeroed();
 }
 #endif
 
@@ -790,23 +790,23 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 				out_sql_func: &mut sql_func_data, MemoryContext out_sql_func_cxt,
 				List **processed)
 {
-	finfo: &mut FmgrInfo = fcinfo->flinfo;
-	Oid			foid = finfo->fn_oid;
-	MemoryContext fcontext;
-	MemoryContext oldcontext;
-	Oid			rettype;
-	TupleDesc	rettupdesc;
-	HeapTuple	procedureTuple = NULL;
-	Form_pg_proc procedureStruct;
-	SQLFunctionCachePtr fcache;
-	queryTree_list: &mut List = NIL;
-	resulttlist: &mut List;
-	Datum		tmp;
-	bool		isNull;
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	o_proc: &mut OProc;
-	sql_func: &mut sql_func_data = NULL;
+	pub static mut FMGR_INFO: *mut finfo = fcinfo->flinfo;
+	pub static mut FOID: Oid = finfo->fn_oid;
+	pub static mut FCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut RETTYPE: Oid = std::mem::zeroed();
+	pub static mut RETTUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut PROCEDURE_TUPLE: HeapTuple = std::ptr::null_mut();
+	pub static mut PROCEDURE_STRUCT: Form_pg_proc = std::mem::zeroed();
+	pub static mut FCACHE: SQLFunctionCachePtr = std::mem::zeroed();
+	pub static mut LIST: *mut queryTree_list = NIL;
+	pub static mut LIST: *mut resulttlist = std::ptr::null_mut();
+	pub static mut TMP: Datum = std::mem::zeroed();
+	pub static mut IS_NULL: bool = false;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut O_PROC: *mut o_proc = std::ptr::null_mut();
+	pub static mut SQL_FUNC_DATA: *mut sql_func = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_proc = o_proc_cache_search(datoid, fcinfo->flinfo->fn_oid, cur_lsn,
@@ -928,9 +928,9 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		queryTree_list = NIL;
 		if (!isNull)
 		{
-			n: &mut Node;
-			stored_query_list: &mut List;
-			lc: &mut ListCell;
+			pub static mut NODE: *mut n = std::ptr::null_mut();
+			pub static mut LIST: *mut stored_query_list = std::ptr::null_mut();
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 			n = stringToNode(TextDatumGetCString(tmp));
 			if (IsA(n, List))
@@ -941,7 +941,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 			foreach(lc, stored_query_list)
 			{
 				parsetree: &mut Query = lfirst_node(Query, lc);
-				queryTree_sublist: &mut List;
+				pub static mut LIST: *mut queryTree_sublist = std::ptr::null_mut();
 
 				AcquireRewriteLocks(parsetree, true, false);
 				queryTree_sublist = pg_rewrite_query(parsetree);
@@ -950,15 +950,15 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		}
 		else
 		{
-			raw_parsetree_list: &mut List;
-			lc: &mut ListCell;
+			pub static mut LIST: *mut raw_parsetree_list = std::ptr::null_mut();
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 			raw_parsetree_list = pg_parse_query(fcache->src);
 
 			foreach(lc, raw_parsetree_list)
 			{
 				parsetree: &mut RawStmt = lfirst_node(RawStmt, lc);
-				queryTree_sublist: &mut List;
+				pub static mut LIST: *mut queryTree_sublist = std::ptr::null_mut();
 
 				queryTree_sublist = pg_analyze_and_rewrite_params(
 																  parsetree,
@@ -1027,13 +1027,13 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 	{
 		if (o_proc)
 		{
-			int			cleanLength;
-			cleanMap: &mut AttrNumber;
-			slot: &mut TupleTableSlot;
-			int			len;
-			TupleDesc	typeInfo;
-			int			cur_resno = 1;
-			l: &mut ListCell;
+			pub static mut CLEAN_LENGTH: std::os::raw::c_int = 0;
+			pub static mut ATTR_NUMBER: *mut cleanMap = std::ptr::null_mut();
+			pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+			pub static mut LEN: std::os::raw::c_int = 0;
+			pub static mut TYPE_INFO: TupleDesc = std::mem::zeroed();
+			pub static mut CUR_RESNO: std::os::raw::c_int = 1;
+			pub static mut LIST_CELL: *mut l = std::ptr::null_mut();
 
 			fcache->junkFilter = makeNode(JunkFilter);
 			fcache->junkFilter->jf_targetList = sql_func->jf_targetList;
@@ -1076,8 +1076,8 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 			cleanLength = typeInfo->natts;
 			if (cleanLength > 0)
 			{
-				AttrNumber	cleanResno;
-				t: &mut ListCell;
+				pub static mut CLEAN_RESNO: AttrNumber = std::mem::zeroed();
+				pub static mut LIST_CELL: *mut t = std::ptr::null_mut();
 
 				cleanMap = (AttrNumber *) palloc(cleanLength * sizeof(AttrNumber));
 				cleanResno = 0;
@@ -1147,7 +1147,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 
 	if (o_proc)
 	{
-		lastes: &mut execution_state = NULL;
+		pub static mut EXECUTION_STATE: *mut lastes = std::ptr::null_mut();
 		int			i,
 					j;
 
@@ -1155,12 +1155,12 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		fcache->lazyEval = sql_func->lazyEval;
 		for (i = 0; i < sql_func->nnqtlists; i++)
 		{
-			firstes: &mut execution_state = NULL;
-			preves: &mut execution_state = NULL;
+			pub static mut EXECUTION_STATE: *mut firstes = std::ptr::null_mut();
+			pub static mut EXECUTION_STATE: *mut preves = std::ptr::null_mut();
 
 			for (j = 0; j < sql_func->nqtlists[i]; j++)
 			{
-				newes: &mut execution_state;
+				pub static mut EXECUTION_STATE: *mut newes = std::ptr::null_mut();
 
 				newes = (execution_state *) palloc0(sizeof(execution_state));
 				if (preves)
@@ -1212,8 +1212,8 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 					j;
 		l: &mut ListCell,
 				   *lc;
-		int			cur_resno = 1;
-		jf: &mut JunkFilter;
+		pub static mut CUR_RESNO: std::os::raw::c_int = 1;
+		pub static mut JUNK_FILTER: *mut jf = std::ptr::null_mut();
 
 		oldcontext = MemoryContextSwitchTo(out_sql_func_cxt);
 
@@ -1252,7 +1252,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 			foreach(l, out_sql_func->jf_targetList)
 			{
 				tle: &mut TargetEntry = lfirst(l);
-				Form_pg_attribute att;
+				pub static mut ATT: Form_pg_attribute = std::mem::zeroed();
 
 				if (tle->resjunk)
 					continue;
@@ -1273,9 +1273,9 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 		lc = list_head(fcache->func_state);
 		for (i = 0; i < out_sql_func->nnqtlists; i++)
 		{
-			int			len;
-			head: &mut execution_state;
-			cur: &mut execution_state;
+			pub static mut LEN: std::os::raw::c_int = 0;
+			pub static mut EXECUTION_STATE: *mut head = std::ptr::null_mut();
+			pub static mut EXECUTION_STATE: *mut cur = std::ptr::null_mut();
 
 			head = lfirst(lc);
 			cur = head;
@@ -1305,7 +1305,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 fn
 postquel_start(es: &mut execution_state, SQLFunctionCachePtr fcache)
 {
-	dest: &mut DestReceiver;
+	pub static mut DEST_RECEIVER: *mut dest = std::ptr::null_mut();
 
 	Assert(es->qd == NULL);
 
@@ -1315,7 +1315,7 @@ postquel_start(es: &mut execution_state, SQLFunctionCachePtr fcache)
 //
 	if (es->setsResult)
 	{
-		myState: &mut DR_sqlfunction;
+		pub static mut DR_SQLFUNCTION: *mut myState = std::ptr::null_mut();
 
 		dest = CreateDestReceiver(DestSQLFunction);
 		// pass down the needed info to the dest receiver routines
@@ -1349,7 +1349,7 @@ postquel_start(es: &mut execution_state, SQLFunctionCachePtr fcache)
 // AfterTrigger level still active.  We are careful not to select
 // lazyEval mode for any statement that could possibly queue triggers.
 //
-		int			eflags;
+		pub static mut EFLAGS: std::os::raw::c_int = 0;
 
 		if (es->lazyEval)
 			eflags = EXEC_FLAG_SKIP_TRIGGERS;
@@ -1366,7 +1366,7 @@ postquel_start(es: &mut execution_state, SQLFunctionCachePtr fcache)
 static bool
 postquel_getnext(es: &mut execution_state, SQLFunctionCachePtr fcache)
 {
-	bool		result;
+	pub static mut RESULT: bool = false;
 
 	if (es->qd->operation == CMD_UTILITY)
 	{
@@ -1398,7 +1398,7 @@ postquel_getnext(es: &mut execution_state, SQLFunctionCachePtr fcache)
 		result = (count == 0 || es->qd->estate->es_processed == 0);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 // Shut down execution of one execution_state node
@@ -1426,11 +1426,11 @@ fn
 postquel_sub_params(SQLFunctionCachePtr fcache,
 					FunctionCallInfo fcinfo)
 {
-	int			nargs = fcinfo->nargs;
+	pub static mut NARGS: std::os::raw::c_int = fcinfo->nargs;
 
 	if (nargs > 0)
 	{
-		ParamListInfo paramLI;
+		pub static mut PARAM_LI: ParamListInfo = std::mem::zeroed();
 
 		if (fcache->paramLI == NULL)
 		{
@@ -1445,7 +1445,7 @@ postquel_sub_params(SQLFunctionCachePtr fcache,
 
 		for (int i = 0; i < nargs; i++)
 		{
-			prm: &mut ParamExternData = &paramLI->params[i];
+			pub static mut PARAM_EXTERN_DATA: *mut prm = &paramLI->params[i];
 
 			prm->value = fcinfo->args[i].value;
 			prm->isnull = fcinfo->args[i].isnull;
@@ -1468,8 +1468,8 @@ postquel_get_single_result(slot: &mut TupleTableSlot,
 						   SQLFunctionCachePtr fcache,
 						   MemoryContext resultcontext)
 {
-	Datum		value;
-	MemoryContext oldcontext;
+	pub static mut VALUE: Datum = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 
 	//
 // Set up to return the function value.  For pass-by-reference datatypes,
@@ -1499,7 +1499,7 @@ postquel_get_single_result(slot: &mut TupleTableSlot,
 
 	MemoryContextSwitchTo(oldcontext);
 
-	return value;
+	pub static mut VALUE: return = std::mem::zeroed();
 }
 
 //
@@ -1510,8 +1510,8 @@ fn
 ShutdownSQLFunction(Datum arg)
 {
 	SQLFunctionCachePtr fcache = (SQLFunctionCachePtr) DatumGetPointer(arg);
-	es: &mut execution_state;
-	lc: &mut ListCell;
+	pub static mut EXECUTION_STATE: *mut es = std::ptr::null_mut();
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 	foreach(lc, fcache->func_state)
 	{
@@ -1552,18 +1552,18 @@ ShutdownSQLFunction(Datum arg)
 Datum
 o_fmgr_sql(PG_FUNCTION_ARGS)
 {
-	SQLFunctionCachePtr fcache;
-	ErrorContextCallback sqlerrcontext;
-	MemoryContext oldcontext;
-	bool		randomAccess;
-	bool		lazyEvalOK;
-	bool		is_first;
-	bool		pushed_snapshot;
-	es: &mut execution_state;
-	slot: &mut TupleTableSlot;
-	Datum		result;
-	eslist: &mut List;
-	eslc: &mut ListCell;
+	pub static mut FCACHE: SQLFunctionCachePtr = std::mem::zeroed();
+	pub static mut SQLERRCONTEXT: ErrorContextCallback = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut RANDOM_ACCESS: bool = false;
+	pub static mut LAZY_EVAL_OK: bool = false;
+	pub static mut IS_FIRST: bool = false;
+	pub static mut PUSHED_SNAPSHOT: bool = false;
+	pub static mut EXECUTION_STATE: *mut es = std::ptr::null_mut();
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+	pub static mut RESULT: Datum = std::mem::zeroed();
+	pub static mut LIST: *mut eslist = std::ptr::null_mut();
+	pub static mut LIST_CELL: *mut eslc = std::ptr::null_mut();
 
 	//
 // Setup error traceback support for ereport()
@@ -1688,7 +1688,7 @@ o_fmgr_sql(PG_FUNCTION_ARGS)
 	pushed_snapshot = false;
 	while (es)
 	{
-		bool		completed;
+		pub static mut COMPLETED: bool = false;
 
 		if (es->status == F_EXEC_START)
 		{
@@ -1920,7 +1920,7 @@ o_fmgr_sql(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1931,7 +1931,7 @@ sql_exec_error_callback( *arg)
 {
 	flinfo: &mut FmgrInfo = (FmgrInfo *) arg;
 	SQLFunctionCachePtr fcache = (SQLFunctionCachePtr) flinfo->fn_extra;
-	int			syntaxerrposition;
+	pub static mut SYNTAXERRPOSITION: std::os::raw::c_int = 0;
 
 	//
 // We can do nothing useful if init_sql_fcache() didn't get as far as
@@ -1960,9 +1960,9 @@ sql_exec_error_callback( *arg)
 //
 	if (fcache->func_state)
 	{
-		es: &mut execution_state;
-		int			query_num;
-		lc: &mut ListCell;
+		pub static mut EXECUTION_STATE: *mut es = std::ptr::null_mut();
+		pub static mut QUERY_NUM: std::os::raw::c_int = 0;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 		es = NULL;
 		query_num = 1;
@@ -2007,7 +2007,7 @@ sql_exec_error_callback( *arg)
 o_proc_cache_validate_add(Oid datoid, Oid procoid, Oid fncollation,
 						  func_type: &mut char, used_for: &mut char, List **processed)
 {
-	StringInfoData str;
+	pub static mut STR: StringInfoData = std::mem::zeroed();
 
 	initStringInfo(&str);
 	appendStringInfo(&str, " should be used as B-tree %s support function "
@@ -2035,9 +2035,9 @@ o_proc_cache_validate_add(Oid datoid, Oid procoid, Oid fncollation,
 
 o_proc_cache_fill_finfo(finfo: &mut FmgrInfo, Oid procoid, Oid datoid)
 {
-	XLogRecPtr	cur_lsn;
-	o_proc: &mut OProc = NULL;
-	const fbp: &mut FmgrBuiltin;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut O_PROC: *mut o_proc = std::ptr::null_mut();
+	pub static mut FMGR_BUILTIN: *mut const fbp = std::ptr::null_mut();
 
 	memset(finfo, 0, sizeof(FmgrInfo));
 
@@ -2101,19 +2101,19 @@ o_proc_cache_fill_finfo(finfo: &mut FmgrInfo, Oid procoid, Oid datoid)
 HeapTuple
 o_proc_cache_search_htup(TupleDesc tupdesc, Oid procoid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_proc] = {0};
 	bool		nulls[Natts_pg_proc] = {0};
-	o_proc: &mut OProc;
+	pub static mut O_PROC: *mut o_proc = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_proc = o_proc_cache_search(datoid, procoid, cur_lsn, proc_cache->nkeys);
 	if (o_proc)
 	{
-		parameterTypes: &mut oidvector;
-		NameData	procname;
+		pub static mut OIDVECTOR: *mut parameterTypes = std::ptr::null_mut();
+		pub static mut PROCNAME: NameData = std::mem::zeroed();
 
 		parameterTypes = buildoidvector(o_proc->argtypes, o_proc->nargs);
 
@@ -2145,5 +2145,5 @@ o_proc_cache_search_htup(TupleDesc tupdesc, Oid procoid)
 		result = heap_form_tuple(tupdesc, values, nulls);
 		ItemPointerSet(&(result->t_self), 0, FirstOffsetNumber);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }

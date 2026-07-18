@@ -97,8 +97,8 @@ static const PagePoolOps local_ppool_ops = {
 	.ucm_init = local_ucm_init,
 };
 
-int			ppool_run_clock_depth PG_USED_FOR_ASSERTS_ONLY = 0;
-static outer_pool: &mut PagePool PG_USED_FOR_ASSERTS_ONLY = NULL;
+pub static mut PG_USED_FOR_ASSERTS_ONLY: int			ppool_run_clock_depth = 0;
+static mut PG_USED_FOR_ASSERTS_ONLY: *mut outer_pool  PagePool = std::ptr::null_mut();
 
 //
 // Calculates shared memory space needed for a page pool. Be careful,
@@ -107,7 +107,7 @@ static outer_pool: &mut PagePool PG_USED_FOR_ASSERTS_ONLY = NULL;
 Size
 o_ppool_estimate_space(pool: &mut OPagePool, OInMemoryBlkno offset, OInMemoryBlkno size, bool debug)
 {
-	Size		result = 0;
+	pub static mut RESULT: Size = 0;
 
 	if (!debug)
 		Assert(size >= PPOOL_MIN_SIZE);
@@ -123,7 +123,7 @@ o_ppool_estimate_space(pool: &mut OPagePool, OInMemoryBlkno offset, OInMemoryBlk
 	pool->ucmShmemSize = estimate_ucm_space(&pool->ucm, offset, size);
 
 	result += pool->ucmShmemSize;
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -174,7 +174,7 @@ o_ppool_shmem_init(pool: &mut OPagePool, Pointer ptr, bool found)
 fn
 o_ppool_reserve_pages(pool: &mut PagePool, int kind, int count)
 {
-	bool		was_saving;
+	pub static mut WAS_SAVING: bool = false;
 	o_pool: &mut OPagePool = (OPagePool *) pool;
 
 	Assert(!have_locked_pages());
@@ -243,7 +243,7 @@ o_ppool_release_reserved(pool: &mut PagePool, uint32 mask)
 
 ppool_release_all_pages()
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < (int) OPagePoolTypesCount; i++)
 	{
@@ -276,7 +276,7 @@ static OInMemoryBlkno
 o_ppool_alloc_page(pool: &mut PagePool, int kind)
 {
 	o_pool: &mut OPagePool = (OPagePool *) pool;
-	OInMemoryBlkno result;
+	pub static mut RESULT: OInMemoryBlkno = std::mem::zeroed();
 
 	Assert(pool->numPagesReserved[kind] > 0);
 	pool->numPagesReserved[kind]--;
@@ -286,7 +286,7 @@ o_ppool_alloc_page(pool: &mut PagePool, int kind)
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(O_GET_IN_MEMORY_PAGE(result), ORIOLEDB_BLCKSZ);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -339,7 +339,7 @@ o_ppool_free_pages_count(pool: &mut PagePool)
 	uint64		count = pg_atomic_read_u64(o_pool->availablePagesCount);
 
 	if (count & (UINT64CONST(1) << 63))
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	else
 		return (OInMemoryBlkno) count;
 }
@@ -378,16 +378,16 @@ static bool
 o_ppool_run_maintenance(pool: &mut PagePool, bool evict,
 						volatile shutdown_requested: &mut sig_atomic_t)
 {
-	uint64		blkno;
+	pub static mut BLKNO: uint64 = std::mem::zeroed();
 	Size		undoRegularSize = get_reserved_undo_size(UndoLogRegularPageLevel);
 	Size		undoSystemSize = get_reserved_undo_size(UndoLogSystem);
 	bool		haveRetainRegularLoc = undo_type_has_retained_location(UndoLogRegularPageLevel);
 	bool		haveRetainSystemLoc = undo_type_has_retained_location(UndoLogSystem);
 	o_pool: &mut OPagePool = (OPagePool *) pool;
-	uint64		skippedLocalEvictions = 0;
-	uint64		skippedLocalEvictionsLimit;
-	uint64		lastPageEvictSharedCount;
-	bool		exhausted = false;
+	pub static mut SKIPPED_LOCAL_EVICTIONS: uint64 = 0;
+	pub static mut SKIPPED_LOCAL_EVICTIONS_LIMIT: uint64 = std::mem::zeroed();
+	pub static mut LAST_PAGE_EVICT_SHARED_COUNT: uint64 = std::mem::zeroed();
+	pub static mut EXHAUSTED: bool = false;
 
 	blkno = pg_prng_uint64_range(&o_pool->prngSeed,
 								 o_pool->offset,
@@ -566,8 +566,8 @@ local_ppool_alloc_page(pool: &mut PagePool, int kind)
 {
 	local_pool: &mut LocalPagePool = (LocalPagePool *) pool;
 
-	int			start = local_pool->alloc_current_slot;
-	int			i = start;
+	pub static mut START: std::os::raw::c_int = local_pool->alloc_current_slot;
+	pub static mut I: std::os::raw::c_int = start;
 
 	Assert(pool->numPagesReserved[kind] > 0);
 	pool->numPagesReserved[kind]--;
@@ -593,7 +593,7 @@ local_ppool_alloc_page(pool: &mut PagePool, int kind)
 fn
 local_ppool_free_page(pool: &mut PagePool, OInMemoryBlkno blkno, bool haveLock)
 {
-	int			i = blkno & O_BLKNO_MASK;
+	pub static mut I: std::os::raw::c_int = blkno & O_BLKNO_MASK;
 	local_pool: &mut LocalPagePool = (LocalPagePool *) pool;
 
 	pfree(local_ppool_pages[i]);
@@ -688,10 +688,10 @@ local_ppool_run_maintenance(pool: &mut PagePool, bool evict, volatile shutdown_r
 	bool		haveRetainRegularLoc = undo_type_has_retained_location(UndoLogRegularPageLevel);
 	bool		haveRetainSystemLoc = undo_type_has_retained_location(UndoLogSystem);
 	local_pool: &mut LocalPagePool = (LocalPagePool *) pool;
-	bool		merged_or_evicted = false;
-	uint64		skippedLocalEvictions = 0;
-	uint64		skippedLocalEvictionsLimit;
-	bool		exhausted = false;
+	pub static mut MERGED_OR_EVICTED: bool = false;
+	pub static mut SKIPPED_LOCAL_EVICTIONS: uint64 = 0;
+	pub static mut SKIPPED_LOCAL_EVICTIONS_LIMIT: uint64 = std::mem::zeroed();
+	pub static mut EXHAUSTED: bool = false;
 
 	//
 // Shutdown can be requested only from the bgwriter. And bgwriter should
@@ -709,7 +709,7 @@ local_ppool_run_maintenance(pool: &mut PagePool, bool evict, volatile shutdown_r
 
 	while (!merged_or_evicted)
 	{
-		OWalkPageResult result;
+		pub static mut RESULT: OWalkPageResult = std::mem::zeroed();
 
 		CHECK_FOR_INTERRUPTS();
 		if (local_pool->evict_current_slot >= local_pool->size)
@@ -784,7 +784,7 @@ local_ppool_size(pool: &mut PagePool)
 fn
 local_ucm_inc_usage(pool: &mut PagePool, OInMemoryBlkno blkno)
 {
-	int			i = blkno & O_BLKNO_MASK;
+	pub static mut I: std::os::raw::c_int = blkno & O_BLKNO_MASK;
 	local_pool: &mut LocalPagePool = (LocalPagePool *) pool;
 
 	local_pool->usage_count[i]++;
@@ -793,7 +793,7 @@ local_ucm_inc_usage(pool: &mut PagePool, OInMemoryBlkno blkno)
 fn
 local_ucm_init(pool: &mut PagePool, OInMemoryBlkno blkno)
 {
-	int			i = blkno & O_BLKNO_MASK;
+	pub static mut I: std::os::raw::c_int = blkno & O_BLKNO_MASK;
 	local_pool: &mut LocalPagePool = (LocalPagePool *) pool;
 
 	local_pool->usage_count[i] = 1;

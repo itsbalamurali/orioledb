@@ -35,8 +35,8 @@ use pgrx::pg_sys;
 fn btree_page_stopevent_params_internal(desc: &mut BTreeDescr, Page p,
 												 JsonbParseState **state);
 
-unique_locks: &mut LWLockPadded;
-int			num_unique_locks;
+pub static mut LW_LOCK_PADDED: *mut unique_locks = std::ptr::null_mut();
+pub static mut NUM_UNIQUE_LOCKS: std::os::raw::c_int = 0;
 
 
 o_btree_init_unique_lwlocks()
@@ -70,8 +70,8 @@ get_page_children(OInMemoryBlkno blkno, uint32 pageChangeCount,
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	BTreePageItemLocator loc;
-	int			ionum;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut IONUM: std::os::raw::c_int = 0;
 
 retry:
 	lock_page(blkno);
@@ -81,7 +81,7 @@ retry:
 		unlock_page(blkno);
 
 		wait_for_io_completion(ionum);
-		goto retry;
+		pub static mut RETRY: goto = std::mem::zeroed();
 	}
 	*childPagesCount = 0;
 
@@ -92,7 +92,7 @@ retry:
 // do.
 //
 		unlock_page(blkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (!O_PAGE_IS(p, LEAF))
@@ -107,7 +107,7 @@ retry:
 				unlock_page(blkno);
 
 				wait_for_io_completion(ionum);
-				goto retry;
+				pub static mut RETRY: goto = std::mem::zeroed();
 			}
 			else if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 			{
@@ -117,7 +117,7 @@ retry:
 			}
 		}
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -131,7 +131,7 @@ mark_page_pre_cleanup(OInMemoryBlkno blkno, uint32 pageChangeCount)
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS];
 	uint32		childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS];
-	int			childPagesCount;
+	pub static mut CHILD_PAGES_COUNT: std::os::raw::c_int = 0;
 	int			i,
 				ionum;
 
@@ -161,8 +161,8 @@ free_page(pool: &mut PagePool, OInMemoryBlkno blkno, uint32 pageChangeCount)
 {
 	OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS];
 	uint32		childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS];
-	int			childPagesCount;
-	int			i;
+	pub static mut CHILD_PAGES_COUNT: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (!get_page_children(blkno, pageChangeCount,
 						   childPageNumbers, childPageChangeCounts,
@@ -190,7 +190,7 @@ free_page(pool: &mut PagePool, OInMemoryBlkno blkno, uint32 pageChangeCount)
 static inline 
 free_meta_page(pool: &mut PagePool, OInMemoryBlkno metaPageBlkno)
 {
-	meta_page: &mut BTreeMetaPage;
+	pub static mut B_TREE_META_PAGE: *mut meta_page = std::ptr::null_mut();
 	int			i,
 				j;
 
@@ -262,7 +262,7 @@ ItemPointerData
 btree_ctid_get_and_inc(desc: &mut BTreeDescr)
 {
 	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
-	ItemPointerData result;
+	pub static mut RESULT: ItemPointerData = std::mem::zeroed();
 	uint64		ctid = pg_atomic_fetch_add_u64(&metaPageBlkno->ctid, 1);
 
 	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc));
@@ -271,7 +271,7 @@ btree_ctid_get_and_inc(desc: &mut BTreeDescr)
 	ItemPointerSet(&result,
 				   (uint32) (ctid / (MaxOffsetNumber - FirstOffsetNumber)),
 				   (OffsetNumber) (ctid % (MaxOffsetNumber - FirstOffsetNumber) + FirstOffsetNumber));
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -299,10 +299,10 @@ ItemPointerData
 btree_bridge_ctid_get_and_inc(desc: &mut BTreeDescr, overflow: &mut bool)
 {
 	metaPageBlkno: &mut BTreeMetaPage = BTREE_GET_META(desc);
-	ItemPointerData result;
+	pub static mut RESULT: ItemPointerData = std::mem::zeroed();
 	uint64		ctid = pg_atomic_fetch_add_u64(&metaPageBlkno->bridge_ctid, 1);
 
-	BlockNumber max_block_number = MaxBlockNumber;
+	pub static mut MAX_BLOCK_NUMBER: BlockNumber = MaxBlockNumber;
 
 	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc));
 
@@ -314,7 +314,7 @@ btree_bridge_ctid_get_and_inc(desc: &mut BTreeDescr, overflow: &mut bool)
 	ItemPointerSet(&result,
 				   (uint32) (ctid / MaxHeapTuplesPerPage % max_block_number),
 				   (OffsetNumber) (ctid % MaxHeapTuplesPerPage + FirstOffsetNumber));
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static inline OIndexDescr *
@@ -348,14 +348,14 @@ btree_page_stopevent_params_internal(desc: &mut BTreeDescr, Page p,
 	jsonb_push_key(state, "hikey");
 	if (!O_PAGE_IS(p, RIGHTMOST))
 	{
-		OTuple		hikey;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, p);
 		() o_btree_key_to_jsonb(desc, hikey, state);
 	}
 	else
 	{
-		JsonbValue	jval;
+		pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 		jval.type = jbvNull;
 		() pushJsonbValue(state, WJB_VALUE, &jval);
@@ -365,8 +365,8 @@ btree_page_stopevent_params_internal(desc: &mut BTreeDescr, Page p,
 Jsonb *
 btree_page_stopevent_params(desc: &mut BTreeDescr, Page p)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
@@ -375,16 +375,16 @@ btree_page_stopevent_params(desc: &mut BTreeDescr, Page p)
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 Jsonb *
 btree_downlink_stopevent_params(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocator)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
-	internal_ptr: &mut BTreeNonLeafTuphdr;
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut internal_ptr = std::ptr::null_mut();
 
 	internal_ptr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, loc);
 
@@ -399,14 +399,14 @@ btree_downlink_stopevent_params(desc: &mut BTreeDescr, Page p, loc: &mut BTreePa
 	jsonb_push_key(&state, "key");
 	if (BTREE_PAGE_LOCATOR_GET_OFFSET(p, loc) > 0)
 	{
-		OTuple		key;
+		pub static mut KEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_READ_INTERNAL_TUPLE(key, p, loc);
 		() o_btree_key_to_jsonb(desc, key, &state);
 	}
 	else
 	{
-		JsonbValue	jval;
+		pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 		jval.type = jbvNull;
 		() pushJsonbValue(&state, WJB_VALUE, &jval);
@@ -416,5 +416,5 @@ btree_downlink_stopevent_params(desc: &mut BTreeDescr, Page p, loc: &mut BTreePa
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }

@@ -66,8 +66,8 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static recovery_main_retain_ptr: &mut pg_atomic_uint64;
-static recovery_index_next_pos: &mut pg_atomic_uint64;
+static mut PG_ATOMIC_UINT64: *mut recovery_main_retain_ptr = std::ptr::null_mut();
+static mut PG_ATOMIC_UINT64: *mut recovery_index_next_pos = std::ptr::null_mut();
 static OBTreeModifyCallbackAction recovery_delete_primary_callback(descr: &mut BTreeDescr,
 																   OTuple tup, newtup: &mut OTuple,
 																   OXid oxid, OTupleXactInfo xactInfo,
@@ -103,25 +103,25 @@ static XLogRecPtr recovery_get_current_ptr();
 typedef struct
 {
 	// Pointer to the worker queue
-	queue: &mut shm_mq_handle;
+	pub static mut SHM_MQ_HANDLE: *mut queue = std::ptr::null_mut();
 	char		queue_buf[RECOVERY_QUEUE_BUF_SIZE];
-	int			queue_buf_len;
+	pub static mut QUEUE_BUF_LEN: std::os::raw::c_int = 0;
 	// Current oids
-	ORelOids	oids;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
 	// Current oxid
-	OXid		oxid;
+	pub static mut OXID: OXid = std::mem::zeroed();
 	// Current index type
-	OIndexType	type;
+	pub static mut TYPE: OIndexType = std::mem::zeroed();
 	// Handle for the worker
-	handle: &mut BackgroundWorkerHandle;
+	pub static mut BACKGROUND_WORKER_HANDLE: *mut handle = std::ptr::null_mut();
 } RecoveryWorkerState;
 
-static workers_pool: &mut RecoveryWorkerState;
+static mut RECOVERY_WORKER_STATE: *mut workers_pool = std::ptr::null_mut();
 
 typedef struct
 {
 	ORelOids	oids;			// hash table key
-	uint64		position;
+	pub static mut POSITION: uint64 = std::mem::zeroed();
 } RecoveryIdxBuildQueueState;
 
 //
@@ -134,35 +134,35 @@ typedef struct
 	TransactionId xid;			// builtin transaction identifier for joint
 // commit
 
-	bool		needs_wal_flush;
+	pub static mut NEEDS_WAL_FLUSH: bool = false;
 	UndoLocation retain_locs[(int) UndoLogsCount];
 	UndoStackLocations undo_stacks[(int) UndoLogsCount];
-	dlist_head	checkpoint_undo_stacks;
-	CommitSeqNo csn;
-	XLogRecPtr	ptr;
+	pub static mut CHECKPOINT_UNDO_STACKS: dlist_head = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut PTR: XLogRecPtr = std::mem::zeroed();
 
-	bool		in_finished_list;
-	bool		in_joint_commit_list;
+	pub static mut IN_FINISHED_LIST: bool = false;
+	pub static mut IN_JOINT_COMMIT_LIST: bool = false;
 	bool		in_retain_undo_heaps[(int) UndoLogsCount];
-	bool		needs_feedback;
+	pub static mut NEEDS_FEEDBACK: bool = false;
 
-	dlist_node	joint_commit_list_node;
-	dlist_node	finished_list_node;
+	pub static mut JOINT_COMMIT_LIST_NODE: dlist_node = std::mem::zeroed();
+	pub static mut FINISHED_LIST_NODE: dlist_node = std::mem::zeroed();
 	pairingheap_node retain_undo_ph_nodes[(int) UndoLogsCount];
-	pairingheap_node xmin_ph_node;
+	pub static mut XMIN_PH_NODE: pairingheap_node = std::mem::zeroed();
 
 	// is any system tree modified by oxid
-	bool		systree_modified;
+	pub static mut SYSTREE_MODIFIED: bool = false;
 	// is typecache invalidation needed after this transaction
-	bool		invalidate_typcache;
+	pub static mut INVALIDATE_TYPCACHE: bool = false;
 	// is oTablesMetaLock held by transaction
-	bool		o_tables_meta_locked;
+	pub static mut O_TABLES_META_LOCKED: bool = false;
 	// is provided by checkpoint xids file
-	bool		checkpoint_xid;
+	pub static mut CHECKPOINT_XID: bool = false;
 	// is started from wal stream
-	bool		wal_xid;
+	pub static mut WAL_XID: bool = false;
 	// usage map
-	used_by: &mut bool;
+	pub static mut BOOL: *mut used_by = std::ptr::null_mut();
 } RecoveryXidState;
 
 #define RetainUndoNodeGetRecoveryXidState(node, undoType) \
@@ -172,33 +172,33 @@ typedef struct
 
 typedef struct
 {
-	XidRecKind	kind;
-	UndoStackLocations undoStack;
-	dlist_node	node;
+	pub static mut KIND: XidRecKind = std::mem::zeroed();
+	pub static mut UNDO_STACK: UndoStackLocations = std::mem::zeroed();
+	pub static mut NODE: dlist_node = std::mem::zeroed();
 } CheckpointUndoStack;
 
 #define WORKER_UNDO_TEMP_FILE (ORIOLEDB_DATA_DIR"/recovery_worker_%d.undotmp")
 
 typedef struct WorkerUndoTempHeader
 {
-	int			worker_id;
-	uint32		num_transactions;
+	pub static mut WORKER_ID: std::os::raw::c_int = 0;
+	pub static mut NUM_TRANSACTIONS: uint32 = std::mem::zeroed();
 } WorkerUndoTempHeader;
 
 typedef struct WorkerUndoTempEntry
 {
-	OXid		oxid;
-	CommitSeqNo csn;
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 	UndoStackLocations undoStacks[UndoLogsCount];
 	UndoLocation undoRetainLocs[UndoLogsCount];
-	uint32		numCheckpointStacks;
+	pub static mut NUM_CHECKPOINT_STACKS: uint32 = std::mem::zeroed();
 	// How many checkpoint stacks follow
 } WorkerUndoTempEntry;
 
 typedef struct WorkerUndoTempCheckpointStack
 {
-	XidRecKind	kind;
-	UndoStackLocations undoStack;
+	pub static mut KIND: XidRecKind = std::mem::zeroed();
+	pub static mut UNDO_STACK: UndoStackLocations = std::mem::zeroed();
 } WorkerUndoTempCheckpointStack;
 
 PG_FUNCTION_INFO_V1(orioledb_recovery_synchronized);
@@ -218,11 +218,11 @@ retain_undo_pairingheap_cmp(const a: &mut pairingheap_node,
 	const r: &mut RecoveryXidState = RetainUndoNodeGetRecoveryXidState(b, num);
 
 	if (l->retain_locs[num] < r->retain_locs[num])
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 	else if (l->retain_locs[num] > r->retain_locs[num])
 		return -1;
 	else
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -239,20 +239,20 @@ xmin_pairingheap_cmp(const a: &mut pairingheap_node,
 	const r: &mut RecoveryXidState = pairingheap_const_container(RecoveryXidState, xmin_ph_node, b);
 
 	if (l->oxid < r->oxid)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 	else if (l->oxid > r->oxid)
 		return -1;
 	else
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 }
 
 // Current recovery transaction state.
-static cur_recovery_xid_state: &mut RecoveryXidState = NULL;
+static mut RECOVERY_XID_STATE: *mut cur_recovery_xid_state = std::ptr::null_mut();
 
 // Recovery transaction hash for the current process.
-static recovery_xid_state_hash: &mut HTAB = NULL;
+static mut HTAB: *mut recovery_xid_state_hash = std::ptr::null_mut();
 
-static idxbuild_oids_hash: &mut HTAB = NULL;
+static mut HTAB: *mut idxbuild_oids_hash = std::ptr::null_mut();
 
 // Queues of undo retain locations
 static retain_undo_queues: &mut pairingheap[(int) UndoLogsCount] =
@@ -262,29 +262,29 @@ static retain_undo_queues: &mut pairingheap[(int) UndoLogsCount] =
 static int	retain_undo_queue_numbers[(int) UndoLogsCount];
 
 // Queue of xmin's
-static xmin_queue: &mut pairingheap = NULL;
+static mut PAIRINGHEAP: *mut xmin_queue = std::ptr::null_mut();
 
 //
 // List of locally finished transaction, which aren't yet knows as finished
 // for every recovery process.
 //
-static dlist_head finished_list;
+static mut FINISHED_LIST: dlist_head = std::mem::zeroed();
 
 //
 // List of transactions waiting for joint commit with builtin transaction.
 //
-static dlist_head joint_commit_list;
+static mut JOINT_COMMIT_LIST: dlist_head = std::mem::zeroed();
 
 // orioledb checkpoint number from which we start recovery
-static uint32 startup_chkp_num;
+static mut STARTUP_CHKP_NUM: uint32 = std::mem::zeroed();
 
 // is recovery main process has error
-static bool unexpected_worker_detach = false;
+static mut UNEXPECTED_WORKER_DETACH: bool = false;
 
 //
 // True if current process is a recovery process (worker or master).
 //
-static bool iam_recovery = false;
+static mut IAM_RECOVERY: bool = false;
 
 //
 // In-flight oxids that recovery_finish() aborted in memory.  These were left
@@ -295,44 +295,44 @@ static bool iam_recovery = false;
 //
 typedef struct
 {
-	OXid		oxid;
-	TransactionId xid;
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut XID: TransactionId = std::mem::zeroed();
 } RecoveryFinishAbortedOxid;
 
-static recovery_finish_aborted_oxids: &mut RecoveryFinishAbortedOxid = NULL;
-static int	recovery_finish_aborted_count = 0;
-static int	recovery_finish_aborted_capacity = 0;
+static mut RECOVERY_FINISH_ABORTED_OXID: *mut recovery_finish_aborted_oxids = std::ptr::null_mut();
+static mut RECOVERY_FINISH_ABORTED_COUNT: std::os::raw::c_int = 0;
+static mut RECOVERY_FINISH_ABORTED_CAPACITY: std::os::raw::c_int = 0;
 
 //
 // Current orioledb transaction recovery id
 //
-OXid		recovery_oxid = InvalidOXid;
+pub static mut RECOVERY_OXID: OXid = InvalidOXid;
 
 //
 // Full size of a recovery queue.
 //
-uint64		recovery_queue_data_size = 0;
+pub static mut RECOVERY_QUEUE_DATA_SIZE: uint64 = 0;
 
 //
 // The pointer to a first recovery queue.
 //
-Pointer		recovery_first_queue = NULL;
+pub static mut RECOVERY_FIRST_QUEUE: Pointer = std::ptr::null_mut();
 
 //
 // GUC value, number of recovery workers.
 //
-int			recovery_pool_size_guc;
-int			recovery_idx_pool_size_guc;
+pub static mut RECOVERY_POOL_SIZE_GUC: std::os::raw::c_int = 0;
+pub static mut RECOVERY_IDX_POOL_SIZE_GUC: std::os::raw::c_int = 0;
 
 //
 // GUC value, size of a single recovery queue in KB.
 //
-int			recovery_queue_size_guc;
+pub static mut RECOVERY_QUEUE_SIZE_GUC: std::os::raw::c_int = 0;
 
 //
 // Are TOAST trees consistent with primary indices.
 //
-bool		toast_consistent = false;
+pub static mut TOAST_CONSISTENT: bool = false;
 
 //
 // Pending PK->SK fix-ups, populated from XidRecPendingSkFixup records read
@@ -343,17 +343,17 @@ bool		toast_consistent = false;
 //
 typedef struct PendingSkFixup
 {
-	OXid		oxid;
-	UndoLocation undoLocation;
-	struct next: &mut PendingSkFixup;
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut PENDING_SK_FIXUP: *mut struct next = std::ptr::null_mut();
 } PendingSkFixup;
 
-static pending_sk_fixups_head: &mut PendingSkFixup = NULL;
+static mut PENDING_SK_FIXUP: *mut pending_sk_fixups_head = std::ptr::null_mut();
 
 fn
 record_pending_sk_fixup(OXid oxid, UndoLocation undoLocation)
 {
-	entry: &mut PendingSkFixup;
+	pub static mut PENDING_SK_FIXUP: *mut entry = std::ptr::null_mut();
 
 	entry = (PendingSkFixup *) MemoryContextAlloc(TopMemoryContext,
 												  sizeof(*entry));
@@ -373,24 +373,24 @@ record_pending_sk_fixup(OXid oxid, UndoLocation undoLocation)
 fn
 apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 {
-	UndoLocation tuphdrLoc = entry->undoLocation;
-	UndoLocation itemLoc;
+	pub static mut TUPHDR_LOC: UndoLocation = entry->undoLocation;
+	pub static mut ITEM_LOC: UndoLocation = std::mem::zeroed();
 	BTreeModifyUndoStackItem item = {0};
-	LocationIndex oldTupleSize;
-	descr: &mut OTableDescr;
-	primary: &mut OIndexDescr;
-	OBTreeKeyBound pkKey;
-	OTuple		oldTuple;
-	OTuple		newTuple;
-	OFindPageResult findResult;
-	OBTreeFindPageContext context;
-	BTreePageItemLocator pageLoc;
-	Page		pkPage;
-	OTuple		pkOnPage;
-	LocationIndex newTupleLen;
-	newSlot: &mut TupleTableSlot;
-	oldSlot: &mut TupleTableSlot;
-	int			i;
+	pub static mut OLD_TUPLE_SIZE: LocationIndex = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut primary = std::ptr::null_mut();
+	pub static mut PK_KEY: OBTreeKeyBound = std::mem::zeroed();
+	pub static mut OLD_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut NEW_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut FIND_RESULT: OFindPageResult = std::mem::zeroed();
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut PAGE_LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut PK_PAGE: Page = std::mem::zeroed();
+	pub static mut PK_ON_PAGE: OTuple = std::mem::zeroed();
+	pub static mut NEW_TUPLE_LEN: LocationIndex = std::mem::zeroed();
+	pub static mut TUPLE_TABLE_SLOT: *mut newSlot = std::ptr::null_mut();
+	pub static mut TUPLE_TABLE_SLOT: *mut oldSlot = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (!UndoLocationIsValid(tuphdrLoc))
 		return;
@@ -430,7 +430,7 @@ apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 // tableOids back-pointer.
 //
 	{
-		indexDescr: &mut OIndexDescr;
+		pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
 
 		indexDescr = o_fetch_index_descr(item.oids, oIndexPrimary,
 										 false, NULL);
@@ -472,7 +472,7 @@ apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 //
 	if (item.action == BTreeOperationDelete)
 	{
-		OTuple		keyTuple;
+		pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
 
 		// oldTuple currently holds just the PK key.  Build a key bound.
 		keyTuple = oldTuple;
@@ -555,13 +555,13 @@ apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 //
 	for (i = 1; i < descr->nIndices; i++)
 	{
-		sk: &mut OIndexDescr = descr->indices[i];
+		pub static mut O_INDEX_DESCR: *mut sk = descr->indices[i];
 		OBTreeKeyBound oldSkKey,
 					newSkKey;
-		BTreeModifyCallbackInfo cbInfo = nullCallbackInfo;
-		OTuple		nullTup;
-		bool		needDelete = false;
-		bool		needInsert = false;
+		pub static mut CB_INFO: BTreeModifyCallbackInfo = nullCallbackInfo;
+		pub static mut NULL_TUP: OTuple = std::mem::zeroed();
+		pub static mut NEED_DELETE: bool = false;
+		pub static mut NEED_INSERT: bool = false;
 
 		O_TUPLE_SET_NULL(nullTup);
 
@@ -577,7 +577,7 @@ apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 		}
 		else					// UPDATE
 		{
-			int			cmp;
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			tts_orioledb_fill_key_bound(oldSlot, sk, &oldSkKey);
 			tts_orioledb_fill_key_bound(newSlot, sk, &newSkKey);
@@ -607,7 +607,7 @@ apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 		if (needInsert &&
 			o_is_index_predicate_satisfied(sk, newSlot, sk->econtext))
 		{
-			OTuple		newSkTup;
+			pub static mut NEW_SK_TUP: OTuple = std::mem::zeroed();
 
 			newSkTup = tts_orioledb_make_secondary_tuple(newSlot, sk, true);
 			if (o_btree_len(&sk->desc, newSkTup, OTupleLength)
@@ -647,12 +647,12 @@ apply_one_pending_sk_fixup(entry: &mut PendingSkFixup)
 fn
 apply_pending_sk_fixups()
 {
-	entry: &mut PendingSkFixup = pending_sk_fixups_head;
-	OXid		saved_oxid = recovery_oxid;
+	pub static mut PENDING_SK_FIXUP: *mut entry = pending_sk_fixups_head;
+	pub static mut SAVED_OXID: OXid = recovery_oxid;
 
 	while (entry != NULL)
 	{
-		next: &mut PendingSkFixup = entry->next;
+		pub static mut PENDING_SK_FIXUP: *mut next = entry->next;
 
 		recovery_switch_to_oxid(entry->oxid, -1);
 		set_oxid_csn(entry->oxid, COMMITSEQNO_INPROGRESS);
@@ -673,33 +673,33 @@ apply_pending_sk_fixups()
 //
 // Checkpoint requests for flushing undo positions and their completion.
 //
-recovery_undo_loc_flush: &mut RecoveryUndoLocFlush;
+pub static mut RECOVERY_UNDO_LOC_FLUSH: *mut recovery_undo_loc_flush = std::ptr::null_mut();
 
 //
 // The last xmin we received from primary.
 //
-static OXid recovery_xmin = InvalidOXid;
+static mut RECOVERY_XMIN: OXid = InvalidOXid;
 
 //
 // Number of successfully finished recovery workers.
 //
-worker_finish_count: &mut pg_atomic_uint32;
-idx_worker_finish_count: &mut pg_atomic_uint32;
-worker_ptrs_changes: &mut pg_atomic_uint32;
-worker_ptrs: &mut RecoveryWorkerPtrs;
-recovery_ptr: &mut pg_atomic_uint64;
-static recovery_main_retain_ptr: &mut pg_atomic_uint64;
-recovery_finished_list_ptr: &mut pg_atomic_uint64;
-recovery_single_process: &mut bool;
-was_in_recovery: &mut bool;
-after_recovery_cleaned: &mut pg_atomic_uint32;
+pub static mut PG_ATOMIC_UINT32: *mut worker_finish_count = std::ptr::null_mut();
+pub static mut PG_ATOMIC_UINT32: *mut idx_worker_finish_count = std::ptr::null_mut();
+pub static mut PG_ATOMIC_UINT32: *mut worker_ptrs_changes = std::ptr::null_mut();
+pub static mut RECOVERY_WORKER_PTRS: *mut worker_ptrs = std::ptr::null_mut();
+pub static mut PG_ATOMIC_UINT64: *mut recovery_ptr = std::ptr::null_mut();
+static mut PG_ATOMIC_UINT64: *mut recovery_main_retain_ptr = std::ptr::null_mut();
+pub static mut PG_ATOMIC_UINT64: *mut recovery_finished_list_ptr = std::ptr::null_mut();
+pub static mut BOOL: *mut recovery_single_process = std::ptr::null_mut();
+pub static mut BOOL: *mut was_in_recovery = std::ptr::null_mut();
+pub static mut PG_ATOMIC_UINT32: *mut after_recovery_cleaned = std::ptr::null_mut();
 
-static recovery_index_next_pos: &mut pg_atomic_uint64;
-recovery_index_completed_pos: &mut pg_atomic_uint64;
-recovery_index_cv: &mut ConditionVariable;
+static mut PG_ATOMIC_UINT64: *mut recovery_index_next_pos = std::ptr::null_mut();
+pub static mut PG_ATOMIC_UINT64: *mut recovery_index_completed_pos = std::ptr::null_mut();
+pub static mut CONDITION_VARIABLE: *mut recovery_index_cv = std::ptr::null_mut();
 
 // TransactionId for system trees modification for using in recovery
-TransactionId recoveryHeapTransactionId = InvalidTransactionId;
+pub static mut RECOVERY_HEAP_TRANSACTION_ID: TransactionId = InvalidTransactionId;
 
 fn delay_rels_queued_for_idxbuild(ORelOids oids);
 fn delay_if_queued_for_idxbuild();
@@ -742,7 +742,7 @@ fn recovery_send_init(int worker_num);
 Size
 recovery_shmem_needs()
 {
-	Size		size = 0;
+	pub static mut SIZE: Size = 0;
 
 	size = add_size(size, mul_size(CACHELINEALIGN((Size) recovery_queue_size_guc * 1024),
 								   recovery_pool_size_guc + recovery_idx_pool_size_guc));
@@ -760,7 +760,7 @@ recovery_shmem_needs()
 	size = add_size(size, CACHELINEALIGN(sizeof(pg_atomic_uint64)));
 	size = add_size(size, CACHELINEALIGN(sizeof(ConditionVariable)));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 //
@@ -819,7 +819,7 @@ recovery_shmem_init(Pointer ptr, bool found)
 
 	if (!found)
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		recovery_undo_loc_flush->finishRequestCheckpointNumber = 0;
 		recovery_undo_loc_flush->immediateRequestCheckpointNumber = 0;
@@ -868,8 +868,8 @@ fn
 read_xids(int checkpointnum, bool recovery_single, int worker_id)
 {
 	xidFilename: &mut char = psprintf(XID_FILENAME_FORMAT, checkpointnum);
-	File		xidFile;
-	off_t		offset = 0;
+	pub static mut XID_FILE: File = std::mem::zeroed();
+	pub static mut OFFSET: off_t = 0;
 	uint32		count = 0,
 				i;
 
@@ -887,9 +887,9 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 
 	for (i = 0; i < count; i++)
 	{
-		state: &mut RecoveryXidState;
+		pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
 		XidFileRec	xidRec = {0};
-		bool		found;
+		pub static mut FOUND: bool = false;
 
 		if (OFileRead(xidFile, (Pointer) &xidRec,
 					  sizeof(xidRec), offset,
@@ -905,7 +905,7 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 
 		if (!found)
 		{
-			int			j;
+			pub static mut J: std::os::raw::c_int = 0;
 
 			state->xid = InvalidTransactionId;
 			state->needs_wal_flush = false;
@@ -939,9 +939,9 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 		if (worker_id < 0)
 		{
 			curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
-			stack: &mut CheckpointUndoStack;
-			UndoLocation retainUndoLocation;
-			XidRecKind	kind = xidRec.kind;
+			pub static mut CHECKPOINT_UNDO_STACK: *mut stack = std::ptr::null_mut();
+			pub static mut RETAIN_UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+			pub static mut KIND: XidRecKind = xidRec.kind;
 
 			if (kind == XidRecPendingSkFixup)
 			{
@@ -1007,13 +1007,13 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 fn
 apply_xids_branches()
 {
-	state: &mut RecoveryXidState;
-	HASH_SEQ_STATUS hash_seq;
+	pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
+	pub static mut HASH_SEQ: HASH_SEQ_STATUS = std::mem::zeroed();
 
 	hash_seq_init(&hash_seq, recovery_xid_state_hash);
 	while ((state = (RecoveryXidState *) hash_seq_search(&hash_seq)) != NULL)
 	{
-		dlist_iter	iter;
+		pub static mut ITER: dlist_iter = std::mem::zeroed();
 
 		oxid_needs_wal_flush = state->needs_wal_flush;
 		recovery_oxid = state->oxid;
@@ -1033,7 +1033,7 @@ apply_xids_branches()
 			}
 			else
 			{
-				uint64		location PG_USED_FOR_ASSERTS_ONLY;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: uint64		location = std::mem::zeroed();
 
 				Assert(!UndoLocationIsValid(stack->undoStack.location));
 				Assert(!UndoLocationIsValid(stack->undoStack.branchLocation));
@@ -1057,7 +1057,7 @@ apply_xids_branches()
 
 idx_workers_shutdown()
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	workers_send_finish(true);
 	for (i = index_build_first_worker; i <= index_build_last_worker; i++)
@@ -1072,9 +1072,9 @@ idx_workers_shutdown()
 
 o_recovery_start_hook()
 {
-	state: &mut RecoveryWorkerState;
-	int			i;
-	bool		recovery_single;
+	pub static mut RECOVERY_WORKER_STATE: *mut state = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut RECOVERY_SINGLE: bool = false;
 
 	before_shmem_exit(recovery_on_proc_exit, (Datum) -1);
 	recovery_single = *recovery_single_process = IsFatalError();
@@ -1092,7 +1092,7 @@ o_recovery_start_hook()
 
 	if (!recovery_single)
 	{
-		int			finish = recovery_idx_pool_size_guc ? index_build_leader : recovery_last_worker;
+		pub static mut FINISH: std::os::raw::c_int = recovery_idx_pool_size_guc ? index_build_leader : recovery_last_worker;
 
 		workers_pool = palloc0(sizeof(RecoveryWorkerState) * (finish + 1));
 
@@ -1155,7 +1155,7 @@ orioledb_redo(record: &mut XLogReaderState)
 {
 	Pointer		msg_start = (Pointer) XLogRecGetData(record);
 	int			msg_len = XLogRecGetDataLen(record);
-	bool		recovery_single;
+	pub static mut RECOVERY_SINGLE: bool = false;
 
 	Assert((XLogRecGetInfo(record) & ~XLR_INFO_MASK) == ORIOLEDB_XLOG_CONTAINER);
 	recovery_single = *recovery_single_process;
@@ -1163,9 +1163,9 @@ orioledb_redo(record: &mut XLogReaderState)
 	if (unlikely(XLogRecPtrIsValid(replay_until_lsn)))
 	{
 		// Scoped to the lifetime of the Startup process.
-		static bool needs_init = true;
-		static bool is_stop_lsn_active = true;
-		static bool skip_all_future_records = false;
+		static mut NEEDS_INIT: bool = true;
+		static mut IS_STOP_LSN_ACTIVE: bool = true;
+		static mut SKIP_ALL_FUTURE_RECORDS: bool = false;
 
 		// Short circuit: once the flag is set no further work is required
 		if (skip_all_future_records)
@@ -1255,10 +1255,10 @@ orioledb_redo(record: &mut XLogReaderState)
 
 o_recovery_finish_hook(bool cleanup)
 {
-	state: &mut RecoveryWorkerState;
+	pub static mut RECOVERY_WORKER_STATE: *mut state = std::ptr::null_mut();
 	int			i,
 				num_workers = recovery_idx_pool_size_guc ? recovery_pool_size_guc + 1 : recovery_pool_size_guc;
-	bool		recovery_single;
+	pub static mut RECOVERY_SINGLE: bool = false;
 
 	recovery_single = *recovery_single_process;
 
@@ -1307,23 +1307,23 @@ o_recovery_finish_hook(bool cleanup)
 static XLogRecPtr
 get_workers_commit_ptr()
 {
-	static CommitSeqNo prev_ptr = InvalidXLogRecPtr;
-	static uint64 prev_changes = UINT64_MAX;
-	uint64		old_changes;
+	static mut PREV_PTR: CommitSeqNo = InvalidXLogRecPtr;
+	static mut PREV_CHANGES: uint64 = UINT64_MAX;
+	pub static mut OLD_CHANGES: uint64 = std::mem::zeroed();
 
 	// fast check - nothing changed
 	old_changes = pg_atomic_read_u32(worker_ptrs_changes);
 	if (old_changes == prev_changes)
-		return prev_ptr;
+		pub static mut PREV_PTR: return = std::mem::zeroed();
 
 	pg_read_barrier();
 
 	// we need to find a new ptr
 	while (true)
 	{
-		XLogRecPtr	min_ptr;
-		uint64		new_changes;
-		int			i;
+		pub static mut MIN_PTR: XLogRecPtr = std::mem::zeroed();
+		pub static mut NEW_CHANGES: uint64 = std::mem::zeroed();
+		pub static mut I: std::os::raw::c_int = 0;
 
 		min_ptr = pg_atomic_read_u64(&worker_ptrs[0].commitPtr);
 		for (i = 1; i < recovery_pool_size_guc; i++)
@@ -1341,7 +1341,7 @@ get_workers_commit_ptr()
 
 		prev_changes = new_changes;
 		prev_ptr = min_ptr;
-		return prev_ptr;
+		pub static mut PREV_PTR: return = std::mem::zeroed();
 	}
 }
 
@@ -1367,14 +1367,14 @@ recovery_get_effective_replay_ptr()
 				finishedPtr;
 
 	if (!RecoveryInProgress() || *recovery_single_process)
-		return InvalidXLogRecPtr;
+		pub static mut INVALID_X_LOG_REC_PTR: return = std::mem::zeroed();
 
 	ptr = pg_atomic_read_u64(recovery_ptr);
 	finishedPtr = pg_atomic_read_u64(recovery_finished_list_ptr);
 	if (ptr == finishedPtr)
-		return InvalidXLogRecPtr;
+		pub static mut INVALID_X_LOG_REC_PTR: return = std::mem::zeroed();
 	else
-		return finishedPtr;
+		pub static mut FINISHED_PTR: return = std::mem::zeroed();
 }
 
 static WalParseResult
@@ -1388,7 +1388,7 @@ recovery_check_version(const r: &mut WalReaderState)
 		elog(PANIC, "cannot read WAL record of version %u newer than supported %u",
 			 r->container.version, ORIOLEDB_WAL_VERSION);
 
-		return WALPARSE_BAD_VERSION;
+		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
 	}
 
 	//
@@ -1396,16 +1396,16 @@ recovery_check_version(const r: &mut WalReaderState)
 // applying WAL records further.
 //
 	else if (r->container.version < ORIOLEDB_CONTAINER_FLAGS_WAL_VERSION)
-		return WALPARSE_BAD_VERSION;
+		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 static WalParseResult
 recovery_on_container(r: &mut WalReaderState)
 {
 	if (r->container.flags & WAL_CONTAINER_HAS_XACT_INFO)
-		return WALPARSE_STOP;
+		pub static mut WALPARSE_STOP: return = std::mem::zeroed();
 
 	return WALPARSE_EOF;		// Stop parser
 }
@@ -1430,7 +1430,7 @@ orioledb_recovery_stops_before_hook(record: &mut XLogReaderState,
 	Pointer		startPtr = (Pointer) XLogRecGetData(record);
 	Pointer		endPtr = startPtr + XLogRecGetDataLen(record);
 
-	WalParseResult st;
+	pub static mut ST: WalParseResult = std::mem::zeroed();
 
 	WalReaderState r = {
 		.start = startPtr,
@@ -1445,11 +1445,11 @@ orioledb_recovery_stops_before_hook(record: &mut XLogReaderState,
 
 	// Currently we consider ony recovery_target_time
 	if (recoveryTarget != RECOVERY_TARGET_TIME)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	// If for some reason data is empty just exit
 	if (XLogRecGetDataLen(record) == 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	st = wal_parse_container(&r, true);
 
@@ -1466,7 +1466,7 @@ orioledb_recovery_stops_before_hook(record: &mut XLogReaderState,
 			return r.container.xact_info.xactTime >= recoveryTargetTime;
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 static XLogRecPtr
@@ -1481,14 +1481,14 @@ recovery_get_retain_ptr()
 	// we need to find a new ptr
 	while (true)
 	{
-		XLogRecPtr	result;
-		int			i;
+		pub static mut RESULT: XLogRecPtr = std::mem::zeroed();
+		pub static mut I: std::os::raw::c_int = 0;
 
 		result = pg_atomic_read_u64(recovery_main_retain_ptr);
 		for (i = 0; i < recovery_pool_size_guc; i++)
 			result = Min(result, pg_atomic_read_u64(&worker_ptrs[i].retainPtr));
 
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 }
 
@@ -1498,22 +1498,22 @@ recovery_get_retain_ptr()
 bool
 is_recovery_process()
 {
-	return iam_recovery;
+	pub static mut IAM_RECOVERY: return = std::mem::zeroed();
 }
 
 CommitSeqNo
 recovery_map_oxid_csn(OXid oxid, found: &mut bool)
 {
-	state: &mut RecoveryXidState;
+	pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
 
 	state = hash_search(recovery_xid_state_hash, &oxid, HASH_FIND, found);
 	if (*found)
 	{
 		if (!state->wal_xid)
-			return COMMITSEQNO_ABORTED;
+			pub static mut COMMITSEQNO_ABORTED: return = std::mem::zeroed();
 		return state->csn;
 	}
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -1522,9 +1522,9 @@ recovery_map_oxid_csn(OXid oxid, found: &mut bool)
 
 recovery_init(int worker_id)
 {
-	HASHCTL		ctl;
-	state: &mut RecoveryWorkerState;
-	int			i;
+	pub static mut CTL: HASHCTL = std::mem::zeroed();
+	pub static mut RECOVERY_WORKER_STATE: *mut state = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	MemSet(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(OXid);
@@ -1587,7 +1587,7 @@ recovery_init(int worker_id)
 
 	if (worker_id < 0)
 	{
-		HASHCTL		reloid_ctl;
+		pub static mut RELOID_CTL: HASHCTL = std::mem::zeroed();
 
 		MemSet(&reloid_ctl, 0, sizeof(reloid_ctl));
 		reloid_ctl.keysize = sizeof(ORelOids);
@@ -1647,7 +1647,7 @@ walk_checkpoint_stacks(recovery_xid_state: &mut RecoveryXidState, CommitSeqNo cs
 					   SubTransactionId parentSubid,
 					   bool flushUndoPos)
 {
-	dlist_mutable_iter miter;
+	pub static mut MITER: dlist_mutable_iter = std::mem::zeroed();
 
 	oxid_needs_wal_flush = recovery_xid_state->needs_wal_flush;
 	recovery_oxid = recovery_xid_state->oxid;
@@ -1692,9 +1692,9 @@ walk_checkpoint_stacks(recovery_xid_state: &mut RecoveryXidState, CommitSeqNo cs
 recovery_finish(int worker_id)
 {
 	bool		flush_undo_pos = need_flush_undo_pos(worker_id);
-	cur_state: &mut RecoveryXidState;
-	HASH_SEQ_STATUS hash_seq;
-	int			i;
+	pub static mut RECOVERY_XID_STATE: *mut cur_state = std::ptr::null_mut();
+	pub static mut HASH_SEQ: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	delay_if_queued_for_idxbuild();
 
@@ -1847,7 +1847,7 @@ recovery_finish(int worker_id)
 
 o_emit_recovery_finish_rollbacks()
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < recovery_finish_aborted_count; i++)
 	{
@@ -1882,12 +1882,12 @@ o_emit_recovery_finish_rollbacks()
 
 recovery_switch_to_oxid(OXid oxid, int worker_id)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (recovery_oxid != oxid)
 	{
-		cur_state: &mut RecoveryXidState = cur_recovery_xid_state;
-		bool		found;
+		pub static mut RECOVERY_XID_STATE: *mut cur_state = cur_recovery_xid_state;
+		pub static mut FOUND: bool = false;
 
 		if (cur_state)
 		{
@@ -1977,8 +1977,8 @@ recovery_switch_to_oxid(OXid oxid, int worker_id)
 fn
 check_delete_xid_state(state: &mut RecoveryXidState, int worker_id)
 {
-	int			i;
-	bool		in_retain_heaps = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut IN_RETAIN_HEAPS: bool = false;
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		if (state->in_retain_undo_heaps[i])
@@ -1988,8 +1988,8 @@ check_delete_xid_state(state: &mut RecoveryXidState, int worker_id)
 		!state->in_finished_list &&
 		!state->in_joint_commit_list)
 	{
-		OXid		oxid = state->oxid;
-		bool		found;
+		pub static mut OXID: OXid = state->oxid;
+		pub static mut FOUND: bool = false;
 
 		if (state->used_by)
 			pfree(state->used_by);
@@ -2021,8 +2021,8 @@ need_flush_undo_pos(int worker_id)
 fn
 flush_current_undo_stack()
 {
-	XidFileRec	rec;
-	int			i;
+	pub static mut REC: XidFileRec = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	rec.oxid = recovery_oxid;
 	for (i = 0; i < (int) UndoLogsCount; i++)
@@ -2041,9 +2041,9 @@ flush_current_undo_stack()
 recovery_finish_current_oxid(CommitSeqNo csn, XLogRecPtr ptr,
 							 int worker_id, bool sync)
 {
-	OXid		oxid = recovery_oxid;
+	pub static mut OXID: OXid = recovery_oxid;
 	bool		flush_undo_pos = need_flush_undo_pos(worker_id);
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(cur_recovery_xid_state != NULL);
 
@@ -2146,7 +2146,7 @@ recovery_finish_current_oxid(CommitSeqNo csn, XLogRecPtr ptr,
 fn
 checkpoint_rollback_to_savepoint(SubTransactionId parentSubid)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		get_cur_undo_locations(&cur_recovery_xid_state->undo_stacks[i],
@@ -2170,7 +2170,7 @@ recovery_savepoint(SubTransactionId parentSubid, int worker_id)
 
 recovery_rollback_to_savepoint(SubTransactionId parentSubid, int worker_id)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		rollback_to_savepoint((UndoLogType) i, UndoStackTail,
@@ -2189,8 +2189,8 @@ recovery_insert_primary_callback(descr: &mut BTreeDescr,
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) >= o_tuple_get_version(*newtup))
-		return OBTreeCallbackActionUndo;
-	return OBTreeCallbackActionUpdate;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2205,9 +2205,9 @@ recovery_delete_primary_callback(descr: &mut BTreeDescr,
 
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) > o_tuple_get_version(*key))
-		return OBTreeCallbackActionUndo;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 
-	return OBTreeCallbackActionDelete;
+	pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 }
 
 OBTreeModifyCallbackAction
@@ -2219,9 +2219,9 @@ recovery_insert_overwrite_callback(descr: &mut BTreeDescr,
 								   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
-		return OBTreeCallbackActionUndo;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 OBTreeModifyCallbackAction
@@ -2233,9 +2233,9 @@ recovery_delete_overwrite_callback(descr: &mut BTreeDescr,
 								   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
-		return OBTreeCallbackActionUndo;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 
-	return OBTreeCallbackActionDelete;
+	pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2245,7 +2245,7 @@ recovery_insert_systree_callback(descr: &mut BTreeDescr,
 								 UndoLocation location, lock_mode: &mut RowLockMode,
 								 hint: &mut BTreeLocationHint,  *arg)
 {
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 OBTreeModifyCallbackAction
@@ -2258,8 +2258,8 @@ recovery_insert_deleted_primary_callback(descr: &mut BTreeDescr,
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) >= o_tuple_get_version(*newtup))
-		return OBTreeCallbackActionUndo;
-	return OBTreeCallbackActionUpdate;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2275,9 +2275,9 @@ recovery_delete_deleted_primary_callback(descr: &mut BTreeDescr,
 
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 		o_tuple_get_version(tup) > o_tuple_get_version(*key))
-		return OBTreeCallbackActionUndo;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 
-	return OBTreeCallbackActionDelete;
+	pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 }
 
 OBTreeModifyCallbackAction
@@ -2290,9 +2290,9 @@ recovery_insert_deleted_overwrite_callback(descr: &mut BTreeDescr,
 										   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
-		return OBTreeCallbackActionUndo;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2305,9 +2305,9 @@ recovery_delete_deleted_overwrite_callback(descr: &mut BTreeDescr,
 										   hint: &mut BTreeLocationHint,  *arg)
 {
 	if (XACT_INFO_OXID_EQ(xactInfo, oxid))
-		return OBTreeCallbackActionUndo;
+		pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 
-	return OBTreeCallbackActionDelete;
+	pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -2318,7 +2318,7 @@ recovery_insert_deleted_systree_callback(descr: &mut BTreeDescr,
 										 UndoLocation location, lock_mode: &mut RowLockMode,
 										 hint: &mut BTreeLocationHint,  *arg)
 {
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 //
@@ -2328,9 +2328,9 @@ bool
 apply_btree_modify_record(tree: &mut BTreeDescr, RecoveryMsgType type,
 						  OTuple ptr, OXid oxid, CommitSeqNo csn)
 {
-	OBTreeModifyResult modifyResult;
-	BTreeModifyCallbackInfo callbackInfo = nullCallbackInfo;
-	bool		result;
+	pub static mut MODIFY_RESULT: OBTreeModifyResult = std::mem::zeroed();
+	pub static mut CALLBACK_INFO: BTreeModifyCallbackInfo = nullCallbackInfo;
+	pub static mut RESULT: bool = false;
 
 	callbackInfo.arg = &ptr;
 
@@ -2397,18 +2397,18 @@ apply_btree_modify_record(tree: &mut BTreeDescr, RecoveryMsgType type,
 			elog(ERROR, "Wrong recovery record type %d", type);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
 replay_erase_bridge_item(bridge: &mut OIndexDescr, ItemPointer iptr)
 {
-	OBTreeFindPageContext context;
-	OBTreeKeyBound bound;
-	item: &mut OBtreePageFindItem;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
-	OTuple		tuple;
-	Page		p;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut BOUND: OBTreeKeyBound = std::mem::zeroed();
+	pub static mut O_BTREE_PAGE_FIND_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut P: Page = std::mem::zeroed();
 
 	bound.nkeys = 1;
 	bound.n_row_keys = 0;
@@ -2460,7 +2460,7 @@ recovery_rec_insert(desc: &mut BTreeDescr, OTuple tuple, allocated: &mut bool, s
 {
 	*allocated = false;
 	*size = o_btree_len(desc, tuple, OTupleLength);
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 //
@@ -2472,7 +2472,7 @@ recovery_rec_update(desc: &mut BTreeDescr, OTuple tuple, allocated: &mut bool, s
 {
 	*allocated = false;
 	*size = o_btree_len(desc, tuple, OTupleLength);
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 //
@@ -2482,19 +2482,19 @@ recovery_rec_update(desc: &mut BTreeDescr, OTuple tuple, allocated: &mut bool, s
 OTuple
 recovery_rec_delete(desc: &mut BTreeDescr, OTuple tuple, allocated: &mut bool, size: &mut int, char relreplident)
 {
-	OTuple		key;
+	pub static mut KEY: OTuple = std::mem::zeroed();
 
 	if (relreplident == REPLICA_IDENTITY_FULL)
 	{
 		*allocated = false;
 		*size = o_btree_len(desc, tuple, OTupleLength);
-		return tuple;
+		pub static mut TUPLE: return = std::mem::zeroed();
 	}
 	else
 	{
 		key = o_btree_tuple_make_key(desc, tuple, NULL, true, allocated);
 		*size = o_btree_len(desc, key, OKeyLength);
-		return key;
+		pub static mut KEY: return = std::mem::zeroed();
 	}
 }
 
@@ -2507,7 +2507,7 @@ recovery_rec_delete_key(desc: &mut BTreeDescr, OTuple key, allocated: &mut bool,
 {
 	*allocated = false;
 	*size = o_btree_len(desc, key, OKeyLength);
-	return key;
+	pub static mut KEY: return = std::mem::zeroed();
 }
 
 //
@@ -2555,9 +2555,9 @@ orioledb_recovery_synchronized(PG_FUNCTION_ARGS)
 fn
 update_run_xmin()
 {
-	OXid		xmin;
-	int			i;
-	bool		found;
+	pub static mut XMIN: OXid = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut FOUND: bool = false;
 
 	// Leader-only: xmin_queue is allocated only when worker_id < 0.
 	Assert(xmin_queue != NULL);
@@ -2578,7 +2578,7 @@ update_run_xmin()
 //
 	while (!pairingheap_is_empty(xmin_queue))
 	{
-		state: &mut RecoveryXidState;
+		pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
 
 		state = pairingheap_container(RecoveryXidState, xmin_ph_node,
 									  pairingheap_first(xmin_queue));
@@ -2612,10 +2612,10 @@ update_run_xmin()
 // the call and put them back.
 //
 		{
-			OXid		saved_recovery_oxid = recovery_oxid;
-			bool		saved_oxid_needs_wal_flush = oxid_needs_wal_flush;
+			pub static mut SAVED_RECOVERY_OXID: OXid = recovery_oxid;
+			pub static mut SAVED_OXID_NEEDS_WAL_FLUSH: bool = oxid_needs_wal_flush;
 			UndoStackLocations saved_undo_locations[(int) UndoLogsCount];
-			int			j;
+			pub static mut J: std::os::raw::c_int = 0;
 
 			for (j = 0; j < (int) UndoLogsCount; j++)
 				get_cur_undo_locations(&saved_undo_locations[j],
@@ -2661,7 +2661,7 @@ update_run_xmin()
 
 	if (!pairingheap_is_empty(xmin_queue))
 	{
-		state: &mut RecoveryXidState;
+		pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
 
 		state = pairingheap_container(RecoveryXidState, xmin_ph_node,
 									  pairingheap_first(xmin_queue));
@@ -2688,7 +2688,7 @@ update_run_xmin()
 fn
 free_run_xmin()
 {
-	OXid		xmin;
+	pub static mut XMIN: OXid = std::mem::zeroed();
 
 	xmin = pg_atomic_read_u64(&xid_meta->nextXid);
 	pg_atomic_write_u64(&xid_meta->runXmin, xmin);
@@ -2714,10 +2714,10 @@ update_retain_location_with_heap(UndoLogType undoType, int worker_id,
 								 XLogRecPtr recoveryPtr)
 {
 	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
-	state: &mut RecoveryXidState;
+	pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
 
 	if (pairingheap_is_empty(retain_undo_queues[undoType]))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	state = RetainUndoNodeGetRecoveryXidState(pairingheap_first(retain_undo_queues[undoType]), undoType);
 
@@ -2730,11 +2730,11 @@ update_retain_location_with_heap(UndoLogType undoType, int worker_id,
 		pairingheap_remove(retain_undo_queues[undoType], &state->retain_undo_ph_nodes[undoType]);
 		state->in_retain_undo_heaps[undoType] = false;
 		check_delete_xid_state(state, worker_id);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
 	{
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 }
 
@@ -2747,11 +2747,11 @@ update_proc_retain_undo_location(int worker_id)
 {
 	XLogRecPtr	recoveryPtr = InvalidXLogRecPtr,
 				listPtr;
-	state: &mut RecoveryXidState;
-	dlist_mutable_iter miter;
-	int			i;
-	bool		allRetainQueuesEmpty = true;
-	bool		needsFeedback = false;
+	pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
+	pub static mut MITER: dlist_mutable_iter = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut ALL_RETAIN_QUEUES_EMPTY: bool = true;
+	pub static mut NEEDS_FEEDBACK: bool = false;
 
 	if (cur_recovery_xid_state != NULL)
 	{
@@ -2844,7 +2844,7 @@ update_proc_retain_undo_location(int worker_id)
 
 	while (true)
 	{
-		bool		removed = false;
+		pub static mut REMOVED: bool = false;
 
 		allRetainQueuesEmpty = true;
 		for (i = 0; i < (int) UndoLogsCount; i++)
@@ -2868,7 +2868,7 @@ update_proc_retain_undo_location(int worker_id)
 
 		for (i = 0; i < (int) UndoLogsCount; i++)
 		{
-			bool		result;
+			pub static mut RESULT: bool = false;
 
 			result = update_retain_location_with_heap(i, worker_id, recoveryPtr);
 			removed = removed || result;
@@ -2887,13 +2887,13 @@ update_proc_retain_undo_location(int worker_id)
 fn
 recovery_write_to_xids_queue(int worker_id, uint32 requestNumber)
 {
-	HASH_SEQ_STATUS hash_seq;
-	state: &mut RecoveryXidState;
-	int			i;
+	pub static mut HASH_SEQ: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (cur_recovery_xid_state)
 	{
-		cur_state: &mut RecoveryXidState = cur_recovery_xid_state;
+		pub static mut RECOVERY_XID_STATE: *mut cur_state = cur_recovery_xid_state;
 
 		for (i = 0; i < (int) UndoLogsCount; i++)
 		{
@@ -2913,8 +2913,8 @@ recovery_write_to_xids_queue(int worker_id, uint32 requestNumber)
 	hash_seq_init(&hash_seq, recovery_xid_state_hash);
 	while ((state = (RecoveryXidState *) hash_seq_search(&hash_seq)) != NULL)
 	{
-		XidFileRec	rec;
-		dlist_iter	iter;
+		pub static mut REC: XidFileRec = std::mem::zeroed();
+		pub static mut ITER: dlist_iter = std::mem::zeroed();
 
 		if (!COMMITSEQNO_IS_INPROGRESS(state->csn))
 			continue;
@@ -2938,7 +2938,7 @@ recovery_write_to_xids_queue(int worker_id, uint32 requestNumber)
 			rec.undoLocation = stack->undoStack;
 			rec.retainLocation = ((int) stack->kind < (int) UndoLogsCount)
 				? state->retain_locs[(UndoLogType) stack->kind]
-				: InvalidUndoLocation;
+				pub static mut INVALID_UNDO_LOCATION: : = std::mem::zeroed();
 			write_to_xids_queue(&rec);
 		}
 	}
@@ -2952,12 +2952,12 @@ recovery_write_to_xids_queue(int worker_id, uint32 requestNumber)
 fn
 update_undo_loc_flush_completed_number(bool single)
 {
-	uint32		completedNumber;
+	pub static mut COMPLETED_NUMBER: uint32 = std::mem::zeroed();
 
 	completedNumber = recovery_undo_loc_flush->recoveryMainCompletedCheckpointNumber;
 	if (!single)
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		for (i = 0; i < recovery_pool_size_guc; i++)
 			completedNumber = Min(completedNumber, worker_ptrs[i].flushedUndoLocCompletedCheckpointNumber);
@@ -3001,11 +3001,11 @@ update_recovery_undo_loc_flush(bool single, int worker_id)
 fn
 save_state_to_file(int worker_id)
 {
-	filename: &mut char;
-	File		tempFile;
-	WorkerUndoTempHeader header;
-	HASH_SEQ_STATUS hash_seq;
-	state: &mut RecoveryXidState;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut TEMP_FILE: File = std::mem::zeroed();
+	pub static mut HEADER: WorkerUndoTempHeader = std::mem::zeroed();
+	pub static mut HASH_SEQ: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
 	off_t		offset = sizeof(header);
 
 	// Create worker-specific temp file
@@ -3049,8 +3049,8 @@ save_state_to_file(int worker_id)
 	hash_seq_init(&hash_seq, recovery_xid_state_hash);
 	while ((state = hash_seq_search(&hash_seq)) != NULL)
 	{
-		WorkerUndoTempEntry entry;
-		dlist_iter	iter;
+		pub static mut ENTRY: WorkerUndoTempEntry = std::mem::zeroed();
+		pub static mut ITER: dlist_iter = std::mem::zeroed();
 
 		// Save complete transaction state
 		memset(&entry, 0, sizeof(entry));
@@ -3078,7 +3078,7 @@ save_state_to_file(int worker_id)
 			stack: &mut CheckpointUndoStack = dlist_container(CheckpointUndoStack,
 														 node,
 														 iter.cur);
-			WorkerUndoTempCheckpointStack tempStack;
+			pub static mut TEMP_STACK: WorkerUndoTempCheckpointStack = std::mem::zeroed();
 
 			memset(&tempStack, 0, sizeof(tempStack));
 			tempStack.kind = stack->kind;
@@ -3111,8 +3111,8 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 {
 	filename: &mut char = psprintf(WORKER_UNDO_TEMP_FILE, worker_id);
 	File		tempFile = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
-	WorkerUndoTempHeader header;
-	off_t		offset;
+	pub static mut HEADER: WorkerUndoTempHeader = std::mem::zeroed();
+	pub static mut OFFSET: off_t = std::mem::zeroed();
 
 	if (tempFile < 0)
 	{
@@ -3136,7 +3136,7 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 	// Process each transaction entry
 	for (int i = 0; i < header.num_transactions; i++)
 	{
-		WorkerUndoTempEntry entry;
+		pub static mut ENTRY: WorkerUndoTempEntry = std::mem::zeroed();
 
 		// Read main entry
 		if (OFileRead(tempFile, (char *) &entry, sizeof(entry), offset,
@@ -3158,7 +3158,7 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 		// Process main undo stacks (Regular, PageLevel, System)
 		for (int j = 0; j < UndoLogsCount; j++)
 		{
-			XidFileRec	rec;
+			pub static mut REC: XidFileRec = std::mem::zeroed();
 
 			rec.oxid = entry.oxid;
 			rec.kind = (XidRecKind) j;
@@ -3170,8 +3170,8 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 		// Process checkpoint stacks
 		for (int j = 0; j < entry.numCheckpointStacks; j++)
 		{
-			XidFileRec	rec;
-			WorkerUndoTempCheckpointStack stack;
+			pub static mut REC: XidFileRec = std::mem::zeroed();
+			pub static mut STACK: WorkerUndoTempCheckpointStack = std::mem::zeroed();
 
 			if (OFileRead(tempFile, (char *) &stack, sizeof(stack), offset,
 						  WAIT_EVENT_DATA_FILE_READ) != sizeof(stack))
@@ -3187,7 +3187,7 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 			rec.undoLocation = stack.undoStack;
 			rec.retainLocation = ((int) stack.kind < (int) UndoLogsCount)
 				? entry.undoRetainLocs[(UndoLogType) stack.kind]
-				: InvalidUndoLocation;
+				pub static mut INVALID_UNDO_LOCATION: : = std::mem::zeroed();
 			write_to_xids_queue(&rec);
 		}
 	}
@@ -3240,7 +3240,7 @@ o_handle_startup_proc_interrupts_hook()
 fn
 abort_recovery(workers_pool: &mut RecoveryWorkerState, bool send_to_idx_pool)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	int			start,
 				finish;
 
@@ -3278,8 +3278,8 @@ abort_recovery(workers_pool: &mut RecoveryWorkerState, bool send_to_idx_pool)
 fn
 worker_wait_shutdown(worker: &mut RecoveryWorkerState)
 {
-	BgwHandleStatus status;
-	pid_t		not_used;
+	pub static mut STATUS: BgwHandleStatus = std::mem::zeroed();
+	pub static mut NOT_USED: pid_t = std::mem::zeroed();
 
 	Assert(worker != NULL);
 	Assert(worker->handle != NULL);
@@ -3306,7 +3306,7 @@ cleanup_tablespace_old_files(path: &mut char, uint32 chkp_num, bool before_recov
 			   *dbDir;
 	struct file: &mut dirent,
 			   *dbFile;
-	filename: &mut char;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
 	char		ext[5];
 
 	dir = opendir(path);
@@ -3315,9 +3315,9 @@ cleanup_tablespace_old_files(path: &mut char, uint32 chkp_num, bool before_recov
 
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
-		Oid			dbOid;
-		dbDirName: &mut char;
-		bool		fsyncDbDir = false;
+		pub static mut DB_OID: Oid = std::mem::zeroed();
+		pub static mut CHAR: *mut dbDirName = std::ptr::null_mut();
+		pub static mut FSYNC_DB_DIR: bool = false;
 
 		if (sscanf(file->d_name, "%u", &dbOid) != 1)
 			continue;
@@ -3336,7 +3336,7 @@ cleanup_tablespace_old_files(path: &mut char, uint32 chkp_num, bool before_recov
 			uint32		file_reloid,
 						file_chkp,
 						file_segno;
-			bool		cleanup = false;
+			pub static mut CLEANUP: bool = false;
 
 			if (orioledb_s3_mode &&
 				(sscanf(dbFile->d_name, "%10u-%10u",
@@ -3372,8 +3372,8 @@ cleanup_tablespace_old_files(path: &mut char, uint32 chkp_num, bool before_recov
 					}
 					else if (!strcmp(ext, "map"))
 					{
-						uint32		my_chkp_num;
-						bool		found;
+						pub static mut MY_CHKP_NUM: uint32 = std::mem::zeroed();
+						pub static mut FOUND: bool = false;
 
 						my_chkp_num = o_get_latest_chkp_num(dbOid, file_reloid,
 															chkp_num, &found);
@@ -3404,7 +3404,7 @@ cleanup_tablespace_old_files(path: &mut char, uint32 chkp_num, bool before_recov
 					}
 					else if (!strcmp(ext, "map"))
 					{
-						uint32		my_chkp_num;
+						pub static mut MY_CHKP_NUM: uint32 = std::mem::zeroed();
 
 						my_chkp_num = o_get_latest_chkp_num(dbOid, file_reloid,
 															chkp_num, NULL);
@@ -3455,10 +3455,10 @@ cleanup_tablespace_old_files(path: &mut char, uint32 chkp_num, bool before_recov
 
 recovery_cleanup_old_files(uint32 chkp_num, bool before_recovery)
 {
-	dir: &mut DIR;
+	pub static mut DIR: *mut dir = std::ptr::null_mut();
 	char		path[MAXPGPATH];
 	char		targetpath[MAXPGPATH];
-	struct file: &mut dirent;
+	pub static mut DIRENT: *mut struct file = std::ptr::null_mut();
 
 #define PG_TBLSPC "pg_tblspc"
 
@@ -3472,8 +3472,8 @@ recovery_cleanup_old_files(uint32 chkp_num, bool before_recovery)
 	dir = opendir(PG_TBLSPC);
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
-		struct stat st;
-		int			rllen;
+		pub static mut ST: struct stat = std::mem::zeroed();
+		pub static mut RLLEN: std::os::raw::c_int = 0;
 
 		// Skip special stuff
 		if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0)
@@ -3525,13 +3525,13 @@ recovery_cleanup_old_files(uint32 chkp_num, bool before_recovery)
 static OIndexKey *
 o_indices_get_trees(Pointer tuple, tableOids: &mut ORelOids)
 {
-	OIndexChunk chunk;
-	trees: &mut OIndexKey;
+	pub static mut CHUNK: OIndexChunk = std::mem::zeroed();
+	pub static mut O_INDEX_KEY: *mut trees = std::ptr::null_mut();
 
 	memcpy(&chunk, tuple, offsetof(OIndexChunk, data));
 
 	if (chunk.key.chunknum != 0)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	//
 // The serialized OIndex blob starts at OIndex.tableOids (the key fields
@@ -3547,17 +3547,17 @@ o_indices_get_trees(Pointer tuple, tableOids: &mut ORelOids)
 	trees->oids = chunk.key.oids;
 	memcpy(&trees->tablespace, tuple + offsetof(OIndexChunk, data) + (offsetof(OIndex, tablespace) - offsetof(OIndex, tableOids)), sizeof(Oid));
 
-	return trees;
+	pub static mut TREES: return = std::mem::zeroed();
 }
 
 fn
 clean_workers_oids()
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < recovery_pool_size_guc; i++)
 	{
-		state: &mut RecoveryWorkerState = &workers_pool[i];
+		pub static mut RECOVERY_WORKER_STATE: *mut state = &workers_pool[i];
 
 		ORelOidsSetInvalid(state->oids);
 		state->type = oIndexInvalid;
@@ -3571,8 +3571,8 @@ recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 // rebuild
 						  bool isrebuild)
 {
-	RecoveryMsgLeaderIdxBuild msg;
-	state: &mut RecoveryIdxBuildQueueState;
+	pub static mut MSG: RecoveryMsgLeaderIdxBuild = std::mem::zeroed();
+	pub static mut RECOVERY_IDX_BUILD_QUEUE_STATE: *mut state = std::ptr::null_mut();
 
 	Assert(!(*recovery_single_process));
 	Assert(ORelOidsIsValid(oids));
@@ -3606,7 +3606,7 @@ recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 
 recovery_send_worker_oids(dsm_handle seg_handle)
 {
-	RecoveryMsgWorkerIdxBuild msg;
+	pub static mut MSG: RecoveryMsgWorkerIdxBuild = std::mem::zeroed();
 
 	Assert(!(*recovery_single_process));
 
@@ -3624,7 +3624,7 @@ recovery_send_worker_oids(dsm_handle seg_handle)
 fn
 recovery_send_init(int worker_num)
 {
-	RecoveryMsgEmpty msg;
+	pub static mut MSG: RecoveryMsgEmpty = std::mem::zeroed();
 
 	Assert(!(*recovery_single_process));
 
@@ -3652,19 +3652,19 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 
 	if (reachedConsistency && ORelOidsIsValid(oids))
 	{
-		new_o_table: &mut OTable = NULL;
-		old_o_table: &mut OTable = NULL;
-		old_descr: &mut OTableDescr;
-		OIndexNumber ix_num;
-		uint16		nindices;
-		bool		changed_tablespace = false;
+		pub static mut O_TABLE: *mut new_o_table = std::ptr::null_mut();
+		pub static mut O_TABLE: *mut old_o_table = std::ptr::null_mut();
+		pub static mut O_TABLE_DESCR: *mut old_descr = std::ptr::null_mut();
+		pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+		pub static mut NINDICES: uint16 = std::mem::zeroed();
+		pub static mut CHANGED_TABLESPACE: bool = false;
 
 		new_o_table = o_tables_get(oids);
 		Assert(new_o_table);
 
 		if (!OidIsValid(oldRelnode))
 		{
-			uint32		version;
+			pub static mut VERSION: uint32 = std::mem::zeroed();
 
 			// new_o_table->version may be 0
 			if (new_o_table->version == O_TABLE_INVALID_VERSION || new_o_table->version == 0)
@@ -3698,7 +3698,7 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 			changed_tablespace = true;
 		if (new_o_table->nindices > old_o_table->nindices)
 		{
-			OTableDescr tmp_descr;
+			pub static mut TMP_DESCR: OTableDescr = std::mem::zeroed();
 
 			o_fill_tmp_table_descr(&tmp_descr, new_o_table);
 			if (new_o_table->indices[ix_num].type == oIndexPrimary)
@@ -3751,7 +3751,7 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 //
 				if (!*recovery_single_process)
 				{
-					ORelOids	old_oids;
+					pub static mut OLD_OIDS: ORelOids = std::mem::zeroed();
 
 					Assert(new_o_table->nindices == nindices);
 					// Send recovery message to become a leader
@@ -3774,7 +3774,7 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 		{
 			if (old_o_table->indices[ix_num].type == oIndexPrimary)
 			{
-				OTableDescr tmp_descr;
+				pub static mut TMP_DESCR: OTableDescr = std::mem::zeroed();
 
 				o_fill_tmp_table_descr(&tmp_descr, new_o_table);
 				if (tbl_data_exists(&old_o_table->indices[ix_num].oids, old_o_table->indices[ix_num].tablespace))
@@ -3825,9 +3825,9 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 // directly without WAL.  Check primary index oids first, then
 // fall back to table oids.
 //
-			OTableDescr tmp_descr;
-			ORelOids	srcOids;
-			Oid			srcTablespace;
+			pub static mut TMP_DESCR: OTableDescr = std::mem::zeroed();
+			pub static mut SRC_OIDS: ORelOids = std::mem::zeroed();
+			pub static mut SRC_TABLESPACE: Oid = std::mem::zeroed();
 
 			srcOids = old_o_table->has_primary ?
 				old_o_table->indices[PrimaryIndexNumber].oids :
@@ -3867,7 +3867,7 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 		}
 		else
 		{
-			OTableDescr tmp_descr;
+			pub static mut TMP_DESCR: OTableDescr = std::mem::zeroed();
 
 			o_fill_tmp_table_descr(&tmp_descr, new_o_table);
 
@@ -3884,7 +3884,7 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 //
 				if (!*recovery_single_process)
 				{
-					ORelOids	invalid_oids;
+					pub static mut INVALID_OIDS: ORelOids = std::mem::zeroed();
 
 					// Send recovery message to become a leader
 					ORelOidsSetInvalid(invalid_oids);
@@ -3915,14 +3915,14 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 fn
 handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 {
-	src_dbpath: &mut char = NULL;
-	dst_dbpath: &mut char = NULL;
-	dst_prefix: &mut char = NULL;
-	dst_prefix_copy: &mut char = NULL;
-	dstdir: &mut DIR;
-	struct xlde: &mut dirent;
-	evicted: &mut List = NIL;
-	lc: &mut ListCell;
+	pub static mut CHAR: *mut src_dbpath = std::ptr::null_mut();
+	pub static mut CHAR: *mut dst_dbpath = std::ptr::null_mut();
+	pub static mut CHAR: *mut dst_prefix = std::ptr::null_mut();
+	pub static mut CHAR: *mut dst_prefix_copy = std::ptr::null_mut();
+	pub static mut DIR: *mut dstdir = std::ptr::null_mut();
+	pub static mut DIRENT: *mut struct xlde = std::ptr::null_mut();
+	pub static mut LIST: *mut evicted = NIL;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 	//
 // Prepare stage of moving: check destination directory.
@@ -3988,7 +3988,7 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 //
 	foreach(lc, evicted)
 	{
-		evicted_data: &mut EvictedTreeData = NULL;
+		pub static mut EVICTED_TREE_DATA: *mut evicted_data = std::ptr::null_mut();
 		Oid			relnode = lfirst_oid(lc);
 
 		evicted_data = read_evicted_data(dbOid, relnode, true);
@@ -4024,7 +4024,7 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 fn
 invalidate_typcache()
 {
-	SharedInvalidationMessage msg;
+	pub static mut MSG: SharedInvalidationMessage = std::mem::zeroed();
 
 	msg.cc.id = TYPEOID;
 	msg.cc.dbId = InvalidOid;
@@ -4046,12 +4046,12 @@ replay_check_version(const r: &mut WalReaderState)
 	if (r->container.version > ORIOLEDB_WAL_VERSION)
 	{
 		// WAL from future version
-		return WALPARSE_BAD_VERSION;
+		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
 	}
 
 	recoveryHeapTransactionId = InvalidTransactionId;
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 static WalParseResult
@@ -4067,20 +4067,20 @@ replay_on_container(r: &mut WalReaderState)
 		recoveryHeapTransactionId = r->container.xact_info.xid;
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 typedef struct
 {
 	// Input params
-	bool		single;
-	XLogRecPtr	xlogRecPtr;
-	XLogRecPtr	xlogRecEndPtr;
+	pub static mut SINGLE: bool = false;
+	pub static mut XLOG_REC_PTR: XLogRecPtr = std::mem::zeroed();
+	pub static mut XLOG_REC_END_PTR: XLogRecPtr = std::mem::zeroed();
 
 	// Replay state params
-	int			sys_tree_num;
-	descr: &mut OTableDescr;
-	indexDescr: &mut OIndexDescr;
+	pub static mut SYS_TREE_NUM: std::os::raw::c_int = 0;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
 
 } ReplayWalDescCtx;
 
@@ -4127,7 +4127,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 							sync = false,
 							needsFeedback;
 
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				recovery_xmin = Max(recovery_xmin, rec->u.finish.xmin);
 				update_run_xmin();
@@ -4200,7 +4200,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_RELATION:
 			{
-				OIndexType	ix_type = rec->u.relation.treeType;
+				pub static mut IX_TYPE: OIndexType = rec->u.relation.treeType;
 
 				rec->relreplident = REPLICA_IDENTITY_DEFAULT;
 
@@ -4229,10 +4229,10 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 				if (ctx->sys_tree_num == -1 && (ctx->descr || ctx->indexDescr))
 				{
-					prefix: &mut char;
-					db_prefix: &mut char;
-					ORelOids	oids;
-					Oid			tablespace;
+					pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+					pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
+					pub static mut OIDS: ORelOids = std::mem::zeroed();
+					pub static mut TABLESPACE: Oid = std::mem::zeroed();
 
 					if (ctx->descr)
 					{
@@ -4273,7 +4273,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_O_TABLES_META_UNLOCK:
 			{
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				elog(DEBUG3, "[%s] META_UNLOCK for [ %u %u %u; old: %u ] ctx->sys_tree_num %d", __func__,
 					 rec->u.unlock.oids.datoid, rec->u.unlock.oids.reloid, rec->u.unlock.oids.relnode, rec->u.unlock.oldRelnode, ctx->sys_tree_num);
@@ -4295,7 +4295,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_TRUNCATE:
 			{
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				if (!ctx->single)
 					workers_synchronize(xlogPtr, true);
@@ -4317,7 +4317,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_ROLLBACK_TO_SAVEPOINT:
 			{
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				if (!ctx->single)
 				{
@@ -4333,7 +4333,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 				if (ctx->indexDescr == NULL)
 				{
 					// nothing to do here
-					return WALPARSE_OK;
+					pub static mut WALPARSE_OK: return = std::mem::zeroed();
 				}
 
 				if (ctx->single)
@@ -4342,8 +4342,8 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 				}
 				else
 				{
-					uint32		hash;
-					OTuple		tuple;
+					pub static mut HASH: uint32 = std::mem::zeroed();
+					pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 					hash = o_hash_iptr(ctx->indexDescr, &rec->u.bridge_erase.iptr);
 					tuple.formatFlags = 0;
@@ -4359,10 +4359,10 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 		case WAL_REC_DELETE:
 		case WAL_REC_REINSERT:
 			{
-				bool		success;
+				pub static mut SUCCESS: bool = false;
 				OFixedTuple tuple1,
 							tuple2;
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 				uint16		type = recovery_msg_from_wal_record(rec->type);
 				Pointer		sys_tree_oids_ptr = rec->data + sizeof(uint8) + sizeof(OffsetNumber);
 
@@ -4390,8 +4390,8 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 					if (ctx->sys_tree_num == SYS_TREES_O_INDICES && success)
 					{
-						trees: &mut OIndexKey = NULL;
-						ORelOids	tmp_oids;
+						pub static mut O_INDEX_KEY: *mut trees = std::ptr::null_mut();
+						pub static mut TMP_OIDS: ORelOids = std::mem::zeroed();
 
 						if (type == RecoveryMsgTypeDelete)
 						{
@@ -4404,8 +4404,8 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 							trees = o_indices_get_trees(sys_tree_oids_ptr, &tmp_oids);
 							if (trees)
 							{
-								prefix: &mut char;
-								db_prefix: &mut char;
+								pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+								pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 								//
 // Ensure the per-tablespace and per-database
@@ -4450,7 +4450,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 					if (rec->relreplident == REPLICA_IDENTITY_FULL)
 					{
-						bool		allocated;
+						pub static mut ALLOCATED: bool = false;
 
 						//
 // tuple2 (old tuple) representation is full tuple,
@@ -4479,7 +4479,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 					{
 						if (rec->type == WAL_REC_DELETE)
 						{
-							bool		allocated;
+							pub static mut ALLOCATED: bool = false;
 
 							//
 // tuple1 representation is full tuple, not a key.
@@ -4525,7 +4525,7 @@ replay_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 			break;
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 //
@@ -4558,10 +4558,10 @@ replay_container(Pointer startPtr, Pointer endPtr,
 	WalParseResult st = wal_parse_container(&r, true);
 
 	if (st != WALPARSE_OK)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	update_recovery_undo_loc_flush(single, -1);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -4570,13 +4570,13 @@ replay_container(Pointer startPtr, Pointer endPtr,
 
 o_xact_redo_hook(TransactionId xid, XLogRecPtr lsn, bool commit)
 {
-	dlist_mutable_iter miter;
-	bool		single = *recovery_single_process;
+	pub static mut MITER: dlist_mutable_iter = std::mem::zeroed();
+	pub static mut SINGLE: bool = *recovery_single_process;
 
 	dlist_foreach_modify(miter, &joint_commit_list)
 	{
-		state: &mut RecoveryXidState;
-		bool		sync = false;
+		pub static mut RECOVERY_XID_STATE: *mut state = std::ptr::null_mut();
+		pub static mut SYNC: bool = false;
 
 		state = dlist_container(RecoveryXidState, joint_commit_list_node, miter.cur);
 		Assert(state->in_joint_commit_list);
@@ -4624,7 +4624,7 @@ o_xact_redo_hook(TransactionId xid, XLogRecPtr lsn, bool commit)
 fn
 worker_send_msg(int worker_id, Pointer msg, uint64 msg_size)
 {
-	state: &mut RecoveryWorkerState = &workers_pool[worker_id];
+	pub static mut RECOVERY_WORKER_STATE: *mut state = &workers_pool[worker_id];
 
 	Assert(workers_pool);
 	Assert(state);
@@ -4641,8 +4641,8 @@ delay_if_queued_for_idxbuild()
 {
 	while (idxbuild_oids_hash)
 	{
-		HASH_SEQ_STATUS hash_seq;
-		cur: &mut RecoveryIdxBuildQueueState;
+		pub static mut HASH_SEQ: HASH_SEQ_STATUS = std::mem::zeroed();
+		pub static mut RECOVERY_IDX_BUILD_QUEUE_STATE: *mut cur = std::ptr::null_mut();
 
 		//
 // This function might be called by a startup process and by a
@@ -4683,8 +4683,8 @@ delay_if_queued_for_idxbuild()
 fn
 delay_rels_queued_for_idxbuild(ORelOids oids)
 {
-	hash_elem: &mut RecoveryIdxBuildQueueState;
-	bool		found;
+	pub static mut RECOVERY_IDX_BUILD_QUEUE_STATE: *mut hash_elem = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	//
 // Delay modify requests if indexes for the relation are requested to be
@@ -4745,12 +4745,12 @@ worker_send_modify(int worker_id, desc: &mut BTreeDescr,
 				   RecoveryMsgType recType,
 				   OTuple tuple, int tuple_len)
 {
-	header: &mut RecoveryMsgHeader;
-	state: &mut RecoveryWorkerState = &workers_pool[worker_id];
-	Pointer		data;
-	int			max_msg_size;
-	ORelOids	oids;
-	OIndexType	type;
+	pub static mut RECOVERY_MSG_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut RECOVERY_WORKER_STATE: *mut state = &workers_pool[worker_id];
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut MAX_MSG_SIZE: std::os::raw::c_int = 0;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut TYPE: OIndexType = std::mem::zeroed();
 
 	if (!IS_SYS_TREE_OIDS(desc->oids))
 	{
@@ -4848,9 +4848,9 @@ worker_send_modify(int worker_id, desc: &mut BTreeDescr,
 fn
 workers_send_finish(bool send_to_idx_pool)
 {
-	RecoveryMsgEmpty finish_msg;
-	state: &mut RecoveryWorkerState;
-	int			i;
+	pub static mut FINISH_MSG: RecoveryMsgEmpty = std::mem::zeroed();
+	pub static mut RECOVERY_WORKER_STATE: *mut state = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 	int			start,
 				finish;
 
@@ -4886,9 +4886,9 @@ workers_send_finish(bool send_to_idx_pool)
 fn
 workers_send_savepoint(SubTransactionId parentSubId)
 {
-	state: &mut RecoveryWorkerState;
-	RecoveryMsgSavepoint msg;
-	int			i;
+	pub static mut RECOVERY_WORKER_STATE: *mut state = std::ptr::null_mut();
+	pub static mut MSG: RecoveryMsgSavepoint = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(cur_recovery_xid_state);
 
@@ -4921,9 +4921,9 @@ fn
 workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 								   SubTransactionId parentSubId)
 {
-	state: &mut RecoveryWorkerState;
-	RecoveryMsgRollbackToSavepoint msg;
-	int			i;
+	pub static mut RECOVERY_WORKER_STATE: *mut state = std::ptr::null_mut();
+	pub static mut MSG: RecoveryMsgRollbackToSavepoint = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(cur_recovery_xid_state);
 
@@ -4957,9 +4957,9 @@ workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 fn
 workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback, bool commit)
 {
-	state: &mut RecoveryWorkerState;
-	RecoveryMsgOXidPtr oxid_ptr_record;
-	int			i;
+	pub static mut RECOVERY_WORKER_STATE: *mut state = std::ptr::null_mut();
+	pub static mut OXID_PTR_RECORD: RecoveryMsgOXidPtr = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	oxid_ptr_record.header.type = commit ? RecoveryMsgTypeCommit : RecoveryMsgTypeRollback;
 	oxid_ptr_record.oxid = cur_recovery_xid_state->oxid;
@@ -5010,11 +5010,11 @@ workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback, bool commit)
 fn
 workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (send_synchronize)
 	{
-		RecoveryMsgPtr sync_msg;
+		pub static mut SYNC_MSG: RecoveryMsgPtr = std::mem::zeroed();
 
 		sync_msg.header.type = RecoveryMsgTypeSynchronize;
 		sync_msg.ptr = ptr;
@@ -5028,13 +5028,13 @@ workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 
 	for (i = 0; i < recovery_pool_size_guc && !unexpected_worker_detach; i++)
 	{
-		int			j = 0;
+		pub static mut J: std::os::raw::c_int = 0;
 
 		while (pg_atomic_read_u64(&worker_ptrs[i].commitPtr) < ptr &&
 			   workers_pool[i].queue)
 		{
-			BgwHandleStatus status;
-			pid_t		pid;
+			pub static mut STATUS: BgwHandleStatus = std::mem::zeroed();
+			pub static mut PID: pid_t = std::mem::zeroed();
 
 			pg_usleep(10);
 
@@ -5058,8 +5058,8 @@ workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 fn
 workers_notify_toast_consistent()
 {
-	RecoveryMsgEmpty msg;
-	int			i;
+	pub static mut MSG: RecoveryMsgEmpty = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	msg.header.type = RecoveryMsgTypeToastConsistent;
 
@@ -5076,8 +5076,8 @@ workers_notify_toast_consistent()
 fn
 worker_queue_flush(int worker_id)
 {
-	state: &mut RecoveryWorkerState = &workers_pool[worker_id];
-	shm_mq_result result;
+	pub static mut RECOVERY_WORKER_STATE: *mut state = &workers_pool[worker_id];
+	pub static mut RESULT: shm_mq_result = std::mem::zeroed();
 
 	result = shm_mq_send(state->queue, state->queue_buf_len, state->queue_buf, false, true);
 	state->queue_buf_len = 0;
@@ -5102,12 +5102,12 @@ static bool
 apply_sys_tree_modify_record(int sys_tree_num, uint16 type, OTuple tup,
 							 OXid oxid, CommitSeqNo csn)
 {
-	bool		result;
+	pub static mut RESULT: bool = false;
 
 	result = apply_btree_modify_record(get_sys_tree(sys_tree_num),
 									   type, tup, oxid, csn);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -5119,11 +5119,11 @@ apply_sys_tree_modify_record(int sys_tree_num, uint16 type, OTuple tup,
 static inline 
 spread_idx_modify(desc: &mut BTreeDescr, RecoveryMsgType recType, OTuple rec)
 {
-	OTuple		key PG_USED_FOR_ASSERTS_ONLY;
-	uint32		hash;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OTuple		key = std::mem::zeroed();
+	pub static mut HASH: uint32 = std::mem::zeroed();
 	int			key_len,
 				tup_len;
-	bool		key_pfree PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		key_pfree = std::mem::zeroed();
 
 	switch (recType)
 	{
@@ -5160,20 +5160,20 @@ recovery_msg_from_wal_record(WalRecordType rec_type)
 	switch (rec_type)
 	{
 		case WAL_REC_INSERT:
-			return RecoveryMsgTypeInsert;
+			pub static mut RECOVERY_MSG_TYPE_INSERT: return = std::mem::zeroed();
 		case WAL_REC_DELETE:
-			return RecoveryMsgTypeDelete;
+			pub static mut RECOVERY_MSG_TYPE_DELETE: return = std::mem::zeroed();
 		case WAL_REC_UPDATE:
-			return RecoveryMsgTypeUpdate;
+			pub static mut RECOVERY_MSG_TYPE_UPDATE: return = std::mem::zeroed();
 		case WAL_REC_BRIDGE_ERASE:
-			return RecoveryMsgTypeBridgeErase;
+			pub static mut RECOVERY_MSG_TYPE_BRIDGE_ERASE: return = std::mem::zeroed();
 		case WAL_REC_REINSERT:
 
 			//
 // Temporary one for convenience. Splits down to
 // RecoveryMsgTypeInsert + RecoveryMsgTypeDelete
 //
-			return RecoveryMsgTypeReinsert;
+			pub static mut RECOVERY_MSG_TYPE_REINSERT: return = std::mem::zeroed();
 		default:
 			Assert(false);
 			elog(ERROR, "Wrong WAL record modify type %d", rec_type);
@@ -5185,14 +5185,14 @@ static bool
 is_process_running(pid_t pid)
 {
 	if (kill(pid, 0) == 0)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (errno == ESRCH)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	else if (errno == EPERM)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	else
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -5201,8 +5201,8 @@ is_process_running(pid_t pid)
 bool
 check_recovery_workers_finished()
 {
-	int			finish = recovery_idx_pool_size_guc ? index_build_leader : recovery_last_worker;
-	int			i;
+	pub static mut FINISH: std::os::raw::c_int = recovery_idx_pool_size_guc ? index_build_leader : recovery_last_worker;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = recovery_first_worker; i <= finish; i++)
 	{
@@ -5211,8 +5211,8 @@ check_recovery_workers_finished()
 
 		if (receiver && receiver->pid > 0 && is_process_running(receiver->pid))
 		{
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }

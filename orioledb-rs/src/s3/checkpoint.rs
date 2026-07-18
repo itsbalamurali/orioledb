@@ -67,12 +67,12 @@ use pgrx::pg_sys;
 #define SINK_BUFFER_LENGTH			Max(32768, BLCKSZ)
 
 // Was the backup currently in-progress initiated in recovery mode?
-static bool backup_started_in_recovery = false;
+static mut BACKUP_STARTED_IN_RECOVERY: bool = false;
 
 // Total number of checksum failures during base backup.
-static long long int total_checksum_failures;
+static mut TOTAL_CHECKSUM_FAILURES: long long int = std::mem::zeroed();
 
-static S3TaskLocation maxLocation;
+static mut MAX_LOCATION: S3TaskLocation = std::mem::zeroed();
 
 //
 // Definition of one element part of an exclusion list, used for paths part
@@ -82,8 +82,8 @@ static S3TaskLocation maxLocation;
 //
 struct exclude_list_item
 {
-	const name: &mut char;
-	bool		match_prefix;
+	pub static mut CHAR: *mut const name = std::ptr::null_mut();
+	pub static mut MATCH_PREFIX: bool = false;
 };
 
 //
@@ -192,13 +192,13 @@ typedef struct
 
 typedef struct
 {
-	tablespaces: &mut List;
-	smallFileNames: &mut List;
-	smallFileSizes: &mut List;
-	int			smallFilesTotalSize;
-	int			smallFilesNum;
-	checksumState: &mut S3ChecksumState;
-	uint32		chkpNum;
+	pub static mut LIST: *mut tablespaces = std::ptr::null_mut();
+	pub static mut LIST: *mut smallFileNames = std::ptr::null_mut();
+	pub static mut LIST: *mut smallFileSizes = std::ptr::null_mut();
+	pub static mut SMALL_FILES_TOTAL_SIZE: std::os::raw::c_int = 0;
+	pub static mut SMALL_FILES_NUM: std::os::raw::c_int = 0;
+	pub static mut S3_CHECKSUM_STATE: *mut checksumState = std::ptr::null_mut();
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
 } S3BackupState;
 
 #define SMALL_FILE_THRESHOLD		0x10000
@@ -226,13 +226,13 @@ static get_tablespaces: &mut List(StringInfo tblspcmapfile);
 
 s3_perform_backup(int flags, S3TaskLocation maxLocation)
 {
-	uint32		chkpNum = checkpoint_state->lastCheckpointNumber;
-	S3BackupState state;
-	StringInfoData tablespaceMapData;
-	lc: &mut ListCell;
-	newti: &mut tablespaceinfo;
-	fileChecksums: &mut S3FileChecksum;
-	S3TaskLocation location;
+	pub static mut CHKP_NUM: uint32 = checkpoint_state->lastCheckpointNumber;
+	pub static mut STATE: S3BackupState = std::mem::zeroed();
+	pub static mut TABLESPACE_MAP_DATA: StringInfoData = std::mem::zeroed();
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+	pub static mut TABLESPACEINFO: *mut newti = std::ptr::null_mut();
+	pub static mut S3_FILE_CHECKSUM: *mut fileChecksums = std::ptr::null_mut();
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	backup_started_in_recovery = RecoveryInProgress();
 
@@ -271,7 +271,7 @@ s3_perform_backup(int flags, S3TaskLocation maxLocation)
 
 		if (ti->path == NULL)
 		{
-			xidFilename: &mut char;
+			pub static mut CHAR: *mut xidFilename = std::ptr::null_mut();
 
 			// Then the bulk of the files...
 			s3_backup_scan_dir(&state, ".", 1, NULL);
@@ -317,11 +317,11 @@ static int64
 s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 				   int basepathlen, const spcoid: &mut char)
 {
-	dir: &mut DIR;
-	struct de: &mut dirent;
+	pub static mut DIR: *mut dir = std::ptr::null_mut();
+	pub static mut DIRENT: *mut struct de = std::ptr::null_mut();
 	char		pathbuf[MAXPGPATH * 2];
-	struct stat statbuf;
-	int64		size = 0;
+	pub static mut STATBUF: struct stat = std::mem::zeroed();
+	pub static mut SIZE: int64 = 0;
 	const lastDir: &mut char = NULL; // Split last dir from parent path.
 	bool		isDbDir = false;	// Does this directory contain relations?
 
@@ -341,7 +341,7 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 		strspn(lastDir + 1, "0123456789") == strlen(lastDir + 1))
 	{
 		// Part of path that contains the parent directory.
-		int			parentPathLen = lastDir - path;
+		pub static mut PARENT_PATH_LEN: std::os::raw::c_int = lastDir - path;
 
 		//
 // Mark path as a database directory if the parent path is either
@@ -358,12 +358,12 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 	dir = AllocateDir(path);
 	while ((de = ReadDir(dir, path)) != NULL)
 	{
-		int			excludeIdx;
-		bool		excludeFound;
+		pub static mut EXCLUDE_IDX: std::os::raw::c_int = 0;
+		pub static mut EXCLUDE_FOUND: bool = false;
 		ForkNumber	relForkNum; // Type of fork if file is a relation
 #if PG_VERSION_NUM >= 170000
-		unsigned	segno;
-		RelFileNumber relNumber;
+		pub static mut SEGNO: unsigned = std::mem::zeroed();
+		pub static mut REL_NUMBER: RelFileNumber = std::mem::zeroed();
 #else
 		int			relnumchars;	// Chars in filename that are the
 // relnumber
@@ -505,7 +505,7 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 
 		if (excludeFound)
 		{
-			S3TaskLocation location;
+			pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 			location = s3_schedule_empty_dir_write(state->chkpNum, pathbuf);
 			maxLocation = Max(maxLocation, location);
@@ -519,7 +519,7 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 //
 		if (strcmp(pathbuf, "./pg_wal") == 0)
 		{
-			S3TaskLocation location;
+			pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 			location = s3_schedule_empty_dir_write(state->chkpNum, pathbuf);
 			maxLocation = Max(maxLocation, location);
@@ -535,7 +535,7 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 		if (strcmp(path, "./pg_tblspc") == 0 && S_ISLNK(statbuf.st_mode))
 		{
 			char		linkpath[MAXPGPATH];
-			int			rllen;
+			pub static mut RLLEN: std::os::raw::c_int = 0;
 
 			rllen = readlink(pathbuf, linkpath, sizeof(linkpath));
 			if (rllen < 0)
@@ -555,9 +555,9 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 		}
 		else if (S_ISDIR(statbuf.st_mode))
 		{
-			bool		skip_this_dir = false;
-			lc: &mut ListCell;
-			S3TaskLocation location;
+			pub static mut SKIP_THIS_DIR: bool = false;
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+			pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 			location = s3_schedule_empty_dir_write(state->chkpNum, pathbuf);
 			maxLocation = Max(maxLocation, location);
@@ -601,7 +601,7 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 		}
 		else if (S_ISREG(statbuf.st_mode))
 		{
-			S3TaskLocation location;
+			pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 			if (statbuf.st_size < SMALL_FILE_THRESHOLD)
 				location = accumulate_small_file(state, pathbuf, statbuf.st_size);
@@ -614,17 +614,17 @@ s3_backup_scan_dir(state: &mut S3BackupState, const path: &mut char,
 					(errmsg("skipping special file \"%s\"", pathbuf)));
 	}
 	FreeDir(dir);
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 static List *
 get_tablespaces(StringInfo tblspcmapfile)
 {
-	tblspcdir: &mut DIR;
-	struct de: &mut dirent;
-	ti: &mut tablespaceinfo;
-	int			datadirpathlen;
-	tablespaces: &mut List = NIL;
+	pub static mut DIR: *mut tblspcdir = std::ptr::null_mut();
+	pub static mut DIRENT: *mut struct de = std::ptr::null_mut();
+	pub static mut TABLESPACEINFO: *mut ti = std::ptr::null_mut();
+	pub static mut DATADIRPATHLEN: std::os::raw::c_int = 0;
+	pub static mut LIST: *mut tablespaces = NIL;
 
 	//
 // Construct tablespace_map file.
@@ -637,9 +637,9 @@ get_tablespaces(StringInfo tblspcmapfile)
 	{
 		char		fullpath[MAXPGPATH + 10];
 		char		linkpath[MAXPGPATH];
-		relpath: &mut char = NULL;
-		s: &mut char;
-		PGFileType	de_type;
+		pub static mut CHAR: *mut relpath = std::ptr::null_mut();
+		pub static mut CHAR: *mut s = std::ptr::null_mut();
+		pub static mut DE_TYPE: PGFileType = std::mem::zeroed();
 
 		// Skip anything that doesn't look like a tablespace
 		if (strspn(de->d_name, "0123456789") != strlen(de->d_name))
@@ -651,8 +651,8 @@ get_tablespaces(StringInfo tblspcmapfile)
 
 		if (de_type == PGFILETYPE_LNK)
 		{
-			StringInfoData escapedpath;
-			int			rllen;
+			pub static mut ESCAPEDPATH: StringInfoData = std::mem::zeroed();
+			pub static mut RLLEN: std::os::raw::c_int = 0;
 
 			rllen = readlink(fullpath, linkpath, sizeof(linkpath));
 			if (rllen < 0)
@@ -726,7 +726,7 @@ get_tablespaces(StringInfo tblspcmapfile)
 	}
 	FreeDir(tblspcdir);
 
-	return tablespaces;
+	pub static mut TABLESPACES: return = std::mem::zeroed();
 }
 
 fn
@@ -752,15 +752,15 @@ write_data(File file, filename: &mut char, int offset, Pointer ptr, int length)
 static Pointer
 read_small_file(const filename: &mut char, int size)
 {
-	File		file;
-	Pointer		buffer;
-	int			rc;
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut BUFFER: Pointer = std::ptr::null_mut();
+	pub static mut RC: std::os::raw::c_int = 0;
 
 	buffer = (Pointer) palloc(size);
 
 	file = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
 	if (file < 0)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	rc = FileRead(file, buffer, size, 0, WAIT_EVENT_DATA_FILE_READ);
 
@@ -772,7 +772,7 @@ read_small_file(const filename: &mut char, int size)
 
 	FileClose(file);
 
-	return buffer;
+	pub static mut BUFFER: return = std::mem::zeroed();
 }
 
 static S3TaskLocation
@@ -780,13 +780,13 @@ flush_small_files(state: &mut S3BackupState)
 {
 	lc: &mut ListCell,
 			   *lc2;
-	int			totalNamesLen = 0;
-	int			offset = 0;
-	int			nameOffset;
-	int			dataOffset;
-	filename: &mut char;
-	File		file;
-	S3TaskLocation location;
+	pub static mut TOTAL_NAMES_LEN: std::os::raw::c_int = 0;
+	pub static mut OFFSET: std::os::raw::c_int = 0;
+	pub static mut NAME_OFFSET: std::os::raw::c_int = 0;
+	pub static mut DATA_OFFSET: std::os::raw::c_int = 0;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 
 	foreach(lc, state->smallFileNames)
 		totalNamesLen += strlen(lfirst(lc)) + 1;
@@ -849,23 +849,23 @@ flush_small_files(state: &mut S3BackupState)
 	state->smallFilesTotalSize = sizeof(int);
 	state->smallFilesNum++;
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 static S3TaskLocation
 accumulate_small_file(state: &mut S3BackupState, const path: &mut char, int size)
 {
 	int			sizeRequired = 3 * sizeof(int) + strlen(path) + 1 + size;
-	S3TaskLocation location = 0;
-	Pointer		data;
-	uint64		dataSize;
+	pub static mut LOCATION: S3TaskLocation = 0;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut DATA_SIZE: uint64 = std::mem::zeroed();
 
 	// First check if the file changed
 	data = read_file(path, &dataSize);
 
 	if (data != NULL)
 	{
-		entry: &mut S3FileChecksum;
+		pub static mut S3_FILE_CHECKSUM: *mut entry = std::ptr::null_mut();
 
 		if (state->checksumState->fileChecksumsLen == state->checksumState->fileChecksumsMaxLen)
 			flushS3ChecksumState(state->checksumState,
@@ -881,7 +881,7 @@ accumulate_small_file(state: &mut S3BackupState, const path: &mut char, int size
 		if (!entry->changed)
 		{
 			pfree(data);
-			return 0;
+			pub static mut 0: return = std::mem::zeroed();
 		}
 
 		pfree(data);
@@ -896,5 +896,5 @@ accumulate_small_file(state: &mut S3BackupState, const path: &mut char, int size
 	state->smallFileSizes = lappend_int(state->smallFileSizes, size);
 	state->smallFilesTotalSize += sizeRequired;
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }

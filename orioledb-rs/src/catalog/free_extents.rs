@@ -69,21 +69,21 @@ FileExtent
 get_extent(desc: &mut BTreeDescr, uint16 len)
 {
 	metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
-	header: &mut BTreeLeafTuphdr = NULL;
+	pub static mut B_TREE_LEAF_TUPHDR: *mut header = std::ptr::null_mut();
 	FreeTreeTuple tup,
 				deleted_tup,
 			   *cur_tup = NULL;
-	FileExtent	result;
-	OBTreeFindPageContext context;
-	Page		p = NULL;
-	bool		old_enable_stopevents;
+	pub static mut RESULT: FileExtent = std::mem::zeroed();
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut P: Page = std::ptr::null_mut();
+	pub static mut OLD_ENABLE_STOPEVENTS: bool = false;
 	bool		found = false,
 				end = false,
 				modify_result;
-	loc: &mut BTreePageItemLocator;
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = std::ptr::null_mut();
 	len_off_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_LEN_OFF);
 	off_len_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
-	OTuple		tmpTup;
+	pub static mut TMP_TUP: OTuple = std::mem::zeroed();
 
 	Assert(!orioledb_s3_mode);
 
@@ -96,7 +96,7 @@ get_extent(desc: &mut BTreeDescr, uint16 len)
 			result.off = orioledb_device_alloc(desc, len * ORIOLEDB_COMP_BLCKSZ) / ORIOLEDB_COMP_BLCKSZ;
 		else
 			result.off = pg_atomic_fetch_add_u64(&metaPage->datafileLength[0], len);
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	old_enable_stopevents = enable_stopevents;
@@ -114,7 +114,7 @@ get_extent(desc: &mut BTreeDescr, uint16 len)
 	// try to find a free extent
 	while (!found && !end)
 	{
-		OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 		tmpTup.data = (Pointer) &tup;
 		tmpTup.formatFlags = 0;
@@ -151,7 +151,7 @@ get_extent(desc: &mut BTreeDescr, uint16 len)
 			}
 			else
 			{
-				OTuple		hikey;
+				pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_GET_HIKEY(hikey, p);
 				cur_tup = (FreeTreeTuple *) hikey.data;
@@ -181,7 +181,7 @@ get_extent(desc: &mut BTreeDescr, uint16 len)
 		else
 			result.off = pg_atomic_fetch_add_u64(&metaPage->datafileLength[0], len);
 		enable_stopevents = old_enable_stopevents;
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	Assert(p != NULL);
@@ -259,7 +259,7 @@ get_extent(desc: &mut BTreeDescr, uint16 len)
 	result.len = len;
 
 	enable_stopevents = old_enable_stopevents;
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -279,19 +279,19 @@ get_extent(desc: &mut BTreeDescr, uint16 len)
 
 free_extent(desc: &mut BTreeDescr, FileExtent extent)
 {
-	it: &mut BTreeIterator = NULL;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 	FreeTreeTuple tup,
 				right,
 				left,
 			   *cur;
-	bool		old_enable_stopevents = enable_stopevents;
+	pub static mut OLD_ENABLE_STOPEVENTS: bool = enable_stopevents;
 	bool		modify_result,
 				merge_right,
 				merge_left,
 				inserted = false;
 	len_off_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_LEN_OFF);
 	off_len_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
-	OTuple		tmpTup;
+	pub static mut TMP_TUP: OTuple = std::mem::zeroed();
 
 	enable_stopevents = false;
 
@@ -478,16 +478,16 @@ free_extent(desc: &mut BTreeDescr, FileExtent extent)
 
 foreach_free_extent(desc: &mut BTreeDescr, ForEachExtentCallback callback,  *arg)
 {
-	it: &mut BTreeIterator;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 	FreeTreeTuple from,
 				to,
 			   *cur;
-	FileExtent	cur_extent;
-	bool		old_enable_stopevents = enable_stopevents;
+	pub static mut CUR_EXTENT: FileExtent = std::mem::zeroed();
+	pub static mut OLD_ENABLE_STOPEVENTS: bool = enable_stopevents;
 	off_len_tree: &mut BTreeDescr = get_sys_tree(SYS_TREES_EXTENTS_OFF_LEN);
-	OTuple		tmpTup;
-	OTuple		toTup;
-	OTuple		fromTup;
+	pub static mut TMP_TUP: OTuple = std::mem::zeroed();
+	pub static mut TO_TUP: OTuple = std::mem::zeroed();
+	pub static mut FROM_TUP: OTuple = std::mem::zeroed();
 
 	enable_stopevents = false;
 
@@ -548,13 +548,13 @@ foreach_free_extent(desc: &mut BTreeDescr, ForEachExtentCallback callback,  *arg
 
 add_free_extents_from_tmp(desc: &mut BTreeDescr, bool remove)
 {
-	metaPage: &mut BTreeMetaPage;
-	File		file;
-	uint64		file_size;
+	pub static mut B_TREE_META_PAGE: *mut metaPage = std::ptr::null_mut();
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut FILE_SIZE: uint64 = std::mem::zeroed();
 	filename: &mut char,
 				buf[ORIOLEDB_BLCKSZ];
-	uint32		chkp_num;
-	metaLock: &mut LWLock;
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
+	pub static mut LW_LOCK: *mut metaLock = std::ptr::null_mut();
 
 	o_btree_load_shmem(desc);
 	metaPage = BTREE_GET_META(desc);
@@ -591,7 +591,7 @@ add_free_extents_from_tmp(desc: &mut BTreeDescr, bool remove)
 
 		while (true)
 		{
-			cur_off: &mut FileExtent;
+			pub static mut FILE_EXTENT: *mut cur_off = std::ptr::null_mut();
 
 			buf_len = OFileRead(file, buf, ORIOLEDB_BLCKSZ, len, WAIT_EVENT_DATA_FILE_READ);
 
@@ -650,7 +650,7 @@ btree_desc_is_local_temp(desc: &mut BTreeDescr)
 
 local_free_extents_push(desc: &mut BTreeDescr, FileExtent extent)
 {
-	list: &mut BTreeLocalFreeExtents = desc->localFreeExtents;
+	pub static mut B_TREE_LOCAL_FREE_EXTENTS: *mut list = desc->localFreeExtents;
 
 	Assert(btree_desc_is_local_temp(desc));
 	Assert(FileExtentIsValid(extent));
@@ -686,17 +686,17 @@ local_free_extents_push(desc: &mut BTreeDescr, FileExtent extent)
 bool
 local_free_extents_pop(desc: &mut BTreeDescr, uint16 len, extent: &mut FileExtent)
 {
-	list: &mut BTreeLocalFreeExtents = desc->localFreeExtents;
-	int			i;
+	pub static mut B_TREE_LOCAL_FREE_EXTENTS: *mut list = desc->localFreeExtents;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(btree_desc_is_local_temp(desc));
 
 	if (list == NULL || list->size == 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	for (i = 0; i < list->size; i++)
 	{
-		item: &mut FileExtent = &list->items[i];
+		pub static mut FILE_EXTENT: *mut item = &list->items[i];
 
 		if (item->len < len)
 			continue;
@@ -715,10 +715,10 @@ local_free_extents_pop(desc: &mut BTreeDescr, uint16 len, extent: &mut FileExten
 			item->off += len;
 			item->len -= len;
 		}
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -727,7 +727,7 @@ local_free_extents_pop(desc: &mut BTreeDescr, uint16 len, extent: &mut FileExten
 
 local_free_extents_cleanup(desc: &mut BTreeDescr)
 {
-	list: &mut BTreeLocalFreeExtents = desc->localFreeExtents;
+	pub static mut B_TREE_LOCAL_FREE_EXTENTS: *mut list = desc->localFreeExtents;
 
 	if (list == NULL)
 		return;

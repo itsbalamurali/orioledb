@@ -101,8 +101,8 @@ static OXid curOxid = InvalidOXid;	// a 64-bit OrioleDB oxid
 // modulo xid_circular_buffer_size and, after run_xmin advances, may be
 // reused for a different oxid.
 //
-static bool csn_committing_set = false;
-static bool xlog_ptr_committing_set = false;
+static mut CSN_COMMITTING_SET: bool = false;
+static mut XLOG_PTR_COMMITTING_SET: bool = false;
 
 static LogicalXidCtx logicalXidContext = {InvalidTransactionId, false};
 
@@ -120,7 +120,7 @@ clone_logical_xid_ctx()
 
 	Assert(clone);
 	memcpy(clone, &logicalXidContext, sizeof(LogicalXidCtx));
-	return clone;
+	pub static mut CLONE: return = std::mem::zeroed();
 }
 
 Datum
@@ -137,7 +137,7 @@ orioledb_get_current_heap_xid(PG_FUNCTION_ARGS)
 
 static prevLogicalXids: &mut List = NIL; // remember all xids on subxact's chain
 // for correct release
-static xidBuffer: &mut OXidMapItem;
+static mut O_XID_MAP_ITEM: *mut xidBuffer = std::ptr::null_mut();
 
 //
 // Per-page dirty bitmap for xidBuffer.  One bit per ORIOLEDB_BLCKSZ page
@@ -153,11 +153,11 @@ static xidBuffer: &mut OXidMapItem;
 // after checkpoint cleared it) leaves the bit set so the next flush
 // catches the update; the worst case is one redundant page write.
 //
-static xidBufferDirty: &mut pg_atomic_uint32;
+static mut PG_ATOMIC_UINT32: *mut xidBufferDirty = std::ptr::null_mut();
 
-xid_meta: &mut XidMeta;
+pub static mut XID_META: *mut xid_meta = std::ptr::null_mut();
 
-static logicalXidsShmemMap: &mut pg_atomic_uint32;
+static mut PG_ATOMIC_UINT32: *mut logicalXidsShmemMap = std::ptr::null_mut();
 
 // # slots covered by one o_buffers page in the xidmap.
 #define XID_SLOTS_PER_PAGE (ORIOLEDB_BLCKSZ / sizeof(OXidMapItem))
@@ -234,7 +234,7 @@ clear_xid_dirty_range(OXid xmin, OXid xmax)
 				p;
 
 	fullStart = ((xmin + XID_SLOTS_PER_PAGE - 1) / XID_SLOTS_PER_PAGE)
-		* XID_SLOTS_PER_PAGE;
+		pub static mut XID_SLOTS_PER_PAGE: *mut  = std::ptr::null_mut();
 	fullEnd = (xmax / XID_SLOTS_PER_PAGE) * XID_SLOTS_PER_PAGE;
 	for (p = fullStart; p < fullEnd; p += XID_SLOTS_PER_PAGE)
 	{
@@ -273,7 +273,7 @@ fn advance_global_xmin(OXid newXid);
 Size
 oxid_shmem_needs()
 {
-	Size		size;
+	pub static mut SIZE: Size = 0;
 
 	buffersDesc.buffersCount = xid_buffers_count;
 
@@ -286,14 +286,14 @@ oxid_shmem_needs()
 	size = add_size(size, mul_size(logical_xid_buffers_guc,
 								   ORIOLEDB_BLCKSZ));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 #define NLOCKENTS() \
 	mul_size(max_locks_per_xact, add_size(MaxBackends, max_prepared_xacts))
 
-static LockMethodLockHash: &mut HTAB;
-static LockMethodProcLockHash: &mut HTAB;
+static mut HTAB: *mut LockMethodLockHash = std::ptr::null_mut();
+static mut HTAB: *mut LockMethodProcLockHash = std::ptr::null_mut();
 
 //
 // Compute the hash code associated with a PROCLOCKTAG.
@@ -310,8 +310,8 @@ static uint32
 proclock_hash(key: &mut const, Size keysize)
 {
 	const proclocktag: &mut PROCLOCKTAG = (const PROCLOCKTAG *) key;
-	uint32		lockhash;
-	Datum		procptr;
+	pub static mut LOCKHASH: uint32 = std::mem::zeroed();
+	pub static mut PROCPTR: Datum = std::mem::zeroed();
 
 	Assert(keysize == sizeof(PROCLOCKTAG));
 
@@ -328,7 +328,7 @@ proclock_hash(key: &mut const, Size keysize)
 	procptr = PointerGetDatum(proclocktag->myProc);
 	lockhash ^= ((uint32) procptr) << LOG2_NUM_LOCK_PARTITIONS;
 
-	return lockhash;
+	pub static mut LOCKHASH: return = std::mem::zeroed();
 }
 
 //
@@ -337,7 +337,7 @@ proclock_hash(key: &mut const, Size keysize)
 fn
 init_lock_hashes()
 {
-	HASHCTL		info;
+	pub static mut INFO: HASHCTL = std::mem::zeroed();
 	long		init_table_size,
 				max_table_size;
 
@@ -397,7 +397,7 @@ oxid_init_shmem(Pointer ptr, bool found)
 
 	if (!found)
 	{
-		int64		i;
+		pub static mut I: int64 = std::mem::zeroed();
 
 		// xid_meta fields are initialized in checkpoint_shmem_init()
 		SpinLockInit(&xid_meta->xminMutex);
@@ -438,10 +438,10 @@ acquire_logical_xid(isValidHeapXid: &mut bool)
 	TransactionId result,
 				sub;
 	int			itemsCount = logical_xid_buffers_guc * (BLCKSZ / sizeof(pg_atomic_uint32));
-	uint32		divider = itemsCount * 32;
+	pub static mut DIVIDER: uint32 = itemsCount * 32;
 	int			i = MYPROCNUMBER % itemsCount,
 				mynum = 0;
-	int			nloops = 0;
+	pub static mut NLOOPS: std::os::raw::c_int = 0;
 
 	Assert(i >= 0 && i < max_procs);
 
@@ -507,7 +507,7 @@ acquire_logical_xid(isValidHeapXid: &mut bool)
 
 	elog(DEBUG4, "logical xid acquired: %u", result);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
@@ -515,7 +515,7 @@ release_logical_xid(ctx: &mut LogicalXidCtx)
 {
 	uint32		itemsCount = 0,
 				mynum = 0;
-	uint32		value PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: uint32		value = std::mem::zeroed();
 
 	if (ctx)
 	{
@@ -534,8 +534,8 @@ release_logical_xid(ctx: &mut LogicalXidCtx)
 static TransactionId
 acquire_logical_xid_wrapper(isValidHeapXid: &mut bool)
 {
-	TransactionId nextLogicalXid;
-	TransactionId heapXid;
+	pub static mut NEXT_LOGICAL_XID: TransactionId = std::mem::zeroed();
+	pub static mut HEAP_XID: TransactionId = std::mem::zeroed();
 
 	Assert(isValidHeapXid);
 
@@ -553,14 +553,14 @@ acquire_logical_xid_wrapper(isValidHeapXid: &mut bool)
 		}
 	}
 
-	return nextLogicalXid;
+	pub static mut NEXT_LOGICAL_XID: return = std::mem::zeroed();
 }
 
 
 assign_subtransaction_logical_xid()
 {
-	TransactionId nextLogicalXid;
-	bool		isValidHeapXid = false;
+	pub static mut NEXT_LOGICAL_XID: TransactionId = std::mem::zeroed();
+	pub static mut IS_VALID_HEAP_XID: bool = false;
 
 	nextLogicalXid = acquire_logical_xid_wrapper(&isValidHeapXid);
 
@@ -583,8 +583,8 @@ assign_subtransaction_logical_xid()
 fn
 setup_prev_logical_xid_ctx()
 {
-	int			llen = 0;
-	ptr: &mut LogicalXidCtx = NULL;
+	pub static mut LLEN: std::os::raw::c_int = 0;
+	pub static mut LOGICAL_XID_CTX: *mut ptr = std::ptr::null_mut();
 
 	llen = list_length(prevLogicalXids);
 	if (llen > 0)
@@ -610,7 +610,7 @@ oxid_subxact_callback(
 					  SubXactEvent event, SubTransactionId mySubid,
 					  SubTransactionId parentSubid,  *arg)
 {
-	TransactionId heapXid;
+	pub static mut HEAP_XID: TransactionId = std::mem::zeroed();
 
 	switch (event)
 	{
@@ -688,8 +688,8 @@ oxid_subxact_callback(
 
 set_oxid_csn(OXid oxid, CommitSeqNo csn)
 {
-	CommitSeqNo oldCsn;
-	OXid		writeInProgressXmin;
+	pub static mut OLD_CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut WRITE_IN_PROGRESS_XMIN: OXid = std::mem::zeroed();
 
 	oldCsn = pg_atomic_read_u64(&xidBuffer[oxid % xid_circular_buffer_size].csn);
 	pg_read_barrier();
@@ -733,8 +733,8 @@ set_oxid_csn(OXid oxid, CommitSeqNo csn)
 fn
 set_oxid_xlog_ptr_internal(OXid oxid, XLogRecPtr ptr)
 {
-	XLogRecPtr	oldPtr;
-	OXid		writeInProgressXmin;
+	pub static mut OLD_PTR: XLogRecPtr = std::mem::zeroed();
+	pub static mut WRITE_IN_PROGRESS_XMIN: OXid = std::mem::zeroed();
 
 	oldPtr = pg_atomic_read_u64(&xidBuffer[oxid % xid_circular_buffer_size].commitPtr);
 	pg_read_barrier();
@@ -791,7 +791,7 @@ map_oxid(OXid oxid, outCsn: &mut CommitSeqNo, outPtr: &mut XLogRecPtr, bool getR
 
 	if (is_recovery_process() && outCsn)
 	{
-		bool		found;
+		pub static mut FOUND: bool = false;
 
 		*outCsn = recovery_map_oxid_csn(oxid, &found);
 		if (found)
@@ -846,8 +846,8 @@ map_oxid(OXid oxid, outCsn: &mut CommitSeqNo, outPtr: &mut XLogRecPtr, bool getR
 
 clear_rewind_oxid(OXid oxid)
 {
-	XLogRecPtr	xlogPtr;
-	CommitSeqNo csn;
+	pub static mut XLOG_PTR: XLogRecPtr = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	map_oxid(oxid, &csn, &xlogPtr, false);
 // elog(LOG, "csn unset from rewind %lu -> %lu", csn | COMMITSEQNO_RETAINED_FOR_REWIND, csn);
@@ -904,12 +904,12 @@ write_xidsmap(OXid targetXmax)
 	for (pageOxid = xmin; pageOxid < xmax;)
 	{
 		OXid		pageBase = pageOxid - (pageOxid % XID_SLOTS_PER_PAGE);
-		OXid		writeStart = pageOxid;
+		pub static mut WRITE_START: OXid = pageOxid;
 		OXid		writeEnd = Min(pageBase + XID_SLOTS_PER_PAGE, xmax);
 		uint32		page = XID_BUFFER_PAGE_INDEX(pageOxid);
 		bool		isFull = (writeStart == pageBase &&
 							  writeEnd == pageBase + XID_SLOTS_PER_PAGE);
-		bool		dirty;
+		pub static mut DIRTY: bool = false;
 
 		//
 // Drain this page's slots into the local buffer, resetting the ring
@@ -919,7 +919,7 @@ write_xidsmap(OXid targetXmax)
 //
 		for (oxid = writeStart; oxid < writeEnd; oxid++)
 		{
-			Size		idx = oxid % xid_circular_buffer_size;
+			pub static mut IDX: Size = oxid % xid_circular_buffer_size;
 
 			pg_atomic_write_u64(&buffer[oxid % bufferLength].csn,
 								pg_atomic_exchange_u64(&xidBuffer[idx].csn,
@@ -999,14 +999,14 @@ flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
 
 	alignedXmin = xmin - (xmin % XID_SLOTS_PER_PAGE);
 	alignedXmax = ((xmax + XID_SLOTS_PER_PAGE - 1) / XID_SLOTS_PER_PAGE)
-		* XID_SLOTS_PER_PAGE;
+		pub static mut XID_SLOTS_PER_PAGE: *mut  = std::ptr::null_mut();
 	if (alignedXmax - alignedXmin > xid_circular_buffer_size)
 		alignedXmax = alignedXmin + xid_circular_buffer_size;
 
 	pageOxid = alignedXmin;
 	while (pageOxid < alignedXmax)
 	{
-		int			processed;
+		pub static mut PROCESSED: std::os::raw::c_int = 0;
 
 		LWLockAcquire(&xid_meta->xidMapWriteLock, LW_EXCLUSIVE);
 
@@ -1015,7 +1015,7 @@ flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
 			 processed++, pageOxid += XID_SLOTS_PER_PAGE)
 		{
 			uint32		page = XID_BUFFER_PAGE_INDEX(pageOxid);
-			OXid		slot;
+			pub static mut SLOT: OXid = std::mem::zeroed();
 
 			if (!test_clear_xid_buffer_page_dirty(page))
 				continue;
@@ -1039,8 +1039,8 @@ flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
 //
 			for (slot = 0; slot < XID_SLOTS_PER_PAGE; slot++)
 			{
-				OXid		slotOxid = pageOxid + slot;
-				Size		idx = slotOxid % xid_circular_buffer_size;
+				pub static mut SLOT_OXID: OXid = pageOxid + slot;
+				pub static mut IDX: Size = slotOxid % xid_circular_buffer_size;
 
 				pg_atomic_write_u64(&buffer[slot].csn,
 									pg_atomic_read_u64(&xidBuffer[idx].csn));
@@ -1080,16 +1080,16 @@ fsync_xidmap_range(OXid xmin, OXid xmax, uint32 wait_event_info)
 bool
 wait_for_oxid(OXid oxid, bool errorOk)
 {
-	int			procnum;
-	CommitSeqNo csn;
-	vxidElem: &mut XidVXidMapElement;
-	VirtualTransactionId vxid;
-	bool		result;
+	pub static mut PROCNUM: std::os::raw::c_int = 0;
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut XID_V_XID_MAP_ELEMENT: *mut vxidElem = std::ptr::null_mut();
+	pub static mut VXID: VirtualTransactionId = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 
 	map_oxid(oxid, &csn, NULL, false);
 
 	if (!COMMITSEQNO_IS_SPECIAL(csn))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	procnum = COMMITSEQNO_GET_PROCNUM(csn);
 	vxidElem = &oProcData[procnum].vxids[COMMITSEQNO_GET_LEVEL(csn)];
@@ -1103,20 +1103,20 @@ wait_for_oxid(OXid oxid, bool errorOk)
 // If transaction isn't already present in its process map, then it
 // must be concurrently gone.
 //
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	if (vxid.BACKENDID < 0 || !VirtualTransactionIdIsValid(vxid))
 	{
 		Assert(errorOk);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	GET_CUR_PROCDATA()->waitingForOxid = true;
 	result = VirtualXactLock(vxid, true);
 	GET_CUR_PROCDATA()->waitingForOxid = false;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1127,11 +1127,11 @@ wait_for_oxid(OXid oxid, bool errorOk)
 
 oxid_notify(OXid oxid)
 {
-	proc: &mut PGPROC;
-	LOCKTAG		tag;
-	CommitSeqNo csn;
-	VirtualTransactionId vxid;
-	int			procnum;
+	pub static mut PGPROC: *mut proc = std::ptr::null_mut();
+	pub static mut TAG: LOCKTAG = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut VXID: VirtualTransactionId = std::mem::zeroed();
+	pub static mut PROCNUM: std::os::raw::c_int = 0;
 
 	map_oxid(oxid, &csn, NULL, false);
 
@@ -1187,8 +1187,8 @@ oxid_notify(OXid oxid)
 static inline uint32
 ProcLockHashCode(const proclocktag: &mut PROCLOCKTAG, uint32 hashcode)
 {
-	uint32		lockhash = hashcode;
-	Datum		procptr;
+	pub static mut LOCKHASH: uint32 = hashcode;
+	pub static mut PROCPTR: Datum = std::mem::zeroed();
 
 	//
 // This must match proclock_hash()!
@@ -1196,7 +1196,7 @@ ProcLockHashCode(const proclocktag: &mut PROCLOCKTAG, uint32 hashcode)
 	procptr = PointerGetDatum(proclocktag->myProc);
 	lockhash ^= ((uint32) procptr) << LOG2_NUM_LOCK_PARTITIONS;
 
-	return lockhash;
+	pub static mut LOCKHASH: return = std::mem::zeroed();
 }
 
 //
@@ -1205,19 +1205,19 @@ ProcLockHashCode(const proclocktag: &mut PROCLOCKTAG, uint32 hashcode)
 
 oxid_notify_all()
 {
-	proc: &mut PGPROC;
-	LOCKTAG		tag;
-	VirtualTransactionId vxid;
-	partitionLock: &mut LWLock;
-	lock: &mut LOCK;
-	proclock: &mut PROCLOCK;
-	PROCLOCKTAG proclocktag;
-	uint32		hashcode;
-	uint32		proclock_hashcode;
-	procs: &mut List = NIL;
-	lc: &mut ListCell;
-	waitQueue: &mut dclist_head;
-	dlist_iter	iter;
+	pub static mut PGPROC: *mut proc = std::ptr::null_mut();
+	pub static mut TAG: LOCKTAG = std::mem::zeroed();
+	pub static mut VXID: VirtualTransactionId = std::mem::zeroed();
+	pub static mut LW_LOCK: *mut partitionLock = std::ptr::null_mut();
+	pub static mut LOCK: *mut lock = std::ptr::null_mut();
+	pub static mut PROCLOCK: *mut proclock = std::ptr::null_mut();
+	pub static mut PROCLOCKTAG: PROCLOCKTAG = std::mem::zeroed();
+	pub static mut HASHCODE: uint32 = std::mem::zeroed();
+	pub static mut PROCLOCK_HASHCODE: uint32 = std::mem::zeroed();
+	pub static mut LIST: *mut procs = NIL;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+	pub static mut DCLIST_HEAD: *mut waitQueue = std::ptr::null_mut();
+	pub static mut ITER: dlist_iter = std::mem::zeroed();
 
 	vxid.localTransactionId = MyProc->LXID;
 	vxid.BACKENDID = MyBackendId;
@@ -1300,7 +1300,7 @@ advance_global_xmin(OXid newXid)
 {
 	OXid		globalXmin,
 				prevGlobalXmin;
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	OXid		writtenXmin,
 				writeInProgressXmin;
 	OXid		oldCleanedXmin,
@@ -1308,7 +1308,7 @@ advance_global_xmin(OXid newXid)
 				oldCheckpointXmax,
 				newCheckpointXmin,
 				newCheckpointXmax;
-	bool		doCleanup = false;
+	pub static mut DO_CLEANUP: bool = false;
 
 	SpinLockAcquire(&xid_meta->xminMutex);
 
@@ -1319,7 +1319,7 @@ advance_global_xmin(OXid newXid)
 
 	for (i = 0; i < max_procs; i++)
 	{
-		OXid		xmin;
+		pub static mut XMIN: OXid = std::mem::zeroed();
 
 		xmin = pg_atomic_read_u64(&oProcData[i].xmin);
 
@@ -1354,7 +1354,7 @@ advance_global_xmin(OXid newXid)
 	if (writtenXmin == writeInProgressXmin && writtenXmin < globalXmin &&
 		LWLockConditionalAcquire(&xid_meta->xidMapWriteLock, LW_EXCLUSIVE))
 	{
-		OXid		oxid;
+		pub static mut OXID: OXid = std::mem::zeroed();
 
 		Assert(globalXmin >= pg_atomic_read_u64(&xid_meta->writeInProgressXmin));
 		Assert(globalXmin >= pg_atomic_read_u64(&xid_meta->writtenXmin));
@@ -1469,13 +1469,13 @@ OXid
 get_current_oxid()
 {
 	if (OXidIsValid(recovery_oxid))
-		return recovery_oxid;
+		pub static mut RECOVERY_OXID: return = std::mem::zeroed();
 
 	if (!OXidIsValid(curOxid))
 	{
 		OXid		newOxid = pg_atomic_fetch_add_u64(&xid_meta->nextXid, 1);
-		vxidElem: &mut XidVXidMapElement;
-		int			nestingLevel;
+		pub static mut XID_V_XID_MAP_ELEMENT: *mut vxidElem = std::ptr::null_mut();
+		pub static mut NESTING_LEVEL: std::os::raw::c_int = 0;
 
 		//
 // Advance xmin every 10th part of circular buffer.  That should
@@ -1541,7 +1541,7 @@ get_current_oxid()
 		}
 	}
 
-	return curOxid;
+	pub static mut CUR_OXID: return = std::mem::zeroed();
 }
 
 
@@ -1565,8 +1565,8 @@ set_current_logical_xid(in: &mut LogicalXidCtx)
 
 parallel_worker_set_oxid()
 {
-	vxidElem: &mut XidVXidMapElement;
-	leaderProcData: &mut ODBProcData;
+	pub static mut XID_V_XID_MAP_ELEMENT: *mut vxidElem = std::ptr::null_mut();
+	pub static mut ODB_PROC_DATA: *mut leaderProcData = std::ptr::null_mut();
 
 	Assert(MyProc->lockGroupLeader);
 
@@ -1587,9 +1587,9 @@ OXid
 get_current_oxid_if_any()
 {
 	if (OXidIsValid(recovery_oxid))
-		return recovery_oxid;
+		pub static mut RECOVERY_OXID: return = std::mem::zeroed();
 
-	return curOxid;
+	pub static mut CUR_OXID: return = std::mem::zeroed();
 }
 
 TransactionId
@@ -1646,8 +1646,8 @@ current_oxid_xlog_precommit()
 fn
 advance_run_xmin(OXid oxid)
 {
-	OXid		run_xmin;
-	CommitSeqNo csn;
+	pub static mut RUN_XMIN: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	pg_read_barrier();
 
@@ -1676,8 +1676,8 @@ release_assigned_logical_xids()
 
 	if (GET_CUR_PROCDATA()->autonomousNestingLevel == 0)
 	{
-		lc: &mut ListCell = NULL;
-		ptr: &mut LogicalXidCtx = NULL;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+		pub static mut LOGICAL_XID_CTX: *mut ptr = std::ptr::null_mut();
 
 		foreach(lc, prevLogicalXids)
 		{
@@ -1696,7 +1696,7 @@ release_assigned_logical_xids()
 
 current_oxid_commit(CommitSeqNo csn)
 {
-	my_proc_info: &mut ODBProcData = &oProcData[MYPROCNUMBER];
+	pub static mut ODB_PROC_DATA: *mut my_proc_info = &oProcData[MYPROCNUMBER];
 
 	if (!OXidIsValid(curOxid))
 		return;
@@ -1716,7 +1716,7 @@ current_oxid_commit(CommitSeqNo csn)
 
 current_oxid_abort()
 {
-	my_proc_info: &mut ODBProcData = &oProcData[MYPROCNUMBER];
+	pub static mut ODB_PROC_DATA: *mut my_proc_info = &oProcData[MYPROCNUMBER];
 
 	if (!OXidIsValid(curOxid))
 		return;
@@ -1739,8 +1739,8 @@ current_oxid_abort()
 // that makes crash recovery resurrect the oxid and emit a spurious
 // deferred rollback.
 //
-		params: &mut Jsonb;
-		state: &mut JsonbParseState = NULL;
+		pub static mut JSONB: *mut params = std::ptr::null_mut();
+		pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
 
 		pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 		jsonb_push_int8_key(&state, "oxid", (int64) curOxid);
@@ -1777,7 +1777,7 @@ current_oxid_abort()
 
 current_oxid_clear_committing()
 {
-	int			nestingLevel;
+	pub static mut NESTING_LEVEL: std::os::raw::c_int = 0;
 
 	if (!OXidIsValid(curOxid))
 		return;
@@ -1816,18 +1816,18 @@ current_oxid_clear_committing()
 CommitSeqNo
 oxid_get_csn(OXid oxid, bool getRawCsn)
 {
-	CommitSeqNo csn;
-	SpinDelayStatus status;
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut STATUS: SpinDelayStatus = std::mem::zeroed();
 
 	if (oxid == BootstrapTransactionId)
-		return COMMITSEQNO_FROZEN;
+		pub static mut COMMITSEQNO_FROZEN: return = std::mem::zeroed();
 
 	init_local_spin_delay(&status);
 
 	while (true)
 	{
 		if (oxid < pg_atomic_read_u64(&xid_meta->globalXmin))
-			return COMMITSEQNO_FROZEN;
+			pub static mut COMMITSEQNO_FROZEN: return = std::mem::zeroed();
 
 		map_oxid(oxid, &csn, NULL, getRawCsn);
 		if (COMMITSEQNO_IS_SPECIAL(csn) &&
@@ -1840,9 +1840,9 @@ oxid_get_csn(OXid oxid, bool getRawCsn)
 	finish_spin_delay(&status);
 
 	if (COMMITSEQNO_IS_SPECIAL(csn))
-		return COMMITSEQNO_INPROGRESS;
+		pub static mut COMMITSEQNO_INPROGRESS: return = std::mem::zeroed();
 
-	return csn;
+	pub static mut CSN: return = std::mem::zeroed();
 }
 
 //
@@ -1852,18 +1852,18 @@ oxid_get_csn(OXid oxid, bool getRawCsn)
 XLogRecPtr
 oxid_get_xlog_ptr(OXid oxid)
 {
-	XLogRecPtr	ptr;
-	SpinDelayStatus status;
+	pub static mut PTR: XLogRecPtr = std::mem::zeroed();
+	pub static mut STATUS: SpinDelayStatus = std::mem::zeroed();
 
 	if (oxid == BootstrapTransactionId)
-		return COMMITSEQNO_FROZEN;
+		pub static mut COMMITSEQNO_FROZEN: return = std::mem::zeroed();
 
 	init_local_spin_delay(&status);
 
 	while (true)
 	{
 		if (oxid < pg_atomic_read_u64(&xid_meta->globalXmin))
-			return COMMITSEQNO_FROZEN;
+			pub static mut COMMITSEQNO_FROZEN: return = std::mem::zeroed();
 
 		map_oxid(oxid, NULL, &ptr, false);
 		if (XLOG_PTR_IS_SPECIAL(ptr) &&
@@ -1876,9 +1876,9 @@ oxid_get_xlog_ptr(OXid oxid)
 	finish_spin_delay(&status);
 
 	if (XLOG_PTR_IS_SPECIAL(ptr))
-		return InvalidXLogRecPtr;
+		pub static mut INVALID_X_LOG_REC_PTR: return = std::mem::zeroed();
 
-	return ptr;
+	pub static mut PTR: return = std::mem::zeroed();
 }
 
 //
@@ -1889,7 +1889,7 @@ oxid_get_xlog_ptr(OXid oxid)
 oxid_match_snapshot(OXid oxid, snapshot: &mut OSnapshot,
 					outCsn: &mut CommitSeqNo, outPtr: &mut XLogRecPtr)
 {
-	SpinDelayStatus status;
+	pub static mut STATUS: SpinDelayStatus = std::mem::zeroed();
 
 	if (oxid == BootstrapTransactionId || oxid < snapshot->xmin)
 	{
@@ -1974,7 +1974,7 @@ fill_current_oxid_osnapshot(oxid: &mut OXid, snapshot: &mut OSnapshot)
 int
 oxid_get_procnum(OXid oxid)
 {
-	CommitSeqNo csn;
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	map_oxid(oxid, &csn, NULL, false);
 
@@ -1992,15 +1992,15 @@ oxid_get_procnum(OXid oxid)
 bool
 xid_is_finished(OXid xid)
 {
-	OXid		xmin;
-	CommitSeqNo csn;
+	pub static mut XMIN: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	if (xid == BootstrapTransactionId)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (is_recovery_process())
 	{
-		bool		found;
+		pub static mut FOUND: bool = false;
 
 		csn = recovery_map_oxid_csn(xid, &found);
 		if (found)
@@ -2010,7 +2010,7 @@ xid_is_finished(OXid xid)
 	xmin = pg_atomic_read_u64(&xid_meta->runXmin);
 
 	if (xid < xmin)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	csn = oxid_get_csn(xid, false);
 
@@ -2023,8 +2023,8 @@ orioledb_get_xid_meta(PG_FUNCTION_ARGS)
 #define XID_META_NATTS 9
 	Datum		values[XID_META_NATTS];
 	bool		nulls[XID_META_NATTS];
-	TupleDesc	tupdesc;
-	HeapTuple	htup;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut HTUP: HeapTuple = std::mem::zeroed();
 
 	orioledb_check_shmem();
 
@@ -2055,18 +2055,18 @@ orioledb_get_xid_meta(PG_FUNCTION_ARGS)
 bool
 xid_is_finished_for_everybody(OXid xid)
 {
-	OXid		xmin;
-	CommitSeqNo csn;
+	pub static mut XMIN: OXid = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 	if (xid == BootstrapTransactionId)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!enable_rewind)
 	{
 		xmin = pg_atomic_read_u64(&xid_meta->runXmin);
 
 		if (xid < xmin)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		csn = oxid_get_csn(xid, false);
 	}
@@ -2075,7 +2075,7 @@ xid_is_finished_for_everybody(OXid xid)
 		csn = oxid_get_csn(xid, true);
 
 		if (csn_is_retained_for_rewind(csn))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	return COMMITSEQNO_IS_COMMITTED(csn);

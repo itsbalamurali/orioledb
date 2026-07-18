@@ -67,7 +67,7 @@ o_tuple_print(TupleDesc tupDesc, spec: &mut OTupleFixedFormatSpec,
 			  values: &mut Datum, nulls: &mut bool, bool printVersion,
 			  bool truncateValues)
 {
-	Form_pg_attribute atti;
+	pub static mut ATTI: Form_pg_attribute = std::mem::zeroed();
 	int			attnum,
 				i;
 
@@ -88,7 +88,7 @@ o_tuple_print(TupleDesc tupDesc, spec: &mut OTupleFixedFormatSpec,
 		}
 		else
 		{
-			output: &mut char;
+			pub static mut CHAR: *mut output = std::ptr::null_mut();
 
 			atti = TupleDescAttr(tupDesc, i);
 			if (!atti->attbyval && atti->attlen && !nulls[i])
@@ -135,7 +135,7 @@ idx_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup, Pointer arg)
 
 init_print_options(printOptions: &mut BTreePrintOptions, optionsArg: &mut VarChar)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	int			optionsSize = VARSIZE(optionsArg) - VARHDRSZ;
 	options: &mut char = (char *) VARDATA(optionsArg);
 
@@ -204,11 +204,11 @@ fn
 print_unloaded_tree(buf: &mut StringInfoData, td: &mut BTreeDescr, const treeName: &mut char,
 					printOptions: &mut BTreePrintOptions)
 {
-	prev_chkp_fname: &mut char;
-	File		prev_chkp_file;
+	pub static mut CHAR: *mut prev_chkp_fname = std::ptr::null_mut();
+	pub static mut PREV_CHKP_FILE: File = std::mem::zeroed();
 	CheckpointFileHeader file_header = {0};
-	SeqBufTag	prev_chkp_tag;
-	evicted_data: &mut EvictedTreeData;
+	pub static mut PREV_CHKP_TAG: SeqBufTag = std::mem::zeroed();
+	pub static mut EVICTED_TREE_DATA: *mut evicted_data = std::ptr::null_mut();
 
 	memset(&prev_chkp_tag, 0, sizeof(prev_chkp_tag));
 	prev_chkp_tag.key.oids = td->oids;
@@ -266,12 +266,12 @@ tree_structure(StringInfo buf,
 			   BTreePrintOptions printOptions,
 			   int depth)
 {
-	int			i;
-	TuplePrintOpaque opaque;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut OPAQUE: TuplePrintOpaque = std::mem::zeroed();
 	SharedRootInfoKey key = {0};
-	sharedRootInfo: &mut SharedRootInfo = NULL;
-	td: &mut BTreeDescr;
-	const treeName: &mut char;
+	pub static mut SHARED_ROOT_INFO: *mut sharedRootInfo = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut td = std::ptr::null_mut();
+	pub static mut CHAR: *mut const treeName = std::ptr::null_mut();
 
 	opaque.desc = id->leafTupdesc;
 	opaque.spec = &id->leafSpec;
@@ -286,8 +286,8 @@ tree_structure(StringInfo buf,
 
 	for (i = 0; i < opaque.desc->natts; i++)
 	{
-		Oid			output;
-		bool		varlena;
+		pub static mut OUTPUT: Oid = std::mem::zeroed();
+		pub static mut VARLENA: bool = false;
 
 		getTypeOutputInfo(TupleDescAttr(opaque.desc, i)->atttypid,
 						  &output, &varlena);
@@ -296,8 +296,8 @@ tree_structure(StringInfo buf,
 
 	for (i = 0; i < opaque.keyDesc->natts; i++)
 	{
-		Oid			output;
-		bool		varlena;
+		pub static mut OUTPUT: Oid = std::mem::zeroed();
+		pub static mut VARLENA: bool = false;
 
 		getTypeOutputInfo(TupleDescAttr(opaque.keyDesc, i)->atttypid,
 						  &output, &varlena);
@@ -335,12 +335,12 @@ orioledb_tbl_structure(PG_FUNCTION_ARGS)
 	Oid			relid = PG_GETARG_OID(0);
 	optionsArg: &mut VarChar = (VarChar *) PG_GETARG_VARCHAR_P(1);
 	int			depth = PG_GETARG_INT32(2);
-	descr: &mut OTableDescr;
-	Relation	rel;
-	result: &mut text;
-	int			treen;
-	StringInfoData buf;
-	BTreePrintOptions printOptions;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut TEXT: *mut result = std::ptr::null_mut();
+	pub static mut TREEN: std::os::raw::c_int = 0;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
+	pub static mut PRINT_OPTIONS: BTreePrintOptions = std::mem::zeroed();
 
 	ASAN_UNPOISON_MEMORY_REGION(&printOptions, sizeof(printOptions));
 	MemSet(&printOptions, 0, sizeof(printOptions));
@@ -384,7 +384,7 @@ append_bytes(StringInfo str, Page p, offset: &mut OffsetNumber, int len, int lev
 {
 	if (print_bytes)
 	{
-		int			j;
+		pub static mut J: std::os::raw::c_int = 0;
 
 		appendStringInfoSpaces(str, level * 4);
 		for (j = 0; j < len; j++)
@@ -411,10 +411,10 @@ append_bits(StringInfo str, Page p, offset: &mut OffsetNumber,
 {
 	if (print_bytes)
 	{
-		int			j;
-		int			bit;
-		int			byte_start = *bit_offset % BITS_PER_BYTE;
-		int			byte_end;
+		pub static mut J: std::os::raw::c_int = 0;
+		pub static mut BIT: std::os::raw::c_int = 0;
+		pub static mut BYTE_START: std::os::raw::c_int = *bit_offset % BITS_PER_BYTE;
+		pub static mut BYTE_END: std::os::raw::c_int = 0;
 
 		appendStringInfoSpaces(str, level * 4);
 		if (len > BITS_PER_BYTE)
@@ -479,13 +479,13 @@ print_page_bin_structure(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	OffsetNumber i,
 				j,
 				k;
 	OffsetNumber offset,
 				bit_offset;
-	int			level = 0;
+	pub static mut LEVEL: std::os::raw::c_int = 0;
 
 	appendStringInfo(outbuf, "Page %u: ", *NLRPageNumber);
 	offset = 0;
@@ -571,10 +571,10 @@ print_page_bin_structure(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	level++;					// CHUNKS BEGIN
 	for (i = 0; i < header->chunksCount; i++)
 	{
-		OffsetNumber chunkItemsCount;
-		LocationIndex chunkSize;
-		chunk: &mut BTreePageChunk;
-		int			align;
+		pub static mut CHUNK_ITEMS_COUNT: OffsetNumber = std::mem::zeroed();
+		pub static mut CHUNK_SIZE: LocationIndex = std::mem::zeroed();
+		pub static mut B_TREE_PAGE_CHUNK: *mut chunk = std::ptr::null_mut();
+		pub static mut ALIGN: std::os::raw::c_int = 0;
 
 		if (i + 1 < header->chunksCount)
 		{
@@ -628,11 +628,11 @@ print_page_bin_structure(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 		{
 			if (O_PAGE_IS(p, LEAF))
 			{
-				OTuple		tup;
-				OTupleReaderState reader;
+				pub static mut TUP: OTuple = std::mem::zeroed();
+				pub static mut READER: OTupleReaderState = std::mem::zeroed();
 				opaque: &mut TuplePrintOpaque = (TuplePrintOpaque *) printArg;
-				TupleDesc	tupdesc = opaque->desc;
-				LocationIndex len;
+				pub static mut TUPDESC: TupleDesc = opaque->desc;
+				pub static mut LEN: LocationIndex = std::mem::zeroed();
 
 				if (j + 1 < chunkItemsCount)
 				{
@@ -702,8 +702,8 @@ print_page_bin_structure(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				Assert(&p[offset] == reader.tp);
 
 				{
-					uint32		off;
-					uint32		next_off = 0;
+					pub static mut OFF: uint32 = std::mem::zeroed();
+					pub static mut NEXT_OFF: uint32 = 0;
 
 					appendStringInfoSpaces(outbuf, level * 4);
 					appendStringInfo(outbuf, "Tuple data: %d\n", len);
@@ -785,7 +785,7 @@ print_page_bin_structure(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 			{
-				OInMemoryBlkno downlink;
+				pub static mut DOWNLINK: OInMemoryBlkno = std::mem::zeroed();
 
 				downlink = DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink);
 				(*NLRPageNumber)++;
@@ -809,11 +809,11 @@ fn
 tree_bin_structure(StringInfo buf, id: &mut OIndexDescr, bool print_bytes,
 				   int depth)
 {
-	TuplePrintOpaque opaque;
+	pub static mut OPAQUE: TuplePrintOpaque = std::mem::zeroed();
 	SharedRootInfoKey key = {0};
-	sharedRootInfo: &mut SharedRootInfo = NULL;
-	td: &mut BTreeDescr;
-	const treeName: &mut char;
+	pub static mut SHARED_ROOT_INFO: *mut sharedRootInfo = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut td = std::ptr::null_mut();
+	pub static mut CHAR: *mut const treeName = std::ptr::null_mut();
 
 	opaque.desc = id->leafTupdesc;
 	opaque.spec = &id->leafSpec;
@@ -836,7 +836,7 @@ tree_bin_structure(StringInfo buf, id: &mut OIndexDescr, bool print_bytes,
 		appendStringInfo(buf, "Index %s contents\n", treeName);
 		if (td->type != oIndexToast)
 		{
-			int			NLRPageNumber = 0;
+			pub static mut NLR_PAGE_NUMBER: std::os::raw::c_int = 0;
 
 			print_page_bin_structure(td, td->rootInfo.rootPageBlkno,
 									 &NLRPageNumber, (Pointer) &opaque,
@@ -852,11 +852,11 @@ orioledb_tbl_bin_structure(PG_FUNCTION_ARGS)
 	Oid			relid = PG_GETARG_OID(0);
 	bool		print_bytes = PG_GETARG_BOOL(1);
 	int			depth = PG_GETARG_INT32(2);
-	descr: &mut OTableDescr;
-	Relation	rel;
-	result: &mut text;
-	int			treen;
-	StringInfoData buf;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut TEXT: *mut result = std::ptr::null_mut();
+	pub static mut TREEN: std::os::raw::c_int = 0;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 
 	orioledb_check_shmem();
 
@@ -894,11 +894,11 @@ orioledb_idx_structure(PG_FUNCTION_ARGS)
 	const treeName: &mut char = text_to_cstring(PG_GETARG_TEXT_PP(1));
 	optionsArg: &mut VarChar = (VarChar *) PG_GETARG_VARCHAR_P(2);
 	int			depth = PG_GETARG_INT32(3);
-	descr: &mut OTableDescr;
-	Relation	rel;
-	result: &mut text;
-	int			treen;
-	StringInfoData buf;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut TEXT: *mut result = std::ptr::null_mut();
+	pub static mut TREEN: std::os::raw::c_int = 0;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 	BTreePrintOptions printOptions = {0};
 
 	orioledb_check_shmem();
@@ -950,13 +950,13 @@ log_btree(desc: &mut BTreeDescr)
 	};
 	static Oid	typeoids[] = {TIDOID, TEXTOID, INT4OID, INT2OID, BYTEAOID};
 	static Oid	outoids[] = {F_TIDOUT, F_TEXTOUT, F_INT4OUT, F_INT2OUT, F_BYTEAOUT};
-	StringInfoData buf;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 
 	initStringInfo(&buf);
 	if (!IS_SYS_TREE_OIDS(desc->oids))
 	{
 		id: &mut OIndexDescr = (OIndexDescr *) desc->arg;
-		TuplePrintOpaque opaque;
+		pub static mut OPAQUE: TuplePrintOpaque = std::mem::zeroed();
 		int			i,
 					j;
 
@@ -972,8 +972,8 @@ log_btree(desc: &mut BTreeDescr)
 		opaque.truncateValues = printOptions.truncateValues;
 		for (i = 0; i < opaque.desc->natts; i++)
 		{
-			Oid			output = InvalidOid;
-			bool		varlena;
+			pub static mut OUTPUT: Oid = InvalidOid;
+			pub static mut VARLENA: bool = false;
 			Form_pg_attribute attr = TupleDescAttr(opaque.desc, i);
 
 			for (j = 0; j < sizeof(typeoids) / sizeof(typeoids[0]); j++)
@@ -988,8 +988,8 @@ log_btree(desc: &mut BTreeDescr)
 
 		for (i = 0; i < opaque.keyDesc->natts; i++)
 		{
-			Oid			output = InvalidOid;
-			bool		varlena;
+			pub static mut OUTPUT: Oid = InvalidOid;
+			pub static mut VARLENA: bool = false;
 			Form_pg_attribute attr = TupleDescAttr(opaque.keyDesc, i);
 
 			for (j = 0; j < sizeof(typeoids) / sizeof(typeoids[0]); j++)
@@ -1006,7 +1006,7 @@ log_btree(desc: &mut BTreeDescr)
 	}
 	else
 	{
-		int			num = desc->oids.relnode;
+		pub static mut NUM: std::os::raw::c_int = desc->oids.relnode;
 
 		o_print_btree_pages(get_sys_tree(num), &buf,
 							sys_tree_key_print(get_sys_tree(num)),
@@ -1026,8 +1026,8 @@ table_pages_walk_page(desc: &mut BTreeDescr, BlockNumber blkno,
 	bool		nulls[4];
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	pageHdr: &mut BTreePageHeader = (BTreePageHeader *) p;
-	int			j = 0;
-	BTreePageItemLocator loc;
+	pub static mut J: std::os::raw::c_int = 0;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	values[j] = Int64GetDatum(blkno);
 	nulls[j] = false;
@@ -1047,9 +1047,9 @@ table_pages_walk_page(desc: &mut BTreeDescr, BlockNumber blkno,
 	j++;
 	if (!O_PAGE_IS(p, RIGHTMOST))
 	{
-		state: &mut JsonbParseState = NULL;
-		jsval: &mut JsonbValue;
-		OTuple		hikey;
+		pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+		pub static mut JSONB_VALUE: *mut jsval = std::ptr::null_mut();
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, p);
 		jsval = o_btree_key_to_jsonb(desc, hikey, &state);
@@ -1068,7 +1068,7 @@ table_pages_walk_page(desc: &mut BTreeDescr, BlockNumber blkno,
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
-		hdr: &mut BTreeNonLeafTuphdr;
+		pub static mut B_TREE_NON_LEAF_TUPHDR: *mut hdr = std::ptr::null_mut();
 
 		hdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 		if (DOWNLINK_IS_IN_MEMORY(hdr->downlink))
@@ -1083,14 +1083,14 @@ orioledb_table_pages(PG_FUNCTION_ARGS)
 {
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	Oid			relid = PG_GETARG_OID(0);
-	bool		randomAccess;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext oldcontext;
-	Relation	rel;
-	descr: &mut OTableDescr;
-	int			treen;
-	AttrNumber	attnum;
+	pub static mut RANDOM_ACCESS: bool = false;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut TREEN: std::os::raw::c_int = 0;
+	pub static mut ATTNUM: AttrNumber = std::mem::zeroed();
 
 	// check to see if caller supports us returning a tuplestore
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -1134,9 +1134,9 @@ orioledb_table_pages(PG_FUNCTION_ARGS)
 
 	for (treen = 0; treen < descr->nIndices + 1; treen++)
 	{
-		td: &mut BTreeDescr;
+		pub static mut B_TREE_DESCR: *mut td = std::ptr::null_mut();
 		SharedRootInfoKey key = {0};
-		sharedRootInfo: &mut SharedRootInfo = NULL;
+		pub static mut SHARED_ROOT_INFO: *mut sharedRootInfo = std::ptr::null_mut();
 
 		if (treen < descr->nIndices)
 			td = &descr->indices[treen]->desc;
@@ -1169,8 +1169,8 @@ orioledb_tbl_are_indices_equal(PG_FUNCTION_ARGS)
 				idx2,
 				tbl1,
 				tbl2;
-	bool		are_equal = true;
-	int			i;
+	pub static mut ARE_EQUAL: bool = true;
+	pub static mut I: std::os::raw::c_int = 0;
 	td1: &mut OIndexDescr,
 			   *td2;
 	iter1: &mut BTreeIterator,
@@ -1252,10 +1252,10 @@ orioledb_tbl_check(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
 	bool		force_map_check = PG_GETARG_OID(1);
-	Relation	rel;
-	descr: &mut OTableDescr;
-	bool		result = true;
-	int			i;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut RESULT: bool = true;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	orioledb_check_shmem();
 
@@ -1273,7 +1273,7 @@ orioledb_tbl_check(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
-		idx: &mut OIndexDescr = descr->indices[i];
+		pub static mut O_INDEX_DESCR: *mut idx = descr->indices[i];
 
 		o_tables_rel_lock_extended(&idx->oids, AccessExclusiveLock, true);
 		o_btree_load_shmem(&idx->desc);
@@ -1300,9 +1300,9 @@ verify_orioledb(PG_FUNCTION_ARGS)
 	Oid			relid = PG_GETARG_OID(0);
 	bool		thorough_check = PG_GETARG_BOOL(1);
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	Relation	rel;
-	descr: &mut OTableDescr;
-	int			i;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	InitMaterializedSRF(fcinfo, 0);
 
@@ -1318,8 +1318,8 @@ verify_orioledb(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
-		idx: &mut OIndexDescr = descr->indices[i];
-		bool		success;
+		pub static mut O_INDEX_DESCR: *mut idx = descr->indices[i];
+		pub static mut SUCCESS: bool = false;
 
 		o_tables_rel_lock_extended(&idx->oids, AccessExclusiveLock, true);
 		o_btree_load_shmem(&idx->desc);
@@ -1353,18 +1353,18 @@ orioledb_compression_max_level(PG_FUNCTION_ARGS)
 Datum
 orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 {
-	BTreeCompressStats stats;
-	descr: &mut OTableDescr;
-	StringInfoData result;
-	array: &mut ArrayType;
-	values: &mut int32;
+	pub static mut STATS: BTreeCompressStats = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut RESULT: StringInfoData = std::mem::zeroed();
+	pub static mut ARRAY_TYPE: *mut array = std::ptr::null_mut();
+	pub static mut INT32: *mut values = std::ptr::null_mut();
 	int			compression_lvl = PG_GETARG_INT16(0),
 				i,
 				j,
 				narray,
 				next_from;
 	Oid			relid = PG_GETARG_OID(1);
-	Relation	rel;
+	pub static mut REL: Relation = std::mem::zeroed();
 
 	Assert(PG_NARGS() == 3);
 
@@ -1426,8 +1426,8 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 	initStringInfo(&result);
 	for (i = 0; i <= descr->nIndices; i++)
 	{
-		td: &mut BTreeDescr;
-		const treeName: &mut char;
+		pub static mut B_TREE_DESCR: *mut td = std::ptr::null_mut();
+		pub static mut CHAR: *mut const treeName = std::ptr::null_mut();
 
 		if (i < descr->nIndices)
 		{
@@ -1499,9 +1499,9 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 fn
 index_description(StringInfo buf, ct: &mut OIndexDescr, bool primary, bool oids)
 {
-	int			nonLeafSize = ct->nonLeafTupdesc->natts;
-	int			leafSize = ct->leafTupdesc->natts;
-	int			j;
+	pub static mut NON_LEAF_SIZE: std::os::raw::c_int = ct->nonLeafTupdesc->natts;
+	pub static mut LEAF_SIZE: std::os::raw::c_int = ct->leafTupdesc->natts;
+	pub static mut J: std::os::raw::c_int = 0;
 
 	appendStringInfo(buf, "Index %s\n", ct->name.data);
 	if (oids)
@@ -1540,13 +1540,13 @@ Datum
 orioledb_tbl_indices(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
-	bool		internal = false;
-	bool		oids = false;
-	Relation	rel;
-	descr: &mut OTableDescr;
-	StringInfoData buf;
-	result: &mut text;
-	int			i;
+	pub static mut INTERNAL: bool = false;
+	pub static mut OIDS: bool = false;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
+	pub static mut TEXT: *mut result = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (PG_NARGS() == 3)
 	{
@@ -1575,8 +1575,8 @@ orioledb_tbl_indices(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
-		ct: &mut OIndexDescr = descr->indices[i];
-		bool		primary = i == PrimaryIndexNumber;
+		pub static mut O_INDEX_DESCR: *mut ct = descr->indices[i];
+		pub static mut PRIMARY: bool = i == PrimaryIndexNumber;
 
 		index_description(&buf, ct, primary, oids);
 	}
@@ -1603,8 +1603,8 @@ Datum
 orioledb_relation_size(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
-	Relation	rel;
-	int64		result;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut RESULT: int64 = std::mem::zeroed();
 
 	orioledb_check_shmem();
 
@@ -1621,29 +1621,29 @@ typedef struct
 {
 	struct
 	{
-		uint64		count;
-		uint64		occupied;
-		uint64		vacated;
-		OFixedKey	hikey;
+		pub static mut COUNT: uint64 = std::mem::zeroed();
+		pub static mut OCCUPIED: uint64 = std::mem::zeroed();
+		pub static mut VACATED: uint64 = std::mem::zeroed();
+		pub static mut HIKEY: OFixedKey = std::mem::zeroed();
 	}			levels[ORIOLEDB_MAX_DEPTH];
 } ORelationStat;
 
 static OIndexDescr *
 fetch_index_descr_by_oid(Oid relid)
 {
-	Relation	rel;
-	ORelOids	tblOids;
-	ORelOids	idxOids;
-	descr: &mut OTableDescr;
-	OIndexNumber ixnum;
-	bool		index = false;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut TBL_OIDS: ORelOids = std::mem::zeroed();
+	pub static mut IDX_OIDS: ORelOids = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut IXNUM: OIndexNumber = std::mem::zeroed();
+	pub static mut INDEX: bool = false;
 
 	ORelOidsSetInvalid(idxOids);
 
 	rel = relation_open(relid, AccessShareLock);
 	if (rel->rd_rel->relkind == RELKIND_INDEX)
 	{
-		Relation	tbl;
+		pub static mut TBL: Relation = std::mem::zeroed();
 
 		idxOids.datoid = MyDatabaseId;
 		idxOids.reloid = rel->rd_rel->oid;
@@ -1691,7 +1691,7 @@ add_page_stat(desc: &mut BTreeDescr, Page p, stat: &mut ORelationStat)
 fn
 tree_stat_walker(desc: &mut BTreeDescr, stat: &mut ORelationStat)
 {
-	OBTreeFindPageContext context;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
 	int			level,
 				maxLevel;
 
@@ -1701,7 +1701,7 @@ tree_stat_walker(desc: &mut BTreeDescr, stat: &mut ORelationStat)
 
 	for (level = 0; level < ORIOLEDB_MAX_DEPTH; level++)
 	{
-		OFindPageResult findResult;
+		pub static mut FIND_RESULT: OFindPageResult = std::mem::zeroed();
 
 		findResult = find_page(&context, NULL, BTreeKeyNone, level);
 		if (findResult != OFindPageResultSuccess ||
@@ -1717,7 +1717,7 @@ tree_stat_walker(desc: &mut BTreeDescr, stat: &mut ORelationStat)
 
 	while (true)
 	{
-		OFixedKey	key;
+		pub static mut KEY: OFixedKey = std::mem::zeroed();
 
 		copy_fixed_key(desc, &key, stat->levels[0].hikey.tuple);
 
@@ -1749,13 +1749,13 @@ orioledb_tree_stat(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
-	descr: &mut OIndexDescr;
-	stat: &mut ORelationStat;
-	int			i;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_RELATION_STAT: *mut stat = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);

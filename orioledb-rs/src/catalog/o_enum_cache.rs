@@ -30,8 +30,8 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static enum_cache: &mut OSysCache = NULL;
-static enumoid_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut enum_cache = std::ptr::null_mut();
+static mut O_SYS_CACHE: *mut enumoid_cache = std::ptr::null_mut();
 
 fn o_enum_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									Pointer arg);
@@ -98,10 +98,10 @@ O_SYS_CACHE_INIT_FUNC(enumoid_cache)
 
 o_enum_cache_add_all(Oid datoid, Oid enum_oid, XLogRecPtr insert_lsn)
 {
-	Relation	enum_rel;
-	SysScanDesc enum_scan;
-	HeapTuple	enum_tuple;
-	ScanKeyData skey;
+	pub static mut ENUM_REL: Relation = std::mem::zeroed();
+	pub static mut ENUM_SCAN: SysScanDesc = std::mem::zeroed();
+	pub static mut ENUM_TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut SKEY: ScanKeyData = std::mem::zeroed();
 
 	// Scan pg_enum for the members of the target enum type.
 	ScanKeyInit(&skey, Anum_pg_enum_enumtypid, BTEqualStrategyNumber, F_OIDEQ,
@@ -129,12 +129,12 @@ o_enum_cache_add_all(Oid datoid, Oid enum_oid, XLogRecPtr insert_lsn)
 fn
 o_enum_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	enumtup;
-	Form_pg_enum enumform;
+	pub static mut ENUMTUP: HeapTuple = std::mem::zeroed();
+	pub static mut ENUMFORM: Form_pg_enum = std::mem::zeroed();
 	o_enum: &mut OEnum = (OEnum *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			enumtypid;
-	Name		enumlabel;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut ENUMTYPID: Oid = std::mem::zeroed();
+	pub static mut ENUMLABEL: Name = std::mem::zeroed();
 
 	enumtypid = DatumGetObjectId(key->keys[0]);
 	enumlabel = DatumGetName(key->keys[1]);
@@ -166,11 +166,11 @@ o_enum_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer
 fn
 o_enumoid_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	enumtup;
-	Form_pg_enum enumform;
+	pub static mut ENUMTUP: HeapTuple = std::mem::zeroed();
+	pub static mut ENUMFORM: Form_pg_enum = std::mem::zeroed();
 	o_enumoid: &mut OEnumOid = (OEnumOid *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			enum_oid;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut ENUM_OID: Oid = std::mem::zeroed();
 
 	enum_oid = DatumGetObjectId(key->keys[0]);
 
@@ -216,7 +216,7 @@ o_enum_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf, OTuple tup,
 					   Pointer arg)
 {
 	key: &mut OSysCacheKey = (OSysCacheKey *) tup.data;
-	o_enum_data: &mut OEnumData;
+	pub static mut O_ENUM_DATA: *mut o_enum_data = std::ptr::null_mut();
 
 	o_enum_data = (OEnumData *) (tup.data + offsetof(OEnum, data) +
 								 key->common.dataLength);
@@ -245,7 +245,7 @@ o_enumoid_cache_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 o_enum_cache_delete_all(Oid datoid, Oid enum_oid)
 {
 	td: &mut BTreeDescr = get_sys_tree(enum_cache->sys_tree_num);
-	it: &mut BTreeIterator;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 	OSysCacheKey2 key = {0};
 	OSysCacheBound bound = {.key = (OSysCacheKey *) &key,
 	.nkeys = 1};
@@ -263,7 +263,7 @@ o_enum_cache_delete_all(Oid datoid, Oid enum_oid)
 												 BTreeKeyBound, true,
 												 NULL);
 		o_enum: &mut OEnum = (OEnum *) tup.data;
-		o_enum_data: &mut OEnumData;
+		pub static mut O_ENUM_DATA: *mut o_enum_data = std::ptr::null_mut();
 
 		if (O_TUPLE_IS_NULL(tup))
 			break;
@@ -290,19 +290,19 @@ o_enum_cache_delete_all(Oid datoid, Oid enum_oid)
 HeapTuple
 o_enumoid_cache_search_htup(TupleDesc tupdesc, Oid enum_oid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_enum] = {0};
 	bool		nulls[Natts_pg_enum] = {0};
-	o_enumoid: &mut OEnumOid;
+	pub static mut O_ENUM_OID: *mut o_enumoid = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_enumoid = o_enumoid_cache_search(datoid, enum_oid, cur_lsn,
 									   enumoid_cache->nkeys);
 	if (o_enumoid)
 	{
-		NameData	enumlabel;
+		pub static mut ENUMLABEL: NameData = std::mem::zeroed();
 
 		values[Anum_pg_enum_oid - 1] = o_enumoid->key.keys[0];
 		values[Anum_pg_enum_enumtypid - 1] =
@@ -311,26 +311,26 @@ o_enumoid_cache_search_htup(TupleDesc tupdesc, Oid enum_oid)
 		values[Anum_pg_enum_enumlabel - 1] = NameGetDatum(&enumlabel);
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 HeapTuple
 o_enum_cache_search_htup(TupleDesc tupdesc, Oid enumtypid, Name enumlabel)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_enum] = {0};
 	bool		nulls[Natts_pg_enum] = {0};
-	o_enum: &mut OEnum;
-	o_enum_data: &mut OEnumData;
+	pub static mut O_ENUM: *mut o_enum = std::ptr::null_mut();
+	pub static mut O_ENUM_DATA: *mut o_enum_data = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_enum = o_enum_cache_search(datoid, enumtypid, NameGetDatum(enumlabel),
 								 cur_lsn, enum_cache->nkeys);
 	if (o_enum)
 	{
-		NameData	enumlabel;
+		pub static mut ENUMLABEL: NameData = std::mem::zeroed();
 
 		o_enum_data =
 			(OEnumData *) (((Pointer) o_enum) + offsetof(OEnum, data) +
@@ -343,7 +343,7 @@ o_enum_cache_search_htup(TupleDesc tupdesc, Oid enumtypid, Name enumlabel)
 			Float4GetDatum(o_enum_data->enumsortorder);
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -358,9 +358,9 @@ enum_oid_cmp(left: &mut const, right: &mut const)
 	if (l->enum_oid < r->enum_oid)
 		return -1;
 	else if (l->enum_oid > r->enum_oid)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 	else
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -369,18 +369,18 @@ enum_oid_cmp(left: &mut const, right: &mut const)
 
 o_load_enum_cache_data_hook(tcache: &mut TypeCacheEntry)
 {
-	enumdata: &mut TypeCacheEnumData;
+	pub static mut TYPE_CACHE_ENUM_DATA: *mut enumdata = std::ptr::null_mut();
 	td: &mut BTreeDescr = get_sys_tree(enum_cache->sys_tree_num);
-	it: &mut BTreeIterator;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 	OSysCacheKey2 key = {0};
 	OSysCacheBound bound = {.key = (OSysCacheKey *) &key,
 	.nkeys = 1};
-	items: &mut EnumItem;
-	int			numitems;
-	int			maxitems;
-	Oid			bitmap_base;
-	bitmap: &mut Bitmapset;
-	MemoryContext oldcxt;
+	pub static mut ENUM_ITEM: *mut items = std::ptr::null_mut();
+	pub static mut NUMITEMS: std::os::raw::c_int = 0;
+	pub static mut MAXITEMS: std::os::raw::c_int = 0;
+	pub static mut BITMAP_BASE: Oid = std::mem::zeroed();
+	pub static mut BITMAPSET: *mut bitmap = std::ptr::null_mut();
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
 	int			bm_size,
 				start_pos;
 
@@ -415,7 +415,7 @@ o_load_enum_cache_data_hook(tcache: &mut TypeCacheEntry)
 												 BTreeKeyBound, true,
 												 NULL);
 		o_enum: &mut OEnum = (OEnum *) tup.data;
-		o_enum_data: &mut OEnumData;
+		pub static mut O_ENUM_DATA: *mut o_enum_data = std::ptr::null_mut();
 
 		if (O_TUPLE_IS_NULL(tup))
 			break;
@@ -468,14 +468,14 @@ o_load_enum_cache_data_hook(tcache: &mut TypeCacheEntry)
 // Identify longest sorted subsequence starting at start_pos
 //
 		this_bitmap: &mut Bitmapset = bms_make_singleton(0);
-		int			this_bm_size = 1;
-		Oid			start_oid = items[start_pos].enum_oid;
-		float4		prev_order = items[start_pos].sort_order;
-		int			i;
+		pub static mut THIS_BM_SIZE: std::os::raw::c_int = 1;
+		pub static mut START_OID: Oid = items[start_pos].enum_oid;
+		pub static mut PREV_ORDER: float4 = items[start_pos].sort_order;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		for (i = start_pos + 1; i < numitems; i++)
 		{
-			Oid			offset;
+			pub static mut OFFSET: Oid = std::mem::zeroed();
 
 			offset = items[i].enum_oid - start_oid;
 			// quit if bitmap would be too large; cutoff is arbitrary

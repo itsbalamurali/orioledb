@@ -35,41 +35,41 @@ use pgrx::pg_sys;
 // Iterates through undo images
 typedef struct
 {
-	it: &mut BTreeIterator;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 	// a current page image from undo log
 	char		image[ORIOLEDB_BLCKSZ];
 	// a lokey of the image for backward scan
-	OFixedKey	lokey;
+	pub static mut LOKEY: OFixedKey = std::mem::zeroed();
 	// a base undo location, from the data page header
-	UndoLocation baseLoc;
+	pub static mut BASE_LOC: UndoLocation = std::mem::zeroed();
 	// undo location of the `image` in this struct
-	UndoLocation imageUndoLoc;
+	pub static mut IMAGE_UNDO_LOC: UndoLocation = std::mem::zeroed();
 	// is the image leftmost on the base location
-	bool		leftmost;
+	pub static mut LEFTMOST: bool = false;
 	// is the image rightmost on the base location
-	bool		rightmost;
+	pub static mut RIGHTMOST: bool = false;
 } UndoIterator;
 
 struct BTreeIterator
 {
-	OBTreeFindPageContext context;
-	oidescr: &mut OIndexDescr;
-	OSnapshot	oSnapshot;
-	UndoIterator undoIt;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut oidescr = std::ptr::null_mut();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut UNDO_IT: UndoIterator = std::mem::zeroed();
 	// scan direction of current iterator: forward or backward
-	ScanDirection scanDir;
+	pub static mut SCAN_DIR: ScanDirection = std::mem::zeroed();
 	// current tuple location in UndoIterator
-	BTreePageItemLocator undoLoc;
+	pub static mut UNDO_LOC: BTreePageItemLocator = std::mem::zeroed();
 	// do we have to combine results from both current and undo pages?
-	bool		combinedResult;
+	pub static mut COMBINED_RESULT: bool = false;
 	// do we need to combine results in the current page?
-	bool		combinedPage;
+	pub static mut COMBINED_PAGE: bool = false;
 	// number of leaf pages visited; drives the FETCH->IMAGE switch
-	int			pageCount;
+	pub static mut PAGE_COUNT: std::os::raw::c_int = 0;
 	// memory context for returned tuples
-	MemoryContext tupleCxt;
+	pub static mut TUPLE_CXT: MemoryContext = std::mem::zeroed();
 	// callback for fetching tuple version
-	TupleFetchCallback fetchCallback;
+	pub static mut FETCH_CALLBACK: TupleFetchCallback = std::mem::zeroed();
 		   *fetchCallbackArg;
 
 	//
@@ -81,9 +81,9 @@ struct BTreeIterator
 // whether curKey has already been handed out: if so the re-find resumes
 // after it, otherwise it resumes at it.
 //
-	OFixedKey	curKey;
-	bool		curKeySet;
-	bool		curKeyReturned;
+	pub static mut CUR_KEY: OFixedKey = std::mem::zeroed();
+	pub static mut CUR_KEY_SET: bool = false;
+	pub static mut CUR_KEY_RETURNED: bool = false;
 
 	//
 // Optimistic array-advance parking.  When o_btree_iterator_fetch()
@@ -95,8 +95,8 @@ struct BTreeIterator
 // tuple came from the plain in-memory leaf path with a clean (non-refind)
 // advance.
 //
-	BTreePageItemLocator resumeLoc;
-	bool		resumeLocValid;
+	pub static mut RESUME_LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut RESUME_LOC_VALID: bool = false;
 
 	//
 // The scan's original start key/kind.  Contract: the caller must keep the
@@ -105,10 +105,10 @@ struct BTreeIterator
 // start when a partial read fails before any tuple has been returned.
 //
 		   *startKey;
-	BTreeKeyType startKind;
+	pub static mut START_KIND: BTreeKeyType = std::mem::zeroed();
 #ifdef USE_ASSERT_CHECKING
 	// additional check for iteration order
-	OFixedTuple prevTuple;
+	pub static mut PREV_TUPLE: OFixedTuple = std::mem::zeroed();
 #endif
 };
 
@@ -119,8 +119,8 @@ struct BTreeIterator
 typedef struct
 {
 		   *key;
-	BTreeKeyType keyKind;
-	bool		isIncluded;
+	pub static mut KEY_KIND: BTreeKeyType = std::mem::zeroed();
+	pub static mut IS_INCLUDED: bool = false;
 } BtreeIterationEnd;
 
 static OTuple fetch_our_tuple_from_page(desc: &mut BTreeDescr, Page p,
@@ -190,14 +190,14 @@ o_btree_find_tuple_by_key_cb(desc: &mut BTreeDescr,  *key,
 							 TupleFetchCallback cb,
 							  *arg)
 {
-	BTreePageItemLocator loc;
-	OBTreeFindPageContext context;
-	img: &mut char;
-	header: &mut BTreePageHeader;
-	bool		combinedResult = false;
-	OTuple		result;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
-	bool		forceFind = false;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut CHAR: *mut img = std::ptr::null_mut();
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut COMBINED_RESULT: bool = false;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
+	pub static mut FORCE_FIND: bool = false;
 
 	//
 // If we need to get the result from given snapshot in the past, and in
@@ -246,7 +246,7 @@ retry:
 		result = fetch_our_tuple_from_page(desc, img, &loc, key, kind, mcxt,
 										   out_csn, deleted);
 		if (!O_TUPLE_IS_NULL(result))
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 
 		//
 // There is no matching tuple modified by us.  So, we have to fetch
@@ -262,7 +262,7 @@ retry:
 		if (!partial_load_full_page(&context.partial, img))
 		{
 			forceFind = true;
-			goto retry;
+			pub static mut RETRY: goto = std::mem::zeroed();
 		}
 		read_page_from_undo(desc, img, header->undoLocation, read_o_snapshot->csn,
 							key, kind, NULL);
@@ -288,14 +288,14 @@ o_btree_find_tuples_start(desc: &mut BTreeDescr,  *key,
 						   *arg,
 						  BTreeIterator **out_it)
 {
-	Pointer		img;
-	BTreePageItemLocator loc;
-	it: &mut BTreeIterator;
-	context: &mut OBTreeFindPageContext;
-	header: &mut BTreePageHeader;
-	OTuple		result;
-	uint16		findFlags = BTREE_PAGE_FIND_FETCH;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut IMG: Pointer = std::ptr::null_mut();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = std::ptr::null_mut();
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut FIND_FLAGS: uint16 = BTREE_PAGE_FIND_FETCH;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 	it = (BTreeIterator *) palloc(sizeof(BTreeIterator));
 	*out_it = it;
@@ -386,7 +386,7 @@ o_btree_find_tuples_start(desc: &mut BTreeDescr,  *key,
 		result = fetch_our_tuple_from_page(desc, img, &loc, key, kind, mcxt,
 										   out_csn, deleted);
 		if (!O_TUPLE_IS_NULL(result))
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 
 		load_page_from_undo(it, key, kind);
 		Assert(it->combinedPage);
@@ -411,13 +411,13 @@ o_btree_find_tuples_continue(it: &mut BTreeIterator,
 							 hint: &mut BTreeLocationHint,
 							 deleted: &mut bool)
 {
-	bool		needToReloadPage = true;
-	context: &mut OBTreeFindPageContext = &it->context;
-	desc: &mut BTreeDescr = context->desc;
-	loc: &mut BTreePageItemLocator = &it->context.items[it->context.index].locator;
-	Pointer		img = context->img;
+	pub static mut NEED_TO_RELOAD_PAGE: bool = true;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = &it->context.items[it->context.index].locator;
+	pub static mut IMG: Pointer = context->img;
 	header: &mut BTreePageHeader = (BTreePageHeader *) img;
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	if (page_contains_key(it, key, kind, img, get_lokey_if_exists(it)))
 	{
@@ -437,13 +437,13 @@ o_btree_find_tuples_continue(it: &mut BTreeIterator,
 //
 		if (IT_IS_FORWARD(it) && BTREE_PAGE_LOCATOR_IS_VALID(img, loc))
 		{
-			BTreePageItemLocator next = *loc;
+			pub static mut NEXT: BTreePageItemLocator = *loc;
 
 			BTREE_PAGE_LOCATOR_NEXT(img, &next);
 			if (BTREE_PAGE_LOCATOR_IS_VALID(img, &next) &&
 				next.chunkOffset == loc->chunkOffset)
 			{
-				OTuple		cur;
+				pub static mut CUR: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_READ_TUPLE(cur, img, &next);
 				if (o_btree_cmp(desc, key, kind, &cur, BTreeKeyLeafTuple) == 0)
@@ -462,7 +462,7 @@ o_btree_find_tuples_continue(it: &mut BTreeIterator,
 
 	if (needToReloadPage)
 	{
-		OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 		// Use the page location hint if provided
 		if (hint && OInMemoryBlknoIsValid(hint->blkno))
@@ -490,7 +490,7 @@ o_btree_find_tuples_continue(it: &mut BTreeIterator,
 		result = fetch_our_tuple_from_page(desc, img, loc, key, kind,
 										   it->tupleCxt, out_csn, deleted);
 		if (!O_TUPLE_IS_NULL(result))
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 
 		if (it->combinedPage)
 		{
@@ -540,20 +540,20 @@ fetch_our_tuple_from_page(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItem
 						   *key, BTreeKeyType kind, MemoryContext mcxt,
 						  out_csn: &mut CommitSeqNo, deleted: &mut bool)
 {
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	if (BTREE_PAGE_LOCATOR_IS_VALID(p, loc))
 	{
-		tupHdrPtr: &mut BTreeLeafTuphdr;
-		OTuple		curTuple;
-		int			result_size;
+		pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdrPtr = std::ptr::null_mut();
+		pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+		pub static mut RESULT_SIZE: std::os::raw::c_int = 0;
 
 		BTREE_PAGE_READ_LEAF_ITEM(tupHdrPtr, curTuple, p, loc);
 		tupHdrPtr = (BTreeLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, loc);
 
 		if (o_btree_cmp(desc, key, kind, &curTuple, BTreeKeyLeafTuple) == 0)
 		{
-			BTreeLeafTuphdr tupHdr = *tupHdrPtr;
+			pub static mut TUP_HDR: BTreeLeafTuphdr = *tupHdrPtr;
 
 			//
 // We found the matching tuple.  Now check if it is modified by
@@ -584,19 +584,19 @@ fetch_our_tuple_from_page(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItem
 					result.data = (Pointer) MemoryContextAlloc(mcxt, result_size);
 					memcpy(result.data, curTuple.data, result_size);
 					result.formatFlags = curTuple.formatFlags;
-					return result;
+					pub static mut RESULT: return = std::mem::zeroed();
 				}
 				else
 				{
 					O_TUPLE_SET_NULL(result);
 					// cppcheck-suppress uninitvar
-					return result;
+					pub static mut RESULT: return = std::mem::zeroed();
 				}
 			}
 		}
 	}
 	O_TUPLE_SET_NULL(result);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -611,13 +611,13 @@ fetch_tuple_from_page(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLoca
 					  out_csn: &mut CommitSeqNo, deleted: &mut bool,
 					  TupleFetchCallback cb,  *arg)
 {
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	if (BTREE_PAGE_LOCATOR_IS_VALID(p, loc))
 	{
-		tupHdr: &mut BTreeLeafTuphdr;
-		OTuple		curTuple;
-		int			cmp;
+		pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+		pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		BTREE_PAGE_READ_LEAF_ITEM(tupHdr, curTuple, p, loc);
 		cmp = o_btree_cmp(desc, key, kind, &curTuple, BTreeKeyLeafTuple);
@@ -638,7 +638,7 @@ fetch_tuple_from_page(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLoca
 
 	// Tuple isn't found
 	O_TUPLE_SET_NULL(result);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 OTuple
@@ -680,13 +680,13 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 {
 	BTreeLeafTuphdr tupHdr,
 			   *tupHdrPtr;
-	OTuple		curTuple;
-	OTuple		result;
-	int			result_size;
-	UndoLocation undoLocation = InvalidUndoLocation;
-	bool		curTupleAllocated = false;
-	MemoryContext prevMctx;
-	bool		txIsFinished = false;
+	pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut RESULT_SIZE: std::os::raw::c_int = 0;
+	pub static mut UNDO_LOCATION: UndoLocation = InvalidUndoLocation;
+	pub static mut CUR_TUPLE_ALLOCATED: bool = false;
+	pub static mut PREV_MCTX: MemoryContext = std::mem::zeroed();
+	pub static mut TX_IS_FINISHED: bool = false;
 
 	prevMctx = MemoryContextSwitchTo(mcxt);
 
@@ -699,9 +699,9 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 
 	while (true)
 	{
-		OTupleXactInfo xactInfo = tupHdr.xactInfo;
-		CommitSeqNo tupcsn;
-		XLogRecPtr	tupptr = InvalidXLogRecPtr;
+		pub static mut XACT_INFO: OTupleXactInfo = tupHdr.xactInfo;
+		pub static mut TUPCSN: CommitSeqNo = std::mem::zeroed();
+		pub static mut TUPPTR: XLogRecPtr = InvalidXLogRecPtr;
 
 		oxid_match_snapshot(XACT_INFO_GET_OXID(xactInfo), oSnapshot, &tupcsn,
 							XLogRecPtrIsInvalid(oSnapshot->xlogptr) ? NULL : &tupptr);
@@ -714,12 +714,12 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 				*tupleCsn = COMMITSEQNO_IS_NORMAL(oSnapshot->csn) ? Max(oSnapshot->csn, tupcsn + 1) : COMMITSEQNO_MAX_NORMAL - 1;
 			else if (COMMITSEQNO_IS_FROZEN(tupcsn))
 				*tupleCsn = COMMITSEQNO_IS_NORMAL(oSnapshot->csn) ? oSnapshot->csn : COMMITSEQNO_MAX_NORMAL - 1;
-			tupleCsn: &mut else = COMMITSEQNO_INPROGRESS;
+			pub static mut ELSE: *mut tupleCsn = COMMITSEQNO_INPROGRESS;
 		}
 
 		if (cb)
 		{
-			TupleFetchCallbackResult cbResult;
+			pub static mut CB_RESULT: TupleFetchCallbackResult = std::mem::zeroed();
 
 			//
 // Fetch from undo chain if txn is in progress OR historical
@@ -737,7 +737,7 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 					pfree(curTuple.data);
 				O_TUPLE_SET_NULL(result);
 				MemoryContextSwitchTo(prevMctx);
-				return result;
+				pub static mut RESULT: return = std::mem::zeroed();
 			}
 		}
 
@@ -757,7 +757,7 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 					XACT_INFO_OXID_IS_CURRENT(xactInfo) &&
 					oSnapshot->csn != COMMITSEQNO_MAX_NORMAL)
 				{
-					CommandId	tupleCid;
+					pub static mut TUPLE_CID: CommandId = std::mem::zeroed();
 
 					if (IS_SYS_TREE_OIDS(desc->oids))
 						break;
@@ -809,7 +809,7 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 				pfree(curTuple.data);
 			O_TUPLE_SET_NULL(result);
 			MemoryContextSwitchTo(prevMctx);
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 
 		if (tupHdr.deleted != BTreeLeafTupleNonDeleted ||
@@ -838,7 +838,7 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 				pfree(curTuple.data);
 			O_TUPLE_SET_NULL(result);
 			MemoryContextSwitchTo(prevMctx);
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 	}
 	else if (tupHdr.deleted != BTreeLeafTupleNonDeleted && !cb)
@@ -847,7 +847,7 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 			pfree(curTuple.data);
 		O_TUPLE_SET_NULL(result);
 		MemoryContextSwitchTo(prevMctx);
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	if (!curTupleAllocated)
@@ -865,7 +865,7 @@ o_find_tuple_version(desc: &mut BTreeDescr, Page p, loc: &mut BTreePageItemLocat
 
 	Assert(!UndoLocationIsValid(undoLocation) || UNDO_REC_EXISTS(desc->undoType, undoLocation));
 	MemoryContextSwitchTo(prevMctx);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -881,7 +881,7 @@ advance_page_location_if_needed(it: &mut BTreeIterator,  *key,
 {
 	if (key != NULL && IT_IS_BACKWARD(it))
 	{
-		bool		make_dec = false;
+		pub static mut MAKE_DEC: bool = false;
 
 		//
 // From btree_page_search(): "When nextkey is false (this case), we
@@ -896,7 +896,7 @@ advance_page_location_if_needed(it: &mut BTreeIterator,  *key,
 			make_dec = true;
 		else
 		{
-			OTuple		tup;
+			pub static mut TUP: OTuple = std::mem::zeroed();
 
 			BTREE_PAGE_READ_TUPLE(tup, p, loc);
 			if (o_btree_cmp(it->context.desc, key, kind, &tup, BTreeKeyLeafTuple) < 0)
@@ -912,9 +912,9 @@ BTreeIterator *
 o_btree_iterator_create(desc: &mut BTreeDescr,  *key, BTreeKeyType kind,
 						o_snapshot: &mut OSnapshot, ScanDirection scanDir)
 {
-	it: &mut BTreeIterator;
-	uint16		findFlags;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut FIND_FLAGS: uint16 = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 	it = (BTreeIterator *) palloc(sizeof(BTreeIterator));
 
@@ -1006,13 +1006,13 @@ o_btree_iterator_create(desc: &mut BTreeDescr,  *key, BTreeKeyType kind,
 //
 	if (!it->combinedResult && BTREE_PAGE_FIND_IS(&it->context, FETCH))
 	{
-		loc: &mut BTreePageItemLocator = &it->context.items[it->context.index].locator;
+		pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = &it->context.items[it->context.index].locator;
 
 		if (BTREE_PAGE_LOCATOR_IS_VALID(it->context.img, loc) &&
 			partial_load_chunk(&it->context.partial, it->context.img,
 							   loc->chunkOffset, NULL))
 		{
-			OTuple		tup;
+			pub static mut TUP: OTuple = std::mem::zeroed();
 
 			BTREE_PAGE_READ_LEAF_TUPLE(tup, it->context.img, loc);
 			copy_fixed_key(desc, &it->curKey, tup);
@@ -1021,7 +1021,7 @@ o_btree_iterator_create(desc: &mut BTreeDescr,  *key, BTreeKeyType kind,
 		}
 	}
 
-	return it;
+	pub static mut IT: return = std::mem::zeroed();
 }
 
 //
@@ -1034,22 +1034,22 @@ static bool
 page_contains_key(it: &mut BTreeIterator,  *key, BTreeKeyType kind,
 				  Page p, OTuple lokey)
 {
-	partial: &mut PartialPageState = &it->context.partial;
+	pub static mut PARTIAL_PAGE_STATE: *mut partial = &it->context.partial;
 
 	if (partial && partial->isPartial && !partial->hikeysChunkIsLoaded)
 	{
 		if (!partial_load_hikeys_chunk(partial, p))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// Check if the new value fits the same leaf page
 	if (IT_IS_FORWARD(it))
 	{
-		OTuple		hikey;
-		int			cmp;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		if (O_PAGE_IS(p, RIGHTMOST))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, p);
 		cmp = o_btree_cmp(it->context.desc,
@@ -1059,10 +1059,10 @@ page_contains_key(it: &mut BTreeIterator,  *key, BTreeKeyType kind,
 	}
 	else
 	{
-		int			cmp;
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		if (O_PAGE_IS(p, LEFTMOST))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		cmp = o_btree_cmp(it->context.desc,
 						  key, kind,
@@ -1078,14 +1078,14 @@ page_contains_key(it: &mut BTreeIterator,  *key, BTreeKeyType kind,
 static OTuple
 get_lokey_if_exists(it: &mut BTreeIterator)
 {
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	if (IT_IS_BACKWARD(it) && !O_PAGE_IS(it->context.img, LEFTMOST))
 		result = btree_find_context_lokey(&it->context);
 	else
 		O_TUPLE_SET_NULL(result);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1096,8 +1096,8 @@ get_lokey_if_exists(it: &mut BTreeIterator)
 
 o_btree_iterator_advance(it: &mut BTreeIterator,  *key, BTreeKeyType kind)
 {
-	loc: &mut BTreePageItemLocator = &it->context.items[it->context.index].locator;
-	bool		found_in_page = false;
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = &it->context.items[it->context.index].locator;
+	pub static mut FOUND_IN_PAGE: bool = false;
 
 	Assert(key != NULL && kind != BTreeKeyNone);
 
@@ -1114,7 +1114,7 @@ o_btree_iterator_advance(it: &mut BTreeIterator,  *key, BTreeKeyType kind)
 		partial_load_chunk(&it->context.partial, it->context.img,
 						   loc->chunkOffset, NULL))
 	{
-		OTuple		cur;
+		pub static mut CUR: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_READ_TUPLE(cur, it->context.img, loc);
 		if (o_btree_cmp(it->context.desc, key, kind,
@@ -1187,7 +1187,7 @@ o_btree_iterator_advance(it: &mut BTreeIterator,  *key, BTreeKeyType kind)
 	else
 	{
 		// Otherwise, re-find the leaf page if needed
-		OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 		findResult = find_page(&it->context, key, kind, 0);
 		Assert(findResult == OFindPageResultSuccess);
@@ -1231,10 +1231,10 @@ o_btree_iterator_fetch(it: &mut BTreeIterator, tupleCsn: &mut CommitSeqNo,
 					    *endKey, BTreeKeyType endKind,
 					   bool endIsIncluded, hint: &mut BTreeLocationHint)
 {
-	desc: &mut BTreeDescr = it->context.desc;
-	OTuple		result;
-	BtreeIterationEnd end;
-	endPtr: &mut BtreeIterationEnd;
+	pub static mut B_TREE_DESCR: *mut desc = it->context.desc;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut END: BtreeIterationEnd = std::mem::zeroed();
+	pub static mut BTREE_ITERATION_END: *mut endPtr = std::ptr::null_mut();
 
 	if (endKey != NULL && endKind != BTreeKeyNone)
 	{
@@ -1278,7 +1278,7 @@ o_btree_iterator_fetch(it: &mut BTreeIterator, tupleCsn: &mut CommitSeqNo,
 				it->context.items[it->context.index].locator = it->resumeLoc;
 				it->curKeyReturned = false;
 			}
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 	}
 
@@ -1287,7 +1287,7 @@ o_btree_iterator_fetch(it: &mut BTreeIterator, tupleCsn: &mut CommitSeqNo,
 	{
 		if (!O_TUPLE_IS_NULL(it->prevTuple.tuple))
 		{
-			int			cmp;
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			cmp = o_btree_cmp(desc, &it->prevTuple.tuple, BTreeKeyLeafTuple,
 							  &result, BTreeKeyLeafTuple);
@@ -1304,7 +1304,7 @@ o_btree_iterator_fetch(it: &mut BTreeIterator, tupleCsn: &mut CommitSeqNo,
 		hint->pageChangeCount = it->context.items[it->context.index].pageChangeCount;
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1324,9 +1324,9 @@ btree_iterator_free(it: &mut BTreeIterator)
 fn
 load_page_from_undo(it: &mut BTreeIterator,  *key, BTreeKeyType kind)
 {
-	context: &mut OBTreeFindPageContext = &it->context;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
 	header: &mut BTreePageHeader = (BTreePageHeader *) context->img;
-	desc: &mut BTreeDescr = context->desc;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
 
 	if (it->combinedResult && header->csn >= it->oSnapshot.csn)
 	{
@@ -1369,17 +1369,17 @@ load_page_from_undo(it: &mut BTreeIterator,  *key, BTreeKeyType kind)
 fn
 get_next_combined_location(it: &mut BTreeIterator)
 {
-	context: &mut OBTreeFindPageContext = &it->context;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
 	OXid		oxid = get_current_oxid_if_any();
-	loc: &mut BTreePageItemLocator = &context->items[context->index].locator;
-	Page		img = context->img;
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = &context->items[context->index].locator;
+	pub static mut IMG: Page = context->img;
 
 	if (!BTREE_PAGE_LOCATOR_IS_VALID(img, loc))
 		return;
 
 	while (BTREE_PAGE_LOCATOR_IS_VALID(img, loc))
 	{
-		tupHdr: &mut BTreeLeafTuphdr;
+		pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
 
 		tupHdr = (BTreeLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(img, loc);
 
@@ -1399,12 +1399,12 @@ get_next_combined_location(it: &mut BTreeIterator)
 fn
 iterator_refind_partial_leaf(it: &mut BTreeIterator)
 {
-	context: &mut OBTreeFindPageContext = &it->context;
-	desc: &mut BTreeDescr = context->desc;
-	loc: &mut BTreePageItemLocator;
-	OTuple		tup;
-	bool		match;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = std::ptr::null_mut();
+	pub static mut TUP: OTuple = std::mem::zeroed();
+	pub static mut MATCH: bool = false;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
 
 	Assert(!it->combinedResult);
 
@@ -1438,7 +1438,7 @@ iterator_refind_partial_leaf(it: &mut BTreeIterator)
 		if (it->startKey != NULL && IT_IS_BACKWARD(it) &&
 			BTREE_PAGE_LOCATOR_IS_VALID(context->img, loc))
 		{
-			bool		make_dec = false;
+			pub static mut MAKE_DEC: bool = false;
 
 			if (BTREE_PAGE_LOCATOR_GET_OFFSET(context->img, loc) ==
 				BTREE_PAGE_ITEMS_COUNT(context->img))
@@ -1540,11 +1540,11 @@ iterator_refind_partial_leaf(it: &mut BTreeIterator)
 static inline bool
 iterator_advance_leaf(it: &mut BTreeIterator, loc: &mut BTreePageItemLocator)
 {
-	context: &mut OBTreeFindPageContext = &it->context;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
 
 	if (BTREE_PAGE_FIND_IS(context, FETCH))
 	{
-		bool		crossing;
+		pub static mut CROSSING: bool = false;
 
 		if (IT_IS_FORWARD(it))
 			crossing = loc->itemOffset + 1 >= loc->chunkItemsCount;
@@ -1553,11 +1553,11 @@ iterator_advance_leaf(it: &mut BTreeIterator, loc: &mut BTreePageItemLocator)
 
 		if (crossing &&
 			!partial_load_hikeys_chunk(&context->partial, context->img))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	IT_NEXT_OFFSET(it, loc);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1567,22 +1567,22 @@ static OTuple
 o_btree_iterator_fetch_internal(it: &mut BTreeIterator, tupleCsn: &mut CommitSeqNo,
 								end: &mut BtreeIterationEnd)
 {
-	desc: &mut BTreeDescr = it->context.desc;
-	context: &mut OBTreeFindPageContext = &it->context;
-	leaf_item: &mut OBtreePageFindItem;
+	pub static mut B_TREE_DESCR: *mut desc = it->context.desc;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
+	pub static mut O_BTREE_PAGE_FIND_ITEM: *mut leaf_item = std::ptr::null_mut();
 	Page		img = context->img,
 				hImg = it->undoIt.image;
 	OTuple		result,
 				itup,
 				htup;
-	int			cmp;
+	pub static mut CMP: std::os::raw::c_int = 0;
 
 	while (true)
 	{
 		if (!btree_iterator_check_load_next_page(it, end))
 		{
 			O_TUPLE_SET_NULL(result);
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 
 		leaf_item = &context->items[context->index];
@@ -1619,7 +1619,7 @@ o_btree_iterator_fetch_internal(it: &mut BTreeIterator, tupleCsn: &mut CommitSeq
 					UNDO_IT_NEXT_OFFSET(&it->undoIt, &it->undoLoc);
 
 				if (!O_TUPLE_IS_NULL(result))
-					return result;
+					pub static mut RESULT: return = std::mem::zeroed();
 			}
 			else
 			{
@@ -1633,12 +1633,12 @@ o_btree_iterator_fetch_internal(it: &mut BTreeIterator, tupleCsn: &mut CommitSeq
 				UNDO_IT_NEXT_OFFSET(&it->undoIt, &it->undoLoc);
 
 				if (!O_TUPLE_IS_NULL(result))
-					return result;
+					pub static mut RESULT: return = std::mem::zeroed();
 			}
 		}
 		else
 		{
-			OTuple		posTup;
+			pub static mut POS_TUP: OTuple = std::mem::zeroed();
 
 			// In FETCH mode the leaf is partial; load this tuple's chunk.
 			if (BTREE_PAGE_FIND_IS(context, FETCH) &&
@@ -1685,7 +1685,7 @@ o_btree_iterator_fetch_internal(it: &mut BTreeIterator, tupleCsn: &mut CommitSeq
 			}
 
 			if (!O_TUPLE_IS_NULL(result))
-				return result;
+				pub static mut RESULT: return = std::mem::zeroed();
 		}
 	}
 
@@ -1719,33 +1719,33 @@ page_contains_end(it: &mut BTreeIterator, Page p,
 
 	if (IT_IS_FORWARD(it))
 	{
-		OTuple		hikey;
-		int			cmp;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		if (O_PAGE_IS(p, RIGHTMOST))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, p);
 		cmp = o_btree_cmp(it->context.desc,
 						  end->key, end->keyKind,
 						  &hikey, BTreeKeyNonLeafKey);
 		if (cmp < 0 || (cmp == 0 && !end->isIncluded))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
 	{
-		int			cmp;
+		pub static mut CMP: std::os::raw::c_int = 0;
 
 		if (O_PAGE_IS(p, LEFTMOST))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		cmp = o_btree_cmp(it->context.desc,
 						  end->key, end->keyKind,
 						  &lokey, BTreeKeyNonLeafKey);
 		if (cmp >= 0)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -1755,22 +1755,22 @@ page_contains_end(it: &mut BTreeIterator, Page p,
 static bool
 btree_iterator_check_load_next_page(it: &mut BTreeIterator, end: &mut BtreeIterationEnd)
 {
-	context: &mut OBTreeFindPageContext = &it->context;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
 	Page		img = context->img,
 				hImg = it->undoIt.image;
-	desc: &mut BTreeDescr = context->desc;
-	OFixedKey	key_buf;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut KEY_BUF: OFixedKey = std::mem::zeroed();
 
 	if (o_btree_interator_can_fetch_from_undo(context->desc, it, end))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	while (!BTREE_PAGE_LOCATOR_IS_VALID(img, &context->items[context->index].locator))
 	{
-		bool		step_result;
-		header: &mut BTreePageHeader;
+		pub static mut STEP_RESULT: bool = false;
+		pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
 
 		if (IS_LAST_PAGE(img, it))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		iterator_maybe_switch_to_image(it);
 
@@ -1813,7 +1813,7 @@ btree_iterator_check_load_next_page(it: &mut BTreeIterator, end: &mut BtreeItera
 // image.
 //
 		if (end && page_contains_end(it, img, get_lokey_if_exists(it), end))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		if (IT_IS_FORWARD(it))
 			step_result = find_right_page(context, &key_buf);
@@ -1821,13 +1821,13 @@ btree_iterator_check_load_next_page(it: &mut BTreeIterator, end: &mut BtreeItera
 			step_result = find_left_page(context, &key_buf);
 
 		if (!step_result)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		header = (BTreePageHeader *) context->img;
 
 		if (it->combinedResult && header->csn >= it->oSnapshot.csn)
 		{
-			bool		reload = true;
+			pub static mut RELOAD: bool = true;
 
 			if (it->combinedPage)
 				reload = !o_btree_interator_can_fetch_from_undo(context->desc, it, NULL);
@@ -1865,7 +1865,7 @@ btree_iterator_check_load_next_page(it: &mut BTreeIterator, end: &mut BtreeItera
 			break;
 	}
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1885,7 +1885,7 @@ o_btree_interator_can_fetch_from_undo(desc: &mut BTreeDescr, it: &mut BTreeItera
 // that data page.
 //
 	if (!it->combinedPage)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	//
 // Return immediately if the loaded page contains the whole remained key
@@ -1924,24 +1924,24 @@ o_btree_interator_can_fetch_from_undo(desc: &mut BTreeDescr, it: &mut BTreeItera
 static bool
 can_fetch_from_undo(it: &mut BTreeIterator)
 {
-	desc: &mut BTreeDescr = it->context.desc;
-	context: &mut OBTreeFindPageContext = &it->context;
-	OTuple		htup;
-	int			cmp;
+	pub static mut B_TREE_DESCR: *mut desc = it->context.desc;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
+	pub static mut HTUP: OTuple = std::mem::zeroed();
+	pub static mut CMP: std::os::raw::c_int = 0;
 
 	// False if no tuples to fetch
 	if (!BTREE_PAGE_LOCATOR_IS_VALID(it->undoIt.image, &it->undoLoc))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	// True if `img` key range is inifity in the required direction
 	if (IS_LAST_PAGE(context->img, it))
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	// Compare the next tuple with corresponding key range bound
 	BTREE_PAGE_READ_LEAF_TUPLE(htup, it->undoIt.image, &it->undoLoc);
 	if (IT_IS_FORWARD(it))
 	{
-		OTuple		hikey;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, context->img);
 		cmp = o_btree_cmp(desc, &hikey, BTreeKeyNonLeafKey, &htup, BTreeKeyLeafTuple);
@@ -1962,11 +1962,11 @@ btree_iterate_raw_internal(it: &mut BTreeIterator,  *end, BTreeKeyType endKind,
 						   hint: &mut BTreeLocationHint, bool deleted_as_null,
 						   BTreeLeafTuphdr **tupHdr)
 {
-	localTupHdr: &mut BTreeLeafTuphdr;
-	context: &mut OBTreeFindPageContext = &it->context;
-	Page		img = context->img;
-	OTuple		result;
-	OFixedKey	key_buf;
+	pub static mut B_TREE_LEAF_TUPHDR: *mut localTupHdr = std::ptr::null_mut();
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = &it->context;
+	pub static mut IMG: Page = context->img;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut KEY_BUF: OFixedKey = std::mem::zeroed();
 
 	if (!tupHdr)
 		tupHdr = &localTupHdr;
@@ -1975,7 +1975,7 @@ btree_iterate_raw_internal(it: &mut BTreeIterator,  *end, BTreeKeyType endKind,
 
 	while (true)
 	{
-		loc: &mut BTreePageItemLocator = &context->items[context->index].locator;
+		pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = &context->items[context->index].locator;
 
 		if (BTREE_PAGE_LOCATOR_IS_VALID(img, loc))
 		{
@@ -2002,15 +2002,15 @@ btree_iterate_raw_internal(it: &mut BTreeIterator,  *end, BTreeKeyType endKind,
 //
 			if (end != NULL && endKind != BTreeKeyNone)
 			{
-				desc: &mut BTreeDescr = it->context.desc;
-				int			cmp;
+				pub static mut B_TREE_DESCR: *mut desc = it->context.desc;
+				pub static mut CMP: std::os::raw::c_int = 0;
 
 				cmp = o_btree_cmp(desc, &result, BTreeKeyLeafTuple, end, endKind);
 				if (cmp > 0 || (cmp == 0 && !endInclude))
 				{
 					*scanEnd = true;
 					O_TUPLE_SET_NULL(result);
-					return result;
+					pub static mut RESULT: return = std::mem::zeroed();
 				}
 			}
 
@@ -2037,12 +2037,12 @@ btree_iterate_raw_internal(it: &mut BTreeIterator,  *end, BTreeKeyType endKind,
 					hint->blkno = it->context.items[it->context.index].blkno;
 					hint->pageChangeCount = it->context.items[it->context.index].pageChangeCount;
 				}
-				return result;
+				pub static mut RESULT: return = std::mem::zeroed();
 			}
 			else
 			{
 				O_TUPLE_SET_NULL(result);
-				return result;
+				pub static mut RESULT: return = std::mem::zeroed();
 			}
 		}
 
@@ -2050,7 +2050,7 @@ btree_iterate_raw_internal(it: &mut BTreeIterator,  *end, BTreeKeyType endKind,
 		{
 			*scanEnd = true;
 			O_TUPLE_SET_NULL(result);
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 
 		iterator_maybe_switch_to_image(it);
@@ -2081,7 +2081,7 @@ btree_iterate_raw_internal(it: &mut BTreeIterator,  *end, BTreeKeyType endKind,
 			if (!find_right_page(context, &key_buf))
 			{
 				O_TUPLE_SET_NULL(result);
-				return result;
+				pub static mut RESULT: return = std::mem::zeroed();
 			}
 		}
 		else
@@ -2089,7 +2089,7 @@ btree_iterate_raw_internal(it: &mut BTreeIterator,  *end, BTreeKeyType endKind,
 			if (!find_left_page(context, &key_buf))
 			{
 				O_TUPLE_SET_NULL(result);
-				return result;
+				pub static mut RESULT: return = std::mem::zeroed();
 			}
 		}
 	}
@@ -2154,12 +2154,12 @@ undo_it_init(undoIt: &mut UndoIterator, UndoLocation location,  *key, BTreeKeyTy
 static bool
 undo_it_next_page(desc: &mut BTreeDescr, undoIt: &mut UndoIterator)
 {
-	BTreeKeyType kind;
-	OFixedKey	key;
-	UndoLocation prevLoc;
+	pub static mut KIND: BTreeKeyType = std::mem::zeroed();
+	pub static mut KEY: OFixedKey = std::mem::zeroed();
+	pub static mut PREV_LOC: UndoLocation = std::mem::zeroed();
 
 	if (!UndoLocationIsValid(undoIt->baseLoc))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	// Get bound key from the current undo page
 	if (IT_IS_FORWARD(undoIt->it))
@@ -2187,12 +2187,12 @@ undo_it_next_page(desc: &mut BTreeDescr, undoIt: &mut UndoIterator)
 	// Did we manage to find another page?
 	if (prevLoc != undoIt->imageUndoLoc)
 	{
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
 	{
 		Assert(undoIt->rightmost || undoIt->leftmost);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 }
 
@@ -2205,16 +2205,16 @@ undo_it_switch(desc: &mut BTreeDescr, undoIt: &mut UndoIterator, UndoLocation lo
 	bool		is_forward = IT_IS_FORWARD(undoIt->it);
 
 	if (!UndoLocationIsValid(location) || undoIt->baseLoc == location)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!UndoLocationIsValid(undoIt->baseLoc))
 	{
-		BTreeKeyType kind = is_forward ? BTreeKeyNone : BTreeKeyRightmost;
+		pub static mut KIND: BTreeKeyType = is_forward ? BTreeKeyNone : BTreeKeyRightmost;
 
 		// load of full undo
 		undoIt->baseLoc = location;
 		undo_it_find_internal(undoIt, NULL, kind);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	// else we must find next page in undo
 
@@ -2222,7 +2222,7 @@ undo_it_switch(desc: &mut BTreeDescr, undoIt: &mut UndoIterator, UndoLocation lo
 	if (IS_LAST_PAGE(undoIt->image, undoIt->it))
 	{
 		// there is no more pages expected
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	else
 	{
@@ -2244,12 +2244,12 @@ undo_it_switch(desc: &mut BTreeDescr, undoIt: &mut UndoIterator, UndoLocation lo
 //
 				return undo_it_next_page(desc, undoIt);
 			}
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 		else
 		{
-			OFixedKey	prev_hikey;
-			int			cmp;
+			pub static mut PREV_HIKEY: OFixedKey = std::mem::zeroed();
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			// copy the previous page hikey
 			copy_fixed_hikey(desc, &prev_hikey, undoIt->image);
@@ -2261,7 +2261,7 @@ undo_it_switch(desc: &mut BTreeDescr, undoIt: &mut UndoIterator, UndoLocation lo
 			}
 			else
 			{
-				OTuple		image_hikey;
+				pub static mut IMAGE_HIKEY: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_GET_HIKEY(image_hikey, undoIt->image);
 				cmp = o_btree_cmp(desc, &image_hikey, BTreeKeyNonLeafKey,
@@ -2276,7 +2276,7 @@ undo_it_switch(desc: &mut BTreeDescr, undoIt: &mut UndoIterator, UndoLocation lo
 			// in backward case we must load previous page
 			Assert(is_forward || cmp < 0);
 
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 	}
 }
@@ -2287,9 +2287,9 @@ undo_it_switch(desc: &mut BTreeDescr, undoIt: &mut UndoIterator, UndoLocation lo
 fn
 undo_it_find_internal(undoIt: &mut UndoIterator,  *key, BTreeKeyType kind)
 {
-	header: &mut BTreePageHeader;
-	CommitSeqNo rec_csn;
-	desc: &mut BTreeDescr = undoIt->it->context.desc;
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut REC_CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut B_TREE_DESCR: *mut desc = undoIt->it->context.desc;
 	UndoLogType undoType PG_USED_FOR_ASSERTS_ONLY = GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType);
 	UndoLocation rec_undo_loc,
 				undoLocation;
@@ -2383,19 +2383,19 @@ orioledb_test_endkey_returned_skip(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
 	int32		start_at = PG_GETARG_INT32(1);
-	Relation	rel;
-	descr: &mut OTableDescr;
-	primary: &mut OIndexDescr;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut primary = std::ptr::null_mut();
 	OBTreeKeyBound startBound,
 				narrowEnd,
 				wideEnd;
-	it: &mut BTreeIterator;
-	OTuple		result;
-	bool		scanEnd = false;
-	bool		isnull;
-	elems: &mut Datum;
-	int			nelems = 0;
-	int			alloc = 16;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut SCAN_END: bool = false;
+	pub static mut ISNULL: bool = false;
+	pub static mut DATUM: *mut elems = std::ptr::null_mut();
+	pub static mut NELEMS: std::os::raw::c_int = 0;
+	pub static mut ALLOC: std::os::raw::c_int = 16;
 	int			dims[1],
 				lbs[1];
 
@@ -2499,20 +2499,20 @@ orioledb_test_back_refind_skip_tail(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
 	int32		fake_curkey = PG_GETARG_INT32(1);
-	Relation	rel;
-	descr: &mut OTableDescr;
-	primary: &mut OIndexDescr;
-	OBTreeKeyBound startBound;
-	it: &mut BTreeIterator;
-	OTuple		result;
-	OTuple		fakeTup;
-	Datum		fakeValue;
-	bool		fakeNull = false;
-	bool		scanEnd = false;
-	bool		isnull;
-	elems: &mut Datum;
-	int			nelems = 0;
-	int			alloc = 16;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut primary = std::ptr::null_mut();
+	pub static mut START_BOUND: OBTreeKeyBound = std::mem::zeroed();
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut FAKE_TUP: OTuple = std::mem::zeroed();
+	pub static mut FAKE_VALUE: Datum = std::mem::zeroed();
+	pub static mut FAKE_NULL: bool = false;
+	pub static mut SCAN_END: bool = false;
+	pub static mut ISNULL: bool = false;
+	pub static mut DATUM: *mut elems = std::ptr::null_mut();
+	pub static mut NELEMS: std::os::raw::c_int = 0;
+	pub static mut ALLOC: std::os::raw::c_int = 16;
 	int			dims[1],
 				lbs[1];
 

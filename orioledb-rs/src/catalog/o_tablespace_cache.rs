@@ -32,9 +32,9 @@ o_get_prefixes_for_tablespace(Oid datoid, Oid tablespace,
 							  char **prefix, char **db_prefix)
 {
 	static char pathbuf[MAXPGPATH];
-	Datum		path_datum;
-	path: &mut text;
-	path_str: &mut char;
+	pub static mut PATH_DATUM: Datum = std::mem::zeroed();
+	pub static mut TEXT: *mut path = std::ptr::null_mut();
+	pub static mut CHAR: *mut path_str = std::ptr::null_mut();
 
 	//
 // Treat InvalidOid as the default tablespace.  System trees and trees

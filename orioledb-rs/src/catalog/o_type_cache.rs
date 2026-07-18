@@ -29,7 +29,7 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static type_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut type_cache = std::ptr::null_mut();
 
 fn o_type_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 									Pointer arg);
@@ -58,8 +58,8 @@ O_SYS_CACHE_INIT_FUNC(type_cache)
 fn
 o_type_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey, Pointer arg)
 {
-	HeapTuple	typetup;
-	Form_pg_type typeform;
+	pub static mut TYPETUP: HeapTuple = std::mem::zeroed();
+	pub static mut TYPEFORM: Form_pg_type = std::mem::zeroed();
 	o_type: &mut OType = (OType *) *entry_ptr;
 	Oid			typeoid = DatumGetObjectId(key->keys[0]);
 
@@ -116,12 +116,12 @@ o_type_cache_free_entry(Pointer entry)
 HeapTuple
 o_type_cache_search_htup(TupleDesc tupdesc, Oid typeoid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	typetup = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut TYPETUP: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_type] = {0};
 	bool		nulls[Natts_pg_type] = {0};
-	o_type: &mut OType;
+	pub static mut O_TYPE: *mut o_type = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);
@@ -162,33 +162,33 @@ o_type_cache_search_htup(TupleDesc tupdesc, Oid typeoid)
 		nulls[Anum_pg_type_typacl - 1] = true;
 		typetup = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return typetup;
+	pub static mut TYPETUP: return = std::mem::zeroed();
 }
 
 bool
 o_type_cache_get_typtype(Oid typeoid, typtype: &mut char)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	o_type: &mut OType;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut O_TYPE: *mut o_type = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);
 	if (o_type)
 	{
 		*typtype = o_type->typtype;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 }
 
 Oid
 o_type_cache_default_opclass(Oid typeoid, Oid am_id)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	o_type: &mut OType;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut O_TYPE: *mut o_type = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);
@@ -204,9 +204,9 @@ o_type_cache_default_opclass(Oid typeoid, Oid am_id)
 o_type_cache_fill_info(Oid typeoid, typlen: &mut int16, typbyval: &mut bool,
 					   typalign: &mut char, typstorage: &mut char, typcollation: &mut Oid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	o_type: &mut OType;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut O_TYPE: *mut o_type = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_type = o_type_cache_search(datoid, typeoid, cur_lsn, type_cache->nkeys);

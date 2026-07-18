@@ -55,11 +55,11 @@ fn orioledb_setup_syscache_hooks();
 typedef struct OSysCacheHashTreeEntry
 {
 	sys_cache: &mut OSysCache;		// If NULL only link stored
-	Pointer		entry;
+	pub static mut ENTRY: Pointer = std::ptr::null_mut();
 } OSysCacheHashTreeEntry;
 typedef struct OSysCacheHashEntry
 {
-	OSysCacheHashKey key;
+	pub static mut KEY: OSysCacheHashKey = std::mem::zeroed();
 	tree_entries: &mut List;	// list of OSysCacheHashTreeEntry-s that used
 // because we store entries for all sys caches
 // in same fastcache for simpler invalidation
@@ -68,8 +68,8 @@ typedef struct OSysCacheHashEntry
 
 typedef struct OCacheIdMapEntry
 {
-	int			cacheId;
-	sys_cache: &mut OSysCache;
+	pub static mut CACHE_ID: std::os::raw::c_int = 0;
+	pub static mut O_SYS_CACHE: *mut sys_cache = std::ptr::null_mut();
 } OCacheIdMapEntry;
 
 static Pointer o_sys_cache_get_from_tree(sys_cache: &mut OSysCache,
@@ -115,16 +115,16 @@ static ToastAPI oSysCacheToastAPI = {
 	.fetchCallback = NULL
 };
 
-Oid			o_sys_cache_search_datoid = InvalidOid;
+pub static mut O_SYS_CACHE_SEARCH_DATOID: Oid = InvalidOid;
 
-static MemoryContext sys_cache_cxt = NULL;
-static sys_cache_fastcache: &mut HTAB;
-static sys_caches: &mut HTAB;
+static mut SYS_CACHE_CXT: MemoryContext = std::ptr::null_mut();
+static mut HTAB: *mut sys_cache_fastcache = std::ptr::null_mut();
+static mut HTAB: *mut sys_caches = std::ptr::null_mut();
 
-static ResourceOwner my_owner = NULL;
-static Oid	save_userid;
-static int	save_sec_context;
-static int	o_sys_cache_hooks_depth = 0;
+static mut MY_OWNER: ResourceOwner = std::ptr::null_mut();
+static mut SAVE_USERID: Oid = std::mem::zeroed();
+static mut SAVE_SEC_CONTEXT: std::os::raw::c_int = 0;
+static mut O_SYS_CACHE_HOOKS_DEPTH: std::os::raw::c_int = 0;
 
 //
 // Initializes the enum B-tree memory.
@@ -132,7 +132,7 @@ static int	o_sys_cache_hooks_depth = 0;
 
 o_sys_caches_init()
 {
-	HASHCTL		ctl;
+	pub static mut CTL: HASHCTL = std::mem::zeroed();
 
 	sys_cache_cxt = AllocSetContextCreate(TopMemoryContext,
 										  "OrioleDB sys_caches fastcache context",
@@ -180,7 +180,7 @@ charhashfast(key: &mut OSysCacheKey, int att_num)
 static uint32
 namehashfast(key: &mut OSysCacheKey, int att_num)
 {
-	name: &mut char;
+	pub static mut CHAR: *mut name = std::ptr::null_mut();
 
 	name = NameStr(*O_KEY_GET_NAME(key, att_num));
 	return hash_any((unsigned char *) name, strlen(name));
@@ -274,9 +274,9 @@ o_create_sys_cache(int sys_tree_num, bool is_toast,
 				   keytypes: &mut Oid, int data_len, fast_cache: &mut HTAB,
 				   MemoryContext mcxt, funcs: &mut OSysCacheFuncs)
 {
-	sys_cache: &mut OSysCache;
-	int			i;
-	entry: &mut OCacheIdMapEntry;
+	pub static mut O_SYS_CACHE: *mut sys_cache = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut O_CACHE_ID_MAP_ENTRY: *mut entry = std::ptr::null_mut();
 
 	Assert(fast_cache);
 	Assert(funcs);
@@ -311,7 +311,7 @@ o_create_sys_cache(int sys_tree_num, bool is_toast,
 	entry = hash_search(sys_caches, &cacheId, HASH_ENTER, NULL);
 	entry->sys_cache = sys_cache;
 	sys_tree_set_extra(sys_tree_num, (Pointer) sys_cache);
-	return sys_cache;
+	pub static mut SYS_CACHE: return = std::mem::zeroed();
 }
 
 //
@@ -322,8 +322,8 @@ o_create_sys_cache(int sys_tree_num, bool is_toast,
 static OSysCacheHashKey
 compute_hash_value(cc_hashfunc: &mut O_CCHashFN, int nkeys, key: &mut OSysCacheKey)
 {
-	uint32		hashValue = 0;
-	uint32		oneHash;
+	pub static mut HASH_VALUE: uint32 = 0;
+	pub static mut ONE_HASH: uint32 = std::mem::zeroed();
 
 	switch (nkeys)
 	{
@@ -355,14 +355,14 @@ compute_hash_value(cc_hashfunc: &mut O_CCHashFN, int nkeys, key: &mut OSysCacheK
 			break;
 	}
 
-	return hashValue;
+	pub static mut HASH_VALUE: return = std::mem::zeroed();
 }
 
 fn
 invalidate_fastcache_entry(int cacheid, uint32 hashvalue)
 {
-	bool		found;
-	fast_cache_entry: &mut OSysCacheHashEntry;
+	pub static mut FOUND: bool = false;
+	pub static mut O_SYS_CACHE_HASH_ENTRY: *mut fast_cache_entry = std::ptr::null_mut();
 
 	fast_cache_entry = (OSysCacheHashEntry *) hash_search(sys_cache_fastcache,
 														  &hashvalue,
@@ -371,17 +371,17 @@ invalidate_fastcache_entry(int cacheid, uint32 hashvalue)
 
 	if (found)
 	{
-		lc: &mut ListCell;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 		foreach(lc, fast_cache_entry->tree_entries)
 		{
-			tree_entry: &mut OSysCacheHashTreeEntry;
+			pub static mut O_SYS_CACHE_HASH_TREE_ENTRY: *mut tree_entry = std::ptr::null_mut();
 
 			tree_entry = (OSysCacheHashTreeEntry *) lfirst(lc);
 
 			if (tree_entry->sys_cache)
 			{
-				sys_cache: &mut OSysCache = tree_entry->sys_cache;
+				pub static mut O_SYS_CACHE: *mut sys_cache = tree_entry->sys_cache;
 
 				if (!memcmp(&sys_cache->last_fast_cache_key,
 							&fast_cache_entry->key,
@@ -408,14 +408,14 @@ orioledb_syscache_hook(Datum arg, int cacheid, uint32 hashvalue)
 fn
 orioledb_setup_syscache_hooks()
 {
-	HASH_SEQ_STATUS hash_seq;
-	entry: &mut OCacheIdMapEntry;
+	pub static mut HASH_SEQ: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut O_CACHE_ID_MAP_ENTRY: *mut entry = std::ptr::null_mut();
 
 	hash_seq_init(&hash_seq, sys_caches);
 
 	while ((entry = (OCacheIdMapEntry *) hash_seq_search(&hash_seq)) != NULL)
 	{
-		sys_cache: &mut OSysCache = entry->sys_cache;
+		pub static mut O_SYS_CACHE: *mut sys_cache = entry->sys_cache;
 
 		CacheRegisterSyscacheCallback(sys_cache->cacheId,
 									  orioledb_syscache_hook,
@@ -426,12 +426,12 @@ orioledb_setup_syscache_hooks()
 Pointer
 o_sys_cache_search(sys_cache: &mut OSysCache, int nkeys, key: &mut OSysCacheKey)
 {
-	bool		found = false;
-	OSysCacheHashKey cur_fast_cache_key;
-	fast_cache_entry: &mut OSysCacheHashEntry;
-	Pointer		tree_entry;
-	MemoryContext prev_context;
-	new_entry: &mut OSysCacheHashTreeEntry;
+	pub static mut FOUND: bool = false;
+	pub static mut CUR_FAST_CACHE_KEY: OSysCacheHashKey = std::mem::zeroed();
+	pub static mut O_SYS_CACHE_HASH_ENTRY: *mut fast_cache_entry = std::ptr::null_mut();
+	pub static mut TREE_ENTRY: Pointer = std::ptr::null_mut();
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut O_SYS_CACHE_HASH_TREE_ENTRY: *mut new_entry = std::ptr::null_mut();
 
 	cur_fast_cache_key = compute_hash_value(sys_cache->cc_hashfunc,
 											sys_cache->nkeys, key);
@@ -441,7 +441,7 @@ o_sys_cache_search(sys_cache: &mut OSysCache, int nkeys, key: &mut OSysCacheKey)
 				sizeof(OSysCacheHashKey)) &&
 		sys_cache->last_fast_cache_entry)
 	{
-		sys_cache_key: &mut OSysCacheKey;
+		pub static mut O_SYS_CACHE_KEY: *mut sys_cache_key = std::ptr::null_mut();
 
 		sys_cache_key = (OSysCacheKey *) sys_cache->last_fast_cache_entry;
 
@@ -457,17 +457,17 @@ o_sys_cache_search(sys_cache: &mut OSysCache, int nkeys, key: &mut OSysCacheKey)
 					&found);
 	if (found)
 	{
-		lc: &mut ListCell;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 		foreach(lc, fast_cache_entry->tree_entries)
 		{
-			tree_entry: &mut OSysCacheHashTreeEntry;
+			pub static mut O_SYS_CACHE_HASH_TREE_ENTRY: *mut tree_entry = std::ptr::null_mut();
 
 			tree_entry = (OSysCacheHashTreeEntry *) lfirst(lc);
 
 			if (tree_entry->sys_cache == sys_cache)
 			{
-				sys_cache_key: &mut OSysCacheKey;
+				pub static mut O_SYS_CACHE_KEY: *mut sys_cache_key = std::ptr::null_mut();
 
 				sys_cache_key = (OSysCacheKey *) tree_entry->entry;
 
@@ -495,7 +495,7 @@ o_sys_cache_search(sys_cache: &mut OSysCache, int nkeys, key: &mut OSysCacheKey)
 	if (tree_entry == NULL)
 	{
 		MemoryContextSwitchTo(prev_context);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 	new_entry = palloc0(sizeof(OSysCacheHashTreeEntry));
 	new_entry->sys_cache = sys_cache;
@@ -522,20 +522,20 @@ o_sys_cache_get_by_lsn_callback(OTuple tuple, OXid tupOxid,
 	cur_lsn: &mut XLogRecPtr = (XLogRecPtr *) arg;
 
 	if (!oxidIsFinished)
-		return OTupleFetchNext;
+		pub static mut O_TUPLE_FETCH_NEXT: return = std::mem::zeroed();
 
 	if (tuple_key->sys_cache_key.common.lsn < *cur_lsn)
-		return OTupleFetchMatch;
+		pub static mut O_TUPLE_FETCH_MATCH: return = std::mem::zeroed();
 	else
-		return OTupleFetchNext;
+		pub static mut O_TUPLE_FETCH_NEXT: return = std::mem::zeroed();
 }
 
 static Pointer
 o_sys_cache_get_from_toast_tree(sys_cache: &mut OSysCache, key: &mut OSysCacheKey)
 {
-	Pointer		data;
-	Size		dataLength;
-	Pointer		result = NULL;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut DATA_LENGTH: Size = 0;
+	pub static mut RESULT: Pointer = std::ptr::null_mut();
 	td: &mut BTreeDescr = get_sys_tree(sys_cache->sys_tree_num);
 	OSysCacheToastKeyBound toast_key = {0};
 
@@ -551,20 +551,20 @@ o_sys_cache_get_from_toast_tree(sys_cache: &mut OSysCache, key: &mut OSysCacheKe
 											   o_sys_cache_get_by_lsn_callback,
 											   &key->common.lsn);
 	if (data == NULL)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	result = sys_cache->funcs->toast_deserialize_entry(sys_cache->mcxt,
 													   data, dataLength);
 	pfree(data);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static Pointer
 o_sys_cache_get_from_tree(sys_cache: &mut OSysCache, int nkeys, key: &mut OSysCacheKey)
 {
 	td: &mut BTreeDescr = get_sys_tree(sys_cache->sys_tree_num);
-	it: &mut BTreeIterator;
-	OTuple		last_tup;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
+	pub static mut LAST_TUP: OTuple = std::mem::zeroed();
 	OSysCacheBound bound = {.key = key,.nkeys = nkeys};
 
 	it = o_btree_iterator_create(td, (Pointer) &bound, BTreeKeyBound,
@@ -577,7 +577,7 @@ o_sys_cache_get_from_tree(sys_cache: &mut OSysCache, int nkeys, key: &mut OSysCa
 												 (Pointer) &bound,
 												 BTreeKeyBound, true,
 												 NULL);
-		sys_cache_key: &mut OSysCacheKey;
+		pub static mut O_SYS_CACHE_KEY: *mut sys_cache_key = std::ptr::null_mut();
 
 		if (O_TUPLE_IS_NULL(tup))
 			break;
@@ -609,8 +609,8 @@ o_sys_cache_fill_locktag(tag: &mut LOCKTAG, Oid datoid, Oid classoid,
 fn
 o_sys_cache_lock(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, int lockmode)
 {
-	LOCKTAG		locktag;
-	OSysCacheHashKey key_hash;
+	pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
+	pub static mut KEY_HASH: OSysCacheHashKey = std::mem::zeroed();
 
 	key_hash = compute_hash_value(sys_cache->cc_hashfunc, sys_cache->nkeys,
 								  key);
@@ -624,8 +624,8 @@ o_sys_cache_lock(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, int lockmode
 fn
 o_sys_cache_unlock(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, int lockmode)
 {
-	LOCKTAG		locktag;
-	OSysCacheHashKey key_hash;
+	pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
+	pub static mut KEY_HASH: OSysCacheHashKey = std::mem::zeroed();
 
 	key_hash = compute_hash_value(sys_cache->cc_hashfunc, sys_cache->nkeys,
 								  key);
@@ -652,14 +652,14 @@ static
 bool
 o_sys_cache_add(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, Pointer entry)
 {
-	bool		inserted;
+	pub static mut INSERTED: bool = false;
 	entry_key: &mut OSysCacheKey = (OSysCacheKey *) entry;
 	desc: &mut BTreeDescr = get_sys_tree(sys_cache->sys_tree_num);
-	int			i;
-	bool		allocated = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut ALLOCATED: bool = false;
 	OTuple		entry_tuple = {.data = entry};
-	int			key_len = -1;
-	int			entry_len = -1;
+	pub static mut KEY_LEN: std::os::raw::c_int = -1;
+	pub static mut ENTRY_LEN: std::os::raw::c_int = -1;
 
 	entry_key->common = key->common;
 	entry_key->common.dataLength = 0;
@@ -669,8 +669,8 @@ o_sys_cache_add(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, Pointer entry
 		{
 			case NAMEOID:
 				{
-					Pointer		new_entry;
-					int			new_entry_len;
+					pub static mut NEW_ENTRY: Pointer = std::ptr::null_mut();
+					pub static mut NEW_ENTRY_LEN: std::os::raw::c_int = 0;
 
 					//
 // In the code below we storing fields with Name type at
@@ -721,10 +721,10 @@ o_sys_cache_add(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, Pointer entry
 	}
 	else
 	{
-		Pointer		data;
-		int			len;
+		pub static mut DATA: Pointer = std::ptr::null_mut();
+		pub static mut LEN: std::os::raw::c_int = 0;
 		OSysCacheToastKeyBound toast_key = {0};
-		OAutonomousTxState state;
+		pub static mut STATE: OAutonomousTxState = std::mem::zeroed();
 
 		toast_key.key = entry_key;
 		toast_key.common.chunknum = 0;
@@ -753,7 +753,7 @@ o_sys_cache_add(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, Pointer entry
 	}
 	if (allocated)
 		pfree(entry);
-	return inserted;
+	pub static mut INSERTED: return = std::mem::zeroed();
 }
 
 static OBTreeWaitCallbackAction
@@ -763,7 +763,7 @@ o_sys_cache_wait_callback(descr: &mut BTreeDescr,
 						  lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
 						   *arg)
 {
-	return OBTreeCallbackActionXidWait;
+	pub static mut OB_TREE_CALLBACK_ACTION_XID_WAIT: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -773,7 +773,7 @@ o_sys_cache_update_callback(descr: &mut BTreeDescr,
 							lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
 							 *arg)
 {
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -785,7 +785,7 @@ o_sys_cache_update_deleted_callback(descr: &mut BTreeDescr,
 									lock_mode: &mut RowLockMode, hint: &mut BTreeLocationHint,
 									 *arg)
 {
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 static BTreeModifyCallbackInfo callbackInfo =
@@ -799,8 +799,8 @@ static BTreeModifyCallbackInfo callbackInfo =
 static bool
 o_sys_cache_update(sys_cache: &mut OSysCache, Pointer updated_entry)
 {
-	bool		result;
-	sys_cache_key: &mut OSysCacheKey;
+	pub static mut RESULT: bool = false;
+	pub static mut O_SYS_CACHE_KEY: *mut sys_cache_key = std::ptr::null_mut();
 	desc: &mut BTreeDescr = get_sys_tree(sys_cache->sys_tree_num);
 	OSysCacheBound bound = {.nkeys = sys_cache->nkeys};
 
@@ -809,8 +809,8 @@ o_sys_cache_update(sys_cache: &mut OSysCache, Pointer updated_entry)
 
 	if (!sys_cache->is_toast)
 	{
-		OAutonomousTxState state;
-		OTuple		tup;
+		pub static mut STATE: OAutonomousTxState = std::mem::zeroed();
+		pub static mut TUP: OTuple = std::mem::zeroed();
 
 		tup.formatFlags = 0;
 		tup.data = updated_entry;
@@ -828,7 +828,7 @@ o_sys_cache_update(sys_cache: &mut OSysCache, Pointer updated_entry)
 
 			if (result)
 			{
-				OTuple		nulltup;
+				pub static mut NULLTUP: OTuple = std::mem::zeroed();
 
 				O_TUPLE_SET_NULL(nulltup);
 				Assert(IS_SYS_TREE_OIDS(desc->oids));
@@ -850,10 +850,10 @@ o_sys_cache_update(sys_cache: &mut OSysCache, Pointer updated_entry)
 	}
 	else
 	{
-		Pointer		data;
-		int			len;
+		pub static mut DATA: Pointer = std::ptr::null_mut();
+		pub static mut LEN: std::os::raw::c_int = 0;
 		OSysCacheToastKeyBound toast_key = {0};
-		OAutonomousTxState state;
+		pub static mut STATE: OAutonomousTxState = std::mem::zeroed();
 
 		toast_key.key = sys_cache_key;
 		toast_key.common.chunknum = 0;
@@ -879,14 +879,14 @@ o_sys_cache_update(sys_cache: &mut OSysCache, Pointer updated_entry)
 		PG_END_TRY();
 		finish_autonomous_transaction(&state);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
 o_sys_cache_add_if_needed(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, Pointer arg)
 {
-	Pointer		entry = NULL;
-	bool		inserted PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut ENTRY: Pointer = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		inserted = std::mem::zeroed();
 
 	o_sys_cache_lock(sys_cache, key, AccessExclusiveLock);
 
@@ -915,9 +915,9 @@ o_sys_cache_add_if_needed(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, Poi
 o_sys_cache_update_if_needed(sys_cache: &mut OSysCache, key: &mut OSysCacheKey,
 							 Pointer arg)
 {
-	Pointer		entry = NULL;
-	sys_cache_key: &mut OSysCacheKey;
-	bool		updated PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut ENTRY: Pointer = std::ptr::null_mut();
+	pub static mut O_SYS_CACHE_KEY: *mut sys_cache_key = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		updated = std::mem::zeroed();
 
 	o_sys_cache_lock(sys_cache, key, AccessExclusiveLock);
 
@@ -940,13 +940,13 @@ o_sys_cache_update_if_needed(sys_cache: &mut OSysCache, key: &mut OSysCacheKey,
 static bool
 update_deleted_value(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, bool new_value)
 {
-	Pointer		entry;
-	sys_cache_key: &mut OSysCacheKey;
+	pub static mut ENTRY: Pointer = std::ptr::null_mut();
+	pub static mut O_SYS_CACHE_KEY: *mut sys_cache_key = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&key->common.lsn, NULL);
 	entry = o_sys_cache_search(sys_cache, sys_cache->nkeys, key);
 	if (entry == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	sys_cache_key = (OSysCacheKey *) entry;
 	sys_cache_key->common.deleted = new_value;
 	return o_sys_cache_update(sys_cache, entry);
@@ -954,19 +954,19 @@ update_deleted_value(sys_cache: &mut OSysCache, key: &mut OSysCacheKey, bool new
 
 typedef struct
 {
-	UndoStackItem header;
-	sys_cache: &mut OSysCache;
-	OSysCacheKey4 key;
+	pub static mut HEADER: UndoStackItem = std::mem::zeroed();
+	pub static mut O_SYS_CACHE: *mut sys_cache = std::ptr::null_mut();
+	pub static mut KEY: OSysCacheKey4 = std::mem::zeroed();
 } SysCacheDeleteUndoStackItem;
 
 fn
 o_add_undo_sys_cache_delete(sys_cache: &mut OSysCache, key: &mut OSysCacheKey)
 {
-	UndoLocation location;
-	item: &mut SysCacheDeleteUndoStackItem;
-	LocationIndex additional_size = 0;
-	LocationIndex size;
-	int			i;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut SYS_CACHE_DELETE_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut ADDITIONAL_SIZE: LocationIndex = 0;
+	pub static mut SIZE: LocationIndex = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 	int			additional_offset = sizeof(OSysCacheKey4);
 
 	for (i = 0; i < sys_cache->nkeys; i++)
@@ -1017,7 +1017,7 @@ o_sys_cache_delete_callback(UndoLogType undoType, UndoLocation location,
 							baseItem: &mut UndoStackItem, OXid oxid,
 							OUndoCallbackStage stage, bool changeCountsValid)
 {
-	bool		res PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		res = std::mem::zeroed();
 	item: &mut SysCacheDeleteUndoStackItem = (SysCacheDeleteUndoStackItem *) baseItem;
 
 	Assert(!is_recovery_in_progress());
@@ -1029,19 +1029,19 @@ o_sys_cache_delete_callback(UndoLogType undoType, UndoLocation location,
 bool
 o_sys_cache_delete(sys_cache: &mut OSysCache, key: &mut OSysCacheKey)
 {
-	bool		res;
+	pub static mut RES: bool = false;
 
 	res = update_deleted_value(sys_cache, key, true);
 
 	if (res)
 		o_add_undo_sys_cache_delete(sys_cache, key);
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 fn
 o_sys_cache_delete_by_lsn(sys_cache: &mut OSysCache, XLogRecPtr lsn)
 {
-	it: &mut BTreeIterator;
+	pub static mut B_TREE_ITERATOR: *mut it = std::ptr::null_mut();
 	td: &mut BTreeDescr = get_sys_tree(sys_cache->sys_tree_num);
 
 	it = o_btree_iterator_create(td, NULL, BTreeKeyNone,
@@ -1050,12 +1050,12 @@ o_sys_cache_delete_by_lsn(sys_cache: &mut OSysCache, XLogRecPtr lsn)
 
 	do
 	{
-		bool		end;
-		BTreeLocationHint hint;
+		pub static mut END: bool = false;
+		pub static mut HINT: BTreeLocationHint = std::mem::zeroed();
 		OTuple		tup = btree_iterate_raw(it, NULL, BTreeKeyNone,
 											false, &end, &hint);
-		sys_cache_key: &mut OSysCacheKey;
-		OTuple		key_tup;
+		pub static mut O_SYS_CACHE_KEY: *mut sys_cache_key = std::ptr::null_mut();
+		pub static mut KEY_TUP: OTuple = std::mem::zeroed();
 
 		if (O_TUPLE_IS_NULL(tup))
 		{
@@ -1075,7 +1075,7 @@ o_sys_cache_delete_by_lsn(sys_cache: &mut OSysCache, XLogRecPtr lsn)
 
 		if (sys_cache_key->common.lsn < lsn && sys_cache_key->common.deleted)
 		{
-			bool		result PG_USED_FOR_ASSERTS_ONLY;
+			pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		result = std::mem::zeroed();
 
 			if (!sys_cache->is_toast)
 			{
@@ -1085,7 +1085,7 @@ o_sys_cache_delete_by_lsn(sys_cache: &mut OSysCache, XLogRecPtr lsn)
 			else
 			{
 				OSysCacheToastKeyBound toast_key = {0};
-				OAutonomousTxState state;
+				pub static mut STATE: OAutonomousTxState = std::mem::zeroed();
 
 				toast_key.key = sys_cache_key;
 				toast_key.common.chunknum = 0;
@@ -1119,13 +1119,13 @@ o_sys_cache_delete_by_lsn(sys_cache: &mut OSysCache, XLogRecPtr lsn)
 
 o_sys_caches_delete_by_lsn(XLogRecPtr checkPointRedo)
 {
-	HASH_SEQ_STATUS hash_seq;
-	entry: &mut OCacheIdMapEntry;
+	pub static mut HASH_SEQ: HASH_SEQ_STATUS = std::mem::zeroed();
+	pub static mut O_CACHE_ID_MAP_ENTRY: *mut entry = std::ptr::null_mut();
 
 	hash_seq_init(&hash_seq, sys_caches);
 	while ((entry = (OCacheIdMapEntry *) hash_seq_search(&hash_seq)) != NULL)
 	{
-		sys_cache: &mut OSysCache = entry->sys_cache;
+		pub static mut O_SYS_CACHE: *mut sys_cache = entry->sys_cache;
 
 		o_sys_cache_delete_by_lsn(sys_cache, checkPointRedo);
 	}
@@ -1136,15 +1136,15 @@ oSysCacheToastGetBTreeDesc( *arg)
 {
 	desc: &mut BTreeDescr = (BTreeDescr *) arg;
 
-	return desc;
+	pub static mut DESC: return = std::mem::zeroed();
 }
 
 static uint32
 oSysCacheToastGetMaxChunkSize( *key,  *arg)
 {
 	desc: &mut BTreeDescr = (BTreeDescr *) arg;
-	uint32		chunk_key_len;
-	uint32		max_chunk_size;
+	pub static mut CHUNK_KEY_LEN: uint32 = std::mem::zeroed();
+	pub static mut MAX_CHUNK_SIZE: uint32 = std::mem::zeroed();
 	OTuple		tup = {0};
 
 	chunk_key_len = o_btree_len(desc, tup, OKeyLength);
@@ -1154,7 +1154,7 @@ oSysCacheToastGetMaxChunkSize( *key,  *arg)
 								   3) -
 		(chunk_key_len + sizeof(OSysCacheToastChunkCommon));
 
-	return max_chunk_size;
+	pub static mut MAX_CHUNK_SIZE: return = std::mem::zeroed();
 }
 
 fn
@@ -1169,13 +1169,13 @@ static inline int
 nkeys_for_desc(desc: &mut BTreeDescr)
 {
 	OTuple		tup = {0};
-	int			key_len;
-	bool		toast = desc->ops->cmp == o_sys_cache_toast_cmp;
-	int			nkeys;
+	pub static mut KEY_LEN: std::os::raw::c_int = 0;
+	pub static mut TOAST: bool = desc->ops->cmp == o_sys_cache_toast_cmp;
+	pub static mut NKEYS: std::os::raw::c_int = 0;
 
 	if (toast)
 	{
-		int			chunk_key_len;
+		pub static mut CHUNK_KEY_LEN: std::os::raw::c_int = 0;
 
 		chunk_key_len = o_btree_len(desc, tup, OKeyLength);
 		key_len = chunk_key_len -
@@ -1187,7 +1187,7 @@ nkeys_for_desc(desc: &mut BTreeDescr)
 	}
 	nkeys = (key_len - offsetof(OSysCacheKey, keys)) / sizeof(Datum);
 
-	return nkeys;
+	pub static mut NKEYS: return = std::mem::zeroed();
 }
 
 fn *
@@ -1198,8 +1198,8 @@ oSysCacheToastGetNextKey( *key,  *arg)
 	static OSysCacheKey4 nextKey = {0};
 	static OSysCacheToastKeyBound nextKeyBound = {.key =
 	(OSysCacheKey *) &nextKey};
-	int			nkeys;
-	int			key_len;
+	pub static mut NKEYS: std::os::raw::c_int = 0;
+	pub static mut KEY_LEN: std::os::raw::c_int = 0;
 
 	nkeys = nkeys_for_desc(desc);
 
@@ -1217,14 +1217,14 @@ oSysCacheToastCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum,
 						  int length,  *arg)
 {
 	bound: &mut OSysCacheToastKeyBound = (OSysCacheToastKeyBound *) key;
-	Pointer		chunk;
-	OTuple		result;
+	pub static mut CHUNK: Pointer = std::ptr::null_mut();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 	OTuple		tup = {0};
 	desc: &mut BTreeDescr = (BTreeDescr *) arg;
-	int			key_len;
-	int			chunk_key_len;
-	chunk_key: &mut OSysCacheToastChunkKey;
-	common: &mut OSysCacheToastChunkCommon;
+	pub static mut KEY_LEN: std::os::raw::c_int = 0;
+	pub static mut CHUNK_KEY_LEN: std::os::raw::c_int = 0;
+	pub static mut O_SYS_CACHE_TOAST_CHUNK_KEY: *mut chunk_key = std::ptr::null_mut();
+	pub static mut O_SYS_CACHE_TOAST_CHUNK_COMMON: *mut common = std::ptr::null_mut();
 
 	bound->common.chunknum = chunknum;
 
@@ -1245,15 +1245,15 @@ oSysCacheToastCreateTuple( *key, Pointer data, uint32 offset, uint32 chunknum,
 	result.data = (Pointer) chunk;
 	result.formatFlags = 0;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTuple
 oSysCacheToastCreateKey( *key, uint32 chunknum,  *arg)
 {
 	ckey: &mut OSysCacheToastChunkKey = (OSysCacheToastChunkKey *) key;
-	ckey_copy: &mut OSysCacheToastChunkKey;
-	OTuple		result;
+	pub static mut O_SYS_CACHE_TOAST_CHUNK_KEY: *mut ckey_copy = std::ptr::null_mut();
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	ckey_copy = (OSysCacheToastChunkKey *) palloc(sizeof(OSysCacheToastChunkKey));
 	*ckey_copy = *ckey;
@@ -1261,16 +1261,16 @@ oSysCacheToastCreateKey( *key, uint32 chunknum,  *arg)
 	result.data = (Pointer) ckey_copy;
 	result.formatFlags = 0;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static Pointer
 oSysCacheToastGetTupleData(OTuple tuple,  *arg)
 {
 	desc: &mut BTreeDescr = (BTreeDescr *) arg;
-	int			chunk_key_len;
+	pub static mut CHUNK_KEY_LEN: std::os::raw::c_int = 0;
 	OTuple		tup = {0};
-	Pointer		chunk = tuple.data;
+	pub static mut CHUNK: Pointer = tuple.data;
 
 	chunk_key_len = o_btree_len(desc, tup, OKeyLength);
 
@@ -1280,8 +1280,8 @@ oSysCacheToastGetTupleData(OTuple tuple,  *arg)
 static uint32
 oSysCacheToastGetTupleChunknum(OTuple tuple,  *arg)
 {
-	Pointer		chunk = tuple.data;
-	chunk_key: &mut OSysCacheToastChunkKey;
+	pub static mut CHUNK: Pointer = tuple.data;
+	pub static mut O_SYS_CACHE_TOAST_CHUNK_KEY: *mut chunk_key = std::ptr::null_mut();
 
 	chunk_key = (OSysCacheToastChunkKey *) chunk;
 
@@ -1291,10 +1291,10 @@ oSysCacheToastGetTupleChunknum(OTuple tuple,  *arg)
 static uint32
 oSysCacheToastGetTupleDataSize(OTuple tuple,  *arg)
 {
-	Pointer		chunk = tuple.data;
-	common: &mut OSysCacheToastChunkCommon;
+	pub static mut CHUNK: Pointer = tuple.data;
+	pub static mut O_SYS_CACHE_TOAST_CHUNK_COMMON: *mut common = std::ptr::null_mut();
 	desc: &mut BTreeDescr = (BTreeDescr *) arg;
-	int			chunk_key_len;
+	pub static mut CHUNK_KEY_LEN: std::os::raw::c_int = 0;
 	OTuple		tup = {0};
 
 	chunk_key_len = o_btree_len(desc, tup, OKeyLength);
@@ -1314,12 +1314,12 @@ o_cache_type_opclasses(Oid datoid, Oid typoid,
 		btree_opclass = GetDefaultOpClass(typoid, BTREE_AM_OID);
 	if (OidIsValid(btree_opclass))
 	{
-		XLogRecPtr	sys_lsn;
-		Oid			sys_datoid;
-		Oid			btree_opf;
-		Oid			btree_opintype;
-		Oid			ssupOid;
-		Oid			cmpOid;
+		pub static mut SYS_LSN: XLogRecPtr = std::mem::zeroed();
+		pub static mut SYS_DATOID: Oid = std::mem::zeroed();
+		pub static mut BTREE_OPF: Oid = std::mem::zeroed();
+		pub static mut BTREE_OPINTYPE: Oid = std::mem::zeroed();
+		pub static mut SSUP_OID: Oid = std::mem::zeroed();
+		pub static mut CMP_OID: Oid = std::mem::zeroed();
 
 		btree_opf = get_opclass_family(btree_opclass);
 		btree_opintype = get_opclass_input_type(btree_opclass);
@@ -1366,11 +1366,11 @@ o_cache_type_opclasses(Oid datoid, Oid typoid,
 		hash_opclass = GetDefaultOpClass(typoid, HASH_AM_OID);
 	if (OidIsValid(hash_opclass))
 	{
-		XLogRecPtr	sys_lsn;
-		Oid			sys_datoid;
-		Oid			hash_opf;
-		Oid			hash_opintype;
-		Oid			hash_extended_proc = InvalidOid;
+		pub static mut SYS_LSN: XLogRecPtr = std::mem::zeroed();
+		pub static mut SYS_DATOID: Oid = std::mem::zeroed();
+		pub static mut HASH_OPF: Oid = std::mem::zeroed();
+		pub static mut HASH_OPINTYPE: Oid = std::mem::zeroed();
+		pub static mut HASH_EXTENDED_PROC: Oid = InvalidOid;
 
 		hash_opf = get_opclass_family(hash_opclass);
 		hash_opintype = get_opclass_input_type(hash_opclass);
@@ -1405,7 +1405,7 @@ o_cache_type_opclasses(Oid datoid, Oid typoid,
 
 o_cache_type(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn)
 {
-	processed: &mut List = NIL;
+	pub static mut LIST: *mut processed = NIL;
 
 	o_cache_type_safe(datoid, typoid, opclass, insert_lsn, &processed);
 	list_free_deep(processed);
@@ -1415,10 +1415,10 @@ o_cache_type(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn)
 o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 				  List **processed)
 {
-	Form_pg_type typeform;
-	HeapTuple	tuple = NULL;
-	oids: &mut List;
-	MemoryContext oldcxt;
+	pub static mut TYPEFORM: Form_pg_type = std::mem::zeroed();
+	pub static mut TUPLE: HeapTuple = std::ptr::null_mut();
+	pub static mut LIST: *mut oids = std::ptr::null_mut();
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
 
 	if (!OidIsValid(opclass))
 		opclass = GetDefaultOpClass(typoid, BTREE_AM_OID);
@@ -1447,15 +1447,15 @@ o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 		case TYPTYPE_COMPOSITE:
 			if (typeform->typtypmod == -1)
 			{
-				int			i;
-				Relation	rel;
+				pub static mut I: std::os::raw::c_int = 0;
+				pub static mut REL: Relation = std::mem::zeroed();
 
 				o_class_cache_add_if_needed(datoid, typeform->typrelid, insert_lsn,
 											NULL);
 				rel = relation_open(typeform->typrelid, AccessShareLock);
 				for (i = 0; i < rel->rd_att->natts; i++)
 				{
-					Form_pg_attribute typcache_attr;
+					pub static mut TYPCACHE_ATTR: Form_pg_attribute = std::mem::zeroed();
 
 					typcache_attr = TupleDescAttr(rel->rd_att, i);
 					if (!typcache_attr->attisdropped)
@@ -1468,10 +1468,10 @@ o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 			break;
 		case TYPTYPE_RANGE:
 			{
-				HeapTuple	rangetup;
-				Form_pg_range rangeform;
-				XLogRecPtr	sys_lsn;
-				Oid			sys_datoid;
+				pub static mut RANGETUP: HeapTuple = std::mem::zeroed();
+				pub static mut RANGEFORM: Form_pg_range = std::mem::zeroed();
+				pub static mut SYS_LSN: XLogRecPtr = std::mem::zeroed();
+				pub static mut SYS_DATOID: Oid = std::mem::zeroed();
 
 				o_sys_cache_set_datoid_lsn(&sys_lsn, &sys_datoid);
 				o_class_cache_add_if_needed(sys_datoid, RangeRelationId,
@@ -1494,10 +1494,10 @@ o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 			break;
 		case TYPTYPE_MULTIRANGE:
 			{
-				XLogRecPtr	sys_lsn;
-				Oid			sys_datoid;
-				HeapTuple	multirangetup;
-				Form_pg_range multirangeform;
+				pub static mut SYS_LSN: XLogRecPtr = std::mem::zeroed();
+				pub static mut SYS_DATOID: Oid = std::mem::zeroed();
+				pub static mut MULTIRANGETUP: HeapTuple = std::mem::zeroed();
+				pub static mut MULTIRANGEFORM: Form_pg_range = std::mem::zeroed();
 
 				multirangetup = SearchSysCache1(RANGEMULTIRANGE,
 												ObjectIdGetDatum(typoid));
@@ -1516,8 +1516,8 @@ o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 			break;
 		case TYPTYPE_ENUM:
 			{
-				XLogRecPtr	sys_lsn;
-				Oid			sys_datoid;
+				pub static mut SYS_LSN: XLogRecPtr = std::mem::zeroed();
+				pub static mut SYS_DATOID: Oid = std::mem::zeroed();
 
 				o_sys_cache_set_datoid_lsn(&sys_lsn, &sys_datoid);
 				o_class_cache_add_if_needed(sys_datoid, EnumRelationId, sys_lsn,
@@ -1550,31 +1550,31 @@ o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 Oid
 o_get_hash_proc_by_btree_opclass(Oid btreeOpclass)
 {
-	Oid			btreeOpfamily;
-	Oid			inputType;
-	Oid			equalOp;
-	RegProcedure result;
+	pub static mut BTREE_OPFAMILY: Oid = std::mem::zeroed();
+	pub static mut INPUT_TYPE: Oid = std::mem::zeroed();
+	pub static mut EQUAL_OP: Oid = std::mem::zeroed();
+	pub static mut RESULT: RegProcedure = std::mem::zeroed();
 
 	btreeOpfamily = get_opclass_family(btreeOpclass);
 	inputType = get_opclass_input_type(btreeOpclass);
 	Assert(OidIsValid(btreeOpfamily));
 	equalOp = get_opfamily_member(btreeOpfamily, inputType, inputType, BTEqualStrategyNumber);
 	if (!OidIsValid(equalOp))
-		return InvalidOid;
+		pub static mut INVALID_OID: return = std::mem::zeroed();
 
 	if (get_op_hash_functions(equalOp, &result, NULL))
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	else
-		return InvalidOid;
+		pub static mut INVALID_OID: return = std::mem::zeroed();
 }
 
 bool
 custom_type_try_add_hash_fn_if_needed(Oid typoid, Oid opclass, List **processed)
 {
-	bool		hashable = true;
-	Form_pg_type typeform;
-	HeapTuple	tuple = NULL;
-	Oid			hash_fn_oid;
+	pub static mut HASHABLE: bool = true;
+	pub static mut TYPEFORM: Form_pg_type = std::mem::zeroed();
+	pub static mut TUPLE: HeapTuple = std::ptr::null_mut();
+	pub static mut HASH_FN_OID: Oid = std::mem::zeroed();
 
 	tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typoid));
 	Assert(tuple);
@@ -1594,13 +1594,13 @@ custom_type_try_add_hash_fn_if_needed(Oid typoid, Oid opclass, List **processed)
 			case TYPTYPE_COMPOSITE:
 				if (typeform->typtypmod == -1)
 				{
-					int			i;
-					Relation	rel;
+					pub static mut I: std::os::raw::c_int = 0;
+					pub static mut REL: Relation = std::mem::zeroed();
 
 					rel = relation_open(typeform->typrelid, AccessShareLock);
 					for (i = 0; i < rel->rd_att->natts; i++)
 					{
-						Form_pg_attribute typcache_attr;
+						pub static mut TYPCACHE_ATTR: Form_pg_attribute = std::mem::zeroed();
 
 						typcache_attr = TupleDescAttr(rel->rd_att, i);
 						if (!typcache_attr->attisdropped)
@@ -1618,8 +1618,8 @@ custom_type_try_add_hash_fn_if_needed(Oid typoid, Oid opclass, List **processed)
 				break;
 			case TYPTYPE_RANGE:
 				{
-					HeapTuple	rangetup;
-					Form_pg_range rangeform;
+					pub static mut RANGETUP: HeapTuple = std::mem::zeroed();
+					pub static mut RANGEFORM: Form_pg_range = std::mem::zeroed();
 
 					rangetup = SearchSysCache1(RANGETYPE, ObjectIdGetDatum(typoid));
 					if (!HeapTupleIsValid(rangetup))
@@ -1634,8 +1634,8 @@ custom_type_try_add_hash_fn_if_needed(Oid typoid, Oid opclass, List **processed)
 				break;
 			case TYPTYPE_MULTIRANGE:
 				{
-					HeapTuple	rangetup;
-					Form_pg_range rangeform;
+					pub static mut RANGETUP: HeapTuple = std::mem::zeroed();
+					pub static mut RANGEFORM: Form_pg_range = std::mem::zeroed();
 
 					rangetup = SearchSysCache1(RANGEMULTIRANGE,
 											   ObjectIdGetDatum(typoid));
@@ -1670,14 +1670,14 @@ custom_type_try_add_hash_fn_if_needed(Oid typoid, Oid opclass, List **processed)
 	}
 	if (tuple != NULL)
 		ReleaseSysCache(tuple);
-	return hashable;
+	pub static mut HASHABLE: return = std::mem::zeroed();
 }
 
 
 o_validate_composite_type(Oid typoid, Oid opclass)
 {
-	Form_pg_type typeform;
-	HeapTuple	tuple = NULL;
+	pub static mut TYPEFORM: Form_pg_type = std::mem::zeroed();
+	pub static mut TUPLE: HeapTuple = std::ptr::null_mut();
 
 	tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typoid));
 	Assert(tuple);
@@ -1690,13 +1690,13 @@ o_validate_composite_type(Oid typoid, Oid opclass)
 			case TYPTYPE_COMPOSITE:
 				if (typeform->typtypmod == -1)
 				{
-					int			i;
-					Relation	rel;
+					pub static mut I: std::os::raw::c_int = 0;
+					pub static mut REL: Relation = std::mem::zeroed();
 
 					rel = relation_open(typeform->typrelid, AccessShareLock);
 					for (i = 0; i < rel->rd_att->natts; i++)
 					{
-						Form_pg_attribute typcache_attr;
+						pub static mut TYPCACHE_ATTR: Form_pg_attribute = std::mem::zeroed();
 
 						typcache_attr = TupleDescAttr(rel->rd_att, i);
 						if (!typcache_attr->attisdropped)
@@ -1711,8 +1711,8 @@ o_validate_composite_type(Oid typoid, Oid opclass)
 				break;
 			case TYPTYPE_RANGE:
 				{
-					HeapTuple	rangetup;
-					Form_pg_range rangeform;
+					pub static mut RANGETUP: HeapTuple = std::mem::zeroed();
+					pub static mut RANGEFORM: Form_pg_range = std::mem::zeroed();
 
 					rangetup = SearchSysCache1(RANGETYPE, ObjectIdGetDatum(typoid));
 					if (!HeapTupleIsValid(rangetup))
@@ -1727,8 +1727,8 @@ o_validate_composite_type(Oid typoid, Oid opclass)
 				break;
 			case TYPTYPE_MULTIRANGE:
 				{
-					HeapTuple	rangetup;
-					Form_pg_range rangeform;
+					pub static mut RANGETUP: HeapTuple = std::mem::zeroed();
+					pub static mut RANGEFORM: Form_pg_range = std::mem::zeroed();
 
 					rangetup = SearchSysCache1(RANGEMULTIRANGE,
 											   ObjectIdGetDatum(typoid));
@@ -1779,17 +1779,17 @@ o_validate_composite_type(Oid typoid, Oid opclass)
 
 o_cache_index_types(o_table: &mut OTable, o_table_index: &mut OTableIndex)
 {
-	int			cur_field;
-	XLogRecPtr	cur_lsn;
-	int			expr_field = 0;
+	pub static mut CUR_FIELD: std::os::raw::c_int = 0;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut EXPR_FIELD: std::os::raw::c_int = 0;
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 	for (cur_field = 0; cur_field < o_table_index->nfields; cur_field++)
 	{
-		int			attnum = o_table_index->fields[cur_field].attnum;
-		Oid			opclass = o_table_index->fields[cur_field].opclass;
-		Oid			typid;
-		processed: &mut List = NIL;
+		pub static mut ATTNUM: std::os::raw::c_int = o_table_index->fields[cur_field].attnum;
+		pub static mut OPCLASS: Oid = o_table_index->fields[cur_field].opclass;
+		pub static mut TYPID: Oid = std::mem::zeroed();
+		pub static mut LIST: *mut processed = NIL;
 
 		if (attnum != EXPR_ATTNUM)
 			typid = o_table->fields[attnum].typid;
@@ -1808,11 +1808,11 @@ o_cache_index_types(o_table: &mut OTable, o_table_index: &mut OTableIndex)
 
 o_cache_table_types(o_table: &mut OTable)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	XLogRecPtr	sys_lsn;
-	Oid			sys_datoid;
-	processed: &mut List = NIL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut SYS_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut SYS_DATOID: Oid = std::mem::zeroed();
+	pub static mut LIST: *mut processed = NIL;
 
 	o_sys_cache_set_datoid_lsn(&sys_lsn, &sys_datoid);
 	o_class_cache_add_if_needed(sys_datoid, OperatorClassRelationId, sys_lsn,
@@ -1845,10 +1845,10 @@ static CatCTup *
 heap_to_catctup(cache: &mut CatCache, TupleDesc cc_tupdesc, HeapTuple tuple,
 				bool refcount)
 {
-	ct: &mut CatCTup;
-	HeapTuple	dtp;
-	MemoryContext oldcxt;
-	int			i;
+	pub static mut CAT_C_TUP: *mut ct = std::ptr::null_mut();
+	pub static mut DTP: HeapTuple = std::mem::zeroed();
+	pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	//
 // If there are any out-of-line toasted fields in the tuple, expand them
@@ -1882,8 +1882,8 @@ heap_to_catctup(cache: &mut CatCache, TupleDesc cc_tupdesc, HeapTuple tuple,
 	// extract keys - they'll point into the tuple if not by-value
 	for (i = 0; i < cache->cc_nkeys; i++)
 	{
-		Datum		atp;
-		bool		isnull;
+		pub static mut ATP: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
 
 		atp = heap_getattr(&ct->tuple, cache->cc_keyno[i], cc_tupdesc,
 						   &isnull);
@@ -1905,16 +1905,16 @@ heap_to_catctup(cache: &mut CatCache, TupleDesc cc_tupdesc, HeapTuple tuple,
 		ct->refcount++;
 		ResourceOwnerRememberCatCacheRef(CurrentResourceOwner, &ct->tuple);
 	}
-	return ct;
+	pub static mut CT: return = std::mem::zeroed();
 }
 
 static CatCTup *
 o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v2,
 							  Datum v3, Datum v4)
 {
-	result: &mut CatCTup = NULL;
-	TupleDesc	tupdesc = NULL;
-	HeapTuple	hook_tuple = NULL;
+	pub static mut CAT_C_TUP: *mut result = std::ptr::null_mut();
+	pub static mut TUPDESC: TupleDesc = std::ptr::null_mut();
+	pub static mut HOOK_TUPLE: HeapTuple = std::ptr::null_mut();
 
 	switch (cache->cc_indexoid)
 	{
@@ -1945,7 +1945,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 	{
 		case AggregateFnoidIndexId:
 			{
-				Oid			aggfnoid;
+				pub static mut AGGFNOID: Oid = std::mem::zeroed();
 
 				aggfnoid = DatumGetObjectId(v1);
 
@@ -1956,9 +1956,9 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case AccessMethodOperatorIndexId:
 			{
-				Oid			amopopr;
-				char		amoppurpose;
-				Oid			amopfamily;
+				pub static mut AMOPOPR: Oid = std::mem::zeroed();
+				pub static mut AMOPPURPOSE: char = std::mem::zeroed();
+				pub static mut AMOPFAMILY: Oid = std::mem::zeroed();
 
 				amopopr = DatumGetObjectId(v1);
 				amoppurpose = DatumGetChar(v2);
@@ -1972,10 +1972,10 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case AccessMethodStrategyIndexId:
 			{
-				Oid			amopfamily;
-				Oid			amoplefttype;
-				Oid			amoprighttype;
-				int16		amopstrategy;
+				pub static mut AMOPFAMILY: Oid = std::mem::zeroed();
+				pub static mut AMOPLEFTTYPE: Oid = std::mem::zeroed();
+				pub static mut AMOPRIGHTTYPE: Oid = std::mem::zeroed();
+				pub static mut AMOPSTRATEGY: int16 = std::mem::zeroed();
 
 				amopfamily = DatumGetObjectId(v1);
 				amoplefttype = DatumGetObjectId(v2);
@@ -1992,10 +1992,10 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case AccessMethodProcedureIndexId:
 			{
-				Oid			amprocfamily;
-				Oid			amproclefttype;
-				Oid			amprocrighttype;
-				int16		amprocnum;
+				pub static mut AMPROCFAMILY: Oid = std::mem::zeroed();
+				pub static mut AMPROCLEFTTYPE: Oid = std::mem::zeroed();
+				pub static mut AMPROCRIGHTTYPE: Oid = std::mem::zeroed();
+				pub static mut AMPROCNUM: int16 = std::mem::zeroed();
 
 				amprocfamily = DatumGetObjectId(v1);
 				amproclefttype = DatumGetObjectId(v2);
@@ -2012,7 +2012,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case AuthIdOidIndexId:
 			{
-				Oid			authoid;
+				pub static mut AUTHOID: Oid = std::mem::zeroed();
 
 				authoid = DatumGetObjectId(v1);
 
@@ -2023,7 +2023,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case CollationOidIndexId:
 			{
-				Oid			colloid;
+				pub static mut COLLOID: Oid = std::mem::zeroed();
 
 				colloid = DatumGetObjectId(v1);
 
@@ -2034,7 +2034,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case EnumOidIndexId:
 			{
-				Oid			enum_oid;
+				pub static mut ENUM_OID: Oid = std::mem::zeroed();
 
 				enum_oid = DatumGetObjectId(v1);
 
@@ -2045,8 +2045,8 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case EnumTypIdLabelIndexId:
 			{
-				Oid			enumtypid;
-				Name		enumlabel;
+				pub static mut ENUMTYPID: Oid = std::mem::zeroed();
+				pub static mut ENUMLABEL: Name = std::mem::zeroed();
 
 				enumtypid = DatumGetObjectId(v1);
 				enumlabel = DatumGetName(v1);
@@ -2059,7 +2059,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case OpclassOidIndexId:
 			{
-				Oid			opclassoid;
+				pub static mut OPCLASSOID: Oid = std::mem::zeroed();
 
 				opclassoid = DatumGetObjectId(v1);
 
@@ -2070,7 +2070,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case OperatorOidIndexId:
 			{
-				Oid			operoid;
+				pub static mut OPEROID: Oid = std::mem::zeroed();
 
 				operoid = DatumGetObjectId(v1);
 
@@ -2081,7 +2081,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case ProcedureOidIndexId:
 			{
-				Oid			procoid;
+				pub static mut PROCOID: Oid = std::mem::zeroed();
 
 				procoid = DatumGetObjectId(v1);
 
@@ -2092,7 +2092,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case RangeTypidIndexId:
 			{
-				Oid			rngtypid;
+				pub static mut RNGTYPID: Oid = std::mem::zeroed();
 
 				rngtypid = DatumGetObjectId(v1);
 
@@ -2103,7 +2103,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case RangeMultirangeTypidIndexId:
 			{
-				Oid			rngmultitypid;
+				pub static mut RNGMULTITYPID: Oid = std::mem::zeroed();
 
 				rngmultitypid = DatumGetObjectId(v1);
 
@@ -2115,7 +2115,7 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 			break;
 		case TypeOidIndexId:
 			{
-				Oid			typeoid;
+				pub static mut TYPEOID: Oid = std::mem::zeroed();
 
 				typeoid = DatumGetObjectId(v1);
 
@@ -2135,26 +2135,26 @@ o_SearchCatCacheInternal_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v
 	if (tupdesc && tupdesc != cache->cc_tupdesc)
 		FreeTupleDesc(tupdesc);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static CatCList *
 o_SearchCatCacheList_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v2,
 						  Datum v3)
 {
-	cl: &mut CatCList = NULL;
+	pub static mut CAT_C_LIST: *mut cl = std::ptr::null_mut();
 
 	switch (cache->cc_indexoid)
 	{
 		case AccessMethodOperatorIndexId:
 			{
-				TupleDesc	tupdesc = NULL;
-				htup_list: &mut List;
-				int			nmembers;
-				Oid			amopopr;
-				int			i;
-				lc: &mut ListCell;
-				MemoryContext oldcxt;
+				pub static mut TUPDESC: TupleDesc = std::ptr::null_mut();
+				pub static mut LIST: *mut htup_list = std::ptr::null_mut();
+				pub static mut NMEMBERS: std::os::raw::c_int = 0;
+				pub static mut AMOPOPR: Oid = std::mem::zeroed();
+				pub static mut I: std::os::raw::c_int = 0;
+				pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+				pub static mut OLDCXT: MemoryContext = std::mem::zeroed();
 
 				if (cache->cc_tupdesc)
 					tupdesc = cache->cc_tupdesc;
@@ -2186,7 +2186,7 @@ o_SearchCatCacheList_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v2,
 					foreach(lc, htup_list)
 					{
 						HeapTuple	ht = lfirst(lc);
-						ct: &mut CatCTup;
+						pub static mut CAT_C_TUP: *mut ct = std::ptr::null_mut();
 
 						ct = heap_to_catctup(cache, tupdesc, ht, false);
 						cl->members[i++] = ct;
@@ -2206,13 +2206,13 @@ o_SearchCatCacheList_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v2,
 			break;
 	}
 
-	return cl;
+	pub static mut CL: return = std::mem::zeroed();
 }
 
 static TupleDesc
 o_SysCacheGetAttr_hook(SysCache: &mut CatCache)
 {
-	TupleDesc	tupdesc = NULL;
+	pub static mut TUPDESC: TupleDesc = std::ptr::null_mut();
 
 	switch (SysCache->cc_indexoid)
 	{
@@ -2234,7 +2234,7 @@ o_SysCacheGetAttr_hook(SysCache: &mut CatCache)
 			break;
 	}
 
-	return tupdesc;
+	pub static mut TUPDESC: return = std::mem::zeroed();
 }
 
 static uint32
@@ -2242,7 +2242,7 @@ o_GetCatCacheHashValue_hook(cache: &mut CatCache, int nkeys, Datum v1, Datum v2,
 							Datum v3, Datum v4)
 {
 	OSysCacheKey4 key = {.keys = {v1, v2, v3, v4}};
-	entry: &mut OCacheIdMapEntry;
+	pub static mut O_CACHE_ID_MAP_ENTRY: *mut entry = std::ptr::null_mut();
 
 	entry = hash_search(sys_caches, &cache->id, HASH_ENTER, NULL);
 	Assert(entry);
@@ -2261,19 +2261,19 @@ static int
 o_sys_cache_key_cmp(sys_cache: &mut OSysCache, int nkeys, key1: &mut OSysCacheKey,
 					key2: &mut OSysCacheKey)
 {
-	int			i;
-	int			cmp = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CMP: std::os::raw::c_int = 0;
 
 	for (i = 0; i < nkeys; i++)
 	{
-		Oid			keytype = sys_cache->keytypes[i];
+		pub static mut KEYTYPE: Oid = sys_cache->keytypes[i];
 
 		switch (keytype)
 		{
 			case NAMEOID:
 				{
-					arg1: &mut char;
-					arg2: &mut char;
+					pub static mut CHAR: *mut arg1 = std::ptr::null_mut();
+					pub static mut CHAR: *mut arg2 = std::ptr::null_mut();
 
 					arg1 = NameStr(*O_KEY_GET_NAME(key1, i));
 					arg2 = NameStr(*O_KEY_GET_NAME(key2, i));
@@ -2287,7 +2287,7 @@ o_sys_cache_key_cmp(sys_cache: &mut OSysCache, int nkeys, key1: &mut OSysCacheKe
 		if (cmp != 0)
 			break;
 	}
-	return cmp;
+	pub static mut CMP: return = std::mem::zeroed();
 }
 
 static inline OSysCache *
@@ -2299,10 +2299,10 @@ get_o_sys_cache(int sys_tree_num)
 int
 o_sys_cache_key_length(desc: &mut BTreeDescr, OTuple tuple)
 {
-	Pointer		data = tuple.data;
-	common: &mut OSysCacheKeyCommon;
-	sys_cache: &mut OSysCache;
-	int			key_len;
+	pub static mut DATA: Pointer = tuple.data;
+	pub static mut O_SYS_CACHE_KEY_COMMON: *mut common = std::ptr::null_mut();
+	pub static mut O_SYS_CACHE: *mut sys_cache = std::ptr::null_mut();
+	pub static mut KEY_LEN: std::os::raw::c_int = 0;
 
 	sys_cache = get_o_sys_cache(desc->oids.reloid);
 	key_len = offsetof(OSysCacheKey, keys) + sizeof(Datum) * sys_cache->nkeys;
@@ -2315,9 +2315,9 @@ o_sys_cache_key_length(desc: &mut BTreeDescr, OTuple tuple)
 int
 o_sys_cache_tup_length(desc: &mut BTreeDescr, OTuple tuple)
 {
-	sys_cache: &mut OSysCache;
-	int			key_len;
-	int			data_len;
+	pub static mut O_SYS_CACHE: *mut sys_cache = std::ptr::null_mut();
+	pub static mut KEY_LEN: std::os::raw::c_int = 0;
+	pub static mut DATA_LEN: std::os::raw::c_int = 0;
 
 	key_len = o_sys_cache_key_length(desc, tuple);
 	sys_cache = get_o_sys_cache(desc->oids.reloid);
@@ -2339,12 +2339,12 @@ int
 o_sys_cache_cmp(desc: &mut BTreeDescr,  *p1, BTreeKeyType k1,  *p2,
 				BTreeKeyType k2)
 {
-	key1: &mut OSysCacheKey;
-	key2: &mut OSysCacheKey;
-	bool		lsn_cmp = true;
-	int			nkeys;
-	int			cmp;
-	sys_cache: &mut OSysCache;
+	pub static mut O_SYS_CACHE_KEY: *mut key1 = std::ptr::null_mut();
+	pub static mut O_SYS_CACHE_KEY: *mut key2 = std::ptr::null_mut();
+	pub static mut LSN_CMP: bool = true;
+	pub static mut NKEYS: std::os::raw::c_int = 0;
+	pub static mut CMP: std::os::raw::c_int = 0;
+	pub static mut O_SYS_CACHE: *mut sys_cache = std::ptr::null_mut();
 
 	sys_cache = get_o_sys_cache(desc->oids.reloid);
 	nkeys = sys_cache->nkeys;
@@ -2376,20 +2376,20 @@ o_sys_cache_cmp(desc: &mut BTreeDescr,  *p1, BTreeKeyType k1,  *p2,
 
 	cmp = o_sys_cache_key_cmp(sys_cache, nkeys, key1, key2);
 	if (cmp != 0)
-		return cmp;
+		pub static mut CMP: return = std::mem::zeroed();
 
 	if (lsn_cmp)
 		if (key1->common.lsn != key2->common.lsn)
 			return key1->common.lsn < key2->common.lsn ? -1 : 1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
 o_sys_cache_keys_to_str(StringInfo buf, sys_cache: &mut OSysCache,
 						key: &mut OSysCacheKey)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	appendStringInfo(buf, "(");
 	for (i = 0; i < sys_cache->nkeys; i++)
@@ -2440,7 +2440,7 @@ o_sys_cache_keys_push_to_jsonb_state(sys_cache: &mut OSysCache,
 									 key: &mut OSysCacheKey,
 									 JsonbParseState **state)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	jsonb_push_key(state, "keys");
 	() pushJsonbValue(state, WJB_BEGIN_ARRAY, NULL);
@@ -2450,8 +2450,8 @@ o_sys_cache_keys_push_to_jsonb_state(sys_cache: &mut OSysCache,
 		{
 			case NAMEOID:
 				{
-					JsonbValue	jval;
-					name: &mut char;
+					pub static mut JVAL: JsonbValue = std::mem::zeroed();
+					pub static mut CHAR: *mut name = std::ptr::null_mut();
 
 					name = NameStr(*O_KEY_GET_NAME(key, i));
 
@@ -2464,8 +2464,8 @@ o_sys_cache_keys_push_to_jsonb_state(sys_cache: &mut OSysCache,
 
 			default:
 				{
-					Datum		res;
-					JsonbValue	jval;
+					pub static mut RES: Datum = std::mem::zeroed();
+					pub static mut JVAL: JsonbValue = std::mem::zeroed();
 
 					res = DirectFunctionCall1(int8_numeric,
 											  Int64GetDatum(key->keys[i]));
@@ -2484,7 +2484,7 @@ fn
 o_sys_cache_key_push_to_jsonb_state(desc: &mut BTreeDescr, key: &mut OSysCacheKey,
 									JsonbParseState **state)
 {
-	StringInfo	str;
+	pub static mut STR: StringInfo = std::mem::zeroed();
 
 	jsonb_push_int8_key(state, "datoid", key->common.datoid);
 	jsonb_push_int8_key(state, "lsn", key->common.lsn);
@@ -2510,10 +2510,10 @@ o_sys_cache_key_to_jsonb(desc: &mut BTreeDescr, OTuple tup, JsonbParseState **st
 int
 o_sys_cache_toast_chunk_length(desc: &mut BTreeDescr, OTuple tuple)
 {
-	Pointer		chunk = tuple.data;
-	int			chunk_key_len;
+	pub static mut CHUNK: Pointer = tuple.data;
+	pub static mut CHUNK_KEY_LEN: std::os::raw::c_int = 0;
 	OTuple		tup = {0};
-	common: &mut OSysCacheToastChunkCommon;
+	pub static mut O_SYS_CACHE_TOAST_CHUNK_COMMON: *mut common = std::ptr::null_mut();
 
 	chunk_key_len = o_btree_len(desc, tup, OKeyLength);
 
@@ -2536,16 +2536,16 @@ o_sys_cache_toast_cmp(desc: &mut BTreeDescr,  *p1, BTreeKeyType k1,
 {
 	uint32		chunknum1,
 				chunknum2;
-	key1: &mut OSysCacheKey = NULL;
-	key2: &mut OSysCacheKey = NULL;
+	pub static mut O_SYS_CACHE_KEY: *mut key1 = std::ptr::null_mut();
+	pub static mut O_SYS_CACHE_KEY: *mut key2 = std::ptr::null_mut();
 	OSysCacheKey4 _key = {0};
 	OSysCacheBound _bound = {.key = (OSysCacheKey *) &_key};
 	OTuple		key_tuple1 = {0},
 				key_tuple2 = {0};
 	Pointer		sys_cache_key_cmp_arg1 = NULL,
 				sys_cache_key_cmp_arg2 = NULL;
-	int			sys_cache_key_cmp_result;
-	int			nkeys;
+	pub static mut SYS_CACHE_KEY_CMP_RESULT: std::os::raw::c_int = 0;
+	pub static mut NKEYS: std::os::raw::c_int = 0;
 
 	nkeys = nkeys_for_desc(desc);
 	_bound.nkeys = nkeys;
@@ -2615,12 +2615,12 @@ o_sys_cache_toast_cmp(desc: &mut BTreeDescr,  *p1, BTreeKeyType k1,
 											   sys_cache_key_cmp_arg2, k2);
 
 	if (sys_cache_key_cmp_result != 0)
-		return sys_cache_key_cmp_result;
+		pub static mut SYS_CACHE_KEY_CMP_RESULT: return = std::mem::zeroed();
 
 	if (chunknum1 != chunknum2)
 		return chunknum1 < chunknum2 ? -1 : 1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 //
@@ -2660,9 +2660,9 @@ o_sys_cache_toast_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 							OTuple tup, Pointer arg)
 {
 	OTuple		key_tup = {0};
-	Pointer		chunk = tup.data;
-	common: &mut OSysCacheToastChunkCommon;
-	int			chunk_key_len;
+	pub static mut CHUNK: Pointer = tup.data;
+	pub static mut O_SYS_CACHE_TOAST_CHUNK_COMMON: *mut common = std::ptr::null_mut();
+	pub static mut CHUNK_KEY_LEN: std::os::raw::c_int = 0;
 
 	chunk_key_len = o_btree_len(desc, key_tup, OKeyLength);
 
@@ -2677,10 +2677,10 @@ o_sys_cache_toast_tup_print(desc: &mut BTreeDescr, StringInfo buf,
 static HeapTuple
 o_auth_cache_search_htup(TupleDesc tupdesc, Oid authoid)
 {
-	HeapTuple	result = NULL;
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_authid] = {0};
 	bool		nulls[Natts_pg_authid] = {0};
-	NameData	oname;
+	pub static mut ONAME: NameData = std::mem::zeroed();
 
 	Assert(authoid == BOOTSTRAP_SUPERUSERID);
 
@@ -2693,13 +2693,13 @@ o_auth_cache_search_htup(TupleDesc tupdesc, Oid authoid)
 	nulls[Anum_pg_authid_rolvaliduntil - 1] = true;
 
 	result = heap_form_tuple(tupdesc, values, nulls);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 bool
 o_is_syscache_hooks_set()
 {
-	return SearchCatCacheInternal_hook == o_SearchCatCacheInternal_hook;
+	pub static mut SEARCH_CAT_CACHE_INTERNAL_HOOK: return = = o_SearchCatCacheInternal_hook;
 }
 
 

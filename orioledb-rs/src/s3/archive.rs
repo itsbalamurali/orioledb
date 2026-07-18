@@ -27,11 +27,11 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	fileName: &mut char;
-	S3TaskLocation location;
+	pub static mut CHAR: *mut fileName = std::ptr::null_mut();
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 } PreloadHashItem;
 
-static preloadHash: &mut HTAB = NULL;
+static mut HTAB: *mut preloadHash = std::ptr::null_mut();
 
 static uint32
 preload_item_hash(key: &mut const, Size keysize)
@@ -55,15 +55,15 @@ preload_item_match(key1: &mut const, key2: &mut const, Size keysize)
 				l2 = strlen(*f2);
 
 	if (l1 == l2 && memcmp(( *) *f1, ( *) *f2, l1) == 0)
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	else
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 }
 
 fn
 make_preload_hash()
 {
-	HASHCTL		hash_ctl;
+	pub static mut HASH_CTL: HASHCTL = std::mem::zeroed();
 
 	// Create the hash table
 	hash_ctl.keysize = sizeof(char *);
@@ -110,7 +110,7 @@ _PG_archive_module_init()
 static bool
 s3_archive_configured(state: &mut ArchiveModuleState)
 {
-	return orioledb_s3_mode;
+	pub static mut ORIOLEDB_S3_MODE: return = std::mem::zeroed();
 }
 
 //
@@ -122,8 +122,8 @@ fn
 s3_archive_preload_file(state: &mut ArchiveModuleState,
 						const file: &mut char, const path: &mut char)
 {
-	bool		found;
-	item: &mut PreloadHashItem;
+	pub static mut FOUND: bool = false;
+	pub static mut PRELOAD_HASH_ITEM: *mut item = std::ptr::null_mut();
 
 	if (!orioledb_s3_mode)
 		return;
@@ -150,12 +150,12 @@ static bool
 s3_archive_file(state: &mut ArchiveModuleState,
 				const file: &mut char, const path: &mut char)
 {
-	S3TaskLocation location;
-	bool		found;
-	item: &mut PreloadHashItem;
+	pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
+	pub static mut FOUND: bool = false;
+	pub static mut PRELOAD_HASH_ITEM: *mut item = std::ptr::null_mut();
 
 	if (!orioledb_s3_mode)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	elog(DEBUG1, "archive %s", file);
 
@@ -172,5 +172,5 @@ s3_archive_file(state: &mut ArchiveModuleState,
 	}
 
 	s3_queue_wait_for_location(location);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }

@@ -51,7 +51,7 @@ init_index_scan_state(o_plan_state: &mut OPlanState, ostate: &mut OScanState,
 					  ScanKeyData **scanKeys, numScanKeys: &mut int)
 #endif
 {
-	IndexScanDesc scan;
+	pub static mut SCAN: IndexScanDesc = std::mem::zeroed();
 
 	ExecIndexBuildScanKeys(o_plan_state->plan_state, index, ostate->indexQuals, false, scanKeys,
 						   numScanKeys, runtimeKeys, numRuntimeKeys, NULL,
@@ -73,22 +73,22 @@ static bool
 row_key_tuple_is_valid(row_key: &mut OBtreeRowKeyBound, OTuple tup, id: &mut OIndexDescr,
 					   bool low)
 {
-	int			rowkeynum;
-	bool		valid = true;
+	pub static mut ROWKEYNUM: std::os::raw::c_int = 0;
+	pub static mut VALID: bool = true;
 
 	for (rowkeynum = 0; rowkeynum < row_key->nkeys; rowkeynum++)
 	{
-		subkey1: &mut OBTreeValueBound = &row_key->keys[rowkeynum];
-		uint8		flags = subkey1->flags;
-		int			keynum = row_key->keynums[rowkeynum];
+		pub static mut OB_TREE_VALUE_BOUND: *mut subkey1 = &row_key->keys[rowkeynum];
+		pub static mut FLAGS: uint8 = subkey1->flags;
+		pub static mut KEYNUM: std::os::raw::c_int = row_key->keynums[rowkeynum];
 
 		if (!(flags & O_VALUE_BOUND_UNBOUNDED))
 		{
-			int			attnum;
-			bool		isnull;
-			Datum		value;
-			int			cmp;
-			int			valid_cmp;
+			pub static mut ATTNUM: std::os::raw::c_int = 0;
+			pub static mut ISNULL: bool = false;
+			pub static mut VALUE: Datum = std::mem::zeroed();
+			pub static mut CMP: std::os::raw::c_int = 0;
+			pub static mut VALID_CMP: std::os::raw::c_int = 0;
 
 			attnum = OIndexKeyAttnumToTupleAttnum(BTreeKeyLeafTuple,
 												  id, keynum + 1);
@@ -111,19 +111,19 @@ row_key_tuple_is_valid(row_key: &mut OBtreeRowKeyBound, OTuple tup, id: &mut OIn
 			break;
 	}
 
-	return valid;
+	pub static mut VALID: return = std::mem::zeroed();
 }
 
 static bool
 is_tuple_valid(OTuple tup, id: &mut OIndexDescr, range: &mut OBTreeKeyRange,
 			   BTScanOpaque so, int numPrefixExactKeys)
 {
-	int			i;
-	low: &mut OBTreeKeyBound = &range->low;
-	high: &mut OBTreeKeyBound = &range->high;
-	bool		valid = true;
-	int			keynum;
-	arrayKeys: &mut BTArrayKeyInfo = so->arrayKeys;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut OB_TREE_KEY_BOUND: *mut low = &range->low;
+	pub static mut OB_TREE_KEY_BOUND: *mut high = &range->high;
+	pub static mut VALID: bool = true;
+	pub static mut KEYNUM: std::os::raw::c_int = 0;
+	pub static mut BT_ARRAY_KEY_INFO: *mut arrayKeys = so->arrayKeys;
 
 	Assert(low->nkeys == high->nkeys);
 
@@ -131,7 +131,7 @@ is_tuple_valid(OTuple tup, id: &mut OIndexDescr, range: &mut OBTreeKeyRange,
 	{
 		int			attnum = OIndexKeyAttnumToTupleAttnum(BTreeKeyLeafTuple,
 														  id, i + 1);
-		bool		isnull;
+		pub static mut ISNULL: bool = false;
 		Datum		value = o_fastgetattr(tup, attnum, id->leafTupdesc,
 										  &id->leafSpec, &isnull);
 
@@ -172,8 +172,8 @@ is_tuple_valid(OTuple tup, id: &mut OIndexDescr, range: &mut OBTreeKeyRange,
 
 	for (i = 0; i < so->numArrayKeys; i++)
 	{
-		arrayKey: &mut BTArrayKeyInfo = arrayKeys + i;
-		ScanKey		key = so->keyData + arrayKey->scan_key;
+		pub static mut BT_ARRAY_KEY_INFO: *mut arrayKey = arrayKeys + i;
+		pub static mut KEY: ScanKey = so->keyData + arrayKey->scan_key;
 
 		Assert((key->sk_flags & SK_SEARCHARRAY) &&
 			   key->sk_strategy == BTEqualStrategyNumber);
@@ -193,18 +193,18 @@ is_tuple_valid(OTuple tup, id: &mut OIndexDescr, range: &mut OBTreeKeyRange,
 
 		if (arrayKey->scan_key >= numPrefixExactKeys)
 		{
-			int			lo = 0;
-			int			hi = arrayKey->num_elems - 1;
-			bool		isnull;
+			pub static mut LO: std::os::raw::c_int = 0;
+			pub static mut HI: std::os::raw::c_int = arrayKey->num_elems - 1;
+			pub static mut ISNULL: bool = false;
 			int			attnum = OIndexKeyAttnumToTupleAttnum(BTreeKeyLeafTuple,
 															  id,
 															  key->sk_attno);
 			Datum		value = o_fastgetattr(tup, attnum, id->leafTupdesc,
 											  &id->leafSpec, &isnull);
-			bool		found = false;
-			bound: &mut OBTreeValueBound = &low->keys[key->sk_attno - 1];
-			field: &mut OIndexField = &id->fields[key->sk_attno - 1];
-			comparator: &mut OComparator;
+			pub static mut FOUND: bool = false;
+			pub static mut OB_TREE_VALUE_BOUND: *mut bound = &low->keys[key->sk_attno - 1];
+			pub static mut O_INDEX_FIELD: *mut field = &id->fields[key->sk_attno - 1];
+			pub static mut O_COMPARATOR: *mut comparator = std::ptr::null_mut();
 
 			Assert(arrayKey->num_elems > 0);
 
@@ -224,7 +224,7 @@ is_tuple_valid(OTuple tup, id: &mut OIndexDescr, range: &mut OBTreeKeyRange,
 			while (lo <= hi)
 			{
 				int			mid = lo + (hi - lo) / 2;
-				int			cmp;
+				pub static mut CMP: std::os::raw::c_int = 0;
 
 				cmp = o_call_comparator(comparator, value,
 										arrayKey->elem_values[mid]);
@@ -246,7 +246,7 @@ is_tuple_valid(OTuple tup, id: &mut OIndexDescr, range: &mut OBTreeKeyRange,
 		}
 	}
 
-	return valid;
+	pub static mut VALID: return = std::mem::zeroed();
 }
 
 #if PG_VERSION_NUM >= 180000
@@ -272,7 +272,7 @@ o_bt_array_set_low_or_high(Relation rel, ScanKey skey, array: &mut BTArrayKeyInf
 
 	if (array->num_elems != -1)
 	{
-		int			set_elem = 0;
+		pub static mut SET_ELEM: std::os::raw::c_int = 0;
 
 		Assert(!(skey->sk_flags & SK_BT_SKIP));
 
@@ -345,13 +345,13 @@ o_bt_skiparray_set_element_from_tuple(ScanKey skey, array: &mut BTArrayKeyInfo,
 static bool
 o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 {
-	IndexScanDesc scan = &ostate->scandesc;
+	pub static mut SCAN: IndexScanDesc = &ostate->scandesc;
 	BTScanOpaque so = (BTScanOpaque) scan->opaque;
 #if PG_VERSION_NUM >= 180000
-	Relation	rel = scan->indexRelation;
+	pub static mut REL: Relation = scan->indexRelation;
 #endif
-	int			i;
-	bool		have_array_keys = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut HAVE_ARRAY_KEYS: bool = false;
 
 	//
 // We must advance the last array key most quickly, since it will
@@ -360,11 +360,11 @@ o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 //
 	for (i = so->numArrayKeys - 1; i >= 0; i--)
 	{
-		curArrayKey: &mut BTArrayKeyInfo = &so->arrayKeys[i];
-		ScanKey		skey = &so->keyData[curArrayKey->scan_key];
-		int			cur_elem = curArrayKey->cur_elem;
-		int			num_elems = curArrayKey->num_elems;
-		bool		rolled = false;
+		pub static mut BT_ARRAY_KEY_INFO: *mut curArrayKey = &so->arrayKeys[i];
+		pub static mut SKEY: ScanKey = &so->keyData[curArrayKey->scan_key];
+		pub static mut CUR_ELEM: std::os::raw::c_int = curArrayKey->cur_elem;
+		pub static mut NUM_ELEMS: std::os::raw::c_int = curArrayKey->num_elems;
+		pub static mut ROLLED: bool = false;
 
 		have_array_keys = true;
 
@@ -393,8 +393,8 @@ o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 //
 		if (skey->sk_flags & SK_BT_SKIP)
 		{
-			ScanKey		bound_key;
-			bool		exhausted;
+			pub static mut BOUND_KEY: ScanKey = std::mem::zeroed();
+			pub static mut EXHAUSTED: bool = false;
 
 			if (skey->sk_flags & (SK_BT_MINVAL | SK_BT_MAXVAL | SK_ISNULL))
 			{
@@ -465,7 +465,7 @@ o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 				skey->sk_flags |= SK_BT_NEXT;
 			else
 				skey->sk_flags |= SK_BT_PRIOR;
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 #endif
 
@@ -486,7 +486,7 @@ o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 		curArrayKey->cur_elem = cur_elem;
 		skey->sk_argument = curArrayKey->elem_values[cur_elem];
 		if (!rolled)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		// Need to advance next array key, if any
 	}
@@ -504,7 +504,7 @@ o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 	if (have_array_keys)
 		_bt_start_array_keys(scan, -dir);
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 #if PG_VERSION_NUM >= 180000
@@ -518,12 +518,12 @@ o_bt_advance_array_keys_increment(ostate: &mut OScanState, ScanDirection dir)
 static bool
 scan_has_skip_array(BTScanOpaque so)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < so->numArrayKeys; i++)
 		if (so->arrayKeys[i].num_elems == -1)
-			return true;
-	return false;
+			pub static mut TRUE: return = std::mem::zeroed();
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 #endif
 
@@ -531,14 +531,14 @@ static bool
 switch_to_next_range(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 					 MemoryContext tupleCxt)
 {
-	bound: &mut OBTreeKeyBound;
-	IndexScanDesc scan = &ostate->scandesc;
+	pub static mut OB_TREE_KEY_BOUND: *mut bound = std::ptr::null_mut();
+	pub static mut SCAN: IndexScanDesc = &ostate->scandesc;
 	BTScanOpaque so = (BTScanOpaque) scan->opaque;
-	MemoryContext oldcontext;
-	bool		result = true;
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut RESULT: bool = true;
 
 	if (!so->qual_ok)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 #if PG_VERSION_NUM >= 170000
 
@@ -576,7 +576,7 @@ switch_to_next_range(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 	if (!result)
 	{
 		ostate->curKeyRangeIsLoaded = true;
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	oldcontext = MemoryContextSwitchTo(ostate->cxt);
@@ -639,7 +639,7 @@ switch_to_next_range(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 	{
 		for (int i = 0; i < so->numArrayKeys; i++)
 		{
-			ScanKey		skey = &so->keyData[so->arrayKeys[i].scan_key];
+			pub static mut SKEY: ScanKey = &so->keyData[so->arrayKeys[i].scan_key];
 
 			if ((skey->sk_flags & SK_BT_SKIP) &&
 				(skey->sk_flags & (SK_BT_MINVAL | SK_BT_MAXVAL | SK_ISNULL |
@@ -654,7 +654,7 @@ switch_to_next_range(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 
 	MemoryContextSwitchTo(oldcontext);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 #if PG_VERSION_NUM >= 180000
@@ -672,20 +672,20 @@ static bool
 o_skip_arrays_observe_tuple(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 							OTuple tup)
 {
-	IndexScanDesc scan = &ostate->scandesc;
+	pub static mut SCAN: IndexScanDesc = &ostate->scandesc;
 	BTScanOpaque so = (BTScanOpaque) scan->opaque;
-	bool		transitioned = false;
+	pub static mut TRANSITIONED: bool = false;
 
 	if (so->numArrayKeys == 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	for (int i = 0; i < so->numArrayKeys; i++)
 	{
-		array: &mut BTArrayKeyInfo = &so->arrayKeys[i];
-		ScanKey		skey = &so->keyData[array->scan_key];
-		AttrNumber	attnum;
-		Datum		value;
-		bool		isnull;
+		pub static mut BT_ARRAY_KEY_INFO: *mut array = &so->arrayKeys[i];
+		pub static mut SKEY: ScanKey = &so->keyData[array->scan_key];
+		pub static mut ATTNUM: AttrNumber = std::mem::zeroed();
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
 
 		if (!(skey->sk_flags & SK_BT_SKIP))
 			continue;
@@ -723,7 +723,7 @@ o_skip_arrays_observe_tuple(indexDescr: &mut OIndexDescr, ostate: &mut OScanStat
 		transitioned = true;
 	}
 
-	return transitioned;
+	pub static mut TRANSITIONED: return = std::mem::zeroed();
 }
 #endif
 
@@ -733,8 +733,8 @@ o_iterate_index(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 				hint: &mut BTreeLocationHint)
 {
 	OTuple		tup = {0};
-	bool		tup_fetched = false;
-	IndexScanDesc scan = &ostate->scandesc;
+	pub static mut TUP_FETCHED: bool = false;
+	pub static mut SCAN: IndexScanDesc = &ostate->scandesc;
 	BTScanOpaque so = (BTScanOpaque) scan->opaque;
 
 	if (ostate->exact || ostate->curKeyRange.empty)
@@ -742,14 +742,14 @@ o_iterate_index(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 		if (!switch_to_next_range(indexDescr, ostate, tupleCxt))
 		{
 			O_TUPLE_SET_NULL(tup);
-			return tup;
+			pub static mut TUP: return = std::mem::zeroed();
 		}
 	}
 
 	do
 	{
-		bound: &mut OBTreeKeyBound;
-		bool		tup_is_valid = true;
+		pub static mut OB_TREE_KEY_BOUND: *mut bound = std::ptr::null_mut();
+		pub static mut TUP_IS_VALID: bool = true;
 
 		if (ostate->exact)
 		{
@@ -806,21 +806,21 @@ o_iterate_index(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 												  ostate->numPrefixExactKeys);
 					if (tup_is_valid && indexDescr->desc.type == oIndexExclusion)
 					{
-						TupleDesc	tupdesc;
-						spec: &mut OTupleFixedFormatSpec;
+						pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+						pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = std::ptr::null_mut();
 						int			i,
 									attnum;
-						Datum		value;
-						bool		isnull;
+						pub static mut VALUE: Datum = std::mem::zeroed();
+						pub static mut ISNULL: bool = false;
 
 						tupdesc = indexDescr->leafTupdesc;
 						spec = &indexDescr->leafSpec;
 
 						for (i = 0; i < indexDescr->nKeyFields; i++)
 						{
-							low: &mut OBTreeKeyBound = &ostate->curKeyRange.low;
-							key: &mut OBTreeValueBound = &low->keys[i];
-							int			cmp;
+							pub static mut OB_TREE_KEY_BOUND: *mut low = &ostate->curKeyRange.low;
+							pub static mut OB_TREE_VALUE_BOUND: *mut key = &low->keys[i];
+							pub static mut CMP: std::os::raw::c_int = 0;
 
 							attnum = i + 1;
 							value = o_fastgetattr(tup, attnum, tupdesc, spec, &isnull);
@@ -868,7 +868,7 @@ o_iterate_index(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 		if (tup_fetched && !O_TUPLE_IS_NULL(tup) &&
 			ostate->skipScanProbePending)
 		{
-			MemoryContext oldcontext;
+			pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 
 			ostate->skipScanProbePending = false;
 
@@ -903,7 +903,7 @@ o_iterate_index(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 
 				if (!ostate->exact && !ostate->curKeyRange.empty)
 				{
-					new_bound: &mut OBTreeKeyBound;
+					pub static mut OB_TREE_KEY_BOUND: *mut new_bound = std::ptr::null_mut();
 
 					new_bound = (ostate->scanDir == ForwardScanDirection
 								 ? &ostate->curKeyRange.low
@@ -932,7 +932,7 @@ o_iterate_index(indexDescr: &mut OIndexDescr, ostate: &mut OScanState,
 			tup_fetched = true;
 		}
 	} while (!tup_fetched);
-	return tup;
+	pub static mut TUP: return = std::mem::zeroed();
 }
 
 OTuple
@@ -940,8 +940,8 @@ o_index_scan_getnext(descr: &mut OTableDescr, ostate: &mut OScanState,
 					 tupleCsn: &mut CommitSeqNo, bool scan_primary,
 					 MemoryContext tupleCxt, hint: &mut BTreeLocationHint)
 {
-	id: &mut OIndexDescr = descr->indices[ostate->ixNum];
-	OTuple		tup;
+	pub static mut O_INDEX_DESCR: *mut id = descr->indices[ostate->ixNum];
+	pub static mut TUP: OTuple = std::mem::zeroed();
 
 	descr->noInvalidation = true;
 
@@ -957,7 +957,7 @@ o_index_scan_getnext(descr: &mut OTableDescr, ostate: &mut OScanState,
 				O_TUPLE_SET_NULL(tup);
 				descr->noInvalidation = false;
 				// cppcheck-suppress uninitvar
-				return tup;
+				pub static mut TUP: return = std::mem::zeroed();
 			}
 		}
 		_bt_preprocess_keys(&ostate->scandesc);
@@ -992,8 +992,8 @@ o_index_scan_getnext(descr: &mut OTableDescr, ostate: &mut OScanState,
 //
 		if (ostate->ixNum != PrimaryIndexNumber)
 		{
-			OBTreeKeyBound bound;
-			OTuple		ptup;
+			pub static mut BOUND: OBTreeKeyBound = std::mem::zeroed();
+			pub static mut PTUP: OTuple = std::mem::zeroed();
 			primary: &mut OIndexDescr = GET_PRIMARY(descr);
 
 			// fetch primary index key from tuple and search raw tuple
@@ -1022,7 +1022,7 @@ o_index_scan_getnext(descr: &mut OTableDescr, ostate: &mut OScanState,
 		break;
 	}
 	descr->noInvalidation = false;
-	return tup;
+	pub static mut TUP: return = std::mem::zeroed();
 }
 
 // fetches next tuple for oIterateDirectModify
@@ -1030,16 +1030,16 @@ TupleTableSlot *
 o_exec_fetch(ostate: &mut OScanState, ss: &mut ScanState)
 {
 	descr: &mut OTableDescr = relation_get_descr(ss->ss_currentRelation);
-	slot: &mut TupleTableSlot;
-	OTuple		tuple;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 	bool		scan_primary = ostate->ixNum == PrimaryIndexNumber ||
 		!ostate->onlyCurIx;
-	MemoryContext tupleCxt = ss->ss_ScanTupleSlot->tts_mcxt;
+	pub static mut TUPLE_CXT: MemoryContext = ss->ss_ScanTupleSlot->tts_mcxt;
 
 	do
 	{
 		BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
-		CommitSeqNo tupleCsn;
+		pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
 
 		if (!ostate->curKeyRangeIsLoaded)
 			ostate->curKeyRange.empty = true;
@@ -1062,7 +1062,7 @@ o_exec_fetch(ostate: &mut OScanState, ss: &mut ScanState)
 			 !o_exec_qual(ss->ps.ps_ExprContext,
 						  ss->ps.qual, slot));
 
-	return slot;
+	pub static mut SLOT: return = std::mem::zeroed();
 }
 
 // checks quals for a tuple slot
@@ -1070,7 +1070,7 @@ bool
 o_exec_qual(econtext: &mut ExprContext, qual: &mut ExprState, slot: &mut TupleTableSlot)
 {
 	if (qual == NULL)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	econtext->ecxt_scantuple = slot;
 	return ExecQual(qual, econtext);
@@ -1085,7 +1085,7 @@ o_exec_project(projInfo: &mut ProjectionInfo, econtext: &mut ExprContext,
 			   scanTuple: &mut TupleTableSlot, innerTuple: &mut TupleTableSlot)
 {
 	if (!projInfo || TupIsNull(scanTuple))
-		return scanTuple;
+		pub static mut SCAN_TUPLE: return = std::mem::zeroed();
 
 	econtext->ecxt_scantuple = scanTuple;
 	econtext->ecxt_innertuple = innerTuple;
@@ -1112,14 +1112,14 @@ fn
 eanalyze_counter_explain(counter: &mut OEACallsCounter, label: &mut char,
 						 ix_name: &mut char, es: &mut ExplainState)
 {
-	StringInfoData explain;
+	pub static mut EXPLAIN: StringInfoData = std::mem::zeroed();
 	fnames: &mut char[EA_COUNTERS_NUM] = {"read", "lock", "evict",
 	"write", "load"};
 	uint32		counts[EA_COUNTERS_NUM],
 				i;
 	bool		is_first,
 				is_null;
-	label_upcase: &mut char = NULL;
+	pub static mut CHAR: *mut label_upcase = std::ptr::null_mut();
 
 	Assert(counter != NULL);
 
@@ -1146,8 +1146,8 @@ eanalyze_counter_explain(counter: &mut OEACallsCounter, label: &mut char,
 		case EXPLAIN_FORMAT_XML:
 		case EXPLAIN_FORMAT_YAML:
 			{
-				int			i;
-				bool		after_space = true;
+				pub static mut I: std::os::raw::c_int = 0;
+				pub static mut AFTER_SPACE: bool = true;
 				int			len = strlen(label);
 
 				label_upcase = pstrdup(label);
@@ -1215,8 +1215,8 @@ eanalyze_counter_explain(counter: &mut OEACallsCounter, label: &mut char,
 eanalyze_counters_explain(descr: &mut OTableDescr, counters: &mut OEACallsCounters,
 						  es: &mut ExplainState)
 {
-	StringInfoData label;
-	int			i;
+	pub static mut LABEL: StringInfoData = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	initStringInfo(&label);
 

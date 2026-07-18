@@ -46,10 +46,10 @@ use pgrx::pg_sys;
 #define QUEUE_READ_USLEEP_MULTIPLER	(2)
 #define QUEUE_READ_USLEEP_MAX		(1024 * QUEUE_READ_USLEEP_BASE)
 
-static bool detached = false;
-static CommitSeqNo my_ptr;
-static bool recovery_initialized = false;
-static bool recovery_needs_feedback = false;
+static mut DETACHED: bool = false;
+static mut MY_PTR: CommitSeqNo = std::mem::zeroed();
+static mut RECOVERY_INITIALIZED: bool = false;
+static mut RECOVERY_NEEDS_FEEDBACK: bool = false;
 
 fn recovery_queue_process(queue: &mut shm_mq_handle, int id);
 static inline Pointer recovery_queue_read(queue: &mut shm_mq_handle, data_size: &mut Size, int id);
@@ -66,9 +66,9 @@ fn ReleaseWorkerResources(bool isCommit);
 
 typedef struct
 {
-	OTuple		tuple;
-	OTuple		key;
-	CommitSeqNo csn;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut KEY: OTuple = std::mem::zeroed();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 	descr: &mut OTableDescr;			// for set_pending_sk_marker_from_tup_copy
 } CallbackTupleCopy;
 
@@ -104,7 +104,7 @@ o_delete_copy_callback(descr: &mut BTreeDescr,
 	{
 		if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 			o_tuple_get_version(tup) > o_tuple_get_version(copyArg->key))
-			return OBTreeCallbackActionUndo;
+			pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 	}
 
 	if (descr->type == oIndexPrimary)
@@ -120,7 +120,7 @@ o_delete_copy_callback(descr: &mut BTreeDescr,
 		else
 			copyArg->csn = COMMITSEQNO_INPROGRESS;
 	}
-	return OBTreeCallbackActionDelete;
+	pub static mut OB_TREE_CALLBACK_ACTION_DELETE: return = std::mem::zeroed();
 }
 
 static OBTreeModifyCallbackAction
@@ -135,7 +135,7 @@ o_update_copy_callback(descr: &mut BTreeDescr,
 	{
 		if (XACT_INFO_OXID_EQ(xactInfo, oxid) &&
 			o_tuple_get_version(tup) >= o_tuple_get_version(*newtup))
-			return OBTreeCallbackActionUndo;
+			pub static mut OB_TREE_CALLBACK_ACTION_UNDO: return = std::mem::zeroed();
 	}
 
 	if (descr->type == oIndexPrimary)
@@ -151,7 +151,7 @@ o_update_copy_callback(descr: &mut BTreeDescr,
 		else
 			copyArg->csn = COMMITSEQNO_INPROGRESS;
 	}
-	return OBTreeCallbackActionUpdate;
+	pub static mut OB_TREE_CALLBACK_ACTION_UPDATE: return = std::mem::zeroed();
 }
 
 //
@@ -162,8 +162,8 @@ BackgroundWorkerHandle *
 recovery_worker_register(int worker_id)
 {
 	char		worker_name[128];
-	BackgroundWorker worker;
-	handle: &mut BackgroundWorkerHandle = NULL;
+	pub static mut WORKER: BackgroundWorker = std::mem::zeroed();
+	pub static mut BACKGROUND_WORKER_HANDLE: *mut handle = std::ptr::null_mut();
 
 	sprintf(worker_name, "orioledb recovery worker %d", worker_id);
 	// Set up background worker parameters
@@ -187,7 +187,7 @@ recovery_worker_register(int worker_id)
 		RegisterDynamicBackgroundWorker(&worker, &handle);
 	}
 
-	return handle;
+	pub static mut HANDLE: return = std::mem::zeroed();
 }
 
 //
@@ -196,11 +196,11 @@ recovery_worker_register(int worker_id)
 
 recovery_worker_main(Datum main_arg)
 {
-	recovery_worker_queue: &mut shm_mq_handle = NULL;
+	pub static mut SHM_MQ_HANDLE: *mut recovery_worker_queue = std::ptr::null_mut();
 
 	PG_TRY();
 	{
-		int			id = main_arg;
+		pub static mut ID: std::os::raw::c_int = main_arg;
 
 		elog(LOG, "orioledb recovery worker %d started.", id);
 
@@ -287,19 +287,19 @@ recovery_worker_main(Datum main_arg)
 ParallelRecoveryContext *
 CreateParallelRecoveryContext(int nworkers)
 {
-	context: &mut ParallelRecoveryContext;
+	pub static mut PARALLEL_RECOVERY_CONTEXT: *mut context = std::ptr::null_mut();
 
 	context = palloc0(sizeof(ParallelRecoveryContext));
 	context->nworkers = nworkers;
 	shm_toc_initialize_estimator(&context->estimator);
 
-	return context;
+	pub static mut CONTEXT: return = std::mem::zeroed();
 }
 
 
 InitializeParallelRecoveryDSM(context: &mut ParallelRecoveryContext)
 {
-	Size		segsize = 0;
+	pub static mut SEGSIZE: Size = 0;
 
 	segsize = shm_toc_estimate(&context->estimator);
 
@@ -358,20 +358,20 @@ update_worker_ptr(int worker_id, XLogRecPtr ptr)
 fn
 recovery_queue_process(queue: &mut shm_mq_handle, int id)
 {
-	oxid_ptr_record: &mut RecoveryMsgOXidPtr;
-	csn_record: &mut RecoveryMsgPtr;
-	recovery_header: &mut RecoveryMsgHeader;
-	descr: &mut OTableDescr = NULL;
-	indexDescr: &mut OIndexDescr = NULL;
-	Pointer		data;
-	OIndexType	ix_type;
+	pub static mut RECOVERY_MSG_O_XID_PTR: *mut oxid_ptr_record = std::ptr::null_mut();
+	pub static mut RECOVERY_MSG_PTR: *mut csn_record = std::ptr::null_mut();
+	pub static mut RECOVERY_MSG_HEADER: *mut recovery_header = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
 	ORelOids	oids = {InvalidOid, InvalidOid, InvalidOid};
-	int			tuple_len;
+	pub static mut TUPLE_LEN: std::os::raw::c_int = 0;
 	Size		data_size,
 				data_pos;
-	MemoryContext recovery_context;
-	bool		finished = false;
-	OXid		oxid;
+	pub static mut RECOVERY_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut FINISHED: bool = false;
+	pub static mut OXID: OXid = std::mem::zeroed();
 
 	recovery_context = AllocSetContextCreate(CurrentMemoryContext,
 											 "recovery worker context",
@@ -387,7 +387,7 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 		data_pos = 0;
 		while (data_pos < data_size)
 		{
-			RecoveryMsgType type;
+			pub static mut TYPE: RecoveryMsgType = std::mem::zeroed();
 
 			recovery_header = (RecoveryMsgHeader *) (data + data_pos);
 			type = (recovery_header->type & RECOVERY_MSG_OPERATION_MASK);
@@ -397,7 +397,7 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 				type == RecoveryMsgTypeDelete ||
 				type == RecoveryMsgTypeBridgeErase)
 			{
-				OTuple		tuple;
+				pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 				data_pos += sizeof(RecoveryMsgHeader);
 				if (recovery_header->type & RECOVERY_MODIFY_OXID)
@@ -409,8 +409,8 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 
 				if (recovery_header->type & RECOVERY_MODIFY_OIDS)
 				{
-					prefix: &mut char;
-					db_prefix: &mut char;
+					pub static mut CHAR: *mut prefix = std::ptr::null_mut();
+					pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 					memcpy(&oids, data + data_pos, sizeof(ORelOids));
 					data_pos += sizeof(ORelOids);
@@ -444,7 +444,7 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 
 				if (type == RecoveryMsgTypeBridgeErase)
 				{
-					ItemPointerData iptr;
+					pub static mut IPTR: ItemPointerData = std::mem::zeroed();
 
 					memcpy(&iptr, data + data_pos, sizeof(iptr));
 					data_pos += sizeof(iptr);
@@ -478,9 +478,9 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 				msg: &mut RecoveryMsgLeaderIdxBuild = (RecoveryMsgLeaderIdxBuild *) (data + data_pos);
 				o_table: &mut OTable,
 						   *old_o_table = NULL;
-				o_descr: &mut OTableDescr;
-				old_o_descr: &mut OTableDescr = NULL;
-				MemoryContext prev_context;
+				pub static mut O_TABLE_DESCR: *mut o_descr = std::ptr::null_mut();
+				pub static mut O_TABLE_DESCR: *mut old_o_descr = std::ptr::null_mut();
+				pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
 
 				prev_context = MemoryContextSwitchTo(recovery_context);
 
@@ -540,9 +540,9 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 			else if (type == RecoveryMsgTypeWorkerParallelIndexBuild)
 			{
 				msg: &mut RecoveryMsgWorkerIdxBuild = (RecoveryMsgWorkerIdxBuild *) (data + data_pos);
-				seg: &mut dsm_segment;
-				toc: &mut shm_toc;
-				MemoryContext prev_context;
+				pub static mut DSM_SEGMENT: *mut seg = std::ptr::null_mut();
+				pub static mut SHM_TOC: *mut toc = std::ptr::null_mut();
+				pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
 
 				prev_context = MemoryContextSwitchTo(recovery_context);
 
@@ -622,7 +622,7 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 			}
 			else if (type == RecoveryMsgTypeSavepoint)
 			{
-				msg: &mut RecoveryMsgSavepoint;
+				pub static mut RECOVERY_MSG_SAVEPOINT: *mut msg = std::ptr::null_mut();
 
 				msg = (RecoveryMsgSavepoint *) (data + data_pos);
 				recovery_switch_to_oxid(msg->oxid, id);
@@ -631,7 +631,7 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 			}
 			else if (type == RecoveryMsgTypeRollbackToSavepointt)
 			{
-				msg: &mut RecoveryMsgRollbackToSavepoint;
+				pub static mut RECOVERY_MSG_ROLLBACK_TO_SAVEPOINT: *mut msg = std::ptr::null_mut();
 
 				msg = (RecoveryMsgRollbackToSavepoint *) (data + data_pos);
 				recovery_switch_to_oxid(msg->oxid, id);
@@ -668,7 +668,7 @@ recovery_queue_process(queue: &mut shm_mq_handle, int id)
 apply_modify_record(descr: &mut OTableDescr, id: &mut OIndexDescr, uint16 type,
 					OTuple p)
 {
-	OXid		oxid;
+	pub static mut OXID: OXid = std::mem::zeroed();
 
 	oxid = get_current_oxid();
 
@@ -694,11 +694,11 @@ apply_modify_record(descr: &mut OTableDescr, id: &mut OIndexDescr, uint16 type,
 static inline Pointer
 recovery_queue_read(queue: &mut shm_mq_handle, data_size: &mut Size, int id)
 {
-	shm_mq_result read_result;
+	pub static mut READ_RESULT: shm_mq_result = std::mem::zeroed();
 	XLogRecPtr	prev_rec_ptr = InvalidXLogRecPtr,
 				cur_rec_ptr;
-	long		usleep_time;
-	Pointer		data = NULL;
+	pub static mut USLEEP_TIME: long = std::mem::zeroed();
+	pub static mut DATA: Pointer = std::ptr::null_mut();
 
 	usleep_time = QUEUE_READ_USLEEP_BASE;
 	while (true)
@@ -782,7 +782,7 @@ recovery_queue_read(queue: &mut shm_mq_handle, data_size: &mut Size, int id)
 			usleep_time *= QUEUE_READ_USLEEP_MULTIPLER;
 	}
 
-	return data;
+	pub static mut DATA: return = std::mem::zeroed();
 }
 
 //
@@ -816,14 +816,14 @@ fn
 apply_tbl_insert(descr: &mut OTableDescr, OTuple tuple,
 				 OXid oxid, CommitSeqNo csn)
 {
-	OBTreeKeyBound keyBound;
+	pub static mut KEY_BOUND: OBTreeKeyBound = std::mem::zeroed();
 	OTuple		stuple,
 				cur_tuple;
-	id: &mut OIndexDescr;
-	int			i;
-	bool		isPrimary = false;
-	slot: &mut TupleTableSlot = descr->newTuple;
-	BTreeModifyCallbackInfo callbackInfo = nullCallbackInfo;
+	pub static mut O_INDEX_DESCR: *mut id = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut IS_PRIMARY: bool = false;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = descr->newTuple;
+	pub static mut CALLBACK_INFO: BTreeModifyCallbackInfo = nullCallbackInfo;
 
 	O_TUPLE_SET_NULL(stuple);
 
@@ -848,7 +848,7 @@ apply_tbl_insert(descr: &mut OTableDescr, OTuple tuple,
 
 	for (i = 0; i < descr->nIndices; i++)
 	{
-		int			attnum;
+		pub static mut ATTNUM: std::os::raw::c_int = 0;
 
 		isPrimary = (i == PrimaryIndexNumber);
 		id = descr->indices[i];
@@ -937,14 +937,14 @@ fn
 apply_tbl_delete(descr: &mut OTableDescr, OTuple key,
 				 OXid oxid, CommitSeqNo csn)
 {
-	OBTreeModifyResult modify_result;
-	OBTreeKeyBound keyBound;
-	CallbackTupleCopy tupCopy;
-	id: &mut OIndexDescr;
-	int			i;
-	bool		isPrimary;
-	slot: &mut TupleTableSlot = descr->newTuple;
-	OTuple		nullTup;
+	pub static mut MODIFY_RESULT: OBTreeModifyResult = std::mem::zeroed();
+	pub static mut KEY_BOUND: OBTreeKeyBound = std::mem::zeroed();
+	pub static mut TUP_COPY: CallbackTupleCopy = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut id = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut IS_PRIMARY: bool = false;
+	pub static mut TUPLE_TABLE_SLOT: *mut slot = descr->newTuple;
+	pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 
 	O_TUPLE_SET_NULL(nullTup);
 	for (i = 0; i < descr->nIndices; i++)
@@ -1017,14 +1017,14 @@ fn
 apply_tbl_update(descr: &mut OTableDescr, OTuple tuple,
 				 OXid oxid, CommitSeqNo csn)
 {
-	OBTreeModifyResult modify_result;
+	pub static mut MODIFY_RESULT: OBTreeModifyResult = std::mem::zeroed();
 	OBTreeKeyBound old_key,
 				new_key;
-	OTuple		new_stup;
-	CallbackTupleCopy tupCopy;
-	tree: &mut OIndexDescr;
-	int			i;
-	bool		isPrimary;
+	pub static mut NEW_STUP: OTuple = std::mem::zeroed();
+	pub static mut TUP_COPY: CallbackTupleCopy = std::mem::zeroed();
+	pub static mut O_INDEX_DESCR: *mut tree = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut IS_PRIMARY: bool = false;
 	new_slot: &mut TupleTableSlot = descr->newTuple,
 			   *old_slot = descr->oldTuple;
 
@@ -1069,7 +1069,7 @@ apply_tbl_update(descr: &mut OTableDescr, OTuple tuple,
 		}
 		else
 		{
-			int			cmp;
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			tts_orioledb_fill_key_bound(new_slot, tree, &new_key);
 			tts_orioledb_fill_key_bound(old_slot, tree, &old_key);
@@ -1080,8 +1080,8 @@ apply_tbl_update(descr: &mut OTableDescr, OTuple tuple,
 
 			if (cmp != 0)
 			{
-				OTuple		nullTup;
-				BTreeModifyCallbackInfo callbackInfo = nullCallbackInfo;
+				pub static mut NULL_TUP: OTuple = std::mem::zeroed();
+				pub static mut CALLBACK_INFO: BTreeModifyCallbackInfo = nullCallbackInfo;
 
 				O_TUPLE_SET_NULL(nullTup);
 

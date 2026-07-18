@@ -139,7 +139,7 @@ o_get_key_len(desc: &mut BTreeDescr, OTuple tuple, OIndexType type, bool keepVer
 	bool		isnull[INDEX_MAX_KEYS] = {false};
 	int			i,
 				len;
-	int			ctid_off = 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = 0;
 
 	if (id->bridging && id->desc.type == oIndexPrimary && !id->primaryIsCtid)
 		ctid_off = 1;
@@ -156,7 +156,7 @@ o_get_key_len(desc: &mut BTreeDescr, OTuple tuple, OIndexType type, bool keepVer
 						   keepVersion ? o_tuple_get_version(tuple) : 0,
 						   values, isnull, NULL);
 
-	return len;
+	pub static mut LEN: return = std::mem::zeroed();
 }
 
 static int
@@ -190,9 +190,9 @@ o_create_key_tuple(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
 	bool		isnull[INDEX_MAX_KEYS] = {false};
 	int			i,
 				len;
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 	uint32		version = keep_version ? o_tuple_get_version(tuple) : 0;
-	int			ctid_off = 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = 0;
 
 	if (id->bridging && type == oIndexPrimary && !id->primaryIsCtid)
 		ctid_off = 1;
@@ -219,7 +219,7 @@ o_create_key_tuple(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
 	}
 	o_tuple_fill(id->nonLeafTupdesc, &id->nonLeafSpec, &result, len, NULL, NULL, version, key, isnull, NULL);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 #define HASH_INITIAL (0x9e3779b9)
@@ -233,7 +233,7 @@ o_create_key_tuple(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
 static inline uint32
 hash_combine_mix(key: &mut char, uint32 len, uint32 hash)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < len; ++i)
 	{
@@ -252,7 +252,7 @@ hash_combine_mix(key: &mut char, uint32 len, uint32 hash)
 //
 	}
 
-	return hash;
+	pub static mut HASH: return = std::mem::zeroed();
 }
 
 static inline uint32
@@ -277,27 +277,27 @@ hash_combine_mix_field(idx: &mut OIndexDescr, TupleDesc tupdesc,
 					   spec: &mut OTupleFixedFormatSpec,
 					   OTuple tup, int attnum, int field_num, uint32 hash)
 {
-	Datum		val;
-	bool		isnull;
-	uint32		element_hash;
+	pub static mut VAL: Datum = std::mem::zeroed();
+	pub static mut ISNULL: bool = false;
+	pub static mut ELEMENT_HASH: uint32 = std::mem::zeroed();
 
 	val = o_fastgetattr(tup, attnum, tupdesc, spec, &isnull);
 	if (isnull)
-		return hash;
+		pub static mut HASH: return = std::mem::zeroed();
 	if (idx->fields[field_num].hash_fn == &o_default_hash_fn)
-		return hash;
+		pub static mut HASH: return = std::mem::zeroed();
 	element_hash = o_call_hash_fn(idx->fields[field_num].hash_fn,
 								  idx->fields[field_num].collation,
 								  val);
 	hash = hash_combine_mix((char *) &element_hash, sizeof(uint32), hash);
 
-	return hash;
+	pub static mut HASH: return = std::mem::zeroed();
 }
 
 uint32
 o_hash_iptr(idx: &mut OIndexDescr, ItemPointer iptr)
 {
-	register uint32 hash = HASH_INITIAL;
+	pub static mut HASH: register uint32 = HASH_INITIAL;
 
 	hash = hash_combine_mix((Pointer) &idx->desc.oids,
 							sizeof(idx->desc.oids), hash);
@@ -309,11 +309,11 @@ o_hash_iptr(idx: &mut OIndexDescr, ItemPointer iptr)
 static uint32
 o_hash_key(idx: &mut OIndexDescr, OTuple key)
 {
-	register uint32 hash = HASH_INITIAL;
-	int			i;
-	int			natts;
-	TupleDesc	tupdesc = idx->nonLeafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = &idx->nonLeafSpec;
+	pub static mut HASH: register uint32 = HASH_INITIAL;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut NATTS: std::os::raw::c_int = 0;
+	pub static mut TUPDESC: TupleDesc = idx->nonLeafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &idx->nonLeafSpec;
 
 	if (idx->desc.type == oIndexPrimary)
 		natts = idx->nUniqueFields;
@@ -324,18 +324,18 @@ o_hash_key(idx: &mut OIndexDescr, OTuple key)
 		hash = hash_combine_mix_field(idx, tupdesc, spec, key, i + 1, i, hash);
 	hash = hash_final(hash);
 
-	return hash;
+	pub static mut HASH: return = std::mem::zeroed();
 }
 
 static uint32
 o_hash_key_from_tuple(idx: &mut OIndexDescr, OTuple tuple)
 {
-	register uint32 hash = HASH_INITIAL;
-	TupleDesc	tupdesc = idx->leafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
-	int			i = 0;
-	int			ctid_off = 0;
-	int			natts;
+	pub static mut HASH: register uint32 = HASH_INITIAL;
+	pub static mut TUPDESC: TupleDesc = idx->leafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &idx->leafSpec;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = 0;
+	pub static mut NATTS: std::os::raw::c_int = 0;
 
 	if (idx->bridging && idx->desc.type == oIndexPrimary && !idx->primaryIsCtid)
 		ctid_off = 1;
@@ -347,7 +347,7 @@ o_hash_key_from_tuple(idx: &mut OIndexDescr, OTuple tuple)
 
 	for (i = 0; i < natts; i++)
 	{
-		int			attnum;
+		pub static mut ATTNUM: std::os::raw::c_int = 0;
 
 		if (idx->desc.type == oIndexPrimary)
 			attnum = idx->tableAttnums[i] + ctid_off;
@@ -360,15 +360,15 @@ o_hash_key_from_tuple(idx: &mut OIndexDescr, OTuple tuple)
 
 	hash = hash_final(hash);
 
-	return hash;
+	pub static mut HASH: return = std::mem::zeroed();
 }
 
 static uint32
 o_hash_key_from_toast_tuple(toast: &mut OIndexDescr, OTuple tuple)
 {
-	register uint32 hash = HASH_INITIAL;
-	TupleDesc	tupdesc = toast->leafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = &toast->leafSpec;
+	pub static mut HASH: register uint32 = HASH_INITIAL;
+	pub static mut TUPDESC: TupleDesc = toast->leafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &toast->leafSpec;
 	int			attnum,
 				natts;
 
@@ -379,15 +379,15 @@ o_hash_key_from_toast_tuple(toast: &mut OIndexDescr, OTuple tuple)
 
 	hash = hash_final(hash);
 
-	return hash;
+	pub static mut HASH: return = std::mem::zeroed();
 }
 
 static uint32
 o_hash_key_from_toast_key(toast: &mut OIndexDescr, OTuple key)
 {
-	register uint32 hash = HASH_INITIAL;
-	TupleDesc	tupdesc = toast->nonLeafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = &toast->nonLeafSpec;
+	pub static mut HASH: register uint32 = HASH_INITIAL;
+	pub static mut TUPDESC: TupleDesc = toast->nonLeafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &toast->nonLeafSpec;
 	int			attnum,
 				natts;
 
@@ -398,7 +398,7 @@ o_hash_key_from_toast_key(toast: &mut OIndexDescr, OTuple key)
 
 	hash = hash_final(hash);
 
-	return hash;
+	pub static mut HASH: return = std::mem::zeroed();
 }
 
 static uint32
@@ -435,9 +435,9 @@ static uint32
 o_idx_unique_hash(desc: &mut BTreeDescr, OTuple tuple)
 {
 	idx: &mut OIndexDescr = o_get_tree_def(desc);
-	register uint32 hash = HASH_INITIAL;
-	TupleDesc	tupdesc = idx->leafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
+	pub static mut HASH: register uint32 = HASH_INITIAL;
+	pub static mut TUPDESC: TupleDesc = idx->leafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &idx->leafSpec;
 	int			i = 0,
 				attnum;
 
@@ -451,7 +451,7 @@ o_idx_unique_hash(desc: &mut BTreeDescr, OTuple tuple)
 
 	hash = hash_final(hash);
 
-	return hash;
+	pub static mut HASH: return = std::mem::zeroed();
 }
 
 // creates index tuple from table tuple for primary index
@@ -476,11 +476,11 @@ o_sidx_tuple_make_key(desc: &mut BTreeDescr, OTuple tuple, Pointer data,
 o_fill_key_bound(id: &mut OIndexDescr, OTuple tuple,
 				 BTreeKeyType keyType, bound: &mut OBTreeKeyBound)
 {
-	TupleDesc	tupdesc;
-	spec: &mut OTupleFixedFormatSpec;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = std::ptr::null_mut();
 	int			i,
 				attnum;
-	bool		isnull;
+	pub static mut ISNULL: bool = false;
 
 	Assert(keyType == BTreeKeyLeafTuple || keyType == BTreeKeyNonLeafKey);
 
@@ -520,7 +520,7 @@ o_fill_key_bound(id: &mut OIndexDescr, OTuple tuple,
 o_fill_bridge_index_key_bound(secondary: &mut BTreeDescr, OTuple tuple, bound: &mut OBTreeKeyBound)
 {
 	td: &mut OIndexDescr = o_get_tree_def(secondary);
-	bool		isnull;
+	pub static mut ISNULL: bool = false;
 
 	bound->nkeys = 1;
 
@@ -540,9 +540,9 @@ o_fill_pindex_tuple_key_bound(desc: &mut BTreeDescr,
 							  bound: &mut OBTreeKeyBound)
 {
 	id: &mut OIndexDescr = o_get_tree_def(desc);
-	int			i;
-	int			pk_from;
-	bool		isnull;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut PK_FROM: std::os::raw::c_int = 0;
+	pub static mut ISNULL: bool = false;
 
 	if (desc->type == oIndexBridge)
 		pk_from = 1;
@@ -552,7 +552,7 @@ o_fill_pindex_tuple_key_bound(desc: &mut BTreeDescr,
 	bound->nkeys = id->nPrimaryFields;
 	for (i = 0; i < id->nPrimaryFields; i++)
 	{
-		AttrNumber	attnum = id->primaryFieldsAttnums[i];
+		pub static mut ATTNUM: AttrNumber = id->primaryFieldsAttnums[i];
 
 		bound->keys[i].value = o_fastgetattr(tup, attnum, id->leafTupdesc, &id->leafSpec, &isnull);
 		bound->keys[i].type = TupleDescAttr(id->leafTupdesc, pk_from + i)->atttypid;
@@ -572,7 +572,7 @@ cmp_inclusive(uint8 f)
 	if ((f & O_VALUE_BOUND_UPPER))
 		return (f & O_VALUE_BOUND_INCLUSIVE) ? 1 : -1;
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 static int
@@ -588,7 +588,7 @@ int
 o_idx_cmp_range_key_to_value(bound1: &mut OBTreeValueBound, field: &mut OIndexField,
 							 Datum value, bool isnull)
 {
-	int			cmp;
+	pub static mut CMP: std::os::raw::c_int = 0;
 
 	Assert(!(bound1->flags & O_VALUE_BOUND_UNBOUNDED));
 	if (!(bound1->flags & O_VALUE_BOUND_NULL) && !isnull)
@@ -614,7 +614,7 @@ o_idx_cmp_range_key_to_value(bound1: &mut OBTreeValueBound, field: &mut OIndexFi
 		if (cmp == 0 && !(bound1->flags & O_VALUE_BOUND_INCLUSIVE))
 			cmp = cmp_inclusive(bound1->flags);
 
-		return cmp;
+		pub static mut CMP: return = std::mem::zeroed();
 	}
 	else
 	{
@@ -679,8 +679,8 @@ o_idx_cmp_tuples(id: &mut OIndexDescr,
 	{
 		if (!OIgnoreColumn(id, i))
 		{
-			field: &mut OIndexField = &id->fields[i];
-			int			cmp = 0;
+			pub static mut O_INDEX_FIELD: *mut field = &id->fields[i];
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			attnum1 = OIndexKeyAttnumToTupleAttnum(keyType1, id, i + 1);
 			value1 = o_fastgetattr(*tuple1, attnum1, tupdesc1, spec1, &isnull1);
@@ -701,10 +701,10 @@ o_idx_cmp_tuples(id: &mut OIndexDescr,
 				cmp = field->nullfirst ? 1 : -1;
 
 			if (cmp != 0)
-				return cmp;
+				pub static mut CMP: return = std::mem::zeroed();
 		}
 	}
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 static int
@@ -712,13 +712,13 @@ o_idx_cmp_key_bound_to_tuple(id: &mut OIndexDescr,
 							 key1: &mut OBTreeKeyBound, BTreeKeyType keyType1,
 							 tuple2: &mut OTuple, BTreeKeyType keyType2)
 {
-	TupleDesc	tupdesc;
-	spec: &mut OTupleFixedFormatSpec;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = std::ptr::null_mut();
 	int			i,
 				n,
 				attnum;
-	Datum		value;
-	bool		isnull;
+	pub static mut VALUE: Datum = std::mem::zeroed();
+	pub static mut ISNULL: bool = false;
 
 	Assert(keyType2 == BTreeKeyLeafTuple || keyType2 == BTreeKeyNonLeafKey);
 
@@ -748,8 +748,8 @@ o_idx_cmp_key_bound_to_tuple(id: &mut OIndexDescr,
 	{
 		if (!OIgnoreColumn(id, i))
 		{
-			uint8		flags = key1->keys[i].flags;
-			int			cmp;
+			pub static mut FLAGS: uint8 = key1->keys[i].flags;
+			pub static mut CMP: std::os::raw::c_int = 0;
 
 			if (flags & O_VALUE_BOUND_UNBOUNDED)
 				return (flags & O_VALUE_BOUND_LOWER) ? -1 : 1;
@@ -760,15 +760,15 @@ o_idx_cmp_key_bound_to_tuple(id: &mut OIndexDescr,
 			cmp = o_idx_cmp_range_key_to_value(&key1->keys[i], &id->fields[i],
 											   value, isnull);
 			if (cmp != 0)
-				return cmp;
+				pub static mut CMP: return = std::mem::zeroed();
 		}
 	}
 
 	if (keyType1 == BTreeKeyUniqueLowerBound)
 		return -1;
 	else if (keyType1 == BTreeKeyUniqueUpperBound)
-		return 1;
-	return 0;
+		pub static mut 1: return = std::mem::zeroed();
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 int
@@ -779,7 +779,7 @@ o_idx_cmp_value_bounds(bound1: &mut OBTreeValueBound,
 {
 	// Keep clang analyzer quiet
 #ifndef __clang_analyzer__
-	int			res;
+	pub static mut RES: std::os::raw::c_int = 0;
 
 	if (equal)
 		*equal = false;
@@ -838,7 +838,7 @@ o_idx_cmp_value_bounds(bound1: &mut OBTreeValueBound,
 		{
 			if ((bound1->flags & O_VALUE_BOUND_DIRECTIONS) ==
 				(bound2->flags & O_VALUE_BOUND_DIRECTIONS))
-				return 0;
+				pub static mut 0: return = std::mem::zeroed();
 			else
 				return (bound1->flags & O_VALUE_BOUND_LOWER) ? -1 : 1;
 		}
@@ -866,9 +866,9 @@ o_idx_cmp_value_bounds(bound1: &mut OBTreeValueBound,
 		res = 0;
 	}
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 #else
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 #endif
 }
 
@@ -884,7 +884,7 @@ o_idx_cmp(desc: &mut BTreeDescr,
 			   *key2;
 	int			i,
 				n;
-	int			cmp;
+	pub static mut CMP: std::os::raw::c_int = 0;
 
 	o_set_sys_cache_search_datoid(desc->oids.datoid);
 
@@ -929,7 +929,7 @@ o_idx_cmp(desc: &mut BTreeDescr,
 										 &id->fields[i],
 										 NULL);
 			if (cmp)
-				return cmp;
+				pub static mut CMP: return = std::mem::zeroed();
 		}
 	}
 #endif
@@ -939,10 +939,10 @@ o_idx_cmp(desc: &mut BTreeDescr,
 		if (keyType1 == BTreeKeyUniqueLowerBound || keyType2 == BTreeKeyUniqueUpperBound)
 			return -1;
 		if (keyType1 == BTreeKeyUniqueUpperBound || keyType2 == BTreeKeyUniqueLowerBound)
-			return 1;
+			pub static mut 1: return = std::mem::zeroed();
 	}
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 static bool
@@ -951,35 +951,35 @@ pk_needs_undo(desc: &mut BTreeDescr, BTreeOperationType action,
 			  OTuple newTuple, OXid newOxid)
 {
 	if (action == BTreeOperationDelete)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!XACT_INFO_OXID_EQ(oldXactInfo, newOxid))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (oldDeleted && o_tuple_get_version(oldTuple) + 1 == o_tuple_get_version(newTuple))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	if (!O_TUPLE_IS_NULL(newTuple) && is_recovery_process() &&
 		o_tuple_get_version(oldTuple) >= o_tuple_get_version(newTuple))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
 o_key_to_jsonb_internal(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 						int natts, OTuple key, JsonbParseState **state)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < natts; i++)
 	{
-		Datum		value;
-		bool		isnull;
-		JsonbValue	jval;
-		ItemPointer iptr;
-		BlockNumber blkno;
-		OffsetNumber offset;
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
+		pub static mut JVAL: JsonbValue = std::mem::zeroed();
+		pub static mut IPTR: ItemPointer = std::mem::zeroed();
+		pub static mut BLKNO: BlockNumber = std::mem::zeroed();
+		pub static mut OFFSET: OffsetNumber = std::mem::zeroed();
 
 		jsonb_push_key(state, TupleDescAttr(tupleDesc, i)->attname.data);
 

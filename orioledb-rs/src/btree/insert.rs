@@ -33,27 +33,27 @@ use pgrx::pg_sys;
 typedef struct BTreeInsertStackItem
 {
 	// next item in the find context. next == NULL if it's last item.
-	struct next: &mut BTreeInsertStackItem;
+	pub static mut B_TREE_INSERT_STACK_ITEM: *mut struct next = std::ptr::null_mut();
 	// current find context
-	context: &mut OBTreeFindPageContext;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut context = std::ptr::null_mut();
 	// if level == 0, tuple is BTreeTuple else it is BTreeKey
-	OTuple		tuple;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 	//
 // if level == 0, tupheader is BTreeLeafTuphdr else it is
 // BTreeNonLeafTuphdr
 //
-	Pointer		tupheader;
+	pub static mut TUPHEADER: Pointer = std::ptr::null_mut();
 	// length of the tuple
-	Size		tuplen;
+	pub static mut TUPLEN: Size = 0;
 	// current level of the insert
-	int			level;
+	pub static mut LEVEL: std::os::raw::c_int = 0;
 	// blkno of the right page of incomplete split.
-	OInMemoryBlkno rightBlkno;
+	pub static mut RIGHT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
 	// is current item replace tuple
-	bool		replace;
+	pub static mut REPLACE: bool = false;
 	// is refind_page must be called
-	bool		refind;
+	pub static mut REFIND: bool = false;
 } BTreeInsertStackItem;
 
 // Fills BTreeInsertStackItem as a downlink of current incomplete split.
@@ -88,7 +88,7 @@ o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(left_blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	uint64		rightLink = header->rightLink;
+	pub static mut RIGHT_LINK: uint64 = header->rightLink;
 
 	if (RightLinkIsValid(rightLink))
 	{
@@ -97,7 +97,7 @@ o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 		Assert(O_PAGE_GET_CHANGE_COUNT(rightP) == RIGHTLINK_GET_CHANGECOUNT(rightLink));
 
 		if (O_PAGE_IS(p, BROKEN_SPLIT))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		// wait for split finish
 		while (RightLinkIsValid(rightLink) && !O_PAGE_IS(rightP, BROKEN_SPLIT))
@@ -105,7 +105,7 @@ o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 			relock_page(left_blkno);
 			*relocked = true;
 			if (O_PAGE_GET_CHANGE_COUNT(p) != pageChangeCount)
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 			rightLink = header->rightLink;
 			if (RightLinkIsValid(rightLink))
@@ -119,9 +119,9 @@ o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 		Assert(O_PAGE_IS(rightP, BROKEN_SPLIT) || !RightLinkIsValid(rightLink));
 
 		if (O_PAGE_IS(rightP, BROKEN_SPLIT))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 fn
@@ -132,8 +132,8 @@ o_btree_split_fill_downlink_item_with_key(insert_item: &mut BTreeInsertStackItem
 										  LocationIndex keylen,
 										  internal_header: &mut BTreeNonLeafTuphdr)
 {
-	header: &mut BTreePageHeader;
-	OInMemoryBlkno right_blkno;
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
+	pub static mut RIGHT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
 	Page		left_page = O_GET_IN_MEMORY_PAGE(left_blkno),
 				right_page;
 
@@ -166,9 +166,9 @@ o_btree_split_fill_downlink_item(insert_item: &mut BTreeInsertStackItem,
 								 bool lock)
 {
 	Page		left_page = O_GET_IN_MEMORY_PAGE(left_blkno);
-	OTuple		hikey;
-	OTuple		key;
-	LocationIndex keylen;
+	pub static mut HIKEY: OTuple = std::mem::zeroed();
+	pub static mut KEY: OTuple = std::mem::zeroed();
+	pub static mut KEYLEN: LocationIndex = std::mem::zeroed();
 	internal_header: &mut BTreeNonLeafTuphdr = palloc(sizeof(BTreeNonLeafTuphdr));
 
 	keylen = BTREE_PAGE_GET_HIKEY_SIZE(left_page);
@@ -186,16 +186,16 @@ o_btree_finish_root_split_internal(desc: &mut BTreeDescr,
 								   OInMemoryBlkno left_blkno,
 								   insert_item: &mut BTreeInsertStackItem)
 {
-	BTreeNonLeafTuphdr internal_header;
+	pub static mut INTERNAL_HEADER: BTreeNonLeafTuphdr = std::mem::zeroed();
 	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(desc->rootInfo.rootPageBlkno);
 	left_header: &mut BTreePageHeader,
 			   *root_header;
-	Pointer		ptr;
+	pub static mut PTR: Pointer = std::ptr::null_mut();
 	Page		p = O_GET_IN_MEMORY_PAGE(desc->rootInfo.rootPageBlkno),
 				left_page;
-	FileExtent	root_extent = page_desc->fileExtent;
+	pub static mut ROOT_EXTENT: FileExtent = page_desc->fileExtent;
 	bool		is_leaf = PAGE_GET_LEVEL(p) == 0;
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	left_page = O_GET_IN_MEMORY_PAGE(left_blkno);
 	init_new_btree_page(desc, left_blkno, O_BTREE_FLAG_LEFTMOST, PAGE_GET_LEVEL(p), false);
@@ -256,7 +256,7 @@ o_btree_finish_root_split_internal(desc: &mut BTreeDescr,
 	if (is_leaf)
 		pg_atomic_fetch_add_u32(&BTREE_GET_META(desc)->leafPagesNum, 1);
 
-	return left_blkno;
+	pub static mut LEFT_BLKNO: return = std::mem::zeroed();
 }
 
 //
@@ -266,13 +266,13 @@ o_btree_finish_root_split_internal(desc: &mut BTreeDescr,
 fn
 o_btree_fix_page_split(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno)
 {
-	BTreeInsertStackItem iitem;
-	OBTreeFindPageContext context;
+	pub static mut IITEM: BTreeInsertStackItem = std::mem::zeroed();
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
 	Page		p = O_GET_IN_MEMORY_PAGE(left_blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	rightHeader: &mut BTreePageHeader = (BTreePageHeader *) p;
-	OFixedKey	key;
-	OInMemoryBlkno rightBlkno;
+	pub static mut KEY: OFixedKey = std::mem::zeroed();
+	pub static mut RIGHT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
 	int			level = PAGE_GET_LEVEL(p);
 
 	Assert(left_blkno != desc->rootInfo.rootPageBlkno);
@@ -318,8 +318,8 @@ o_btree_fix_page_split(desc: &mut BTreeDescr, OInMemoryBlkno left_blkno)
 
 o_btree_split_fix_and_unlock(descr: &mut BTreeDescr, OInMemoryBlkno left_blkno)
 {
-	MemoryContext prev_context;
-	bool		nested_call;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut NESTED_CALL: bool = false;
 
 	nested_call = CurrentMemoryContext == btree_insert_context;
 	if (!nested_call)
@@ -350,10 +350,10 @@ o_btree_split_fix_and_unlock(descr: &mut BTreeDescr, OInMemoryBlkno left_blkno)
 o_btree_split_fix_for_right_page_and_unlock(desc: &mut BTreeDescr, OInMemoryBlkno rightBlkno)
 {
 	rightPageDesc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(rightBlkno);
-	OInMemoryBlkno leftBlkno;
-	leftHeader: &mut BTreePageHeader;
-	uint64		rightLink;
-	uint32		rightChangeCount;
+	pub static mut LEFT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut B_TREE_PAGE_HEADER: *mut leftHeader = std::ptr::null_mut();
+	pub static mut RIGHT_LINK: uint64 = std::mem::zeroed();
+	pub static mut RIGHT_CHANGE_COUNT: uint32 = std::mem::zeroed();
 
 	leftBlkno = rightPageDesc->leftBlkno;
 	rightChangeCount = O_PAGE_GET_CHANGE_COUNT(O_GET_IN_MEMORY_PAGE(rightBlkno));
@@ -382,9 +382,9 @@ o_btree_insert_stack_push_split_item(insert_item: &mut BTreeInsertStackItem,
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(left_blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	rightHeader: &mut BTreePageHeader;
+	pub static mut B_TREE_PAGE_HEADER: *mut rightHeader = std::ptr::null_mut();
 	new_item: &mut BTreeInsertStackItem = palloc(sizeof(BTreeInsertStackItem));
-	OInMemoryBlkno right_blkno;
+	pub static mut RIGHT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
 
 	// Should not be here.
 	Assert(insert_item->context->index != 0);
@@ -419,15 +419,15 @@ o_btree_insert_stack_push_split_item(insert_item: &mut BTreeInsertStackItem,
 	new_item->rightBlkno = right_blkno;
 	new_item->refind = true;
 
-	return new_item;
+	pub static mut NEW_ITEM: return = std::mem::zeroed();
 }
 
 typedef struct
 {
-	BTreePageItem item;
-	int			index;
-	int			pgprocno;
-	bool		inserted;
+	pub static mut ITEM: BTreePageItem = std::mem::zeroed();
+	pub static mut INDEX: std::os::raw::c_int = 0;
+	pub static mut PGPROCNO: std::os::raw::c_int = 0;
+	pub static mut INSERTED: bool = false;
 } TupleWaiterInfo;
 
 //
@@ -440,14 +440,14 @@ get_tuple_waiter_infos(desc: &mut BTreeDescr,
 					   TupleWaiterInfo tupleWaiterInfos[BTREE_PAGE_MAX_SPLIT_ITEMS],
 					   int tupleWaitersCount)
 {
-	int			i;
-	int			totalSize = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut TOTAL_SIZE: std::os::raw::c_int = 0;
 
 	for (i = 0; i < tupleWaitersCount; i++)
 	{
-		lockerState: &mut OPageWaiterShmemState = &lockerStates[tupleWaiterProcnums[i]];
-		tupleWaiterInfo: &mut TupleWaiterInfo = &tupleWaiterInfos[i];
-		OTuple		tuple;
+		pub static mut O_PAGE_WAITER_SHMEM_STATE: *mut lockerState = &lockerStates[tupleWaiterProcnums[i]];
+		pub static mut TUPLE_WAITER_INFO: *mut tupleWaiterInfo = &tupleWaiterInfos[i];
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 		tuple.formatFlags = lockerState->tupleFlags;
 		tuple.data = &lockerState->tupleData.fixedData[BTreeLeafTuphdrSize];
@@ -464,7 +464,7 @@ get_tuple_waiter_infos(desc: &mut BTreeDescr,
 		totalSize += tupleWaiterInfo->item.size;
 	}
 
-	return totalSize;
+	pub static mut TOTAL_SIZE: return = std::mem::zeroed();
 }
 
 static int
@@ -472,8 +472,8 @@ waiter_info_cmp(a: &mut const, b: &mut const,  *arg)
 {
 	wa: &mut TupleWaiterInfo = (TupleWaiterInfo *) a;
 	wb: &mut TupleWaiterInfo = (TupleWaiterInfo *) b;
-	OTuple		ta;
-	OTuple		tb;
+	pub static mut TA: OTuple = std::mem::zeroed();
+	pub static mut TB: OTuple = std::mem::zeroed();
 	desc: &mut BTreeDescr = (BTreeDescr *) arg;
 
 	ta.formatFlags = wa->item.flags;
@@ -521,9 +521,9 @@ merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitI
 				totalCount = 0;
 	int			rightSpace,
 				singlePageSpace;
-	int			maxKeyLen;
-	int			i;
-	bool		finished = false;
+	pub static mut MAX_KEY_LEN: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut FINISHED: bool = false;
 
 	//
 // Stack of waiters accepted so far, in acceptance (= sort) order.  Used
@@ -535,11 +535,11 @@ merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitI
 //
 	struct
 	{
-		int			outputPos;
-		int			waiterIdx;
-		int			keyLen;
+		pub static mut OUTPUT_POS: std::os::raw::c_int = 0;
+		pub static mut WAITER_IDX: std::os::raw::c_int = 0;
+		pub static mut KEY_LEN: std::os::raw::c_int = 0;
 	}			accepted[BTREE_PAGE_MAX_SPLIT_ITEMS] = {0};
-	int			acceptedTop = 0;
+	pub static mut ACCEPTED_TOP: std::os::raw::c_int = 0;
 
 	outputItems->leaf = inputItems->leaf;
 	outputItems->hikeySize = inputItems->hikeySize;
@@ -572,9 +572,9 @@ merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitI
 	while (inputIndex < inputItems->itemsCount ||
 		   (waitersIndex < tupleWaitersCount && !finished))
 	{
-		int			cmp;
-		BTreePageItem item;
-		bool		isWaiter;
+		pub static mut CMP: std::os::raw::c_int = 0;
+		pub static mut ITEM: BTreePageItem = std::mem::zeroed();
+		pub static mut IS_WAITER: bool = false;
 
 		// Pick the next item in sort order.
 		if (inputIndex >= inputItems->itemsCount)
@@ -587,8 +587,8 @@ merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitI
 		}
 		else
 		{
-			OTuple		tup1;
-			OTuple		tup2;
+			pub static mut TUP1: OTuple = std::mem::zeroed();
+			pub static mut TUP2: OTuple = std::mem::zeroed();
 
 			tup1.formatFlags = inputItems->items[inputIndex].flags;
 			tup1.data = inputItems->items[inputIndex].data + BTreeLeafTuphdrSize;
@@ -611,7 +611,7 @@ merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitI
 
 		if (isWaiter)
 		{
-			OTuple		tup;
+			pub static mut TUP: OTuple = std::mem::zeroed();
 			int			newKeyLen,
 						newMaxKeyLen,
 						newLeftSpace,
@@ -692,11 +692,11 @@ merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitI
 		   !btree_page_split_can_succeed(outputItems) &&
 		   acceptedTop > 0)
 	{
-		int			pos;
-		int			waiterIdx;
-		int			keyLen;
-		int			itemSize;
-		int			j;
+		pub static mut POS: std::os::raw::c_int = 0;
+		pub static mut WAITER_IDX: std::os::raw::c_int = 0;
+		pub static mut KEY_LEN: std::os::raw::c_int = 0;
+		pub static mut ITEM_SIZE: std::os::raw::c_int = 0;
+		pub static mut J: std::os::raw::c_int = 0;
 
 		acceptedTop--;
 		pos = accepted[acceptedTop].outputPos;
@@ -737,7 +737,7 @@ merge_waited_tuples(desc: &mut BTreeDescr, Page p, outputItems: &mut BTreeSplitI
 			MAXALIGN(totalCount * sizeof(LocationIndex)) > singlePageSpace;
 
 		Assert(!splitNeeded || btree_page_split_can_succeed(outputItems));
-		return splitNeeded;
+		pub static mut SPLIT_NEEDED: return = std::mem::zeroed();
 	}
 }
 
@@ -762,19 +762,19 @@ o_btree_insert_split(insert_item: &mut BTreeInsertStackItem,
 					 waitersWakeupProcnums: &mut int,
 					 int waitersWakeupCount)
 {
-	OffsetNumber left_count;
-	curContext: &mut OBTreeFindPageContext = insert_item->context;
-	desc: &mut BTreeDescr = curContext->desc;
+	pub static mut LEFT_COUNT: OffsetNumber = std::mem::zeroed();
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut curContext = insert_item->context;
+	pub static mut B_TREE_DESCR: *mut desc = curContext->desc;
 	OInMemoryBlkno blkno,
 				right_blkno = OInvalidInMemoryBlkno,
 				root_split_left_blkno = OInvalidInMemoryBlkno;
-	Page		p;
-	OTuple		split_key;
-	LocationIndex split_key_len;
-	UndoLocation undoLocation;
-	internal_header: &mut BTreeNonLeafTuphdr;
-	bool		next;
-	params: &mut Jsonb = NULL;
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut SPLIT_KEY: OTuple = std::mem::zeroed();
+	pub static mut SPLIT_KEY_LEN: LocationIndex = std::mem::zeroed();
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut internal_header = std::ptr::null_mut();
+	pub static mut NEXT: bool = false;
+	pub static mut JSONB: *mut params = std::ptr::null_mut();
 
 	blkno = curContext->items[curContext->index].blkno;
 	p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -911,7 +911,7 @@ o_btree_insert_split(insert_item: &mut BTreeInsertStackItem,
 		insert_item->level++;
 	}
 
-	return next;
+	pub static mut NEXT: return = std::mem::zeroed();
 }
 
 fn
@@ -919,7 +919,7 @@ tuple_waiters_check_hikey(desc: &mut BTreeDescr, Page p,
 						  TupleWaiterInfo tupleWaiterInfos[BTREE_PAGE_MAX_SPLIT_ITEMS],
 						  tupleWaitersCount: &mut int)
 {
-	OTuple		hikey;
+	pub static mut HIKEY: OTuple = std::mem::zeroed();
 	int			count = (*tupleWaitersCount);
 
 	if (O_PAGE_IS(p, RIGHTMOST))
@@ -929,7 +929,7 @@ tuple_waiters_check_hikey(desc: &mut BTreeDescr, Page p,
 
 	while (count > 0)
 	{
-		OTuple		waiterTup;
+		pub static mut WAITER_TUP: OTuple = std::mem::zeroed();
 
 		waiterTup.formatFlags = tupleWaiterInfos[count - 1].item.flags;
 		waiterTup.data = tupleWaiterInfos[count - 1].item.data + BTreeLeafTuphdrSize;
@@ -953,7 +953,7 @@ o_btree_insert_needs_page_undo(desc: &mut BTreeDescr, Page p)
 		desc->createOxid == get_current_oxid_if_any())
 		needsUndo = false;
 
-	return needsUndo;
+	pub static mut NEEDS_UNDO: return = std::mem::zeroed();
 }
 
 //
@@ -977,24 +977,24 @@ btree_leaf_probe_insert_slot(desc: &mut BTreeDescr, Page p, bool rightmost,
 {
 	if (!rightmost &&
 		o_btree_cmp(desc, hikey, BTreeKeyNonLeafKey, key, keyType) <= 0)
-		return BTreeLeafProbeHikeyCrossed;
+		pub static mut B_TREE_LEAF_PROBE_HIKEY_CROSSED: return = std::mem::zeroed();
 
 	btree_page_search(desc, p, key, keyType, NULL, loc);
 
 	if (!page_locator_fits_new_item(p, loc, newItemSize))
-		return BTreeLeafProbeNoFit;
+		pub static mut B_TREE_LEAF_PROBE_NO_FIT: return = std::mem::zeroed();
 
 	if (BTREE_PAGE_LOCATOR_IS_VALID(p, loc))
 	{
-		OTuple		existing;
+		pub static mut EXISTING: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_READ_LEAF_TUPLE(existing, p, loc);
 		if (o_btree_cmp(desc, key, keyType,
 						&existing, BTreeKeyLeafTuple) == 0)
-			return BTreeLeafProbeDuplicate;
+			pub static mut B_TREE_LEAF_PROBE_DUPLICATE: return = std::mem::zeroed();
 	}
 
-	return BTreeLeafProbeFits;
+	pub static mut B_TREE_LEAF_PROBE_FITS: return = std::mem::zeroed();
 }
 
 //
@@ -1012,8 +1012,8 @@ btree_leaf_write_new_item(desc: &mut BTreeDescr, Page p,
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	LocationIndex newItemSize = MAXALIGN(tuplen) + BTreeLeafTuphdrSize;
-	LocationIndex keyLen;
-	Pointer		ptr;
+	pub static mut KEY_LEN: LocationIndex = std::mem::zeroed();
+	pub static mut PTR: Pointer = std::ptr::null_mut();
 
 	page_locator_insert_item(p, loc, newItemSize);
 	header->prevInsertOffset = BTREE_PAGE_LOCATOR_GET_OFFSET(p, loc);
@@ -1059,16 +1059,16 @@ o_btree_multi_insert_item(ctx: &mut OBTreeFindPageContext,
 						   **cb_args,
 						  result: &mut BTreeLeafProbeResult)
 {
-	desc: &mut BTreeDescr = ctx->desc;
-	OInMemoryBlkno blkno;
-	Page		p;
-	BTreePageItemLocator loc;
-	OTupleXactInfo xactInfo;
-	OTuple		hikey;
-	bool		rightmost;
-	bool		needsUndo;
-	int			inserted = 0;
-	int			k;
+	pub static mut B_TREE_DESCR: *mut desc = ctx->desc;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut XACT_INFO: OTupleXactInfo = std::mem::zeroed();
+	pub static mut HIKEY: OTuple = std::mem::zeroed();
+	pub static mut RIGHTMOST: bool = false;
+	pub static mut NEEDS_UNDO: bool = false;
+	pub static mut INSERTED: std::os::raw::c_int = 0;
+	pub static mut K: std::os::raw::c_int = 0;
 
 	Assert(ctx->index >= 0 && ctx->index < ORIOLEDB_MAX_DEPTH);
 	blkno = ctx->items[ctx->index].blkno;
@@ -1100,11 +1100,11 @@ o_btree_multi_insert_item(ctx: &mut OBTreeFindPageContext,
 
 	for (k = 0; k < nitems; k++)
 	{
-		OTuple		tuple = tuples[k];
-		LocationIndex tuplen = tuplens[k];
+		pub static mut TUPLE: OTuple = tuples[k];
+		pub static mut TUPLEN: LocationIndex = tuplens[k];
 		LocationIndex newItemSize = MAXALIGN(tuplen) + BTreeLeafTuphdrSize;
-		BTreeLeafTuphdr tuphdr;
-		UndoLocation undoLocation = InvalidUndoLocation;
+		pub static mut TUPHDR: BTreeLeafTuphdr = std::mem::zeroed();
+		pub static mut UNDO_LOCATION: UndoLocation = InvalidUndoLocation;
 
 		*result = btree_leaf_probe_insert_slot(desc, p, rightmost, &hikey,
 											   keys[k], keyType, newItemSize, &loc);
@@ -1158,7 +1158,7 @@ o_btree_multi_insert_item(ctx: &mut OBTreeFindPageContext,
 	}
 
 	unlock_page(blkno);
-	return inserted;
+	pub static mut INSERTED: return = std::mem::zeroed();
 }
 
 static bool
@@ -1167,21 +1167,21 @@ o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 								 int tupleWaiterProcnums[BTREE_PAGE_MAX_SPLIT_ITEMS],
 								 int tupleWaitersCount)
 {
-	desc: &mut BTreeDescr = insert_item->context->desc;
-	curContext: &mut OBTreeFindPageContext = insert_item->context;
-	BTreeSplitItems items;
-	BTreeSplitItems newItems;
+	pub static mut B_TREE_DESCR: *mut desc = insert_item->context->desc;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut curContext = insert_item->context;
+	pub static mut ITEMS: BTreeSplitItems = std::mem::zeroed();
+	pub static mut NEW_ITEMS: BTreeSplitItems = std::mem::zeroed();
 	int			i,
 				waitersWakeupCount = 0;
-	CommitSeqNo csn;
-	bool		needsUndo;
-	OffsetNumber offset;
-	bool		split;
-	OInMemoryBlkno blkno;
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut NEEDS_UNDO: bool = false;
+	pub static mut OFFSET: OffsetNumber = std::mem::zeroed();
+	pub static mut SPLIT: bool = false;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
 	TupleWaiterInfo tupleWaiterInfos[BTREE_PAGE_MAX_SPLIT_ITEMS];
-	Page		p;
-	int			totalSize;
-	BTreePageItemLocator loc;
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut TOTAL_SIZE: std::os::raw::c_int = 0;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	totalSize = get_tuple_waiter_infos(desc,
 									   tupleWaiterProcnums,
@@ -1198,7 +1198,7 @@ o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 		BTREE_PAGE_FREE_SPACE(p))
 	{
 		bool		rightmost = O_PAGE_IS(p, RIGHTMOST);
-		OTuple		hikey;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 		if (!rightmost)
 			hikey = page_get_hikey(p);
@@ -1207,9 +1207,9 @@ o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 
 		for (i = 0; i <= tupleWaitersCount; i++)
 		{
-			LocationIndex tuplen;
-			BTreeLeafTuphdr tuphdr;
-			OTuple		tuple;
+			pub static mut TUPLEN: LocationIndex = std::mem::zeroed();
+			pub static mut TUPHDR: BTreeLeafTuphdr = std::mem::zeroed();
+			pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 			if (i == 0)
 			{
@@ -1221,9 +1221,9 @@ o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 			}
 			else
 			{
-				waiterInfo: &mut TupleWaiterInfo = &tupleWaiterInfos[i - 1];
-				lockerState: &mut OPageWaiterShmemState = &lockerStates[waiterInfo->pgprocno];
-				BTreeLeafProbeResult result;
+				pub static mut TUPLE_WAITER_INFO: *mut waiterInfo = &tupleWaiterInfos[i - 1];
+				pub static mut O_PAGE_WAITER_SHMEM_STATE: *mut lockerState = &lockerStates[waiterInfo->pgprocno];
+				pub static mut RESULT: BTreeLeafProbeResult = std::mem::zeroed();
 
 				tuple.formatFlags = waiterInfo->item.flags;
 				tuple.data = waiterInfo->item.data + BTreeLeafTuphdrSize;
@@ -1265,7 +1265,7 @@ o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 		}
 
 		unlock_page(blkno);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	qsort_arg(tupleWaiterInfos,
@@ -1304,13 +1304,13 @@ o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 	{
 		if (tupleWaiterInfos[i].inserted)
 		{
-			lockerState: &mut OPageWaiterShmemState = &lockerStates[tupleWaiterInfos[i].pgprocno];
+			pub static mut O_PAGE_WAITER_SHMEM_STATE: *mut lockerState = &lockerStates[tupleWaiterInfos[i].pgprocno];
 
 			tupleWaiterProcnums[waitersWakeupCount++] = tupleWaiterInfos[i].pgprocno;
 
 			if (desc->undoType != UndoLogNone)
 			{
-				tuphdr: &mut BTreeLeafTuphdr;
+				pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
 
 				steal_reserved_undo_size(desc->undoType,
 										 lockerState->reservedUndoSize);
@@ -1338,7 +1338,7 @@ o_btree_insert_item_with_waiters(insert_item: &mut BTreeInsertStackItem,
 		o_btree_insert_mark_split_finished_if_needed(insert_item);
 		unlock_page(blkno);
 		END_CRIT_SECTION();
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
 	{
@@ -1353,20 +1353,20 @@ static bool
 o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 							   int reserve_kind)
 {
-	desc: &mut BTreeDescr = insert_item->context->desc;
-	curContext: &mut OBTreeFindPageContext = insert_item->context;
-	OInMemoryBlkno blkno;
-	LocationIndex tupheaderlen;
-	LocationIndex newItemSize;
-	BTreePageItemLocator loc;
-	Page		p;
-	BTreeItemPageFitType fit;
-	header: &mut BTreePageHeader;
+	pub static mut B_TREE_DESCR: *mut desc = insert_item->context->desc;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut curContext = insert_item->context;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut TUPHEADERLEN: LocationIndex = std::mem::zeroed();
+	pub static mut NEW_ITEM_SIZE: LocationIndex = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut FIT: BTreeItemPageFitType = std::mem::zeroed();
+	pub static mut B_TREE_PAGE_HEADER: *mut header = std::ptr::null_mut();
 
 	blkno = curContext->items[curContext->index].blkno;
 	loc = curContext->items[curContext->index].locator;
 	tupheaderlen = (insert_item->level > 0) ?
-		BTreeNonLeafTuphdrSize : BTreeLeafTuphdrSize;
+		pub static mut B_TREE_LEAF_TUPHDR_SIZE: BTreeNonLeafTuphdrSize : = std::mem::zeroed();
 
 	Assert(OInMemoryBlknoIsValid(blkno));
 	p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -1387,14 +1387,14 @@ o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 
 	if (fit == BTreeItemPageFitAsIs)
 	{
-		Pointer		ptr;
+		pub static mut PTR: Pointer = std::ptr::null_mut();
 
 		START_CRIT_SECTION();
 		page_block_reads(blkno);
 
 		if (!insert_item->replace)
 		{
-			LocationIndex keyLen;
+			pub static mut KEY_LEN: LocationIndex = std::mem::zeroed();
 
 			page_locator_insert_item(p, &loc, newItemSize);
 			header->prevInsertOffset = BTREE_PAGE_LOCATOR_GET_OFFSET(p, &loc);
@@ -1407,8 +1407,8 @@ o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 		}
 		else
 		{
-			int			prevItemSize;
-			BTreeLeafTuphdr prev;
+			pub static mut PREV_ITEM_SIZE: std::os::raw::c_int = 0;
+			pub static mut PREV: BTreeLeafTuphdr = std::mem::zeroed();
 
 			prev = *((BTreeLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc));
 			prevItemSize = BTREE_PAGE_GET_ITEM_SIZE(p, &loc);
@@ -1416,7 +1416,7 @@ o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 
 			if (!prev.deleted)
 			{
-				OTuple		tuple;
+				pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_READ_TUPLE(tuple, p, &loc);
 				PAGE_ADD_N_VACATED(p, BTreeLeafTuphdrSize + MAXALIGN(o_btree_len(desc, tuple, OTupleLength)));
@@ -1471,14 +1471,14 @@ o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 
 		END_CRIT_SECTION();
 
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	else
 	{
-		BTreeSplitItems items;
-		OffsetNumber offset;
-		CommitSeqNo csn;
-		bool		needsUndo;
+		pub static mut ITEMS: BTreeSplitItems = std::mem::zeroed();
+		pub static mut OFFSET: OffsetNumber = std::mem::zeroed();
+		pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+		pub static mut NEEDS_UNDO: bool = false;
 
 		//
 // No compaction should occur for bridge index: we need to keep the
@@ -1523,7 +1523,7 @@ o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 
 			END_CRIT_SECTION();
 
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 
 		return o_btree_insert_split(insert_item, &items, offset, csn,
@@ -1534,9 +1534,9 @@ o_btree_insert_item_no_waiters(insert_item: &mut BTreeInsertStackItem,
 fn
 o_btree_insert_item(insert_item: &mut BTreeInsertStackItem, int reserve_kind)
 {
-	BTreeKeyType kind;
-	desc: &mut BTreeDescr = insert_item->context->desc;
-	OInMemoryBlkno blkno = OInvalidInMemoryBlkno;
+	pub static mut KIND: BTreeKeyType = std::mem::zeroed();
+	pub static mut B_TREE_DESCR: *mut desc = insert_item->context->desc;
+	pub static mut BLKNO: OInMemoryBlkno = OInvalidInMemoryBlkno;
 
 	Assert(insert_item != NULL);
 
@@ -1557,10 +1557,10 @@ o_btree_insert_item(insert_item: &mut BTreeInsertStackItem, int reserve_kind)
 
 	while (insert_item != NULL)
 	{
-		curContext: &mut OBTreeFindPageContext = insert_item->context;
-		bool		next = false;
+		pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut curContext = insert_item->context;
+		pub static mut NEXT: bool = false;
 		int			tupleWaiterProcnums[BTREE_PAGE_MAX_SPLIT_ITEMS];
-		int			tupleWaitersCount;
+		pub static mut TUPLE_WAITERS_COUNT: std::os::raw::c_int = 0;
 
 		Assert(desc->ppool->numPagesReserved[reserve_kind] >= 2);
 
@@ -1589,12 +1589,12 @@ o_btree_insert_item(insert_item: &mut BTreeInsertStackItem, int reserve_kind)
 		}
 		else
 		{
-			bool		relocked = false;
-			uint32		pageChangeCount;
+			pub static mut RELOCKED: bool = false;
+			pub static mut PAGE_CHANGE_COUNT: uint32 = std::mem::zeroed();
 
 			if (insert_item->refind)
 			{
-				OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult result = std::mem::zeroed();
 
 				//
 // Re-find appropriate tree page.  It might happen that parent
@@ -1654,7 +1654,7 @@ o_btree_insert_item(insert_item: &mut BTreeInsertStackItem, int reserve_kind)
 			if (STOPEVENTS_ENABLED())
 			{
 				Page		page = O_GET_IN_MEMORY_PAGE(blkno);
-				params: &mut Jsonb;
+				pub static mut JSONB: *mut params = std::ptr::null_mut();
 
 				params = btree_page_stopevent_params(desc, page);
 				STOPEVENT(STOPEVENT_BEFORE_GET_WAITERS_WITH_TUPLES, params);
@@ -1689,9 +1689,9 @@ o_btree_insert_tuple_to_leaf(context: &mut OBTreeFindPageContext,
 							 tuphdr: &mut BTreeLeafTuphdr, bool replace,
 							 int reserve_kind)
 {
-	BTreeInsertStackItem insert_item;
-	MemoryContext prev_context;
-	bool		nested_call;
+	pub static mut INSERT_ITEM: BTreeInsertStackItem = std::mem::zeroed();
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut NESTED_CALL: bool = false;
 
 	nested_call = CurrentMemoryContext == btree_insert_context;
 	if (!nested_call)

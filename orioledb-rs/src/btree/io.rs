@@ -54,35 +54,35 @@ static int	btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkp
 
 typedef struct
 {
-	pg_atomic_uint64 writesStarted;
-	pg_atomic_uint64 writesFinished;
+	pub static mut WRITES_STARTED: pg_atomic_uint64 = std::mem::zeroed();
+	pub static mut WRITES_FINISHED: pg_atomic_uint64 = std::mem::zeroed();
 	ConditionVariable cv[FLEXIBLE_ARRAY_MEMBER];
 } IOShmem;
 
 typedef struct TreeOffset
 {
-	OIndexKey	key;
-	int			segno;
-	uint32		chkpNum;
-	FileExtent	fileExtent;
-	bool		compressed;
+	pub static mut KEY: OIndexKey = std::mem::zeroed();
+	pub static mut SEGNO: std::os::raw::c_int = 0;
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
+	pub static mut FILE_EXTENT: FileExtent = std::mem::zeroed();
+	pub static mut COMPRESSED: bool = false;
 } TreeOffset;
 
 typedef struct IOWriteBack
 {
-	int			extentsNumber;
-	int			extentsAllocated;
-	extents: &mut TreeOffset;
+	pub static mut EXTENTS_NUMBER: std::os::raw::c_int = 0;
+	pub static mut EXTENTS_ALLOCATED: std::os::raw::c_int = 0;
+	pub static mut TREE_OFFSET: *mut extents = std::ptr::null_mut();
 } IOWriteBack;
 
 static IOWriteBack io_writeback =
 {
 	0, 0, NULL
 };
-static io_locks: &mut LWLockPadded;
-static ioShmem: &mut IOShmem = NULL;
-static int	num_io_lwlocks;
-static bool io_in_progress = false;
+static mut LW_LOCK_PADDED: *mut io_locks = std::ptr::null_mut();
+static mut IO_SHMEM: *mut ioShmem = std::ptr::null_mut();
+static mut NUM_IO_LWLOCKS: std::os::raw::c_int = 0;
+static mut IO_IN_PROGRESS: bool = false;
 
 static bool prepare_non_leaf_page(Page p);
 static uint64 get_free_disk_offset(desc: &mut BTreeDescr);
@@ -116,12 +116,12 @@ btree_io_shmem_needs()
 
 btree_io_shmem_init(Pointer buf, bool found)
 {
-	Pointer		ptr = buf;
+	pub static mut PTR: Pointer = buf;
 
 	ioShmem = (IOShmem *) ptr;
 	if (!found)
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		pg_atomic_init_u64(&ioShmem->writesStarted, 0);
 		pg_atomic_init_u64(&ioShmem->writesFinished, 0);
@@ -134,8 +134,8 @@ btree_io_shmem_init(Pointer buf, bool found)
 fn
 io_start()
 {
-	uint64		startNum;
-	bool		slept = false;
+	pub static mut START_NUM: uint64 = std::mem::zeroed();
+	pub static mut SLEPT: bool = false;
 
 	if (max_io_concurrency == 0)
 		return;
@@ -154,7 +154,7 @@ io_start()
 fn
 io_finish()
 {
-	uint64		finishNum;
+	pub static mut FINISH_NUM: uint64 = std::mem::zeroed();
 
 	if (max_io_concurrency == 0)
 		return;
@@ -168,37 +168,37 @@ int
 OFileRead(File file, buffer: &mut char, int amount, off_t offset,
 		  uint32 wait_event_info)
 {
-	int			result;
+	pub static mut RESULT: std::os::raw::c_int = 0;
 
 	io_start();
 	result = FileRead(file, buffer, amount, offset, wait_event_info);
 	io_finish();
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 int
 OFileWrite(File file, buffer: &mut char, int amount, off_t offset,
 		   uint32 wait_event_info)
 {
-	int			result;
+	pub static mut RESULT: std::os::raw::c_int = 0;
 
 	io_start();
 	result = FileWrite(file, buffer, amount, offset, wait_event_info);
 	io_finish();
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 typedef struct
 {
-	uint32		checkpointNumber;
-	uint32		segmentNumber;
+	pub static mut CHECKPOINT_NUMBER: uint32 = std::mem::zeroed();
+	pub static mut SEGMENT_NUMBER: uint32 = std::mem::zeroed();
 } FileHashKey;
 
 typedef struct
 {
-	FileHashKey key;
-	File		file;
-	uint32		loadId;
+	pub static mut KEY: FileHashKey = std::mem::zeroed();
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut LOAD_ID: uint32 = std::mem::zeroed();
 	char		status;			// for simplehash use
 } FileHashElement;
 
@@ -215,8 +215,8 @@ typedef struct
 char *
 btree_filename(OIndexKey key, int segno, uint32 chkpNum)
 {
-	result: &mut char;
-	db_prefix: &mut char;
+	pub static mut CHAR: *mut result = std::ptr::null_mut();
+	pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 	o_get_prefixes_for_tablespace(key.oids.datoid, key.tablespace,
 								  NULL, &db_prefix);
@@ -249,13 +249,13 @@ btree_filename(OIndexKey key, int segno, uint32 chkpNum)
 	}
 
 	pfree(db_prefix);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 char *
 btree_smgr_filename(desc: &mut BTreeDescr, off_t offset, uint32 chkpNum)
 {
-	int			segno = offset / ORIOLEDB_SEGMENT_SIZE;
+	pub static mut SEGNO: std::os::raw::c_int = offset / ORIOLEDB_SEGMENT_SIZE;
 	OIndexKey	key = {.oids = desc->oids,.tablespace = desc->tablespace};
 
 	return btree_filename(key, segno, chkpNum);
@@ -267,10 +267,10 @@ btree_open_smgr_file(desc: &mut BTreeDescr, uint32 num, uint32 chkpNum,
 {
 	if (orioledb_s3_mode)
 	{
-		hashElem: &mut FileHashElement;
-		FileHashKey key;
-		bool		found;
-		filename: &mut char;
+		pub static mut FILE_HASH_ELEMENT: *mut hashElem = std::ptr::null_mut();
+		pub static mut KEY: FileHashKey = std::mem::zeroed();
+		pub static mut FOUND: bool = false;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 		key.checkpointNumber = chkpNum;
 		key.segmentNumber = num;
@@ -297,11 +297,11 @@ btree_open_smgr_file(desc: &mut BTreeDescr, uint32 num, uint32 chkpNum,
 	}
 	else
 	{
-		filename: &mut char;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 		if (num >= desc->smgr.array.filesAllocated)
 		{
-			int			i = desc->smgr.array.filesAllocated;
+			pub static mut I: std::os::raw::c_int = desc->smgr.array.filesAllocated;
 
 			//
 // btree_open_smgr should have been called before, so
@@ -354,8 +354,8 @@ btree_open_smgr(descr: &mut BTreeDescr)
 {
 	if (orioledb_s3_mode)
 	{
-		int			i;
-		int			j;
+		pub static mut I: std::os::raw::c_int = 0;
+		pub static mut J: std::os::raw::c_int = 0;
 
 		descr->smgr.hash = s3Files_create(TopMemoryContext, 16, NULL);
 
@@ -371,7 +371,7 @@ btree_open_smgr(descr: &mut BTreeDescr)
 	}
 	else
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		if (descr->smgr.array.files)
 			return;
@@ -388,18 +388,18 @@ btree_open_smgr(descr: &mut BTreeDescr)
 
 btree_close_smgr(descr: &mut BTreeDescr)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (orioledb_s3_mode)
 	{
-		int			j;
+		pub static mut J: std::os::raw::c_int = 0;
 
 		for (j = 0; j < 2; j++)
 		{
 			for (i = 0; i < MAX_NUM_DIRTY_PARTS; i++)
 			{
-				S3TaskLocation location;
-				uint32		chkpNum;
+				pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
+				pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
 				int32		segNum,
 							partNum;
 
@@ -424,8 +424,8 @@ btree_close_smgr(descr: &mut BTreeDescr)
 
 		if (descr->smgr.hash)
 		{
-			s3Files_iterator i;
-			hashElem: &mut FileHashElement;
+			pub static mut I: s3Files_iterator = std::mem::zeroed();
+			pub static mut FILE_HASH_ELEMENT: *mut hashElem = std::ptr::null_mut();
 
 			s3Files_start_iterate(descr->smgr.hash, &i);
 			while ((hashElem = s3Files_iterate(descr->smgr.hash, &i)) != NULL)
@@ -450,12 +450,12 @@ btree_close_smgr(descr: &mut BTreeDescr)
 fn
 btree_s3_flush(desc: &mut BTreeDescr, uint32 chkpNum)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	meta: &mut BTreeMetaPage = BTREE_GET_META(desc);
 
 	for (i = 0; i < MAX_NUM_DIRTY_PARTS; i++)
 	{
-		S3TaskLocation location;
+		pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 		int32		segNum,
 					partNum;
 
@@ -479,14 +479,14 @@ fn
 btree_smgr_schedule_s3_write(desc: &mut BTreeDescr, uint32 chkpNum,
 							 int32 segNum, int32 partNum)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	int32		curSegNum,
 				curPartNum,
 				curChkpNum,
 				tmpSegNum,
 				tmpPartNum,
 				tmpChkpNum;
-	partsInfo: &mut BTreeS3PartsInfo = NULL;
+	pub static mut B_TREE_S3_PARTS_INFO: *mut partsInfo = std::ptr::null_mut();
 
 	if (OInMemoryBlknoIsValid(desc->rootInfo.metaPageBlkno))
 	{
@@ -522,7 +522,7 @@ btree_smgr_schedule_s3_write(desc: &mut BTreeDescr, uint32 chkpNum,
 
 		if (i == MAX_NUM_DIRTY_PARTS - 1)
 		{
-			S3TaskLocation location;
+			pub static mut LOCATION: S3TaskLocation = std::mem::zeroed();
 			OIndexKey	key = {.oids = desc->oids,.tablespace = desc->tablespace};
 
 			location = s3_schedule_file_part_write(curChkpNum, key, curSegNum,
@@ -537,7 +537,7 @@ static int
 btree_smgr_write(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 				 int amount, off_t offset)
 {
-	int			result = 0;
+	pub static mut RESULT: std::os::raw::c_int = 0;
 	off_t		curOffset = offset,
 				granularity;
 	S3HeaderTag tag = {0};
@@ -546,7 +546,7 @@ btree_smgr_write(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 	{
 		Assert(offset + amount <= device_length);
 		memcpy(mmap_data + offset, buffer, amount);
-		return amount;
+		pub static mut AMOUNT: return = std::mem::zeroed();
 	}
 	else if (use_device)
 	{
@@ -554,7 +554,7 @@ btree_smgr_write(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 		pgstat_report_wait_start(WAIT_EVENT_DATA_FILE_WRITE);
 		result = pg_pwrite(device_fd, buffer, amount, offset);
 		pgstat_report_wait_end();
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	if (orioledb_s3_mode)
@@ -571,10 +571,10 @@ btree_smgr_write(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 
 	while (amount > 0)
 	{
-		int			segno = curOffset / ORIOLEDB_SEGMENT_SIZE;
-		int			partno = 0;
-		File		file;
-		uint32		loadId = 0;
+		pub static mut SEGNO: std::os::raw::c_int = curOffset / ORIOLEDB_SEGMENT_SIZE;
+		pub static mut PARTNO: std::os::raw::c_int = 0;
+		pub static mut FILE: File = std::mem::zeroed();
+		pub static mut LOAD_ID: uint32 = 0;
 
 		if (orioledb_s3_mode)
 		{
@@ -595,7 +595,7 @@ btree_smgr_write(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 		}
 		else
 		{
-			int			stepAmount = granularity - curOffset % granularity;
+			pub static mut STEP_AMOUNT: std::os::raw::c_int = granularity - curOffset % granularity;
 
 			Assert(amount >= stepAmount);
 			result += OFileWrite(file, buffer, stepAmount,
@@ -623,22 +623,22 @@ btree_smgr_write(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 										 ((offset + amount - 1) % ORIOLEDB_SEGMENT_SIZE) / ORIOLEDB_S3_PART_SIZE);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static int
 btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 				int amount, off_t offset)
 {
-	int			result = 0;
-	off_t		granularity;
+	pub static mut RESULT: std::os::raw::c_int = 0;
+	pub static mut GRANULARITY: off_t = std::mem::zeroed();
 	S3HeaderTag tag = {0};
 
 	if (use_mmap)
 	{
 		Assert(offset + amount <= device_length);
 		memcpy(buffer, mmap_data + offset, amount);
-		return amount;
+		pub static mut AMOUNT: return = std::mem::zeroed();
 	}
 	else if (use_device)
 	{
@@ -646,7 +646,7 @@ btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 		pgstat_report_wait_start(WAIT_EVENT_DATA_FILE_READ);
 		result = pg_pread(device_fd, buffer, amount, offset);
 		pgstat_report_wait_end();
-		return result;
+		pub static mut RESULT: return = std::mem::zeroed();
 	}
 
 	if (orioledb_s3_mode)
@@ -663,10 +663,10 @@ btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 
 	while (amount > 0)
 	{
-		int			segno = offset / ORIOLEDB_SEGMENT_SIZE;
-		int			partno = 0;
-		File		file;
-		uint32		loadId = 0;
+		pub static mut SEGNO: std::os::raw::c_int = offset / ORIOLEDB_SEGMENT_SIZE;
+		pub static mut PARTNO: std::os::raw::c_int = 0;
+		pub static mut FILE: File = std::mem::zeroed();
+		pub static mut LOAD_ID: uint32 = 0;
 
 		if (orioledb_s3_mode)
 		{
@@ -687,7 +687,7 @@ btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 		}
 		else
 		{
-			int			stepAmount = granularity - offset % granularity;
+			pub static mut STEP_AMOUNT: std::os::raw::c_int = granularity - offset % granularity;
 
 			Assert(amount >= stepAmount);
 			result += OFileRead(file, buffer, stepAmount,
@@ -702,7 +702,7 @@ btree_smgr_read(desc: &mut BTreeDescr, buffer: &mut char, uint32 chkpNum,
 			s3_header_unlock_part(tag, partno, false);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -722,9 +722,9 @@ btree_smgr_writeback(desc: &mut BTreeDescr, uint32 chkpNum,
 
 	while (amount > 0)
 	{
-		int			segno = offset / ORIOLEDB_SEGMENT_SIZE;
-		File		file;
-		uint32		loadId = 0;
+		pub static mut SEGNO: std::os::raw::c_int = offset / ORIOLEDB_SEGMENT_SIZE;
+		pub static mut FILE: File = std::mem::zeroed();
+		pub static mut LOAD_ID: uint32 = 0;
 
 		if (orioledb_s3_mode)
 		{
@@ -746,7 +746,7 @@ btree_smgr_writeback(desc: &mut BTreeDescr, uint32 chkpNum,
 		}
 		else
 		{
-			int			stepAmount = ORIOLEDB_SEGMENT_SIZE - offset % ORIOLEDB_SEGMENT_SIZE;
+			pub static mut STEP_AMOUNT: std::os::raw::c_int = ORIOLEDB_SEGMENT_SIZE - offset % ORIOLEDB_SEGMENT_SIZE;
 
 			Assert(amount >= stepAmount);
 			FileWriteback(file,
@@ -761,7 +761,7 @@ btree_smgr_writeback(desc: &mut BTreeDescr, uint32 chkpNum,
 
 btree_smgr_sync(desc: &mut BTreeDescr, uint32 chkpNum, off_t length)
 {
-	int			num;
+	pub static mut NUM: std::os::raw::c_int = 0;
 
 	if (orioledb_s3_mode)
 		btree_s3_flush(desc, chkpNum);
@@ -771,8 +771,8 @@ btree_smgr_sync(desc: &mut BTreeDescr, uint32 chkpNum, off_t length)
 
 	for (num = 0; num < length / ORIOLEDB_SEGMENT_SIZE; num++)
 	{
-		File		file;
-		uint32		loadId = 0;
+		pub static mut FILE: File = std::mem::zeroed();
+		pub static mut LOAD_ID: uint32 = 0;
 
 		if (orioledb_s3_mode)
 		{
@@ -797,11 +797,11 @@ btree_smgr_sync(desc: &mut BTreeDescr, uint32 chkpNum, off_t length)
 
 punch_fd_hole(int fd, off_t offset, off_t length, const fileName: &mut char)
 {
-	int			ret;
+	pub static mut RET: std::os::raw::c_int = 0;
 
 #ifdef __APPLE__
 	{
-		fpunchhole_t hole;
+		pub static mut HOLE: fpunchhole_t = std::mem::zeroed();
 
 		memset(&hole, 0, sizeof(hole));
 		hole.fp_offset = offset;
@@ -814,7 +814,7 @@ punch_fd_hole(int fd, off_t offset, off_t length, const fileName: &mut char)
 #endif
 	if (ret < 0)
 	{
-		int			save_errno = errno;
+		pub static mut SAVE_ERRNO: std::os::raw::c_int = errno;
 
 		ereport(WARNING,
 				(errcode_for_file_access(),
@@ -832,10 +832,10 @@ btree_smgr_punch_hole(desc: &mut BTreeDescr, uint32 chkpNum,
 
 	while (length > 0)
 	{
-		File		file;
-		int			segno = offset / ORIOLEDB_SEGMENT_SIZE;
-		off_t		segoffset;
-		int			seglength;
+		pub static mut FILE: File = std::mem::zeroed();
+		pub static mut SEGNO: std::os::raw::c_int = offset / ORIOLEDB_SEGMENT_SIZE;
+		pub static mut SEGOFFSET: off_t = std::mem::zeroed();
+		pub static mut SEGLENGTH: std::os::raw::c_int = 0;
 
 		file = btree_open_smgr_file(desc, segno, chkpNum, 0);
 
@@ -884,9 +884,9 @@ init_btree_io_lwlocks()
 int
 assign_io_num(OInMemoryBlkno blkno, OffsetNumber offnum)
 {
-	int			locknum;
-	int			i;
-	pg_crc32c	crc;
+	pub static mut LOCKNUM: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CRC: pg_crc32c = std::mem::zeroed();
 
 	INIT_CRC32C(crc);
 	COMP_CRC32C(crc, &blkno, sizeof(blkno));
@@ -898,12 +898,12 @@ assign_io_num(OInMemoryBlkno blkno, OffsetNumber offnum)
 	for (i = 0; i < num_io_lwlocks; i++)
 	{
 		if (LWLockConditionalAcquire(&io_locks[locknum].lock, LW_EXCLUSIVE))
-			return locknum;
+			pub static mut LOCKNUM: return = std::mem::zeroed();
 		locknum = (locknum + 1) % num_io_lwlocks;
 	}
 
 	LWLockAcquire(&io_locks[locknum].lock, LW_EXCLUSIVE);
-	return locknum;
+	pub static mut LOCKNUM: return = std::mem::zeroed();
 }
 
 //
@@ -933,11 +933,11 @@ static uint64
 get_free_disk_offset(desc: &mut BTreeDescr)
 {
 	metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
-	metaLock: &mut LWLock = &metaPage->metaLock;
+	pub static mut LW_LOCK: *mut metaLock = &metaPage->metaLock;
 	uint64		result,
 				numFreeBlocks;
-	uint32		free_buf_num;
-	bool		gotBlock;
+	pub static mut FREE_BUF_NUM: uint32 = std::mem::zeroed();
+	pub static mut GOT_BLOCK: bool = false;
 
 	Assert(!orioledb_s3_mode);
 
@@ -952,7 +952,7 @@ get_free_disk_offset(desc: &mut BTreeDescr)
 	{
 		SeqBufTag	tag = {0},
 					old_tag = desc->freeBuf.shared->tag;
-		SeqBufReplaceResult replaceResult;
+		pub static mut REPLACE_RESULT: SeqBufReplaceResult = std::mem::zeroed();
 
 		if (orioledb_use_sparse_files)
 		{
@@ -993,7 +993,7 @@ get_free_disk_offset(desc: &mut BTreeDescr)
 		LWLockRelease(metaLock);
 		if (replaceResult == SeqBufReplaceError)
 		{
-			return InvalidFileExtentOff;
+			pub static mut INVALID_FILE_EXTENT_OFF: return = std::mem::zeroed();
 		}
 		// SeqBufReplaceAlready requires no action, just retry if needed
 
@@ -1023,7 +1023,7 @@ get_free_disk_offset(desc: &mut BTreeDescr)
 
 		if (use_device)
 		{
-			FileExtent	extent;
+			pub static mut EXTENT: FileExtent = std::mem::zeroed();
 
 			if (seq_buf_read_file_extent(&desc->freeBuf, &extent))
 				result = extent.off;
@@ -1032,7 +1032,7 @@ get_free_disk_offset(desc: &mut BTreeDescr)
 		}
 		else
 		{
-			uint32		offset;
+			pub static mut OFFSET: uint32 = std::mem::zeroed();
 
 			if (seq_buf_read_u32(&desc->freeBuf, &offset))
 				result = offset;
@@ -1048,7 +1048,7 @@ get_free_disk_offset(desc: &mut BTreeDescr)
 			result = pg_atomic_fetch_add_u64(&metaPage->datafileLength[0], 1);
 	}
 	LWLockRelease(metaLock);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1137,7 +1137,7 @@ get_free_disk_extent_copy_blkno(desc: &mut BTreeDescr, off_t page_size,
 	if (!get_free_disk_extent(desc, checkpoint_number, page_size, extent))
 	{
 		LWLockRelease(&metaPage->copyBlknoLock);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if ((desc->storageType == BTreeStoragePersistence || desc->storageType == BTreeStorageUnlogged) &&
@@ -1154,7 +1154,7 @@ get_free_disk_extent_copy_blkno(desc: &mut BTreeDescr, off_t page_size,
 // Otherwise we might loose this block number.
 //
 		int			prev_chkp_index = (checkpoint_number - 1) % 2;
-		bool		success;
+		pub static mut SUCCESS: bool = false;
 
 		if (OCompressIsValid(desc->compress) || use_device)
 		{
@@ -1162,7 +1162,7 @@ get_free_disk_extent_copy_blkno(desc: &mut BTreeDescr, off_t page_size,
 		}
 		else
 		{
-			uint32		offset = extent->off;
+			pub static mut OFFSET: uint32 = extent->off;
 
 			Assert(offset < UINT32_MAX);
 			success = seq_buf_write_u32(&desc->nextChkp[prev_chkp_index], offset);
@@ -1171,7 +1171,7 @@ get_free_disk_extent_copy_blkno(desc: &mut BTreeDescr, off_t page_size,
 		if (!success)
 		{
 			LWLockRelease(&metaPage->copyBlknoLock);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 
@@ -1236,7 +1236,7 @@ check_orioledb_page_version(OrioleDBOndiskPageHeader ondisk_page_header)
 	if (ondisk_page_header.page_version != ORIOLEDB_PAGE_VERSION)
 		elog(FATAL, "Page version %u of OrioleDB cluster is not among supported for conversion %u", ondisk_page_header.page_version, ORIOLEDB_PAGE_VERSION);
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 fn
@@ -1259,7 +1259,7 @@ check_orioledb_compress_version(OrioleDBOndiskPageHeader ondisk_page_header)
 	if (ondisk_page_header.compress_version != ORIOLEDB_COMPRESS_VERSION)
 		elog(FATAL, "Page version %u of OrioleDB cluster is not among supported for conversion %u", ondisk_page_header.compress_version, ORIOLEDB_PAGE_VERSION);
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -1273,11 +1273,11 @@ read_page_from_disk(desc: &mut BTreeDescr, Pointer img, uint64 downlink,
 	off_t		byte_offset,
 				read_size;
 	uint64		offset = DOWNLINK_GET_DISK_OFF(downlink);
-	uint32		chkpNum = 0;
+	pub static mut CHKP_NUM: uint32 = 0;
 	uint16		len = DOWNLINK_GET_DISK_LEN(downlink);
-	bool		err = false;
+	pub static mut ERR: bool = false;
 	OrioleDBOndiskPageHeader ondisk_page_header = {0};
-	bool		needs_page_version_convert;
+	pub static mut NEEDS_PAGE_VERSION_CONVERT: bool = false;
 
 	Assert(FileExtentOffIsValid(offset));
 	Assert(FileExtentLenIsValid(len));
@@ -1304,7 +1304,7 @@ read_page_from_disk(desc: &mut BTreeDescr, Pointer img, uint64 downlink,
 
 		err = btree_smgr_read(desc, img, chkpNum, read_size, byte_offset) != read_size;
 		if (err)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		ondisk_page_header = *((OrioleDBOndiskPageHeader *) img);
 		needs_page_version_convert = check_orioledb_page_version(ondisk_page_header);
@@ -1318,14 +1318,14 @@ read_page_from_disk(desc: &mut BTreeDescr, Pointer img, uint64 downlink,
 
 		if (compressed)
 		{
-			bool		needs_compress_version_convert PG_USED_FOR_ASSERTS_ONLY;
+			pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		needs_compress_version_convert = std::mem::zeroed();
 
 			byte_offset = (off_t) offset * (off_t) ORIOLEDB_COMP_BLCKSZ;
 			read_size = len * ORIOLEDB_COMP_BLCKSZ;
 
 			err = btree_smgr_read(desc, buf, chkpNum, read_size, byte_offset) != read_size;
 			if (err)
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 			ondisk_page_header = *((OrioleDBOndiskPageHeader *) buf);
 			needs_page_version_convert = check_orioledb_page_version(ondisk_page_header);
@@ -1352,12 +1352,12 @@ read_page_from_disk(desc: &mut BTreeDescr, Pointer img, uint64 downlink,
 			byte_offset += read_size;
 
 			if (err)
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 			read_size = ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE;
 			err = btree_smgr_read(desc, img + O_PAGE_HEADER_SIZE, chkpNum, read_size, byte_offset) != read_size;
 			if (err)
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 			needs_page_version_convert = check_orioledb_page_version(ondisk_page_header);
 			elog(DEBUG1, "Read disk page: checkpoint %u size %d", ondisk_page_header.checkpointNum, ORIOLEDB_BLCKSZ);
@@ -1386,7 +1386,7 @@ read_page_from_disk(desc: &mut BTreeDescr, Pointer img, uint64 downlink,
 	store_read_page_checkpoint_stats(((BTreePageHeader *) img)->o_header.checkpointNum);
 #endif
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -1399,8 +1399,8 @@ write_page_to_disk(desc: &mut BTreeDescr, extent: &mut FileExtent, uint32 curChk
 
 	off_t		byte_offset,
 				write_size;
-	bool		err = false;
-	uint32		chkpNum = 0;
+	pub static mut ERR: bool = false;
+	pub static mut CHKP_NUM: uint32 = 0;
 	char		buf[ORIOLEDB_BLCKSZ];
 
 	Assert(FileExtentOffIsValid(extent->off));
@@ -1415,7 +1415,7 @@ write_page_to_disk(desc: &mut BTreeDescr, extent: &mut FileExtent, uint32 curChk
 
 	if (!OCompressIsValid(desc->compress))
 	{
-		ondisk_page_header: &mut OrioleDBOndiskPageHeader;
+		pub static mut ORIOLE_DB_ONDISK_PAGE_HEADER: *mut ondisk_page_header = std::ptr::null_mut();
 
 		//
 // Easy case, write whole page to uncompressed index.
@@ -1462,7 +1462,7 @@ write_page_to_disk(desc: &mut BTreeDescr, extent: &mut FileExtent, uint32 curChk
 		byte_offset += write_size;
 
 		if (err)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		// Write everything left except header, which is already written
 		if (page_size != ORIOLEDB_BLCKSZ)
@@ -1499,28 +1499,28 @@ write_page_to_disk(desc: &mut BTreeDescr, extent: &mut FileExtent, uint32 curChk
 
 load_page(context: &mut OBTreeFindPageContext)
 {
-	page_desc: &mut OrioleDBPageDesc;
-	desc: &mut BTreeDescr = context->desc;
-	OInMemoryBlkno parent_blkno;
-	Page		parent_page;
-	parent_loc: &mut BTreePageItemLocator;
-	CommitSeqNo csn;
-	uint64		downlink;
+	pub static mut ORIOLE_DB_PAGE_DESC: *mut page_desc = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut PARENT_BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut PARENT_PAGE: Page = std::mem::zeroed();
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut parent_loc = std::ptr::null_mut();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut DOWNLINK: uint64 = std::mem::zeroed();
 	int			context_index,
 				ionum;
-	uint32		parent_change_count;
-	int_hdr: &mut BTreeNonLeafTuphdr;
-	OInMemoryBlkno blkno;
-	OFixedKey	target_hikey;
-	int			target_level;
-	Page		page;
+	pub static mut PARENT_CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut int_hdr = std::ptr::null_mut();
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut TARGET_HIKEY: OFixedKey = std::mem::zeroed();
+	pub static mut TARGET_LEVEL: std::os::raw::c_int = 0;
+	pub static mut PAGE: Page = std::mem::zeroed();
 	char		buf[ORIOLEDB_BLCKSZ];
-	bool		was_modify;
-	bool		was_downlink_location;
-	bool		was_fetch = false;
-	bool		was_image = false;
-	bool		was_keep_lokey = false;
-	uint32		chkpNum = 0;
+	pub static mut WAS_MODIFY: bool = false;
+	pub static mut WAS_DOWNLINK_LOCATION: bool = false;
+	pub static mut WAS_FETCH: bool = false;
+	pub static mut WAS_IMAGE: bool = false;
+	pub static mut WAS_KEEP_LOKEY: bool = false;
+	pub static mut CHKP_NUM: uint32 = 0;
 
 	context_index = context->index;
 	parent_blkno = context->items[context_index].blkno;
@@ -1599,7 +1599,7 @@ load_page(context: &mut OBTreeFindPageContext)
 
 	if (orioledb_s3_mode && !O_PAGE_IS(page, LEAF))
 	{
-		BTreePageItemLocator loc;
+		pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 		//
 // In S3 mode schedule load of all the page children for faster
@@ -1607,7 +1607,7 @@ load_page(context: &mut OBTreeFindPageContext)
 //
 		BTREE_PAGE_FOREACH_ITEMS(page, &loc)
 		{
-			tupHdr: &mut BTreeNonLeafTuphdr;
+			pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
 
 			tupHdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(page, &loc);
 			() s3_schedule_downlink_load(desc, tupHdr->downlink);
@@ -1620,7 +1620,7 @@ load_page(context: &mut OBTreeFindPageContext)
 
 	if (STOPEVENTS_ENABLED())
 	{
-		params: &mut Jsonb;
+		pub static mut JSONB: *mut params = std::ptr::null_mut();
 
 		params = btree_page_stopevent_params(desc, page);
 		STOPEVENT(STOPEVENT_LOAD_PAGE_REFIND, params);
@@ -1655,7 +1655,7 @@ load_page(context: &mut OBTreeFindPageContext)
 
 	if (O_PAGE_IS(page, RIGHTMOST))
 	{
-		OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult result = std::mem::zeroed();
 
 		if (!O_TUPLE_IS_NULL(target_hikey.tuple))
 			ereport(PANIC, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -1670,8 +1670,8 @@ load_page(context: &mut OBTreeFindPageContext)
 	}
 	else
 	{
-		OTuple		hikey;
-		OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult result = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, page);
 
@@ -1724,7 +1724,7 @@ load_page(context: &mut OBTreeFindPageContext)
 static inline Pointer
 get_write_img(desc: &mut BTreeDescr, Page page, size: &mut size_t)
 {
-	Pointer		result;
+	pub static mut RESULT: Pointer = std::ptr::null_mut();
 
 	if (OCompressIsValid(desc->compress))
 	{
@@ -1743,7 +1743,7 @@ get_write_img(desc: &mut BTreeDescr, Page page, size: &mut size_t)
 		result = page;
 		*size = ORIOLEDB_BLCKSZ;
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 #ifdef USE_ASSERT_CHECKING
@@ -1752,7 +1752,7 @@ prewrite_image_check(Page p)
 {
 	if (!O_PAGE_IS(p, LEAF))
 	{
-		BTreePageItemLocator loc;
+		pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 		{
@@ -1775,9 +1775,9 @@ perform_page_io(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	Page		page = O_GET_IN_MEMORY_PAGE(blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) page;
 	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	Pointer		write_img;
-	size_t		write_size;
-	int			chkp_index;
+	pub static mut WRITE_IMG: Pointer = std::ptr::null_mut();
+	pub static mut WRITE_SIZE: size_t = std::mem::zeroed();
+	pub static mut CHKP_INDEX: std::os::raw::c_int = 0;
 	bool		less_num,
 				err = false;
 
@@ -1940,7 +1940,7 @@ perform_page_io(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 				//
 // free space
 //
-				FileExtent	free_extent;
+				pub static mut FREE_EXTENT: FileExtent = std::mem::zeroed();
 
 				free_extent.len = page_desc->fileExtent.len - new_len;
 				free_extent.off = page_desc->fileExtent.off + new_len;
@@ -1974,7 +1974,7 @@ perform_page_io(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 							   btree_smgr_filename(desc, page_desc->fileExtent.off, checkpoint_number),
 							   (unsigned long) page_desc->fileExtent.off)));
 
-		return InvalidDiskDownlink;
+		pub static mut INVALID_DISK_DOWNLINK: return = std::mem::zeroed();
 	}
 
 	Assert(FileExtentIsValid(page_desc->fileExtent));
@@ -1989,8 +1989,8 @@ perform_page_io(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 uint64
 perform_page_io_autonomous(desc: &mut BTreeDescr, uint32 chkpNum, Page img, extent: &mut FileExtent)
 {
-	Pointer		write_img;
-	size_t		write_size;
+	pub static mut WRITE_IMG: Pointer = std::ptr::null_mut();
+	pub static mut WRITE_SIZE: size_t = std::mem::zeroed();
 
 #ifdef USE_ASSERT_CHECKING
 	prewrite_image_check(img);
@@ -2004,14 +2004,14 @@ perform_page_io_autonomous(desc: &mut BTreeDescr, uint32 chkpNum, Page img, exte
 						errmsg("could not get free file offset for write page to file %s: %m",
 							   btree_smgr_filename(desc, 0, 0))));
 
-		return InvalidDiskDownlink;
+		pub static mut INVALID_DISK_DOWNLINK: return = std::mem::zeroed();
 	}
 
 	Assert(FileExtentIsValid(*extent));
 
 	if (!write_page_to_disk(desc, extent, chkpNum, write_img, write_size))
 	{
-		uint64		offset;
+		pub static mut OFFSET: uint64 = std::mem::zeroed();
 
 		if (orioledb_s3_mode)
 		{
@@ -2029,7 +2029,7 @@ perform_page_io_autonomous(desc: &mut BTreeDescr, uint32 chkpNum, Page img, exte
 							   btree_smgr_filename(desc, offset, chkpNum),
 							   (unsigned long) offset)));
 
-		return InvalidDiskDownlink;
+		pub static mut INVALID_DISK_DOWNLINK: return = std::mem::zeroed();
 	}
 
 	Assert(FileExtentIsValid(*extent));
@@ -2045,9 +2045,9 @@ uint64
 perform_page_io_build(desc: &mut BTreeDescr, Page img,
 					  extent: &mut FileExtent, metaPage: &mut BTreeMetaPage)
 {
-	Pointer		write_img;
-	size_t		write_size;
-	uint32		chkpNum;
+	pub static mut WRITE_IMG: Pointer = std::ptr::null_mut();
+	pub static mut WRITE_SIZE: size_t = std::mem::zeroed();
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
 
 	btree_page_update_max_key_len(desc, img);
 
@@ -2088,9 +2088,9 @@ perform_page_io_build(desc: &mut BTreeDescr, Page img,
 		if ((extent->off + threshold - 1) / threshold !=
 			(extent->off + threshold - 1 + extent->len) / threshold)
 		{
-			S3HeaderTag tag;
+			pub static mut TAG: S3HeaderTag = std::mem::zeroed();
 			uint64		offset = (extent->off + extent->len - 1) * (OCompressIsValid(desc->compress) ? ORIOLEDB_COMP_BLCKSZ : ORIOLEDB_BLCKSZ);
-			int			index;
+			pub static mut INDEX: std::os::raw::c_int = 0;
 
 			Assert((extent->off + threshold - 1) / threshold + 1 ==
 				   (extent->off + threshold - 1 + extent->len) / threshold);
@@ -2117,7 +2117,7 @@ perform_page_io_build(desc: &mut BTreeDescr, Page img,
 							   btree_smgr_filename(desc, extent[0].off, chkpNum),
 							   (unsigned long) extent[0].off)));
 
-		return InvalidDiskDownlink;
+		pub static mut INVALID_DISK_DOWNLINK: return = std::mem::zeroed();
 	}
 
 	Assert(FileExtentIsValid(*extent));
@@ -2130,14 +2130,14 @@ perform_page_io_build(desc: &mut BTreeDescr, Page img,
 static bool
 prepare_non_leaf_page(Page p)
 {
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
 		tuphdr: &mut BTreeNonLeafTuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 
 		if (DOWNLINK_IS_IN_IO(tuphdr->downlink))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 		{
@@ -2145,7 +2145,7 @@ prepare_non_leaf_page(Page p)
 			desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(child);
 
 			if (!try_lock_page(child))
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 
 			//
 // It's worth less to write non-leaf page, if it's going to anyway
@@ -2154,7 +2154,7 @@ prepare_non_leaf_page(Page p)
 			if (IS_DIRTY(child) || desc->ionum >= 0)
 			{
 				unlock_page(child);
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			}
 
 			// XXX: should we also consider checkpoint number of child page?
@@ -2165,7 +2165,7 @@ prepare_non_leaf_page(Page p)
 	}
 
 	PAGE_SET_N_ONDISK(p, BTREE_PAGE_ITEMS_COUNT(p));
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -2176,17 +2176,17 @@ write_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno, Page img,
 		   uint32 checkpoint_number,
 		   bool evict, bool copy_blkno)
 {
-	desc: &mut BTreeDescr = context->desc;
-	OInMemoryBlkno parent_blkno = OInvalidInMemoryBlkno;
-	Page		parent_page = NULL;
+	pub static mut B_TREE_DESCR: *mut desc = context->desc;
+	pub static mut PARENT_BLKNO: OInMemoryBlkno = OInvalidInMemoryBlkno;
+	pub static mut PARENT_PAGE: Page = std::ptr::null_mut();
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
-	parent_loc: &mut BTreePageItemLocator;
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut parent_loc = std::ptr::null_mut();
 	int			ionum = -1,
 				context_index;
-	int_hdr: &mut BTreeNonLeafTuphdr = NULL;
-	uint32		parent_change_count = 0;
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut int_hdr = std::ptr::null_mut();
+	pub static mut PARENT_CHANGE_COUNT: uint32 = 0;
 	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	bool		is_root = desc->rootInfo.rootPageBlkno == blkno;
+	pub static mut IS_ROOT: bool = desc->rootInfo.rootPageBlkno == blkno;
 
 	// rootPageBlkno can not be evicted here
 	Assert(!evict || !is_root);
@@ -2239,7 +2239,7 @@ write_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno, Page img,
 	{
 		uint64		new_downlink,
 					old_downlink = 0;
-		bool		dirty_parent;
+		pub static mut DIRTY_PARENT: bool = false;
 
 		// Mark parent downlink as IO in-progress.
 		if (evict)
@@ -2278,7 +2278,7 @@ write_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno, Page img,
 
 			if (STOPEVENTS_ENABLED())
 			{
-				params: &mut Jsonb;
+				pub static mut JSONB: *mut params = std::ptr::null_mut();
 
 				params = btree_page_stopevent_params(desc, p);
 				STOPEVENT(STOPEVENT_AFTER_IONUM_SET, params);
@@ -2313,7 +2313,7 @@ write_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno, Page img,
 
 		if (!is_root)
 		{
-			OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
+			pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult result = std::mem::zeroed();
 
 			// Refind parent
 			BTREE_PAGE_FIND_SET(context, DOWNLINK_LOCATION);
@@ -2325,7 +2325,7 @@ write_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno, Page img,
 			}
 			else
 			{
-				OTuple		hikey;
+				pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_GET_HIKEY(hikey, p);
 				result = refind_page(context, &hikey, BTreeKeyPageHiKey,
@@ -2385,7 +2385,7 @@ write_page(context: &mut OBTreeFindPageContext, OInMemoryBlkno blkno, Page img,
 fn
 btree_finalize_private_seq_bufs(desc: &mut BTreeDescr, evicted_data: &mut EvictedTreeData)
 {
-	int			chkp_index;
+	pub static mut CHKP_INDEX: std::os::raw::c_int = 0;
 	bool		is_compressed = OCompressIsValid(desc->compress);
 
 	Assert(desc->storageType == BTreeStorageTemporary ||
@@ -2461,20 +2461,20 @@ btree_finalize_private_seq_bufs(desc: &mut BTreeDescr, evicted_data: &mut Evicte
 static bool
 evict_btree(desc: &mut BTreeDescr, uint32 checkpoint_number)
 {
-	OInMemoryBlkno root_blkno = desc->rootInfo.rootPageBlkno;
+	pub static mut ROOT_BLKNO: OInMemoryBlkno = desc->rootInfo.rootPageBlkno;
 	Page		rootPageBlkno = O_GET_IN_MEMORY_PAGE(root_blkno);
 	root_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(root_blkno);
 	metaPage: &mut BTreeMetaPage = BTREE_GET_META(desc);
 	CheckpointFileHeader file_header = {0};
 	EvictedTreeData evicted_tree_data = {{0}};
-	uint64		new_downlink;
+	pub static mut NEW_DOWNLINK: uint64 = std::mem::zeroed();
 	char		img[ORIOLEDB_BLCKSZ];
-	bool		was_dirty;
-	uint32		chkpNum = 0;
-	bool		notModified;
+	pub static mut WAS_DIRTY: bool = false;
+	pub static mut CHKP_NUM: uint32 = 0;
+	pub static mut NOT_MODIFIED: bool = false;
 	bool		hasMetaLock = LWLockHeldByMe(&checkpoint_state->oTablesMetaLock);
-	SharedRootInfoKey evict_key;
-	int			evict_lockNo;
+	pub static mut EVICT_KEY: SharedRootInfoKey = std::mem::zeroed();
+	pub static mut EVICT_LOCK_NO: std::os::raw::c_int = 0;
 
 	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc) &&
 		   (O_PAGE_STATE_IS_LOCKED(pg_atomic_read_u64(&(O_PAGE_HEADER(rootPageBlkno)->state))) || O_PAGE_IS_LOCAL(root_blkno)));
@@ -2490,7 +2490,7 @@ evict_btree(desc: &mut BTreeDescr, uint32 checkpoint_number)
 								  LW_EXCLUSIVE))
 	{
 		unlock_page(root_blkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	//
@@ -2502,7 +2502,7 @@ evict_btree(desc: &mut BTreeDescr, uint32 checkpoint_number)
 	{
 		LWLockRelease(&checkpoint_state->oSharedRootInfoInsertLocks[evict_lockNo]);
 		unlock_page(root_blkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// we check it before
@@ -2520,7 +2520,7 @@ evict_btree(desc: &mut BTreeDescr, uint32 checkpoint_number)
 //
 	if (was_dirty || !FileExtentIsValid(root_desc->fileExtent))
 	{
-		bool		not_used;
+		pub static mut NOT_USED: bool = false;
 
 		CLEAN_DIRTY(desc->ppool, root_blkno);
 
@@ -2554,7 +2554,7 @@ evict_btree(desc: &mut BTreeDescr, uint32 checkpoint_number)
 									  LW_SHARED))
 		{
 			LWLockRelease(&checkpoint_state->oSharedRootInfoInsertLocks[evict_lockNo]);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 
@@ -2625,37 +2625,37 @@ evict_btree(desc: &mut BTreeDescr, uint32 checkpoint_number)
 	if (!hasMetaLock)
 		LWLockRelease(&checkpoint_state->oTablesMetaLock);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 BTreeDescr *
 index_oids_get_btree_descr(ORelOids oids, OIndexType type)
 {
-	indexDescr: &mut OIndexDescr = NULL;
-	desc: &mut BTreeDescr;
-	bool		nested;
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
+	pub static mut NESTED: bool = false;
 
 	// Check is this table is visible for us
 	indexDescr = o_fetch_index_descr(oids, type, false, &nested);
 
 	if (indexDescr == NULL)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	desc = &indexDescr->desc;
 
 	if (!o_btree_try_use_shmem(desc))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
-	return desc;
+	pub static mut DESC: return = std::mem::zeroed();
 }
 
 typedef struct
 {
-	bool		indexRegularLock;
-	bool		indexCheckpointerLock;
-	bool		tableRegularLock;
-	bool		tableCheckpointerLock;
-	ORelOids	tableOids;
+	pub static mut INDEX_REGULAR_LOCK: bool = false;
+	pub static mut INDEX_CHECKPOINTER_LOCK: bool = false;
+	pub static mut TABLE_REGULAR_LOCK: bool = false;
+	pub static mut TABLE_CHECKPOINTER_LOCK: bool = false;
+	pub static mut TABLE_OIDS: ORelOids = std::mem::zeroed();
 } EvictBtreeLocksState;
 
 //
@@ -2667,31 +2667,31 @@ static BTreeDescr *
 get_evict_btree_locks(OInMemoryBlkno blkno, ORelOids oids, OIndexType type,
 					  state: &mut EvictBtreeLocksState)
 {
-	desc: &mut BTreeDescr;
-	id: &mut OIndexDescr;
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut id = std::ptr::null_mut();
 	bool		recovery = is_recovery_in_progress();
-	bool		nested = false;
+	pub static mut NESTED: bool = false;
 
 	if (!recovery && !(state->indexRegularLock = o_tables_rel_try_lock_extended(&oids, AccessExclusiveLock, &nested, false)))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (nested)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (!(state->indexCheckpointerLock = o_tables_rel_try_lock_extended(&oids, AccessExclusiveLock, &nested, true)))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (nested)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	desc = index_oids_get_btree_descr(oids, type);
 
 	if (desc == NULL ||
 		desc->rootInfo.rootPageBlkno != blkno)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (desc->type != oIndexPrimary)
-		return desc;
+		pub static mut DESC: return = std::mem::zeroed();
 
 	id = (OIndexDescr *) desc->arg;
 	state->tableOids = id->tableOids;
@@ -2701,27 +2701,27 @@ get_evict_btree_locks(OInMemoryBlkno blkno, ORelOids oids, OIndexType type,
 // ctid is the table itself
 //
 	if (id->primaryIsCtid)
-		return desc;
+		pub static mut DESC: return = std::mem::zeroed();
 
 	if (!recovery && !(state->tableRegularLock = o_tables_rel_try_lock_extended(&state->tableOids, AccessExclusiveLock, &nested, false)))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (nested)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (!(state->tableCheckpointerLock = o_tables_rel_try_lock_extended(&state->tableOids, AccessExclusiveLock, &nested, true)))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (nested)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	desc = index_oids_get_btree_descr(oids, type);
 
 	if (desc == NULL ||
 		desc->rootInfo.rootPageBlkno != blkno)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
-	return desc;
+	pub static mut DESC: return = std::mem::zeroed();
 }
 
 fn
@@ -2749,10 +2749,10 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 						page_desc: &mut OrioleDBPageDesc, Page p,
 						oids: &mut ORelOids)
 {
-	desc: &mut BTreeDescr;
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
 
 	if (!ORelOidsIsValid(page_desc->oids) || page_desc->type == oIndexInvalid)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	//
 // Read field2 directly rather than via PAGE_GET_N_ONDISK(): we don't hold
@@ -2763,10 +2763,10 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 //
 	if (!O_PAGE_IS(p, LEAF) && evict &&
 		((BTreePageHeader *) p)->field2 != BTREE_PAGE_ITEMS_COUNT(p))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (!evict && !IS_DIRTY(blkno))
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	// Important to access the shared memory oids: &mut once = *((volatile ORelOids *) &page_desc->oids);
 
@@ -2780,7 +2780,7 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 		if (sys_tree_get_storage_type(oids->relnode) != BTreeStorageInMemory)
 			desc = get_sys_tree(oids->relnode);
 		else
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 	}
 	else
 	{
@@ -2788,10 +2788,10 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 		desc = index_oids_get_btree_descr(*oids, page_desc->type);
 
 		if (desc == NULL)
-			return NULL;
+			pub static mut NULL: return = std::mem::zeroed();
 	}
 
-	return desc;
+	pub static mut DESC: return = std::mem::zeroed();
 }
 
 typedef enum WalkPageCheckResult
@@ -2822,32 +2822,32 @@ walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
 		!ORelOidsIsEqual(oids, page_desc->oids))
 	{
 		unlock_page(blkno);
-		return WalkPageCheckFailed;
+		pub static mut WALK_PAGE_CHECK_FAILED: return = std::mem::zeroed();
 	}
 
 	if (!evict && !IS_DIRTY(blkno))
 	{
 		unlock_page(blkno);
-		return WalkPageCheckFailed;
+		pub static mut WALK_PAGE_CHECK_FAILED: return = std::mem::zeroed();
 	}
 
 	if (O_PAGE_IS(p, PRE_CLEANUP))
 	{
 		unlock_page(blkno);
-		return WalkPageCheckFailed;
+		pub static mut WALK_PAGE_CHECK_FAILED: return = std::mem::zeroed();
 	}
 
 	// On concurrent IO, unlock and let the caller decide to wait or ionum: &mut skip = page_desc->ionum;
 	if (*ionum >= 0)
 	{
 		unlock_page(blkno);
-		return WalkPageCheckWaitIO;
+		pub static mut WALK_PAGE_CHECK_WAIT_IO: return = std::mem::zeroed();
 	}
 
 	if (!O_PAGE_IS(p, LEAF) && evict && PAGE_GET_N_ONDISK(p) != BTREE_PAGE_ITEMS_COUNT(p))
 	{
 		unlock_page(blkno);
-		return WalkPageCheckFailed;
+		pub static mut WALK_PAGE_CHECK_FAILED: return = std::mem::zeroed();
 	}
 
 	if (!O_PAGE_IS(p, LEAF) && !evict)
@@ -2856,17 +2856,17 @@ walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
 		if (!prepare_non_leaf_page(img))
 		{
 			unlock_page(blkno);
-			return WalkPageCheckFailed;
+			pub static mut WALK_PAGE_CHECK_FAILED: return = std::mem::zeroed();
 		}
 	}
 
 	if (RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(p)))
 	{
 		unlock_page(blkno);
-		return WalkPageCheckFailed;
+		pub static mut WALK_PAGE_CHECK_FAILED: return = std::mem::zeroed();
 	}
 
-	return WalkPageCheckPassed;
+	pub static mut WALK_PAGE_CHECK_PASSED: return = std::mem::zeroed();
 }
 
 //
@@ -2880,16 +2880,16 @@ walk_page_evict_root(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 					 page_desc: &mut OrioleDBPageDesc, Page p,
 					 ORelOids oids)
 {
-	EvictBtreeLocksState locksState;
-	uint32		checkpoint_number;
-	bool		copy_blkno;
-	bool		result = false;
-	int			ionum;
+	pub static mut LOCKS_STATE: EvictBtreeLocksState = std::mem::zeroed();
+	pub static mut CHECKPOINT_NUMBER: uint32 = std::mem::zeroed();
+	pub static mut COPY_BLKNO: bool = false;
+	pub static mut RESULT: bool = false;
+	pub static mut IONUM: std::os::raw::c_int = 0;
 
 	if (tree_is_under_checkpoint(desc))
 	{
 		unlock_page(blkno);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	// Release page lock before acquiring evict btree locks
@@ -2902,7 +2902,7 @@ walk_page_evict_root(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	if (!desc)
 	{
 		release_evict_btree_locks(oids, &locksState);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	//
@@ -2912,35 +2912,35 @@ walk_page_evict_root(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	if (!try_lock_page(blkno))
 	{
 		release_evict_btree_locks(oids, &locksState);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	if (walk_page_check_locked(blkno, true, page_desc, p,
 							   oids, NULL, &ionum) != WalkPageCheckPassed)
 	{
 		release_evict_btree_locks(oids, &locksState);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	if (tree_is_under_checkpoint(desc))
 	{
 		unlock_page(blkno);
 		release_evict_btree_locks(oids, &locksState);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	if (desc->rootInfo.rootPageBlkno != blkno)
 	{
 		unlock_page(blkno);
 		release_evict_btree_locks(oids, &locksState);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	if (!get_checkpoint_number(desc, blkno, &checkpoint_number, &copy_blkno))
 	{
 		unlock_page(blkno);
 		release_evict_btree_locks(oids, &locksState);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	result = evict_btree(desc, checkpoint_number);
@@ -2961,45 +2961,45 @@ OWalkPageResult
 walk_page(OInMemoryBlkno blkno, bool evict)
 {
 	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	OBTreeFindPageContext context;
-	desc: &mut BTreeDescr;
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut B_TREE_DESCR: *mut desc = std::ptr::null_mut();
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno),
 				parent_page;
-	ORelOids	oids;
-	int_hdr: &mut BTreeNonLeafTuphdr;
-	uint32		checkpoint_number;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut B_TREE_NON_LEAF_TUPHDR: *mut int_hdr = std::ptr::null_mut();
+	pub static mut CHECKPOINT_NUMBER: uint32 = std::mem::zeroed();
 	bool		copy_blkno,
 				merge_tried = false;
-	OFindPageResult findResult;
-	int			ionum;
+	pub static mut FIND_RESULT: OFindPageResult = std::mem::zeroed();
+	pub static mut IONUM: std::os::raw::c_int = 0;
 	char		img[ORIOLEDB_BLCKSZ];
-	bool		is_root;
-	WalkPageCheckResult checkResult;
+	pub static mut IS_ROOT: bool = false;
+	pub static mut CHECK_RESULT: WalkPageCheckResult = std::mem::zeroed();
 
 	p = O_GET_IN_MEMORY_PAGE(blkno);
 retry:
 
 	desc = walk_page_prelock_check(blkno, evict, page_desc, p, &oids);
 	if (!desc)
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 
 	if (!try_lock_page(blkno))
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 
 	checkResult = walk_page_check_locked(blkno, evict, page_desc, p,
 										 oids, img, &ionum);
 	if (checkResult == WalkPageCheckWaitIO)
 	{
 		wait_for_io_completion(ionum);
-		goto retry;
+		pub static mut RETRY: goto = std::mem::zeroed();
 	}
 	if (checkResult == WalkPageCheckFailed)
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 
 	// Try to merge sparse page instead of eviction
 	if (!merge_tried && is_page_too_sparse(desc, p))
 	{
-		bool		result;
+		pub static mut RESULT: bool = false;
 
 		result = btree_try_merge_and_unlock(desc, blkno, true, false);
 
@@ -3008,12 +3008,12 @@ retry:
 
 		if (result)
 		{
-			return OWalkPageMerged;
+			pub static mut O_WALK_PAGE_MERGED: return = std::mem::zeroed();
 		}
 		else
 		{
 			merge_tried = true;
-			goto retry;
+			pub static mut RETRY: goto = std::mem::zeroed();
 		}
 	}
 
@@ -3036,7 +3036,7 @@ retry:
 		}
 		else
 		{
-			OTuple		hikey;
+			pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 			BTREE_PAGE_GET_HIKEY(hikey, p);
 			findResult = find_page(&context, &hikey, BTreeKeyPageHiKey, PAGE_GET_LEVEL(p) + 1);
@@ -3047,7 +3047,7 @@ retry:
 			Assert(findResult == OFindPageResultFailure);
 			unlock_page(blkno);
 			Assert(!have_locked_pages());
-			return OWalkPageSkipped;
+			pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 		}
 
 		BTREE_PAGE_FIND_UNSET(&context, TRY_LOCK);
@@ -3064,14 +3064,14 @@ retry:
 //
 			unlock_page(blkno);
 			unlock_page(context.items[context.index].blkno);
-			return OWalkPageSkipped;
+			pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 		}
 	}
 	else if (IS_SYS_TREE_OIDS(oids))
 	{
 		Assert(is_root);
 		unlock_page(blkno);
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	if (!get_checkpoint_number(desc, blkno, &checkpoint_number, &copy_blkno))
@@ -3082,7 +3082,7 @@ retry:
 		{
 			unlock_page(context.items[context.index].blkno);
 		}
-		return OWalkPageSkipped;
+		pub static mut O_WALK_PAGE_SKIPPED: return = std::mem::zeroed();
 	}
 
 	if (evict && is_root)
@@ -3106,16 +3106,16 @@ write_tree_pages_recursive(UndoLogType undoType,
 						   OInMemoryBlkno blkno, uint32 loadId,
 						   int maxLevel, bool evict)
 {
-	Page		p;
-	int			level;
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut LEVEL: std::os::raw::c_int = 0;
 	OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS];
 	uint32		childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS];
-	int			childPagesCount = 0;
-	int			i;
-	BTreePageItemLocator loc;
+	pub static mut CHILD_PAGES_COUNT: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 
 	if (!OInMemoryBlknoIsValid(blkno))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	lock_page(blkno);
 	p = O_GET_IN_MEMORY_PAGE(blkno);
@@ -3128,12 +3128,12 @@ write_tree_pages_recursive(UndoLogType undoType,
 	if (O_PAGE_IS_LOCAL(blkno) && p == NULL)
 	{
 		unlock_page(blkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	if (O_PAGE_GET_CHANGE_COUNT(p) != loadId)
 	{
 		unlock_page(blkno);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	level = PAGE_GET_LEVEL(p);
 
@@ -3173,7 +3173,7 @@ write_tree_pages_recursive(UndoLogType undoType,
 		release_undo_size(GET_PAGE_LEVEL_UNDO_TYPE(undoType));
 	}
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 
@@ -3199,10 +3199,10 @@ write_tree_pages(desc: &mut BTreeDescr, int maxLevel, bool evict)
 fn
 write_relation_pages(Oid relid, int maxLevel, bool evict)
 {
-	descr: &mut OTableDescr;
-	td: &mut BTreeDescr;
-	Relation	rel;
-	int			treen;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut B_TREE_DESCR: *mut td = std::ptr::null_mut();
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut TREEN: std::os::raw::c_int = 0;
 
 	orioledb_check_shmem();
 
@@ -3241,7 +3241,7 @@ Datum
 orioledb_write_pages(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
-	int			maxLevel = ORIOLEDB_MAX_DEPTH;
+	pub static mut MAX_LEVEL: std::os::raw::c_int = ORIOLEDB_MAX_DEPTH;
 
 	write_relation_pages(relid, maxLevel, false);
 
@@ -3273,17 +3273,17 @@ tree_offsets_cmp(a: &mut const, b: &mut const)
 		return val1.fileExtent.len > val2.fileExtent.len ? -1 : 1;
 	}
 
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 fn
 writeback_put_extent(writeback: &mut IOWriteBack, desc: &mut BTreeDescr,
 					 uint64 downlink)
 {
-	TreeOffset	offset;
-	off_t		blcksz = 0;
-	int			last_segno;
-	FileExtent	extent;
+	pub static mut OFFSET: TreeOffset = std::mem::zeroed();
+	pub static mut BLCKSZ: off_t = 0;
+	pub static mut LAST_SEGNO: std::os::raw::c_int = 0;
+	pub static mut EXTENT: FileExtent = std::mem::zeroed();
 
 	Assert(DOWNLINK_IS_ON_DISK(downlink));
 	extent.len = DOWNLINK_GET_DISK_LEN(downlink);
@@ -3345,12 +3345,12 @@ perform_writeback(writeback: &mut IOWriteBack)
 	int			i,
 				len = 0,
 				flushAfter;
-	uint64		offset = InvalidFileExtentOff - 1;
-	off_t		blcksz = 0;
+	pub static mut OFFSET: uint64 = InvalidFileExtentOff - 1;
+	pub static mut BLCKSZ: off_t = 0;
 	ORelOids	oids = {0};
-	File		file = -1;
-	int			segno = 0;
-	int			chkpNum = 0;
+	pub static mut FILE: File = -1;
+	pub static mut SEGNO: std::os::raw::c_int = 0;
+	pub static mut CHKP_NUM: std::os::raw::c_int = 0;
 
 	if (use_device && !use_mmap)
 	{
@@ -3376,7 +3376,7 @@ perform_writeback(writeback: &mut IOWriteBack)
 
 	for (i = 0; i < writeback->extentsNumber; i++)
 	{
-		TreeOffset	cur = writeback->extents[i];
+		pub static mut CUR: TreeOffset = writeback->extents[i];
 
 		if (oids.datoid != cur.key.oids.datoid ||
 			oids.relnode != cur.key.oids.relnode ||
@@ -3405,7 +3405,7 @@ perform_writeback(writeback: &mut IOWriteBack)
 			chkpNum = cur.chkpNum;
 			if (!use_mmap)
 			{
-				filename: &mut char;
+				pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 				filename = btree_filename(cur.key, segno, chkpNum);
 				file = PathNameOpenFile(filename, O_RDWR | O_CREAT | PG_BINARY);
@@ -3467,11 +3467,11 @@ typedef  (*RelnodeFileCallback) (const filename: &mut char, uint32 segno,
 static bool
 iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback,  *arg)
 {
-	struct file: &mut dirent;
-	dir: &mut DIR;
-	filename: &mut char;
-	bool		first_file_deleted = false;
-	db_prefix: &mut char;
+	pub static mut DIRENT: *mut struct file = std::ptr::null_mut();
+	pub static mut DIR: *mut dir = std::ptr::null_mut();
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut FIRST_FILE_DELETED: bool = false;
+	pub static mut CHAR: *mut db_prefix = std::ptr::null_mut();
 
 	o_get_prefixes_for_tablespace(key.oids.datoid, key.tablespace,
 								  NULL, &db_prefix);
@@ -3479,7 +3479,7 @@ iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback,  *arg)
 	dir = opendir(db_prefix);
 
 	if (dir == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
@@ -3487,7 +3487,7 @@ iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback,  *arg)
 					file_chkp = 0,
 					file_segno = 0;
 		char		file_ext[5];
-		file_ext_p: &mut char = NULL;
+		pub static mut CHAR: *mut file_ext_p = std::ptr::null_mut();
 
 		if ((sscanf(file->d_name, "%10u-%10u.%4s",
 					&file_relnode, &file_chkp, file_ext) == 3 &&
@@ -3531,7 +3531,7 @@ iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback,  *arg)
 
 	closedir(dir);
 	pfree(db_prefix);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
@@ -3572,17 +3572,17 @@ fsync_btree_files(OIndexKey key)
 
 try_to_punch_holes(desc: &mut BTreeDescr)
 {
-	metaPage: &mut BTreeMetaPage;
-	File		file;
-	uint64		file_size;
+	pub static mut B_TREE_META_PAGE: *mut metaPage = std::ptr::null_mut();
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut FILE_SIZE: uint64 = std::mem::zeroed();
 	filename: &mut char,
 				buf[ORIOLEDB_BLCKSZ];
 	uint64		len = 0,
 				i,
 				buf_len;
-	uint32		chkp_num;
-	metaLock: &mut LWLock;
-	punchHolesLock: &mut LWLock;
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
+	pub static mut LW_LOCK: *mut metaLock = std::ptr::null_mut();
+	pub static mut LW_LOCK: *mut punchHolesLock = std::ptr::null_mut();
 
 	Assert(orioledb_use_sparse_files);
 	Assert(!OCompressIsValid(desc->compress));
@@ -3595,8 +3595,8 @@ try_to_punch_holes(desc: &mut BTreeDescr)
 	chkp_num = metaPage->punchHolesChkpNum + 1;
 	while (can_use_checkpoint_extents(desc, chkp_num))
 	{
-		SeqBufTag	tag;
-		bool		removeFile = false;
+		pub static mut TAG: SeqBufTag = std::mem::zeroed();
+		pub static mut REMOVE_FILE: bool = false;
 
 		LWLockAcquire(punchHolesLock, LW_EXCLUSIVE);
 
@@ -3651,7 +3651,7 @@ try_to_punch_holes(desc: &mut BTreeDescr)
 
 		while (true)
 		{
-			cur_off: &mut BlockNumber;
+			pub static mut BLOCK_NUMBER: *mut cur_off = std::ptr::null_mut();
 
 			buf_len = OFileRead(file, buf, ORIOLEDB_BLCKSZ, len, WAIT_EVENT_DATA_FILE_READ);
 			if (buf_len <= 0)

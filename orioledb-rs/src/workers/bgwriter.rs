@@ -35,13 +35,13 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-bool		IsBGWriter = false;
-int			BGWriterNum = -1;
+pub static mut IS_BG_WRITER: bool = false;
+pub static mut BG_WRITER_NUM: std::os::raw::c_int = -1;
 
 
 register_bgwriter(int num)
 {
-	BackgroundWorker worker;
+	pub static mut WORKER: BackgroundWorker = std::mem::zeroed();
 
 	// Set up background worker parameters
 	memset(&worker, 0, sizeof(worker));
@@ -60,7 +60,7 @@ register_bgwriter(int num)
 
 bgwriter_main(Datum main_arg)
 {
-	pool: &mut PagePool;
+	pub static mut PAGE_POOL: *mut pool = std::ptr::null_mut();
 	int			rc,
 				wake_events = WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT;
 	bool		need_eviction,
@@ -124,10 +124,10 @@ bgwriter_main(Datum main_arg)
 		MemoryContextSwitchTo(CurTransactionContext);
 		while (true)
 		{
-			OPagePoolType poolType;
-			UndoLocation lastUsedLocation;
-			UndoLocation writeInProgressLocation;
-			int			j;
+			pub static mut POOL_TYPE: OPagePoolType = std::mem::zeroed();
+			pub static mut LAST_USED_LOCATION: UndoLocation = std::mem::zeroed();
+			pub static mut WRITE_IN_PROGRESS_LOCATION: UndoLocation = std::mem::zeroed();
+			pub static mut J: std::os::raw::c_int = 0;
 
 			if (ShutdownRequestPending)
 				break;
@@ -154,7 +154,7 @@ bgwriter_main(Datum main_arg)
 
 				if (need_eviction || need_write)
 				{
-					int			i = 0;
+					pub static mut I: std::os::raw::c_int = 0;
 
 					while (need_eviction || need_write)
 					{

@@ -32,7 +32,7 @@ use pgrx::pg_sys;
 o_tuple_init_reader(state: &mut OTupleReaderState, OTuple tuple, TupleDesc desc,
 					spec: &mut OTupleFixedFormatSpec)
 {
-	Pointer		data = tuple.data;
+	pub static mut DATA: Pointer = tuple.data;
 	OTupleHeader header = (OTupleHeader) data;
 
 	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
@@ -65,7 +65,7 @@ o_tuple_init_reader(state: &mut OTupleReaderState, OTuple tuple, TupleDesc desc,
 uint32
 o_tuple_next_field_offset(state: &mut OTupleReaderState, OTupleAttrCompact * att)
 {
-	uint32		off;
+	pub static mut OFF: uint32 = std::mem::zeroed();
 
 	if (!state->slow && att->attcacheoff >= 0)
 	{
@@ -111,15 +111,15 @@ o_tuple_next_field_offset(state: &mut OTupleReaderState, OTupleAttrCompact * att
 
 	state->attnum++;
 
-	return off;
+	pub static mut OFF: return = std::mem::zeroed();
 }
 
 Datum
 o_tuple_read_next_field(state: &mut OTupleReaderState, isnull: &mut bool)
 {
 	att: &mut OTupleAttrCompact = OTupleDescAttrFast(state->desc, state->attnum);
-	Datum		result;
-	uint32		off;
+	pub static mut RESULT: Datum = std::mem::zeroed();
+	pub static mut OFF: uint32 = std::mem::zeroed();
 
 	if (state->attnum >= state->natts)
 	{
@@ -129,7 +129,7 @@ o_tuple_read_next_field(state: &mut OTupleReaderState, isnull: &mut bool)
 									state->attnum + 1,
 									isnull);
 			state->attnum++;
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 		else
 		{
@@ -156,16 +156,16 @@ o_tuple_read_next_field(state: &mut OTupleReaderState, isnull: &mut bool)
 static Pointer
 o_tuple_read_next_field_ptr(state: &mut OTupleReaderState)
 {
-	uint32		off;
+	pub static mut OFF: uint32 = std::mem::zeroed();
 
 	if (state->attnum >= state->natts)
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 
 	if (state->hasnulls && att_isnull(state->attnum, state->bp))
 	{
 		state->slow = true;
 		state->attnum++;
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	off = o_tuple_next_field_offset(state,
@@ -219,9 +219,9 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 	OTupleHeader tup = (OTupleHeader) tuple.data;
 	tp: &mut char;				// ptr to data part of tuple
 	bool		slow = false;	// do we have to walk attrs?
-	int			i;
-	OTupleReaderState reader;
-	Pointer		result = NULL;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut READER: OTupleReaderState = std::mem::zeroed();
+	pub static mut RESULT: Pointer = std::ptr::null_mut();
 
 	// ----------------
 // Three cases:
@@ -245,8 +245,8 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 //
 // check to see if any preceding bits are null...
 //
-		int			byte = attnum >> 3;
-		int			finalbit = attnum & 0x07;
+		pub static mut BYTE: std::os::raw::c_int = attnum >> 3;
+		pub static mut FINALBIT: std::os::raw::c_int = attnum & 0x07;
 		bp: &mut bits8 = (bits8 *) (tuple.data + SizeOfOTupleHeader);
 
 		// check for nulls "before" final bit of last byte
@@ -288,7 +288,7 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 		result = o_tuple_read_next_field_ptr(&reader);
 	Assert(result != NULL);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -305,8 +305,8 @@ o_toast_nocachegetattr(OTuple tuple,
 	OTupleHeader tup = (OTupleHeader) tuple.data;
 	tp: &mut char;				// ptr to data part of tuple
 	bool		slow = false;	// do we have to walk attrs?
-	int			i;
-	OTupleReaderState reader;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut READER: OTupleReaderState = std::mem::zeroed();
 	Datum		result = (Datum) 0;
 
 	*is_null = false;
@@ -333,8 +333,8 @@ o_toast_nocachegetattr(OTuple tuple,
 //
 // check to see if any preceding bits are null...
 //
-		int			byte = attnum >> 3;
-		int			finalbit = attnum & 0x07;
+		pub static mut BYTE: std::os::raw::c_int = attnum >> 3;
+		pub static mut FINALBIT: std::os::raw::c_int = attnum & 0x07;
 		bp: &mut bits8 = (bits8 *) (tuple.data + SizeOfOTupleHeader);
 
 		// check for nulls "before" final bit of last byte
@@ -361,7 +361,7 @@ o_toast_nocachegetattr(OTuple tuple,
 
 	if (!slow)
 	{
-		att: &mut OTupleAttrCompact;
+		pub static mut O_TUPLE_ATTR_COMPACT: *mut att = std::ptr::null_mut();
 
 		//
 // If we get here, there are no nulls up to and including the target
@@ -383,12 +383,12 @@ o_toast_nocachegetattr(OTuple tuple,
 // column
 //
 		*is_null = true;
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	}
 
 	Assert(!(*is_null));
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 // No existing callers
@@ -398,8 +398,8 @@ o_tuple_get_data(OTuple tuple, size: &mut int, spec: &mut OTupleFixedFormatSpec)
 	if (!(tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT))
 	{
 		OTupleHeader header = (OTupleHeader) tuple.data;
-		int			hasnull_off;
-		int			hoff;
+		pub static mut HASNULL_OFF: std::os::raw::c_int = 0;
+		pub static mut HOFF: std::os::raw::c_int = 0;
 
 		hasnull_off = header->hasnulls ? MAXALIGN(BITMAPLEN(header->natts)) :
 			0;
@@ -423,8 +423,8 @@ o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, bridge_data: &m
 						  values: &mut Datum, isnull: &mut bool, to_toast: &mut char,
 						  int natts)
 {
-	Size		data_length = 0;
-	bool		has_bridge_ctid = bridge_data && bridge_data->attnum != InvalidAttrNumber;
+	pub static mut DATA_LENGTH: Size = 0;
+	pub static mut HAS_BRIDGE_CTID: bool = bridge_data && bridge_data->attnum != InvalidAttrNumber;
 	int			i,
 				ctid_off = 0;
 
@@ -435,8 +435,8 @@ o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, bridge_data: &m
 
 	for (i = 0; i < natts; i++)
 	{
-		Datum		val;
-		Form_pg_attribute atti;
+		pub static mut VAL: Datum = std::mem::zeroed();
+		pub static mut ATTI: Form_pg_attribute = std::mem::zeroed();
 
 		if (i == 0 && iptr)
 		{
@@ -489,7 +489,7 @@ o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, bridge_data: &m
 		}
 	}
 
-	return data_length;
+	pub static mut DATA_LENGTH: return = std::mem::zeroed();
 }
 
 Size
@@ -497,13 +497,13 @@ o_new_tuple_size(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 				 ItemPointer iptr, bridge_data: &mut BridgeData, uint32 version,
 				 values: &mut Datum, isnull: &mut bool, to_toast: &mut char)
 {
-	bool		hasnull = false;
+	pub static mut HASNULL: bool = false;
 	bool		fixedFormat = (version == 0);
 	int			i,
 				natts,
 				ctid_off = 0;
-	bool		has_bridge_ctid = bridge_data && bridge_data->attnum != InvalidAttrNumber;
-	Size		result;
+	pub static mut HAS_BRIDGE_CTID: bool = bridge_data && bridge_data->attnum != InvalidAttrNumber;
+	pub static mut RESULT: Size = 0;
 
 	natts = tupleDesc->natts;
 
@@ -544,7 +544,7 @@ o_new_tuple_size(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 	result += o_tuple_compute_data_size(tupleDesc, iptr, bridge_data, values,
 										isnull, to_toast, natts);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -557,17 +557,17 @@ o_tuple_fill(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 			 values: &mut Datum, isnull: &mut bool, to_toast: &mut char)
 {
 	OTupleHeader tup = (OTupleHeader) tuple->data;
-	bitP: &mut bits8;
-	bits8		bitmask;
-	int			i;
-	int			natts = tupleDesc->natts;
-	int			hoff;
-	int			ctid_off = 0;
-	Size		len;
-	bool		hasnull = false;
+	pub static mut BITS8: *mut bitP = std::ptr::null_mut();
+	pub static mut BITMASK: bits8 = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut NATTS: std::os::raw::c_int = tupleDesc->natts;
+	pub static mut HOFF: std::os::raw::c_int = 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = 0;
+	pub static mut LEN: Size = 0;
+	pub static mut HASNULL: bool = false;
 	bool		fixedFormat = (version == 0);
-	Pointer		data;
-	bool		has_bridge_ctid = bridge_data && bridge_data->attnum != InvalidAttrNumber;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut HAS_BRIDGE_CTID: bool = bridge_data && bridge_data->attnum != InvalidAttrNumber;
 
 	if (iptr)
 		ctid_off++;
@@ -627,10 +627,10 @@ o_tuple_fill(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 	for (i = 0; i < natts; i++)
 	{
 		Form_pg_attribute att = TupleDescAttr(tupleDesc, i);
-		Size		data_length = 0;
-		Datum		value;
-		bool		null;
-		bool		cur_to_toast;
+		pub static mut DATA_LENGTH: Size = 0;
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut NULL: bool = false;
+		pub static mut CUR_TO_TOAST: bool = false;
 
 		if (i == 0 && iptr)
 		{
@@ -654,7 +654,7 @@ o_tuple_fill(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 
 		if (cur_to_toast)
 		{
-			OToastValue toastValue;
+			pub static mut TOAST_VALUE: OToastValue = std::mem::zeroed();
 
 			memset(&toastValue, 0, sizeof(toastValue));
 			SET_TOAST_POINTER(&toastValue);
@@ -797,20 +797,20 @@ o_form_tuple(TupleDesc tupleDesc, spec: &mut OTupleFixedFormatSpec,
 			 uint32 version, values: &mut Datum, isnull: &mut bool,
 			 bridge_data: &mut BridgeData)
 {
-	OTuple		result;
-	int			len;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
+	pub static mut LEN: std::os::raw::c_int = 0;
 
 	len = o_new_tuple_size(tupleDesc, spec, NULL, bridge_data, version, values, isnull, NULL);
 	result.data = (Pointer) palloc0(len);
 	o_tuple_fill(tupleDesc, spec, &result, len, NULL, bridge_data, version, values, isnull, NULL);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 uint32
 o_tuple_get_version(OTuple tuple)
 {
 	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 	else
 		return ((OTupleHeader) tuple.data)->version;
 }
@@ -852,7 +852,7 @@ o_tuple_set_version(spec: &mut OTupleFixedFormatSpec, tuple: &mut OTuple,
 
 o_tuple_set_ctid(OTuple tuple, ItemPointer iptr)
 {
-	Pointer		data = tuple.data;
+	pub static mut DATA: Pointer = tuple.data;
 	OTupleHeader header = (OTupleHeader) data;
 
 	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)

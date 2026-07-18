@@ -24,25 +24,25 @@ use pgrx::pg_sys;
 
 struct OBuffersMeta
 {
-	int			groupCtlTrancheId;
-	int			bufferCtlTrancheId;
+	pub static mut GROUP_CTL_TRANCHE_ID: std::os::raw::c_int = 0;
+	pub static mut BUFFER_CTL_TRANCHE_ID: std::os::raw::c_int = 0;
 };
 
 typedef struct
 {
-	LWLock		bufferCtlLock;
-	int64		blockNum;
-	int64		shadowBlockNum;
-	uint32		tag;
-	uint32		shadowTag;
-	uint32		usageCount;
-	bool		dirty;
+	pub static mut BUFFER_CTL_LOCK: LWLock = std::mem::zeroed();
+	pub static mut BLOCK_NUM: int64 = std::mem::zeroed();
+	pub static mut SHADOW_BLOCK_NUM: int64 = std::mem::zeroed();
+	pub static mut TAG: uint32 = std::mem::zeroed();
+	pub static mut SHADOW_TAG: uint32 = std::mem::zeroed();
+	pub static mut USAGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut DIRTY: bool = false;
 	char		data[ORIOLEDB_BLCKSZ];
 } OBuffer;
 
 struct OBuffersGroup
 {
-	LWLock		groupCtlLock;
+	pub static mut GROUP_CTL_LOCK: LWLock = std::mem::zeroed();
 	OBuffer		buffers[O_BUFFERS_PER_GROUP];
 };
 
@@ -58,7 +58,7 @@ o_buffers_shmem_needs(desc: &mut OBuffersDesc)
 
 o_buffers_shmem_init(desc: &mut OBuffersDesc,  *buf, bool found)
 {
-	Pointer		ptr = buf;
+	pub static mut PTR: Pointer = buf;
 
 	desc->metaPageBlkno = (OBuffersMeta *) ptr;
 	ptr += CACHELINEALIGN(sizeof(OBuffersMeta));
@@ -79,13 +79,13 @@ o_buffers_shmem_init(desc: &mut OBuffersDesc,  *buf, bool found)
 
 		for (i = 0; i < desc->groupsCount; i++)
 		{
-			group: &mut OBuffersGroup = &desc->groups[i];
+			pub static mut O_BUFFERS_GROUP: *mut group = &desc->groups[i];
 
 			LWLockInitialize(&group->groupCtlLock,
 							 desc->metaPageBlkno->groupCtlTrancheId);
 			for (j = 0; j < O_BUFFERS_PER_GROUP; j++)
 			{
-				buffer: &mut OBuffer = &group->buffers[j];
+				pub static mut O_BUFFER: *mut buffer = &group->buffers[j];
 
 				LWLockInitialize(&buffer->bufferCtlLock,
 								 desc->metaPageBlkno->bufferCtlTrancheId);
@@ -110,14 +110,14 @@ o_buffers_shmem_init(desc: &mut OBuffersDesc,  *buf, bool found)
 static bool
 open_file(desc: &mut OBuffersDesc, uint32 tag, uint64 fileNum, bool create)
 {
-	int			flags;
+	pub static mut FLAGS: std::os::raw::c_int = 0;
 
 	Assert(OBuffersMaxTagIsValid(tag));
 
 	if (desc->curFile >= 0 &&
 		desc->curFileNum == fileNum &&
 		desc->curFileTag == tag)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (desc->curFile >= 0)
 		FileClose(desc->curFile);
@@ -133,11 +133,11 @@ open_file(desc: &mut OBuffersDesc, uint32 tag, uint64 fileNum, bool create)
 	if (desc->curFile < 0)
 	{
 		if (!create && errno == ENOENT)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		ereport(PANIC, (errcode_for_file_access(),
 						errmsg("could not open file %s: %m", desc->curFileName)));
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
@@ -158,7 +158,7 @@ unlink_file(desc: &mut OBuffersDesc, uint32 tag, uint64 fileNum)
 fn
 write_buffer_data(desc: &mut OBuffersDesc, data: &mut char, uint32 tag, uint64 blockNum)
 {
-	int			result;
+	pub static mut RESULT: std::os::raw::c_int = 0;
 
 	Assert(OBuffersMaxTagIsValid(tag));
 
@@ -184,14 +184,14 @@ write_buffer(desc: &mut OBuffersDesc, buffer: &mut OBuffer)
 static bool
 read_buffer(desc: &mut OBuffersDesc, buffer: &mut OBuffer, bool missing_ok)
 {
-	int			result;
+	pub static mut RESULT: std::os::raw::c_int = 0;
 
 	if (!open_file(desc, buffer->tag,
 				   buffer->blockNum / (desc->singleFileSize / ORIOLEDB_BLCKSZ),
 				   !missing_ok))
 	{
 		memset(buffer->data, 0, ORIOLEDB_BLCKSZ);
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	result = OFileRead(desc->curFile, buffer->data, ORIOLEDB_BLCKSZ,
@@ -203,7 +203,7 @@ read_buffer(desc: &mut OBuffersDesc, buffer: &mut OBuffer, bool missing_ok)
 		if (missing_ok)
 		{
 			memset(buffer->data, 0, ORIOLEDB_BLCKSZ);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 		ereport(PANIC, (errcode_for_file_access(),
 						errmsg("could not read buffer from file %s: %m", desc->curFileName)));
@@ -212,7 +212,7 @@ read_buffer(desc: &mut OBuffersDesc, buffer: &mut OBuffer, bool missing_ok)
 	if (result < ORIOLEDB_BLCKSZ)
 		memset(&buffer->data[result], 0, ORIOLEDB_BLCKSZ - result);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -225,15 +225,15 @@ static OBuffer *
 get_buffer(desc: &mut OBuffersDesc, uint32 tag, int64 blockNum, bool write,
 		   bool missing_ok)
 {
-	group: &mut OBuffersGroup = &desc->groups[blockNum % desc->groupsCount];
-	buffer: &mut OBuffer = NULL;
+	pub static mut O_BUFFERS_GROUP: *mut group = &desc->groups[blockNum % desc->groupsCount];
+	pub static mut O_BUFFER: *mut buffer = std::ptr::null_mut();
 	int			i,
 				victim = 0;
-	uint32		victimUsageCount = 0;
-	bool		prevDirty;
-	int64		prevBlockNum;
-	uint32		prevTag;
-	LWLockMode	lockMode = write ? LW_EXCLUSIVE : LW_SHARED;
+	pub static mut VICTIM_USAGE_COUNT: uint32 = 0;
+	pub static mut PREV_DIRTY: bool = false;
+	pub static mut PREV_BLOCK_NUM: int64 = std::mem::zeroed();
+	pub static mut PREV_TAG: uint32 = std::mem::zeroed();
+	pub static mut LOCK_MODE: LWLockMode = write ? LW_EXCLUSIVE : LW_SHARED;
 
 	// First check if required buffer is already loaded
 	LWLockAcquire(&group->groupCtlLock, LW_SHARED);
@@ -247,7 +247,7 @@ get_buffer(desc: &mut OBuffersDesc, uint32 tag, int64 blockNum, bool write,
 			buffer->usageCount++;
 			LWLockRelease(&group->groupCtlLock);
 
-			return buffer;
+			pub static mut BUFFER: return = std::mem::zeroed();
 		}
 	}
 	LWLockRelease(&group->groupCtlLock);
@@ -268,7 +268,7 @@ get_buffer(desc: &mut OBuffersDesc, uint32 tag, int64 blockNum, bool write,
 			buffer->usageCount++;
 			LWLockRelease(&group->groupCtlLock);
 
-			return buffer;
+			pub static mut BUFFER: return = std::mem::zeroed();
 		}
 
 		if (buffer->shadowBlockNum == blockNum &&
@@ -315,12 +315,12 @@ get_buffer(desc: &mut OBuffersDesc, uint32 tag, int64 blockNum, bool write,
 		buffer->blockNum = -1;
 		buffer->shadowBlockNum = -1;
 		LWLockRelease(&buffer->bufferCtlLock);
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 	}
 
 	buffer->shadowBlockNum = -1;
 
-	return buffer;
+	pub static mut BUFFER: return = std::mem::zeroed();
 }
 
 //
@@ -346,7 +346,7 @@ o_buffers_rw(desc: &mut OBuffersDesc, Pointer buf,
 	int64		firstBlockNum = offset / ORIOLEDB_BLCKSZ,
 				lastBlockNum = (offset + size - 1) / ORIOLEDB_BLCKSZ,
 				blockNum;
-	Pointer		ptr = buf;
+	pub static mut PTR: Pointer = buf;
 
 	Assert(OBuffersMaxTagIsValid(tag) && offset >= 0 && size > 0);
 
@@ -360,7 +360,7 @@ o_buffers_rw(desc: &mut OBuffersDesc, Pointer buf,
 		{
 			Assert(missing_ok);
 			memset(buf, 0, size);
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 
 		if (firstBlockNum == lastBlockNum)
@@ -396,7 +396,7 @@ o_buffers_rw(desc: &mut OBuffersDesc, Pointer buf,
 		ptr += copySize;
 		LWLockRelease(&buffer->bufferCtlLock);
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 bool
@@ -441,9 +441,9 @@ o_buffers_write(desc: &mut OBuffersDesc, Pointer buf, uint32 tag,
 o_buffers_write_page_direct(desc: &mut OBuffersDesc, data: &mut char, uint32 tag,
 							int64 offset)
 {
-	int64		blockNum = offset / ORIOLEDB_BLCKSZ;
-	group: &mut OBuffersGroup;
-	int			i;
+	pub static mut BLOCK_NUM: int64 = offset / ORIOLEDB_BLCKSZ;
+	pub static mut O_BUFFERS_GROUP: *mut group = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(OBuffersMaxTagIsValid(tag));
 	Assert(offset >= 0 && offset % ORIOLEDB_BLCKSZ == 0);
@@ -454,7 +454,7 @@ o_buffers_write_page_direct(desc: &mut OBuffersDesc, data: &mut char, uint32 tag
 	LWLockAcquire(&group->groupCtlLock, LW_SHARED);
 	for (i = 0; i < O_BUFFERS_PER_GROUP; i++)
 	{
-		buffer: &mut OBuffer = &group->buffers[i];
+		pub static mut O_BUFFER: *mut buffer = &group->buffers[i];
 
 		if (buffer->blockNum == blockNum && buffer->tag == tag)
 		{
@@ -481,11 +481,11 @@ o_buffers_flush(desc: &mut OBuffersDesc,
 
 	for (i = 0; i < desc->groupsCount; i++)
 	{
-		group: &mut OBuffersGroup = &desc->groups[i];
+		pub static mut O_BUFFERS_GROUP: *mut group = &desc->groups[i];
 
 		for (j = 0; j < O_BUFFERS_PER_GROUP; j++)
 		{
-			buffer: &mut OBuffer = &group->buffers[j];
+			pub static mut O_BUFFER: *mut buffer = &group->buffers[j];
 
 			LWLockAcquire(&buffer->bufferCtlLock, LW_SHARED);
 			if (buffer->dirty &&
@@ -512,11 +512,11 @@ o_buffers_wipe(desc: &mut OBuffersDesc,
 
 	for (i = 0; i < desc->groupsCount; i++)
 	{
-		group: &mut OBuffersGroup = &desc->groups[i];
+		pub static mut O_BUFFERS_GROUP: *mut group = &desc->groups[i];
 
 		for (j = 0; j < O_BUFFERS_PER_GROUP; j++)
 		{
-			buffer: &mut OBuffer = &group->buffers[j];
+			pub static mut O_BUFFER: *mut buffer = &group->buffers[j];
 
 			LWLockAcquire(&buffer->bufferCtlLock, LW_EXCLUSIVE);
 			if (buffer->dirty &&
@@ -576,7 +576,7 @@ o_buffers_sync(desc: &mut OBuffersDesc, uint32 tag,
 o_buffers_unlink_blocks_range(desc: &mut OBuffersDesc, uint32 tag,
 							  int64 firstBlockNumber, int64 lastBlockNumber)
 {
-	int64		blocksPerFile = desc->singleFileSize / ORIOLEDB_BLCKSZ;
+	pub static mut BLOCKS_PER_FILE: int64 = desc->singleFileSize / ORIOLEDB_BLCKSZ;
 	int64		firstFile,
 				lastFile,
 				fileNumber;
@@ -593,8 +593,8 @@ o_buffers_unlink_blocks_range(desc: &mut OBuffersDesc, uint32 tag,
 
 	for (fileNumber = firstFile; fileNumber <= lastFile; fileNumber++)
 	{
-		int64		fileFirstBlock = fileNumber * blocksPerFile;
-		int64		fileLastBlock = fileFirstBlock + blocksPerFile - 1;
+		pub static mut FILE_FIRST_BLOCK: int64 = fileNumber * blocksPerFile;
+		pub static mut FILE_LAST_BLOCK: int64 = fileFirstBlock + blocksPerFile - 1;
 		int64		from = Max(firstBlockNumber, fileFirstBlock);
 		int64		to = Min(lastBlockNumber, fileLastBlock);
 
@@ -641,9 +641,9 @@ unlink_unretained_o_buffers(desc: &mut OBuffersDesc, uint32 tag, int64 itemsPerB
 							int64 chkpRetainStart, int64 chkpRetainEnd,
 							int64 transactionRetainStart)
 {
-	int64		blocksPerFile = desc->singleFileSize / ORIOLEDB_BLCKSZ;
-	int64		retainStart;
-	int64		finish;
+	pub static mut BLOCKS_PER_FILE: int64 = desc->singleFileSize / ORIOLEDB_BLCKSZ;
+	pub static mut RETAIN_START: int64 = std::mem::zeroed();
+	pub static mut FINISH: int64 = std::mem::zeroed();
 
 	//
 // Block arithmetic below uses index / itemsPerBlock, which is only
@@ -666,9 +666,9 @@ unlink_unretained_o_buffers(desc: &mut OBuffersDesc, uint32 tag, int64 itemsPerB
 	if (cleanupStart < finish)
 	{
 		int64		firstBlock = (cleanupStart + itemsPerBlock - 1) / itemsPerBlock;
-		int64		lastBlock = finish / itemsPerBlock - 1;
-		int64		retainBlock = retainStart / itemsPerBlock;
-		int64		leadFile = firstBlock / blocksPerFile;
+		pub static mut LAST_BLOCK: int64 = finish / itemsPerBlock - 1;
+		pub static mut RETAIN_BLOCK: int64 = retainStart / itemsPerBlock;
+		pub static mut LEAD_FILE: int64 = firstBlock / blocksPerFile;
 
 		//
 // If the file containing the leading edge is entirely below retain,
@@ -692,11 +692,11 @@ unlink_unretained_o_buffers(desc: &mut OBuffersDesc, uint32 tag, int64 itemsPerB
 		if (gapStart < gapEnd)
 		{
 			int64		firstBlock = (gapStart + itemsPerBlock - 1) / itemsPerBlock;
-			int64		lastBlock = gapEnd / itemsPerBlock - 1;
-			int64		retainBlock = transactionRetainStart / itemsPerBlock;
+			pub static mut LAST_BLOCK: int64 = gapEnd / itemsPerBlock - 1;
+			pub static mut RETAIN_BLOCK: int64 = transactionRetainStart / itemsPerBlock;
 			int64		chkpEndBlock = (chkpRetainEnd + itemsPerBlock - 1) / itemsPerBlock;
-			int64		leadFile = firstBlock / blocksPerFile;
-			int64		leadFileFirst = leadFile * blocksPerFile;
+			pub static mut LEAD_FILE: int64 = firstBlock / blocksPerFile;
+			pub static mut LEAD_FILE_FIRST: int64 = leadFile * blocksPerFile;
 
 			//
 // Extend only when the leading file sits entirely inside the gap

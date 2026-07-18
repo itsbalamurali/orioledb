@@ -36,10 +36,10 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 {
 	CheckpointControl control,
 			   *s3_control;
-	bool		control_res;
-	StringInfoData buf;
-	objectname: &mut char;
-	bool		res = false;
+	pub static mut CONTROL_RES: bool = false;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
+	pub static mut CHAR: *mut objectname = std::ptr::null_mut();
+	pub static mut RES: bool = false;
 
 	control_res = get_checkpoint_control_data(&control);
 
@@ -53,7 +53,7 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 	if (s3_get_object(objectname, &buf, true) == S3_RESPONSE_NOT_FOUND)
 	{
 		res = true;
-		goto cleanup;
+		pub static mut CLEANUP: goto = std::mem::zeroed();
 	}
 
 	//
@@ -66,7 +66,7 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 		*errmsgp = psprintf("OrioleDB can be incompatible with the S3 bucket "
 							"because the control file exists on the S3 bucket");
 		*errdetailp = psprintf("OrioleDB control file \"%s\" is absent", CONTROL_FILENAME);
-		goto cleanup;
+		pub static mut CLEANUP: goto = std::mem::zeroed();
 	}
 
 	s3_control = (CheckpointControl *) buf.data;
@@ -81,7 +81,7 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 							   " differs from the S3 bucket identifier " UINT64_FORMAT,
 							   control.controlIdentifier,
 							   s3_control->controlIdentifier);
-		goto cleanup;
+		pub static mut CLEANUP: goto = std::mem::zeroed();
 	}
 
 	if (control.lastCheckpointNumber < s3_control->lastCheckpointNumber)
@@ -93,7 +93,7 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 							   "the S3 bucket last checkpoint number %u",
 							   control.lastCheckpointNumber,
 							   s3_control->lastCheckpointNumber);
-		goto cleanup;
+		pub static mut CLEANUP: goto = std::mem::zeroed();
 	}
 	else if (control.lastCheckpointNumber > s3_control->lastCheckpointNumber)
 		ereport(LOG,
@@ -113,7 +113,7 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 							   " is behind the S3 bucket XLOG location " UINT64_FORMAT,
 							   control.sysTreesStartPtr,
 							   s3_control->sysTreesStartPtr);
-		goto cleanup;
+		pub static mut CLEANUP: goto = std::mem::zeroed();
 	}
 	else if (control.sysTreesStartPtr > s3_control->sysTreesStartPtr)
 		ereport(LOG,
@@ -129,7 +129,7 @@ cleanup:
 	pfree(buf.data);
 	pfree(objectname);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 //
@@ -138,11 +138,11 @@ cleanup:
 
 s3_put_lock_file()
 {
-	int			lock_file;
-	uint64		lock_identifier = 0;
-	objectname: &mut char;
-	long		res;
-	int			retry_put_count = 0;
+	pub static mut LOCK_FILE: std::os::raw::c_int = 0;
+	pub static mut LOCK_IDENTIFIER: uint64 = 0;
+	pub static mut CHAR: *mut objectname = std::ptr::null_mut();
+	pub static mut RES: long = std::mem::zeroed();
+	pub static mut RETRY_PUT_COUNT: std::os::raw::c_int = 0;
 
 	lock_file = BasicOpenFile(LOCK_FILENAME, O_RDONLY | PG_BINARY);
 	if (lock_file >= 0)
@@ -164,7 +164,7 @@ s3_put_lock_file()
 	}
 	else
 	{
-		struct timeval tv;
+		pub static mut TV: struct timeval = std::mem::zeroed();
 
 		if (errno != ENOENT)
 			ereport(FATAL,
@@ -218,7 +218,7 @@ retry_put:
 					(errmsg("the lock file \"%s\" was deleted concurrently, "
 							"retrying creating a lock file", objectname)));
 
-			goto retry_put;
+			pub static mut RETRY_PUT: goto = std::mem::zeroed();
 		}
 		else
 			ereport(FATAL,
@@ -229,8 +229,8 @@ retry_put:
 	}
 	else if (res == S3_RESPONSE_CONDITION_FAILED)
 	{
-		StringInfoData buf;
-		uint64		s3_lock_identifier;
+		pub static mut BUF: StringInfoData = std::mem::zeroed();
+		pub static mut S3_LOCK_IDENTIFIER: uint64 = std::mem::zeroed();
 
 		//
 // The lock file exists on the S3 bucket. In this case check its lock
@@ -278,7 +278,7 @@ retry_put:
 
 s3_delete_lock_file()
 {
-	objectname: &mut char;
+	pub static mut CHAR: *mut objectname = std::ptr::null_mut();
 
 	objectname = psprintf("data/%s", LOCK_FILENAME);
 

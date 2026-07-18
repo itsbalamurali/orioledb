@@ -29,53 +29,53 @@ use pgrx::pg_sys;
 
 typedef struct
 {
-	options: &mut BTreePrintOptions;
+	pub static mut B_TREE_PRINT_OPTIONS: *mut options = std::ptr::null_mut();
 	// Page number in NLR tree traversal
-	OInMemoryBlkno NLRPageNumber;
-	uint32		minCheckpointNum;
-	CommitSeqNo minCsn;
-	UndoLocation minUndoLoc;
+	pub static mut NLR_PAGE_NUMBER: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut MIN_CHECKPOINT_NUM: uint32 = std::mem::zeroed();
+	pub static mut MIN_CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut MIN_UNDO_LOC: UndoLocation = std::mem::zeroed();
 	// Used for saving backend id number during NLR traversal.
 #if PG_VERSION_NUM >= 170000
-	ProcNumber	backendIdInTraversal;
+	pub static mut BACKEND_ID_IN_TRAVERSAL: ProcNumber = std::mem::zeroed();
 #else
-	BackendId	backendIdInTraversal;
+	pub static mut BACKEND_ID_IN_TRAVERSAL: BackendId = std::mem::zeroed();
 #endif
-	bool		hasCsn;
+	pub static mut HAS_CSN: bool = false;
 	// hash mapping of the backend id with the number of
-	backendIdHash: &mut HTAB;
+	pub static mut HTAB: *mut backendIdHash = std::ptr::null_mut();
 
 	//
 // hash mapping of the page number in memory with number in the NLR tree
 // traversal
 //
-	pageHash: &mut HTAB;
+	pub static mut HTAB: *mut pageHash = std::ptr::null_mut();
 	// sorted list of unique undo locations in ascending order
 	undosList: &mut List[(int) UndoLogsCount];
 } BTreePrintData;
 
-typedef OInMemoryBlkno PageHashKey;
+pub static mut PAGE_HASH_KEY: typedef OInMemoryBlkno = std::mem::zeroed();
 
 #if PG_VERSION_NUM >= 170000
-typedef ProcNumber BackendIdHashKey;
+pub static mut BACKEND_ID_HASH_KEY: typedef ProcNumber = std::mem::zeroed();
 #else
-typedef BackendId BackendIdHashKey;
+pub static mut BACKEND_ID_HASH_KEY: typedef BackendId = std::mem::zeroed();
 #endif
 
 typedef struct
 {
-	BackendIdHashKey backendId;
+	pub static mut BACKEND_ID: BackendIdHashKey = std::mem::zeroed();
 #if PG_VERSION_NUM >= 170000
-	ProcNumber	backendIdInTraversal;
+	pub static mut BACKEND_ID_IN_TRAVERSAL: ProcNumber = std::mem::zeroed();
 #else
-	BackendId	backendIdInTraversal;
+	pub static mut BACKEND_ID_IN_TRAVERSAL: BackendId = std::mem::zeroed();
 #endif
 } BackendIdHashEntry;
 
 typedef struct
 {
-	PageHashKey inMemoryPageNumber;
-	OInMemoryBlkno NLRPageNumber;
+	pub static mut IN_MEMORY_PAGE_NUMBER: PageHashKey = std::mem::zeroed();
+	pub static mut NLR_PAGE_NUMBER: OInMemoryBlkno = std::mem::zeroed();
 } PageHashEntry;
 
 fn print_page_contents_recursive(desc: &mut BTreeDescr,
@@ -121,9 +121,9 @@ o_print_btree_pages(desc: &mut BTreeDescr, StringInfo outbuf,
 					PrintFunc keyPrintFunc, PrintFunc tuplePrintFunc,
 					Pointer printArg, options: &mut BTreePrintOptions, int depth)
 {
-	HASHCTL		ctl;
+	pub static mut CTL: HASHCTL = std::mem::zeroed();
 	BTreePrintData printData = {0};
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (options->undoLogLocationPrintType != BTreeNotPrint && desc->undoType != UndoLogNone)
 	{
@@ -191,7 +191,7 @@ print_page_contents_recursive(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
 	page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	OffsetNumber i,
 				j,
 				k;
@@ -314,7 +314,7 @@ print_page_contents_recursive(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	appendStringInfo(outbuf, O_PAGE_IS(p, LEFTMOST) ? "    Leftmost, " : "    ");
 	if (!O_PAGE_IS(p, RIGHTMOST))
 	{
-		OTuple		hikey;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 		btree_print_rightlink(RIGHTLINK_GET_BLKNO(header->rightLink), outbuf, printData);
 		BTREE_PAGE_GET_HIKEY(hikey, p);
@@ -339,7 +339,7 @@ print_page_contents_recursive(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 						 SHORT_GET_LOCATION(header->chunkDesc[j].hikeyShortLocation));
 		if (!O_PAGE_IS(p, RIGHTMOST) || j < header->chunksCount - 1)
 		{
-			OTuple		hikey;
+			pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 			hikey.formatFlags = header->chunkDesc[j].hikeyFlags;
 			hikey.data = (Pointer) p + SHORT_GET_LOCATION(header->chunkDesc[j].hikeyShortLocation);
@@ -357,8 +357,8 @@ print_page_contents_recursive(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 			{
 				BTreeLeafTuphdr tuphdr,
 						   *pageTuphdr;
-				OTuple		tuple;
-				bool		inUndo = false;
+				pub static mut TUPLE: OTuple = std::mem::zeroed();
+				pub static mut IN_UNDO: bool = false;
 
 				BTREE_PAGE_READ_LEAF_ITEM(pageTuphdr, tuple, p, &loc);
 				tuphdr = *pageTuphdr;
@@ -366,7 +366,7 @@ print_page_contents_recursive(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 
 				while (true)
 				{
-					bool		needsComma = false;
+					pub static mut NEEDS_COMMA: bool = false;
 
 					if (inUndo)
 						appendStringInfo(outbuf, "      Undo item: ");
@@ -486,8 +486,8 @@ print_page_contents_recursive(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 			}
 			else
 			{
-				tuphdr: &mut BTreeNonLeafTuphdr;
-				OTuple		tuple;
+				pub static mut B_TREE_NON_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+				pub static mut TUPLE: OTuple = std::mem::zeroed();
 
 				BTREE_PAGE_READ_INTERNAL_ITEM(tuphdr, tuple, p, &loc);
 
@@ -548,10 +548,10 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	pageHashEntry: &mut PageHashEntry;
-	backendIdHashEntry: &mut BackendIdHashEntry;
-	BTreePageItemLocator loc;
-	bool		found;
+	pub static mut PAGE_HASH_ENTRY: *mut pageHashEntry = std::ptr::null_mut();
+	pub static mut BACKEND_ID_HASH_ENTRY: *mut backendIdHashEntry = std::ptr::null_mut();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut FOUND: bool = false;
 	UndoLogType pageUndoType = GET_PAGE_LEVEL_UNDO_TYPE(undoType);
 
 	// if page number is not in hash, then add new value to hash
@@ -643,7 +643,7 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 static bool
 btree_print_csn(CommitSeqNo csn, StringInfo outbuf, printData: &mut BTreePrintData, bool addComma)
 {
-	CommitSeqNo printedCsn = csn;
+	pub static mut PRINTED_CSN: CommitSeqNo = csn;
 
 	// print csn if option has another value then BTreePrintAbsolute
 	if (printData->options->csnPrintType != BTreeNotPrint)
@@ -665,9 +665,9 @@ btree_print_csn(CommitSeqNo csn, StringInfo outbuf, printData: &mut BTreePrintDa
 				printedCsn = csn - printData->minCsn;
 			appendStringInfo(outbuf, UINT64_FORMAT, printedCsn);
 		}
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -682,8 +682,8 @@ btree_print_backend_id(OXid oxid, StringInfo outbuf, printData: &mut BTreePrintD
 	BackendId	backendId = oxid_get_procnum(oxid);
 #endif
 
-	hentry: &mut BackendIdHashEntry;
-	bool		found;
+	pub static mut BACKEND_ID_HASH_ENTRY: *mut hentry = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	if (printData->options->backendIdPrintType != BTreeNotPrint)
 	{
@@ -697,8 +697,8 @@ btree_print_backend_id(OXid oxid, StringInfo outbuf, printData: &mut BTreePrintD
 static uint64
 lundo_location(list: &mut List, UndoLocation location)
 {
-	lc: &mut ListCell;
-	uint64		i = 0;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+	pub static mut I: uint64 = 0;
 
 	foreach(lc, list)
 	{
@@ -706,7 +706,7 @@ lundo_location(list: &mut List, UndoLocation location)
 			break;
 		i++;
 	}
-	return i;
+	pub static mut I: return = std::mem::zeroed();
 }
 
 static bool
@@ -714,8 +714,8 @@ btree_print_undo_location(UndoLogType undoType, UndoLocation undoLocation,
 						  StringInfo outbuf, printData: &mut BTreePrintData,
 						  bool addComma)
 {
-	UndoLocation printedUndoLoc = undoLocation;
-	BTreePrintOption printType = printData->options->undoLogLocationPrintType;
+	pub static mut PRINTED_UNDO_LOC: UndoLocation = undoLocation;
+	pub static mut PRINT_TYPE: BTreePrintOption = printData->options->undoLogLocationPrintType;
 
 	if (printType != BTreeNotPrint && undoType != UndoLogNone)
 	{
@@ -738,10 +738,10 @@ btree_print_undo_location(UndoLogType undoType, UndoLocation undoLocation,
 			if (addComma)
 				appendStringInfo(outbuf, ", ");
 			appendStringInfo(outbuf, "undoLocation = " UINT64_FORMAT, printedUndoLoc);
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 static bool
@@ -755,9 +755,9 @@ btree_print_format_flags(int formatFlags, StringInfo outbuf,
 		appendStringInfo(outbuf, "format = %sFIXED",
 						 formatFlags == O_TUPLE_FLAGS_FIXED_FORMAT ? "" :
 						 "NOT ");
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -766,9 +766,9 @@ btree_print_format_flags(int formatFlags, StringInfo outbuf,
 fn
 btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, printData: &mut BTreePrintData)
 {
-	hentry: &mut PageHashEntry;
-	bool		found;
-	OInMemoryBlkno printedPageNumber = blkno;
+	pub static mut PAGE_HASH_ENTRY: *mut hentry = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
+	pub static mut PRINTED_PAGE_NUMBER: OInMemoryBlkno = blkno;
 
 	// print page number in NLR traverse only if corresponding option set
 	if (printData->options->pagePrintType == BTreePrintRelative)
@@ -787,8 +787,8 @@ btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, printData: &mut
 fn
 btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, printData: &mut BTreePrintData)
 {
-	hentry: &mut PageHashEntry;
-	bool		found;
+	pub static mut PAGE_HASH_ENTRY: *mut hentry = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 	OInMemoryBlkno printedPageNumber = DOWNLINK_GET_IN_MEMORY_BLKNO(downlink);
 
 	// print page number in NLR traverse only if corresponding option set
@@ -810,9 +810,9 @@ btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, printData: &mu
 fn
 btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf, printData: &mut BTreePrintData)
 {
-	hentry: &mut PageHashEntry;
-	bool		found;
-	OInMemoryBlkno printedPageNumber = rightlink;
+	pub static mut PAGE_HASH_ENTRY: *mut hentry = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
+	pub static mut PRINTED_PAGE_NUMBER: OInMemoryBlkno = rightlink;
 
 	//
 // print rightlink page number in NLR traverse only if corresponding
@@ -850,7 +850,7 @@ pdata_set_min_csn(printData: &mut BTreePrintData, CommitSeqNo csn)
 static List *
 ladd_unique_undo(list: &mut List, UndoLogType undoType, UndoLocation location)
 {
-	lc: &mut ListCell;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 	UndoLocation lLoc,
 			   *copyLoc;
 	int			insertAt = -1,
@@ -858,7 +858,7 @@ ladd_unique_undo(list: &mut List, UndoLogType undoType, UndoLocation location)
 
 	if (!UndoLocationIsValid(location) ||
 		!UNDO_REC_XACT_RETAIN(undoType, location))
-		return list;
+		pub static mut LIST: return = std::mem::zeroed();
 
 	copyLoc = palloc(sizeof(UndoLocation));
 	*copyLoc = location;
@@ -878,7 +878,7 @@ ladd_unique_undo(list: &mut List, UndoLogType undoType, UndoLocation location)
 		if (lLoc == location)
 		{
 			pfree(copyLoc);
-			return list;
+			pub static mut LIST: return = std::mem::zeroed();
 		}
 		if (lLoc > location)
 			break;
@@ -887,5 +887,5 @@ ladd_unique_undo(list: &mut List, UndoLogType undoType, UndoLocation location)
 	}
 	Assert(insertAt >= 0);
 	list = list_insert_nth(list, insertAt, copyLoc);
-	return list;
+	pub static mut LIST: return = std::mem::zeroed();
 }

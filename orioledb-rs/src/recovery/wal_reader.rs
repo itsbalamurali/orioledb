@@ -59,7 +59,7 @@ wal_type_name(WalRecordType type)
 static WalParseResult
 wal_parse_empty(r: &mut WalReaderState, rec: &mut WalRecord)
 {
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_XID
@@ -79,7 +79,7 @@ wal_parse_rec_xid(r: &mut WalReaderState, rec: &mut WalRecord)
 	{
 		rec->heapXid = InvalidTransactionId;
 	}
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_COMMIT and WAL_REC_ROLLBACK
@@ -92,7 +92,7 @@ wal_parse_rec_finish(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->u.finish.xmin);
 	WR_PARSE(r, &rec->u.finish.csn);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_JOINT_COMMIT
@@ -106,7 +106,7 @@ wal_parse_rec_joint_commit(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->u.joint_commit.xmin);
 	WR_PARSE(r, &rec->u.joint_commit.csn);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_RELATION
@@ -123,7 +123,7 @@ wal_parse_rec_relation(r: &mut WalReaderState, rec: &mut WalRecord)
 
 	if (r->container.version >= 17)
 	{
-		OXid		xmin;
+		pub static mut XMIN: OXid = std::mem::zeroed();
 
 		WR_PARSE(r, &xmin);
 		WR_PARSE(r, &rec->u.relation.snapshot.csn);
@@ -141,7 +141,7 @@ wal_parse_rec_relation(r: &mut WalReaderState, rec: &mut WalRecord)
 		rec->u.relation.base_version = O_TABLE_INVALID_VERSION;
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_RELREPLIDENT
@@ -163,7 +163,7 @@ wal_parse_rec_relreplident(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->u.relreplident.relreplident_ix_oid);
 	Assert(rec->u.relreplident.relreplident_ix_oid == InvalidOid);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_O_TABLES_META_UNLOCK
@@ -178,7 +178,7 @@ wal_parse_rec_o_tables_meta_unlock(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->u.unlock.oldRelnode);
 	WR_PARSE(r, &rec->u.unlock.oids.relnode);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_SAVEPOINT
@@ -192,7 +192,7 @@ wal_parse_rec_savepoint(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->logicalXid);
 	WR_PARSE(r, &rec->u.savepoint.parentLogicalXid);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_ROLLBACK_TO_SAVEPOINT
@@ -213,7 +213,7 @@ wal_parse_rec_rollback_to_savepoint(r: &mut WalReaderState, rec: &mut WalRecord)
 		rec->u.rb_to_sp.xmin = InvalidOXid;
 		rec->u.rb_to_sp.csn = 0;
 	}
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_TRUNCATE
@@ -227,7 +227,7 @@ wal_parse_rec_truncate(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->u.truncate.oids.reloid);
 	WR_PARSE(r, &rec->u.truncate.oids.relnode);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_BRIDGE_ERASE
@@ -239,7 +239,7 @@ wal_parse_rec_bridge_erase(r: &mut WalReaderState, rec: &mut WalRecord)
 
 	WR_PARSE(r, &rec->u.bridge_erase.iptr);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_SWITCH_LOGICAL_XID
@@ -252,7 +252,7 @@ wal_parse_rec_switch_logical_xid(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->u.swxid.topXid);
 	WR_PARSE(r, &rec->u.swxid.subXid);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 //
@@ -296,7 +296,7 @@ wal_parse_rec_modify(r: &mut WalReaderState, rec: &mut WalRecord)
 		WR_SKIP(r, rec->u.modify.len2);
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 // Parser for WAL_REC_DATABASE_COPY
@@ -310,7 +310,7 @@ wal_parse_rec_dbcopy(r: &mut WalReaderState, rec: &mut WalRecord)
 	WR_PARSE(r, &rec->u.dbcopy.src_tblspc);
 	WR_PARSE(r, &rec->u.dbcopy.dst_tblspc);
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 fn
@@ -391,9 +391,9 @@ build_fixed_tuples(const rec: &mut WalRecord, tuple1: &mut OFixedTuple, tuple2: 
 static WalParseResult
 wal_container_read_header(r: &mut WalReaderState, bool allow_logging)
 {
-	uint16		wal_version = 0;
-	uint8		wal_flags = 0;
-	uint8		firstByte = 0;
+	pub static mut WAL_VERSION: uint16 = 0;
+	pub static mut WAL_FLAGS: uint8 = 0;
+	pub static mut FIRST_BYTE: uint8 = 0;
 
 	firstByte = *(uint8 *) r->ptr;
 
@@ -423,7 +423,7 @@ wal_container_read_header(r: &mut WalReaderState, bool allow_logging)
 		if (allow_logging)
 			elog(FATAL, "Can't apply WAL container version %u that is newer than supported %u. Intentionally fail tests", wal_version, ORIOLEDB_WAL_VERSION);
 
-		return WALPARSE_BAD_VERSION;
+		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
 #else
 		if (allow_logging)
 			elog(WARNING, "Can't apply WAL container version %u that is newer than supported %u", wal_version, ORIOLEDB_WAL_VERSION);
@@ -438,7 +438,7 @@ wal_container_read_header(r: &mut WalReaderState, bool allow_logging)
 		if (allow_logging)
 			elog(FATAL, "WAL container version %u is older than current %u. Intentionally fail tests", wal_version, ORIOLEDB_WAL_VERSION);
 
-		return WALPARSE_BAD_VERSION;
+		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
 #else
 		if (allow_logging)
 			elog(LOG, "WAL container version %u is older than current %u. Applying with conversion.", wal_version, ORIOLEDB_WAL_VERSION);
@@ -457,7 +457,7 @@ wal_container_read_header(r: &mut WalReaderState, bool allow_logging)
 	r->container.version = wal_version;
 	r->container.flags = wal_flags;
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 //
@@ -490,7 +490,7 @@ wal_container_parse_flags(r: &mut WalReaderState)
 		WR_PARSE(r, &r->container.origin_info.lsn);
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 //
@@ -521,8 +521,8 @@ wal_container_parse_flags(r: &mut WalReaderState)
 WalParseResult
 wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 {
-	WalParseResult st;
-	WalRecord	rec;
+	pub static mut ST: WalParseResult = std::mem::zeroed();
+	pub static mut REC: WalRecord = std::mem::zeroed();
 
 	Assert(r);
 	Assert(r->on_record);		// consumer must handle every record
@@ -537,7 +537,7 @@ wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 //
 	st = wal_container_read_header(r, allow_logging);
 	if (st != WALPARSE_OK)
-		return st;
+		pub static mut ST: return = std::mem::zeroed();
 
 	//
 // Version policy check (consumer-level).
@@ -557,7 +557,7 @@ wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 	{
 		st = r->check_version(r);
 		if (st != WALPARSE_OK)
-			return st;
+			pub static mut ST: return = std::mem::zeroed();
 	}
 
 	//
@@ -571,13 +571,13 @@ wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 //
 	st = wal_container_parse_flags(r);
 	if (st != WALPARSE_OK)
-		return st;
+		pub static mut ST: return = std::mem::zeroed();
 
 	if (r->on_container)
 	{
 		st = r->on_container(r);
 		if (st != WALPARSE_OK)
-			return st;
+			pub static mut ST: return = std::mem::zeroed();
 	}
 
 	//
@@ -587,7 +587,7 @@ wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 //
 	while (r->ptr < r->end)
 	{
-		uint8		rec_type;
+		pub static mut REC_TYPE: uint8 = std::mem::zeroed();
 
 		//
 // Offset from container start at which this record tag was found.
@@ -635,7 +635,7 @@ wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 					elog(LOG, "[%s] UNKNOWN WAL RECORD TYPE %u: chunk/tail len %ld/%ld",
 						 __func__, rec.type,
 						 r->end - r->start, r->end - r->ptr);
-				return WALPARSE_BAD_TYPE;
+				pub static mut WALPARSE_BAD_TYPE: return = std::mem::zeroed();
 		}
 
 		//
@@ -647,8 +647,8 @@ wal_parse_container(r: &mut WalReaderState, bool allow_logging)
 //
 		st = r->on_record(r, &rec);
 		if (st != WALPARSE_OK)
-			return st;
+			pub static mut ST: return = std::mem::zeroed();
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }

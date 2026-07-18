@@ -43,11 +43,11 @@ s3_header_tag_hash(S3HeaderTag tag)
 {
 	struct
 	{
-		Oid			datoid;
-		Oid			relnode;
-		Oid			tablespace;
-		uint32		checkpointNum;
-		int			segNum;
+		pub static mut DATOID: Oid = std::mem::zeroed();
+		pub static mut RELNODE: Oid = std::mem::zeroed();
+		pub static mut TABLESPACE: Oid = std::mem::zeroed();
+		pub static mut CHECKPOINT_NUM: uint32 = std::mem::zeroed();
+		pub static mut SEG_NUM: std::os::raw::c_int = 0;
 	}			hashKey;
 
 	hashKey.datoid = tag.key.oids.datoid;
@@ -60,32 +60,32 @@ s3_header_tag_hash(S3HeaderTag tag)
 
 typedef struct
 {
-	int			groupCtlTrancheId;
-	int			bufferCtlTrancheId;
-	pg_atomic_uint64 numberOfLoadedParts;
+	pub static mut GROUP_CTL_TRANCHE_ID: std::os::raw::c_int = 0;
+	pub static mut BUFFER_CTL_TRANCHE_ID: std::os::raw::c_int = 0;
+	pub static mut NUMBER_OF_LOADED_PARTS: pg_atomic_uint64 = std::mem::zeroed();
 } S3HeadersMeta;
 
 typedef struct
 {
-	LWLock		bufferCtlLock;
-	S3HeaderTag tag;
-	S3HeaderTag shadowTag;
-	uint32		changeCount;
-	uint32		usageCount;
+	pub static mut BUFFER_CTL_LOCK: LWLock = std::mem::zeroed();
+	pub static mut TAG: S3HeaderTag = std::mem::zeroed();
+	pub static mut SHADOW_TAG: S3HeaderTag = std::mem::zeroed();
+	pub static mut CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut USAGE_COUNT: uint32 = std::mem::zeroed();
 	pg_atomic_uint64 data[S3_HEADER_NUM_VALUES];
 } S3HeaderBuffer;
 
 typedef struct
 {
-	LWLock		groupCtlLock;
+	pub static mut GROUP_CTL_LOCK: LWLock = std::mem::zeroed();
 	S3HeaderBuffer buffers[S3_HEADER_BUFFERS_PER_GROUP];
 } S3HeadersBuffersGroup;
 
-int			s3_headers_buffers_size;
-static int	buffersCount = 0;
-static int	groupsCount = 0;
-static meta: &mut S3HeadersMeta;
-static groups: &mut S3HeadersBuffersGroup;
+pub static mut S3_HEADERS_BUFFERS_SIZE: std::os::raw::c_int = 0;
+static mut BUFFERS_COUNT: std::os::raw::c_int = 0;
+static mut GROUPS_COUNT: std::os::raw::c_int = 0;
+static mut S3_HEADERS_META: *mut meta = std::ptr::null_mut();
+static mut S3_HEADERS_BUFFERS_GROUP: *mut groups = std::ptr::null_mut();
 
 #define S3_HEADER_MAX_CHANGE_COUNT (0x7FFFFFFF)
 
@@ -136,7 +136,7 @@ s3_headers_shmem_needs()
 
 s3_headers_shmem_init(Pointer buf, bool found)
 {
-	Pointer		ptr = buf;
+	pub static mut PTR: Pointer = buf;
 
 	meta = (S3HeadersMeta *) ptr;
 	ptr += CACHELINEALIGN(sizeof(S3HeadersMeta));
@@ -154,13 +154,13 @@ s3_headers_shmem_init(Pointer buf, bool found)
 
 		for (i = 0; i < groupsCount; i++)
 		{
-			group: &mut S3HeadersBuffersGroup = &groups[i];
+			pub static mut S3_HEADERS_BUFFERS_GROUP: *mut group = &groups[i];
 
 			LWLockInitialize(&group->groupCtlLock,
 							 meta->groupCtlTrancheId);
 			for (j = 0; j < S3_HEADER_BUFFERS_PER_GROUP; j++)
 			{
-				buffer: &mut S3HeaderBuffer = &group->buffers[j];
+				pub static mut S3_HEADER_BUFFER: *mut buffer = &group->buffers[j];
 
 				LWLockInitialize(&buffer->bufferCtlLock,
 								 meta->bufferCtlTrancheId);
@@ -185,7 +185,7 @@ s3_headers_shmem_init(Pointer buf, bool found)
 
 s3_headers_increase_loaded_parts(uint64 inc)
 {
-	uint64		result;
+	pub static mut RESULT: uint64 = std::mem::zeroed();
 
 	result = pg_atomic_fetch_add_u64(&meta->numberOfLoadedParts, inc);
 	elog(DEBUG1, "s3_headers_increase_loaded_parts(%llu %llu)",
@@ -196,8 +196,8 @@ fn
 read_from_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES],
 			   dirty: &mut bool)
 {
-	filename: &mut char;
-	int			fd;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut FD: std::os::raw::c_int = 0;
 	int			headerSize = sizeof(uint32) * S3_HEADER_NUM_VALUES,
 				rc;
 
@@ -223,7 +223,7 @@ read_from_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES],
 		}
 		else
 		{
-			int			i;
+			pub static mut I: std::os::raw::c_int = 0;
 
 			for (i = 0; i < S3_HEADER_NUM_VALUES; i++)
 				values[i] = S3_PART_SET_STATUS(0, S3PartStatusLoaded);
@@ -241,8 +241,8 @@ read_from_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES],
 fn
 write_to_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES])
 {
-	filename: &mut char;
-	int			fd;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut FD: std::os::raw::c_int = 0;
 	int			headerSize = sizeof(uint32) * S3_HEADER_NUM_VALUES;
 
 	Assert(headerSize <= BLCKSZ);
@@ -268,18 +268,18 @@ write_to_file(S3HeaderTag tag, uint32 values[S3_HEADER_NUM_VALUES])
 fn
 change_buffer(group: &mut S3HeadersBuffersGroup, int index, S3HeaderTag tag)
 {
-	S3HeaderTag prevTag;
+	pub static mut PREV_TAG: S3HeaderTag = std::mem::zeroed();
 	uint32		oldValues[S3_HEADER_NUM_VALUES];
 	uint32		newValues[S3_HEADER_NUM_VALUES];
 	bool		dirty = false,
 				newDirty = false;
-	uint32		prevChangeCount PG_USED_FOR_ASSERTS_ONLY;
-	buffer: &mut S3HeaderBuffer = NULL;
-	int			i;
-	int			minLoaded = -1;
-	bool		haveLoadedPart = false;
-	bool		checkUnlink = false;
-	off_t		prevFileSize = ORIOLEDB_SEGMENT_SIZE;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: uint32		prevChangeCount = std::mem::zeroed();
+	pub static mut S3_HEADER_BUFFER: *mut buffer = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut MIN_LOADED: std::os::raw::c_int = -1;
+	pub static mut HAVE_LOADED_PART: bool = false;
+	pub static mut CHECK_UNLINK: bool = false;
+	pub static mut PREV_FILE_SIZE: off_t = ORIOLEDB_SEGMENT_SIZE;
 
 	buffer = &group->buffers[index];
 
@@ -317,7 +317,7 @@ change_buffer(group: &mut S3HeadersBuffersGroup, int index, S3HeaderTag tag)
 
 	for (i = 0; i < S3_HEADER_NUM_VALUES; i++)
 	{
-		uint64		oldValue;
+		pub static mut OLD_VALUE: uint64 = std::mem::zeroed();
 
 		oldValue = pg_atomic_exchange_u64(&buffer->data[i],
 										  S3_PART_MAKE(newValues[i],
@@ -337,8 +337,8 @@ change_buffer(group: &mut S3HeadersBuffersGroup, int index, S3HeaderTag tag)
 
 	if (checkUnlink && !haveLoadedPart)
 	{
-		filename: &mut char;
-		int			fd;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
+		pub static mut FD: std::os::raw::c_int = 0;
 
 		filename = btree_filename(prevTag.key, prevTag.segNum,
 								  prevTag.checkpointNum);
@@ -356,7 +356,7 @@ change_buffer(group: &mut S3HeadersBuffersGroup, int index, S3HeaderTag tag)
 
 	if (checkUnlink && !haveLoadedPart)
 	{
-		filename: &mut char;
+		pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 		filename = btree_filename(prevTag.key, prevTag.segNum,
 								  prevTag.checkpointNum);
@@ -382,10 +382,10 @@ fn
 load_header_buffer(S3HeaderTag tag)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
+	pub static mut S3_HEADERS_BUFFERS_GROUP: *mut group = &groups[hash % groupsCount];
 	int			i,
 				victim = 0;
-	uint32		victimUsageCount = 0;
+	pub static mut VICTIM_USAGE_COUNT: uint32 = 0;
 
 	// First check if required buffer is already loaded
 	LWLockAcquire(&group->groupCtlLock, LW_EXCLUSIVE);
@@ -395,7 +395,7 @@ load_header_buffer(S3HeaderTag tag)
 	victimUsageCount = group->buffers[0].usageCount;
 	for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 	{
-		buffer: &mut S3HeaderBuffer = &group->buffers[i];
+		pub static mut S3_HEADER_BUFFER: *mut buffer = &group->buffers[i];
 
 		if (S3HeaderTagsIsEqual(buffer->tag, tag))
 		{
@@ -432,19 +432,19 @@ fn
 check_unlink_file(S3HeaderTag tag)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
-	int			victim = 0;
-	S3HeaderTag newTag;
+	pub static mut S3_HEADERS_BUFFERS_GROUP: *mut group = &groups[hash % groupsCount];
+	pub static mut VICTIM: std::os::raw::c_int = 0;
+	pub static mut NEW_TAG: S3HeaderTag = std::mem::zeroed();
 
 	while (true)
 	{
-		bool		found = false;
+		pub static mut FOUND: bool = false;
 
 		// First check if required buffer is already loaded
 		LWLockAcquire(&group->groupCtlLock, LW_EXCLUSIVE);
 		for (victim = 0; victim < S3_HEADER_BUFFERS_PER_GROUP; victim++)
 		{
-			buffer: &mut S3HeaderBuffer = &group->buffers[victim];
+			pub static mut S3_HEADER_BUFFER: *mut buffer = &group->buffers[victim];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
@@ -475,22 +475,22 @@ static uint32
 s3_header_read_value(S3HeaderTag tag, int index)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
-	int			i;
+	pub static mut S3_HEADERS_BUFFERS_GROUP: *mut group = &groups[hash % groupsCount];
+	pub static mut I: std::os::raw::c_int = 0;
 
 	while (true)
 	{
-		bool		tagMatched = false;
+		pub static mut TAG_MATCHED: bool = false;
 
 		for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 		{
-			buffer: &mut S3HeaderBuffer = &group->buffers[i];
+			pub static mut S3_HEADER_BUFFER: *mut buffer = &group->buffers[i];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
 				// check there is no read collision
-				uint32		changeCount = buffer->changeCount;
-				uint64		value;
+				pub static mut CHANGE_COUNT: uint32 = buffer->changeCount;
+				pub static mut VALUE: uint64 = std::mem::zeroed();
 
 				pg_read_barrier();
 
@@ -530,19 +530,19 @@ uint32
 s3_header_get_load_id(S3HeaderTag tag)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
-	int			i;
+	pub static mut S3_HEADERS_BUFFERS_GROUP: *mut group = &groups[hash % groupsCount];
+	pub static mut I: std::os::raw::c_int = 0;
 
 	while (true)
 	{
 		for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 		{
-			buffer: &mut S3HeaderBuffer = &group->buffers[i];
+			pub static mut S3_HEADER_BUFFER: *mut buffer = &group->buffers[i];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
 				// check there is no read collision
-				uint32		changeCount = buffer->changeCount;
+				pub static mut CHANGE_COUNT: uint32 = buffer->changeCount;
 
 				pg_read_barrier();
 
@@ -568,23 +568,23 @@ s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
 									bufferLoadId: &mut uint32)
 {
 	uint32		hash = s3_header_tag_hash(tag);
-	group: &mut S3HeadersBuffersGroup = &groups[hash % groupsCount];
-	int			i;
+	pub static mut S3_HEADERS_BUFFERS_GROUP: *mut group = &groups[hash % groupsCount];
+	pub static mut I: std::os::raw::c_int = 0;
 
 	while (true)
 	{
-		bool		tagMatched = false;
+		pub static mut TAG_MATCHED: bool = false;
 
 		for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
 		{
-			buffer: &mut S3HeaderBuffer = &group->buffers[i];
+			pub static mut S3_HEADER_BUFFER: *mut buffer = &group->buffers[i];
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
 				// check there is no read collision
-				uint32		changeCount = buffer->changeCount;
-				uint64		fullValue;
-				uint64		newFullValue;
+				pub static mut CHANGE_COUNT: uint32 = buffer->changeCount;
+				pub static mut FULL_VALUE: uint64 = std::mem::zeroed();
+				pub static mut NEW_FULL_VALUE: uint64 = std::mem::zeroed();
 
 				pg_read_barrier();
 
@@ -613,7 +613,7 @@ s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
 				if (S3_PART_GET_LOWER(fullValue) != *oldValue)
 				{
 					*oldValue = S3_PART_GET_LOWER(fullValue);
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				}
 
 				newFullValue = S3_PART_MAKE(newValue, changeCount, true);
@@ -627,12 +627,12 @@ s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
 					if (S3_PART_GET_STATUS(fullValue) == S3PartStatusLoaded &&
 						S3_PART_GET_STATUS(newFullValue) == S3PartStatusEvicting)
 						sync_buffer(buffer);
-					return true;
+					pub static mut TRUE: return = std::mem::zeroed();
 				}
 				else
 				{
 					*oldValue = S3_PART_GET_LOWER(fullValue);
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				}
 			}
 		}
@@ -655,7 +655,7 @@ s3_header_compare_and_swap(S3HeaderTag tag, int index,
 //
 static S3HeaderTag curLockedTag = {{{InvalidOid, InvalidOid, InvalidOid},
 InvalidOid}, 0, 0};
-static int	curLockedIndex = 0;
+static mut CUR_LOCKED_INDEX: std::os::raw::c_int = 0;
 
 //
 // Lock file part in S3 header.  This shouldn't let anybody to concurrently
@@ -664,7 +664,7 @@ static int	curLockedIndex = 0;
 bool
 s3_header_lock_part(S3HeaderTag tag, int index, loadId: &mut uint32)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	Assert(!OidIsValid(curLockedTag.key.oids.datoid) &&
 		   !OidIsValid(curLockedTag.key.oids.relnode));
@@ -675,7 +675,7 @@ s3_header_lock_part(S3HeaderTag tag, int index, loadId: &mut uint32)
 	{
 		uint32		newValue = value,
 					usageCount = S3_PART_GET_USAGE_COUNT(value);
-		S3PartStatus status;
+		pub static mut STATUS: S3PartStatus = std::mem::zeroed();
 
 		status = S3_PART_GET_STATUS(value);
 
@@ -718,21 +718,21 @@ s3_header_lock_part(S3HeaderTag tag, int index, loadId: &mut uint32)
 S3PartStatus
 s3_header_mark_part_loading(S3HeaderTag tag, int index)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue;
-		S3PartStatus status;
+		pub static mut NEW_VALUE: uint32 = std::mem::zeroed();
+		pub static mut STATUS: S3PartStatus = std::mem::zeroed();
 
 		status = S3_PART_GET_STATUS(value);
 
 		if (status == S3PartStatusLoaded ||
 			status == S3PartStatusLoading)
 		{
-			return status;
+			pub static mut STATUS: return = std::mem::zeroed();
 		}
 		else if (status == S3PartStatusEvicting)
 		{
@@ -750,7 +750,7 @@ s3_header_mark_part_loading(S3HeaderTag tag, int index)
 		{
 			if (status == S3PartStatusNotLoaded)
 			{
-				uint64		result;
+				pub static mut RESULT: uint64 = std::mem::zeroed();
 
 				result = pg_atomic_fetch_add_u64(&meta->numberOfLoadedParts, 1);
 				elog(DEBUG1, "s3_header_mark_part_loading(%u %u %u %d %d) - %llu",
@@ -758,7 +758,7 @@ s3_header_mark_part_loading(S3HeaderTag tag, int index)
 					 tag.checkpointNum, tag.segNum, index,
 					 (unsigned long long) result);
 			}
-			return status;
+			pub static mut STATUS: return = std::mem::zeroed();
 		}
 	}
 }
@@ -766,14 +766,14 @@ s3_header_mark_part_loading(S3HeaderTag tag, int index)
 
 s3_header_mark_part_loaded(S3HeaderTag tag, int index)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue;
-		S3PartStatus status PG_USED_FOR_ASSERTS_ONLY;
+		pub static mut NEW_VALUE: uint32 = std::mem::zeroed();
+		pub static mut PG_USED_FOR_ASSERTS_ONLY: S3PartStatus status = std::mem::zeroed();
 
 		status = S3_PART_GET_STATUS(value);
 
@@ -789,13 +789,13 @@ s3_header_mark_part_loaded(S3HeaderTag tag, int index)
 
 s3_header_unlock_part(S3HeaderTag tag, int index, bool setDirty)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue = value;
+		pub static mut NEW_VALUE: uint32 = value;
 
 		Assert(S3_PART_GET_STATUS(value) == S3PartStatusLoaded);
 		Assert(S3_PART_GET_LOCKS_NUM(value) >= 0);
@@ -819,25 +819,25 @@ s3_header_unlock_part(S3HeaderTag tag, int index, bool setDirty)
 bool
 s3_header_mark_part_scheduled_for_write(S3HeaderTag tag, int index)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue = value;
+		pub static mut NEW_VALUE: uint32 = value;
 
 		if (!(value & S3_PART_DIRTY_FLAG))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		if (value & S3_PART_SCHEDULED_FOR_WRITE_FLAG)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		newValue |= S3_PART_SCHEDULED_FOR_WRITE_FLAG;
 
 		if (s3_header_compare_and_swap(tag, index, &value, newValue))
 		{
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 	}
 }
@@ -845,13 +845,13 @@ s3_header_mark_part_scheduled_for_write(S3HeaderTag tag, int index)
 
 s3_header_mark_part_writing(S3HeaderTag tag, int index)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue = value;
+		pub static mut NEW_VALUE: uint32 = value;
 
 		Assert(value & S3_PART_DIRTY_FLAG);
 		Assert(value & S3_PART_SCHEDULED_FOR_WRITE_FLAG);
@@ -869,13 +869,13 @@ s3_header_mark_part_writing(S3HeaderTag tag, int index)
 fn
 s3_header_mark_not_loaded(S3HeaderTag tag, int index)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue = value;
+		pub static mut NEW_VALUE: uint32 = value;
 
 		Assert(S3_PART_GET_STATUS(value) == S3PartStatusEvicting);
 		Assert(S3_PART_GET_LOCKS_NUM(value) == 0);
@@ -891,13 +891,13 @@ s3_header_mark_not_loaded(S3HeaderTag tag, int index)
 
 s3_header_mark_part_written(S3HeaderTag tag, int index)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue = value;
+		pub static mut NEW_VALUE: uint32 = value;
 
 		newValue &= ~S3_PART_WRITING_FLAG;
 
@@ -914,13 +914,13 @@ s3_header_mark_part_written(S3HeaderTag tag, int index)
 
 s3_header_mark_part_not_written(S3HeaderTag tag, int index)
 {
-	uint32		value;
+	pub static mut VALUE: uint32 = std::mem::zeroed();
 
 	value = s3_header_read_value(tag, index);
 
 	while (true)
 	{
-		uint32		newValue = value;
+		pub static mut NEW_VALUE: uint32 = value;
 
 		newValue &= ~S3_PART_WRITING_FLAG;
 		newValue |= S3_PART_DIRTY_FLAG | S3_PART_SCHEDULED_FOR_WRITE_FLAG;
@@ -935,16 +935,16 @@ s3_header_mark_part_not_written(S3HeaderTag tag, int index)
 fn
 sync_buffer(buffer: &mut S3HeaderBuffer)
 {
-	S3HeaderTag tag;
+	pub static mut TAG: S3HeaderTag = std::mem::zeroed();
 	uint32		oldValues[S3_HEADER_NUM_VALUES];
-	bool		dirty = false;
-	int			i;
+	pub static mut DIRTY: bool = false;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	LWLockAcquire(&buffer->bufferCtlLock, LW_EXCLUSIVE);
 
 	for (i = 0; i < S3_HEADER_NUM_VALUES; i++)
 	{
-		uint64		oldValue;
+		pub static mut OLD_VALUE: uint64 = std::mem::zeroed();
 
 		oldValue = pg_atomic_fetch_and_u64(&buffer->data[i],
 										   ~S3_PART_DIRTY_BIT);
@@ -1000,8 +1000,8 @@ iterate_tablespace_files(Oid tablespace, path: &mut char, IterateFilesCallback c
 
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
-		Oid			dbOid;
-		dbDirName: &mut char;
+		pub static mut DB_OID: Oid = std::mem::zeroed();
+		pub static mut CHAR: *mut dbDirName = std::ptr::null_mut();
 
 		if (sscanf(file->d_name, "%u", &dbOid) != 1)
 			continue;
@@ -1054,10 +1054,10 @@ iterate_tablespace_files(Oid tablespace, path: &mut char, IterateFilesCallback c
 fn
 iterate_files(IterateFilesCallback callback)
 {
-	dir: &mut DIR;
+	pub static mut DIR: *mut dir = std::ptr::null_mut();
 	char		path[MAXPGPATH];
 	char		targetpath[MAXPGPATH];
-	struct file: &mut dirent;
+	pub static mut DIRENT: *mut struct file = std::ptr::null_mut();
 
 #define PG_TBLSPC "pg_tblspc"
 
@@ -1072,9 +1072,9 @@ iterate_files(IterateFilesCallback callback)
 				 errmsg("could not open directory \"%s\": %m", PG_TBLSPC)));
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
-		struct stat st;
-		int			rllen;
-		Oid			tablespace;
+		pub static mut ST: struct stat = std::mem::zeroed();
+		pub static mut RLLEN: std::os::raw::c_int = 0;
+		pub static mut TABLESPACE: Oid = std::mem::zeroed();
 
 		// Skip special stuff
 		if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0)
@@ -1125,19 +1125,19 @@ iterate_files(IterateFilesCallback callback)
 #undef PG_TBLSPC
 }
 
-static off_t totalFilesSize;
-static off_t totalOccupiedSize;
-static uint64 totalFilesCount;
+static mut TOTAL_FILES_SIZE: off_t = std::mem::zeroed();
+static mut TOTAL_OCCUPIED_SIZE: off_t = std::mem::zeroed();
+static mut TOTAL_FILES_COUNT: uint64 = std::mem::zeroed();
 
 fn
 initial_parts_counting_callback(S3HeaderTag tag)
 {
 	uint32		values[S3_HEADER_NUM_VALUES];
-	bool		dirty;
-	off_t		fileSize;
-	int			i;
-	int			fd;
-	filename: &mut char;
+	pub static mut DIRTY: bool = false;
+	pub static mut FILE_SIZE: off_t = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut FD: std::os::raw::c_int = 0;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
 
 	read_from_file(tag, values, &dirty);
 
@@ -1177,7 +1177,7 @@ initial_parts_counting_callback(S3HeaderTag tag)
 			Assert(status == S3PartStatusLoaded);
 			if (fileSize > offset)
 			{
-				uint64		result;
+				pub static mut RESULT: uint64 = std::mem::zeroed();
 
 				result = pg_atomic_fetch_add_u64(&meta->numberOfLoadedParts, 1);
 				elog(DEBUG1, "initial_parts_counting_callback(%u %u %u %d %d) - %llu",
@@ -1213,12 +1213,12 @@ initial_parts_conting()
 fn
 eviction_callback(S3HeaderTag tag)
 {
-	int			fd;
-	filename: &mut char;
-	off_t		fileSize;
-	int			i;
-	int			numParts;
-	bool		haveLoadedParts = false;
+	pub static mut FD: std::os::raw::c_int = 0;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut FILE_SIZE: off_t = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut NUM_PARTS: std::os::raw::c_int = 0;
+	pub static mut HAVE_LOADED_PARTS: bool = false;
 
 	filename = btree_filename(tag.key, tag.segNum, tag.checkpointNum);
 	fd = BasicOpenFile(filename, O_RDWR | PG_BINARY);
@@ -1232,12 +1232,12 @@ eviction_callback(S3HeaderTag tag)
 	numParts = (fileSize + ORIOLEDB_S3_PART_SIZE - 1) / ORIOLEDB_S3_PART_SIZE;
 	for (i = 0; i < numParts; i++)
 	{
-		uint32		value;
+		pub static mut VALUE: uint32 = std::mem::zeroed();
 
 		if (i == numParts - 1 && fileSize < (uint64) numParts * (uint64) ORIOLEDB_S3_PART_SIZE)
 		{
-			static pg_prng_state random_state;
-			static bool seed_initialized = false;
+			static mut RANDOM_STATE: pg_prng_state = std::mem::zeroed();
+			static mut SEED_INITIALIZED: bool = false;
 
 			if (!seed_initialized)
 			{
@@ -1276,7 +1276,7 @@ eviction_callback(S3HeaderTag tag)
 					S3_PART_GET_STATUS(newValue) == S3PartStatusEvicting)
 				{
 					off_t		offset = (off_t) i * (off_t) ORIOLEDB_S3_PART_SIZE + (off_t) ORIOLEDB_BLCKSZ;
-					uint64		result;
+					pub static mut RESULT: uint64 = std::mem::zeroed();
 
 					elog(DEBUG1, "S3 evict %u %u %u %d %d",
 						 tag.key.oids.datoid, tag.key.oids.relnode,

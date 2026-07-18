@@ -27,8 +27,8 @@ use pgrx::pg_sys;
 bool
 get_checkpoint_control_data(control: &mut CheckpointControl)
 {
-	int			controlFile;
-	Size		readBytes;
+	pub static mut CONTROL_FILE: std::os::raw::c_int = 0;
+	pub static mut READ_BYTES: Size = 0;
 
 	controlFile = BasicOpenFile(CONTROL_FILENAME, O_RDONLY | PG_BINARY);
 	if (controlFile < 0)
@@ -38,7 +38,7 @@ get_checkpoint_control_data(control: &mut CheckpointControl)
 // if there wasn't any checkpoint before.
 //
 		if (errno == ENOENT)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -54,7 +54,7 @@ get_checkpoint_control_data(control: &mut CheckpointControl)
 // finished successfully.
 //
 	if (readBytes == 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	else if (readBytes != sizeof(CheckpointControl))
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -65,7 +65,7 @@ get_checkpoint_control_data(control: &mut CheckpointControl)
 
 	check_checkpoint_control(control);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -76,7 +76,7 @@ get_checkpoint_control_data(control: &mut CheckpointControl)
 
 check_checkpoint_control(control: &mut CheckpointControl)
 {
-	pg_crc32c	crc;
+	pub static mut CRC: pg_crc32c = std::mem::zeroed();
 
 	INIT_CRC32C(crc);
 	COMP_CRC32C(crc, control, offsetof(CheckpointControl, crc));
@@ -123,7 +123,7 @@ check_checkpoint_control(control: &mut CheckpointControl)
 
 write_checkpoint_control(control: &mut CheckpointControl)
 {
-	File		controlFile;
+	pub static mut CONTROL_FILE: File = std::mem::zeroed();
 	char		buffer[CHECKPOINT_CONTROL_FILE_SIZE];
 
 	INIT_CRC32C(control->crc);

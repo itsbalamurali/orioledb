@@ -31,10 +31,10 @@ make_split_items(desc: &mut BTreeDescr, Page page,
 				 offset: &mut OffsetNumber, Pointer tupleheader, OTuple tuple,
 				 LocationIndex tuplesize, bool replace, CommitSeqNo csn)
 {
-	BTreePageItemLocator loc;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
 	bool		leaf = O_PAGE_IS(page, LEAF);
-	LocationIndex tuple_header_size = leaf ? BTreeLeafTuphdrSize : BTreeNonLeafTuphdrSize;
-	int			i;
+	pub static mut TUPLE_HEADER_SIZE: LocationIndex = leaf ? BTreeLeafTuphdrSize : BTreeNonLeafTuphdrSize;
+	pub static mut I: std::os::raw::c_int = 0;
 	static char newItem[Max(BTreeLeafTuphdrSize, BTreeNonLeafTuphdrSize) + O_BTREE_MAX_TUPLE_SIZE];
 	int			maxKeyLen = MAXALIGN(((BTreePageHeader *) page)->maxKeyLen);
 
@@ -44,7 +44,7 @@ make_split_items(desc: &mut BTreeDescr, Page page,
 	{
 		if (i == *offset)
 		{
-			int			newKeyLen;
+			pub static mut NEW_KEY_LEN: std::os::raw::c_int = 0;
 
 			memcpy(newItem, tupleheader, tuple_header_size);
 			memcpy(&newItem[tuple_header_size], tuple.data, tuplesize);
@@ -73,9 +73,9 @@ make_split_items(desc: &mut BTreeDescr, Page page,
 //
 		if (leaf)
 		{
-			tupHdr: &mut BTreeLeafTuphdr;
-			OTuple		tup;
-			bool		finished;
+			pub static mut B_TREE_LEAF_TUPHDR: *mut tupHdr = std::ptr::null_mut();
+			pub static mut TUP: OTuple = std::mem::zeroed();
+			pub static mut FINISHED: bool = false;
 
 			BTREE_PAGE_READ_LEAF_ITEM(tupHdr, tup, page, &loc);
 			finished = COMMITSEQNO_IS_FROZEN(csn) ? false : XACT_INFO_FINISHED_FOR_EVERYBODY(tupHdr->xactInfo);
@@ -118,9 +118,9 @@ perform_page_compaction(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	header: &mut BTreePageHeader = (BTreePageHeader *) p;
-	UndoLocation undoLocation;
-	OFixedKey	hikey;
-	LocationIndex hikeySize;
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut HIKEY: OFixedKey = std::mem::zeroed();
+	pub static mut HIKEY_SIZE: LocationIndex = std::mem::zeroed();
 
 	START_CRIT_SECTION();
 
@@ -182,9 +182,9 @@ perform_page_compaction(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 bool
 split_items_fit_single_page(items: &mut BTreeSplitItems)
 {
-	int			totalDataSize = 0;
-	int			hikeysEnd;
-	int			spaceAvailable;
+	pub static mut TOTAL_DATA_SIZE: std::os::raw::c_int = 0;
+	pub static mut HIKEYS_END: std::os::raw::c_int = 0;
+	pub static mut SPACE_AVAILABLE: std::os::raw::c_int = 0;
 
 	for (int i = 0; i < items->itemsCount; i++)
 		totalDataSize += items->items[i].size;
@@ -224,7 +224,7 @@ btree_page_split_find_location(items: &mut BTreeSplitItems,
 				maxLeftPageItemsCount;
 
 	if (items->itemsCount < 2)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	leftPageSpaceLeft = ORIOLEDB_BLCKSZ -
 		Max(items->hikeysEnd,
@@ -245,7 +245,7 @@ btree_page_split_find_location(items: &mut BTreeSplitItems,
 
 	// First / last items must individually fit their respective pages.
 	if (leftPageSpaceLeft < 0 || rightPageSpaceLeft < 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	//
 // Shift minimal and maximal left-page item counts until they are equal.
@@ -267,7 +267,7 @@ btree_page_split_find_location(items: &mut BTreeSplitItems,
 		{
 			// Place item on the left page.
 			if (leftPageSpaceLeft <= 0)
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			leftPageSpaceLeft -= items->items[minLeftPageItemsCount].size +
 				MAXALIGN(sizeof(LocationIndex) * (minLeftPageItemsCount + 1)) -
 				MAXALIGN(sizeof(LocationIndex) * minLeftPageItemsCount);
@@ -279,7 +279,7 @@ btree_page_split_find_location(items: &mut BTreeSplitItems,
 		{
 			// Place item on the right page.
 			if (rightPageSpaceLeft <= 0)
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 			rightPageSpaceLeft -= items->items[maxLeftPageItemsCount - 1].size +
 				MAXALIGN(sizeof(LocationIndex) *
 						 (items->itemsCount - maxLeftPageItemsCount + 1)) -
@@ -293,7 +293,7 @@ btree_page_split_find_location(items: &mut BTreeSplitItems,
 
 	if (splitLocation)
 		*splitLocation = minLeftPageItemsCount;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -323,8 +323,8 @@ btree_page_split_location(desc: &mut BTreeDescr,
 						  OffsetNumber targetLocation, float4 spaceRatio,
 						  split_item: &mut OTuple)
 {
-	OffsetNumber splitLocation;
-	bool		ok PG_USED_FOR_ASSERTS_ONLY;
+	pub static mut SPLIT_LOCATION: OffsetNumber = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		ok = std::mem::zeroed();
 
 	Assert(spaceRatio >= 0.0f && spaceRatio <= 1.0f);
 
@@ -339,7 +339,7 @@ btree_page_split_location(desc: &mut BTreeDescr,
 			(items->leaf ? BTreeLeafTuphdrSize : BTreeNonLeafTuphdrSize);
 	}
 
-	return splitLocation;
+	pub static mut SPLIT_LOCATION: return = std::mem::zeroed();
 }
 
 OffsetNumber
@@ -349,11 +349,11 @@ btree_get_split_left_count(desc: &mut BTreeDescr, Page page,
 						   split_key: &mut OTuple, split_key_len: &mut LocationIndex)
 {
 	header: &mut BTreePageHeader = (BTreePageHeader *) page;
-	OffsetNumber targetCount;
-	OffsetNumber result;
-	float4		spaceRatio;
+	pub static mut TARGET_COUNT: OffsetNumber = std::mem::zeroed();
+	pub static mut RESULT: OffsetNumber = std::mem::zeroed();
+	pub static mut SPACE_RATIO: float4 = std::mem::zeroed();
 	float4		fillfactorRatio = ((float4) desc->fillfactor) / 100.0f;
-	OTuple		split_item;
+	pub static mut SPLIT_ITEM: OTuple = std::mem::zeroed();
 
 	// The default target is to split the page 50%/50%
 	targetCount = 0;
@@ -402,7 +402,7 @@ btree_get_split_left_count(desc: &mut BTreeDescr, Page page,
 //
 	if (split_key)
 	{
-		bool		allocated = true;
+		pub static mut ALLOCATED: bool = true;
 
 		if (O_PAGE_IS(page, LEAF))
 			split_item = o_btree_tuple_make_key(desc, split_item, NULL,
@@ -421,7 +421,7 @@ btree_get_split_left_count(desc: &mut BTreeDescr, Page page,
 		}
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -443,9 +443,9 @@ perform_page_split(desc: &mut BTreeDescr, OInMemoryBlkno blkno,
 	left_header: &mut BTreePageHeader = (BTreePageHeader *) left_page,
 			   *right_header = (BTreePageHeader *) right_page;
 	bool		leaf = O_PAGE_IS(left_page, LEAF);
-	OTuple		hikey;
-	uint64		rightlink;
-	LocationIndex hikeySize;
+	pub static mut HIKEY: OTuple = std::mem::zeroed();
+	pub static mut RIGHTLINK: uint64 = std::mem::zeroed();
+	pub static mut HIKEY_SIZE: LocationIndex = std::mem::zeroed();
 
 	rightlink = left_header->rightLink;
 	init_new_btree_page(desc, new_blkno,

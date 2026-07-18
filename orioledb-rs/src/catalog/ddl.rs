@@ -105,7 +105,7 @@ use pgrx::pg_sys;
 
 #endif
 
-static IndexBuildResult o_pkey_result;
+static mut O_PKEY_RESULT: IndexBuildResult = std::mem::zeroed();
 fn o_drop_table(ORelOids oids);
 
 typedef struct
@@ -115,26 +115,26 @@ typedef struct
 	Oid			dest_tsoid;		// tablespace we are trying to move to
 } movedb_params;
 
-static ProcessUtility_hook_type next_ProcessUtility_hook = NULL;
-static object_access_hook_type old_objectaccess_hook = NULL;
+static mut NEXT__PROCESS_UTILITY_HOOK: ProcessUtility_hook_type = std::ptr::null_mut();
+static mut OLD_OBJECTACCESS_HOOK: object_access_hook_type = std::ptr::null_mut();
 
-static drop_index_list: &mut List = NIL;
-static partition_drop_index_list: &mut List = NIL;
-static alter_type_exprs: &mut List = NIL;
-static o_alter_generated_column_id: &mut List = NIL;
-static dropped_attrs: &mut List = NIL;
-static bool o_composite_alter_index_safe = false;
-Oid			o_saved_relrewrite = InvalidOid;
-static Oid	o_saved_reltablespace = InvalidOid;
-o_reuse_indices: &mut List = NIL;
-static ORelOids saved_oids;
-static bool in_rewrite = false;
-reindex_list: &mut List = NIL;
-static savedDataQuery: &mut Query = NULL;
+static mut LIST: *mut drop_index_list = NIL;
+static mut LIST: *mut partition_drop_index_list = NIL;
+static mut LIST: *mut alter_type_exprs = NIL;
+static mut LIST: *mut o_alter_generated_column_id = NIL;
+static mut LIST: *mut dropped_attrs = NIL;
+static mut O_COMPOSITE_ALTER_INDEX_SAFE: bool = false;
+pub static mut O_SAVED_RELREWRITE: Oid = InvalidOid;
+static mut O_SAVED_RELTABLESPACE: Oid = InvalidOid;
+pub static mut LIST: *mut o_reuse_indices = NIL;
+static mut SAVED_OIDS: ORelOids = std::mem::zeroed();
+static mut IN_REWRITE: bool = false;
+pub static mut LIST: *mut reindex_list = NIL;
+static mut QUERY: *mut savedDataQuery = std::ptr::null_mut();
 static IndexBuildResult o_pkey_result = {0};
-bool		o_in_add_column = false;
-static create_stmt: &mut CreateStmt = NULL;
-static o_added_columns: &mut List = NIL;
+pub static mut O_IN_ADD_COLUMN: bool = false;
+static mut CREATE_STMT: *mut create_stmt = std::ptr::null_mut();
+static mut LIST: *mut o_added_columns = NIL;
 static movedb_params o_movedb_data = {InvalidOid, InvalidOid, InvalidOid};
 
 fn orioledb_utility_command(pstmt: &mut PlannedStmt,
@@ -311,7 +311,7 @@ alter_table_type_to_string(AlterTableType cmdtype)
 			return NULL;		// not real grammar
 	}
 
-	return NULL;
+	pub static mut NULL: return = std::mem::zeroed();
 }
 
 static bool
@@ -326,9 +326,9 @@ is_alter_table_partition(pstmt: &mut PlannedStmt)
 		if (cmd->subtype == AT_AttachPartition ||
 			cmd->subtype == AT_DetachPartition ||
 			cmd->subtype == AT_DetachPartitionFinalize)
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -343,7 +343,7 @@ is_alter_table_partition(pstmt: &mut PlannedStmt)
 static List *
 expand_vacuum_rel(vrel: &mut VacuumRelation, int options)
 {
-	vacrels: &mut List = NIL;
+	pub static mut LIST: *mut vacrels = NIL;
 
 	// If caller supplied OID, there's nothing we need do here.
 	if (OidIsValid(vrel->oid))
@@ -353,11 +353,11 @@ expand_vacuum_rel(vrel: &mut VacuumRelation, int options)
 	else
 	{
 		// Process a specific relation, and possibly partitions thereof
-		Oid			relid;
-		HeapTuple	tuple;
-		Form_pg_class classForm;
-		bool		include_parts;
-		int			rvr_opts;
+		pub static mut RELID: Oid = std::mem::zeroed();
+		pub static mut TUPLE: HeapTuple = std::mem::zeroed();
+		pub static mut CLASS_FORM: Form_pg_class = std::mem::zeroed();
+		pub static mut INCLUDE_PARTS: bool = false;
+		pub static mut RVR_OPTS: std::os::raw::c_int = 0;
 
 		//
 // We transiently take AccessShareLock to protect the syscache lookup
@@ -376,7 +376,7 @@ expand_vacuum_rel(vrel: &mut VacuumRelation, int options)
 //
 		if (!OidIsValid(relid))
 		{
-			return vacrels;
+			pub static mut VACRELS: return = std::mem::zeroed();
 		}
 
 		//
@@ -414,7 +414,7 @@ expand_vacuum_rel(vrel: &mut VacuumRelation, int options)
 		if (include_parts)
 		{
 			part_oids: &mut List = find_all_inheritors(relid, NoLock, NULL);
-			part_lc: &mut ListCell;
+			pub static mut LIST_CELL: *mut part_lc = std::ptr::null_mut();
 
 			foreach(part_lc, part_oids)
 			{
@@ -448,7 +448,7 @@ expand_vacuum_rel(vrel: &mut VacuumRelation, int options)
 		UnlockRelationOid(relid, AccessShareLock);
 	}
 
-	return vacrels;
+	pub static mut VACRELS: return = std::mem::zeroed();
 }
 
 //
@@ -458,10 +458,10 @@ expand_vacuum_rel(vrel: &mut VacuumRelation, int options)
 static List *
 get_all_vacuum_rels(int options)
 {
-	vacrels: &mut List = NIL;
-	Relation	pgclass;
-	TableScanDesc scan;
-	HeapTuple	tuple;
+	pub static mut LIST: *mut vacrels = NIL;
+	pub static mut PGCLASS: Relation = std::mem::zeroed();
+	pub static mut SCAN: TableScanDesc = std::mem::zeroed();
+	pub static mut TUPLE: HeapTuple = std::mem::zeroed();
 
 	pgclass = table_open(RelationRelationId, AccessShareLock);
 
@@ -470,7 +470,7 @@ get_all_vacuum_rels(int options)
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pg_class classForm = (Form_pg_class) GETSTRUCT(tuple);
-		Oid			relid = classForm->oid;
+		pub static mut RELID: Oid = classForm->oid;
 
 		// check permissions of relation
 		if (!vacuum_is_relation_owner(relid, classForm, options))
@@ -498,21 +498,21 @@ get_all_vacuum_rels(int options)
 
 	table_endscan(scan);
 	table_close(pgclass, AccessShareLock);
-	return vacrels;
+	pub static mut VACRELS: return = std::mem::zeroed();
 }
 
 // Based on postgres function ReindexMultipleTables
 static bool
 check_multiple_tables(const objectName: &mut char, ReindexObjectType objectKind, bool concurrently)
 {
-	Oid			objectOid;
-	Relation	relationRelation;
-	TableScanDesc scan;
+	pub static mut OBJECT_OID: Oid = std::mem::zeroed();
+	pub static mut RELATION_RELATION: Relation = std::mem::zeroed();
+	pub static mut SCAN: TableScanDesc = std::mem::zeroed();
 	ScanKeyData scan_keys[1];
-	HeapTuple	tuple;
-	MemoryContext private_context;
-	int			num_keys;
-	bool		has_orioledb = false;
+	pub static mut TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut PRIVATE_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut NUM_KEYS: std::os::raw::c_int = 0;
+	pub static mut HAS_ORIOLEDB: bool = false;
 
 	Assert(objectKind == REINDEX_OBJECT_SCHEMA ||
 		   objectKind == REINDEX_OBJECT_SYSTEM ||
@@ -601,8 +601,8 @@ check_multiple_tables(const objectName: &mut char, ReindexObjectType objectKind,
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pg_class classtuple = (Form_pg_class) GETSTRUCT(tuple);
-		Oid			relid = classtuple->oid;
-		Relation	tbl;
+		pub static mut RELID: Oid = classtuple->oid;
+		pub static mut TBL: Relation = std::mem::zeroed();
 
 		//
 // Only regular tables and matviews can have indexes, so ignore any
@@ -655,7 +655,7 @@ check_multiple_tables(const objectName: &mut char, ReindexObjectType objectKind,
 		tbl = relation_open(relid, AccessShareLock);
 		if (is_orioledb_rel(tbl))
 		{
-			index: &mut ListCell;
+			pub static mut LIST_CELL: *mut index = std::ptr::null_mut();
 
 			foreach(index, RelationGetIndexList(tbl))
 			{
@@ -681,7 +681,7 @@ check_multiple_tables(const objectName: &mut char, ReindexObjectType objectKind,
 	table_close(relationRelation, AccessShareLock);
 
 	MemoryContextDelete(private_context);
-	return has_orioledb;
+	pub static mut HAS_ORIOLEDB: return = std::mem::zeroed();
 }
 
 #if PG_VERSION_NUM >= 170000
@@ -696,15 +696,15 @@ static ObjectAddress
 create_ctas_internal(attrList: &mut List, into: &mut IntoClause)
 {
 	create: &mut CreateStmt = makeNode(CreateStmt);
-	bool		is_matview;
-	char		relkind;
-	Datum		toast_options;
+	pub static mut IS_MATVIEW: bool = false;
+	pub static mut RELKIND: char = std::mem::zeroed();
+	pub static mut TOAST_OPTIONS: Datum = std::mem::zeroed();
 #if PG_VERSION_NUM < 180000
 	static validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #else
 	const validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #endif
-	ObjectAddress intoRelationAddr;
+	pub static mut INTO_RELATION_ADDR: ObjectAddress = std::mem::zeroed();
 
 	// This code supports both CREATE TABLE AS and CREATE MATERIALIZED VIEW
 	is_matview = (into->viewQuery != NULL);
@@ -759,7 +759,7 @@ create_ctas_internal(attrList: &mut List, into: &mut IntoClause)
 		CommandCounterIncrement();
 	}
 
-	return intoRelationAddr;
+	pub static mut INTO_RELATION_ADDR: return = std::mem::zeroed();
 }
 
 //
@@ -771,7 +771,7 @@ create_ctas_internal(attrList: &mut List, into: &mut IntoClause)
 static ObjectAddress
 create_ctas_nodata(tlist: &mut List, into: &mut IntoClause)
 {
-	attrList: &mut List;
+	pub static mut LIST: *mut attrList = std::ptr::null_mut();
 	t: &mut ListCell,
 			   *lc;
 
@@ -788,8 +788,8 @@ create_ctas_nodata(tlist: &mut List, into: &mut IntoClause)
 
 		if (!tle->resjunk)
 		{
-			col: &mut ColumnDef;
-			colname: &mut char;
+			pub static mut COLUMN_DEF: *mut col = std::ptr::null_mut();
+			pub static mut CHAR: *mut colname = std::ptr::null_mut();
 
 			if (lc)
 			{
@@ -836,9 +836,9 @@ create_ctas_nodata(tlist: &mut List, into: &mut IntoClause)
 static bool
 ReindexPartitions(Oid relid, bool concurrently)
 {
-	inhoids: &mut List;
-	lc: &mut ListCell;
-	bool		has_orioledb = false;
+	pub static mut LIST: *mut inhoids = std::ptr::null_mut();
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+	pub static mut HAS_ORIOLEDB: bool = false;
 
 	inhoids = find_all_inheritors(relid, ShareLock, NULL);
 
@@ -870,7 +870,7 @@ ReindexPartitions(Oid relid, bool concurrently)
 			}
 			else if (part_rel->rd_rel->relkind == RELKIND_INDEX)
 			{
-				Relation	tbl;
+				pub static mut TBL: Relation = std::mem::zeroed();
 
 				tbl = relation_open(part_rel->rd_index->indrelid, AccessShareLock);
 
@@ -884,7 +884,7 @@ ReindexPartitions(Oid relid, bool concurrently)
 		}
 		relation_close(part_rel, AccessShareLock);
 	}
-	return has_orioledb;
+	pub static mut HAS_ORIOLEDB: return = std::mem::zeroed();
 }
 
 fn
@@ -898,8 +898,8 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 						 struct qc: &mut QueryCompletion)
 {
 	bool		isTopLevel = (context == PROCESS_UTILITY_TOPLEVEL);
-	pstate: &mut ParseState;
-	bool		call_next = true;
+	pub static mut PARSE_STATE: *mut pstate = std::ptr::null_mut();
+	pub static mut CALL_NEXT: bool = true;
 
 	// copied from standard_ProcessUtility
 	if (readOnlyTree)
@@ -952,9 +952,9 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 		!is_alter_table_partition(pstmt))
 	{
 		atstmt: &mut AlterTableStmt = (AlterTableStmt *) pstmt->utilityStmt;
-		Oid			relid;
-		LOCKMODE	lockmode;
-		ObjectType	objtype;
+		pub static mut RELID: Oid = std::mem::zeroed();
+		pub static mut LOCKMODE: LOCKMODE = std::mem::zeroed();
+		pub static mut OBJTYPE: ObjectType = std::mem::zeroed();
 
 		objtype = atstmt->objtype;
 
@@ -976,8 +976,8 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 		o_composite_alter_index_safe = false;
 		if (objtype == OBJECT_TYPE && atstmt->cmds != NIL)
 		{
-			lc: &mut ListCell;
-			bool		all_safe = true;
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+			pub static mut ALL_SAFE: bool = true;
 
 			foreach(lc, atstmt->cmds)
 			{
@@ -1007,7 +1007,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 
 			if (is_orioledb_rel(rel))
 			{
-				lc: &mut ListCell;
+				pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 				foreach(lc, atstmt->cmds)
 				{
@@ -1120,7 +1120,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 // partitions can use orioledb, so we need to process
 // non-oriole relations as well
 //
-				lc: &mut ListCell;
+				pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 				foreach(lc, atstmt->cmds)
 				{
@@ -1154,9 +1154,9 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 		if (stmt->relation != NULL)
 		{
 			// This is the single-relation case.
-			Oid			tableOid;
-			Relation	rel = NULL;
-			bool		orioledb;
+			pub static mut TABLE_OID: Oid = std::mem::zeroed();
+			pub static mut REL: Relation = std::ptr::null_mut();
+			pub static mut ORIOLEDB: bool = false;
 
 			tableOid = RangeVarGetRelid(stmt->relation, AccessShareLock,
 										false);
@@ -1173,11 +1173,11 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 	else if (IsA(pstmt->utilityStmt, VacuumStmt))
 	{
 		vacstmt: &mut VacuumStmt = (VacuumStmt *) pstmt->utilityStmt;
-		lc: &mut ListCell;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 		bool		full = false,
 					skip_locked = false,
 					analyze = false;
-		int			options;
+		pub static mut OPTIONS: std::os::raw::c_int = 0;
 
 		foreach(lc, vacstmt->options)
 		{
@@ -1197,16 +1197,16 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 			(full ? VACOPT_FULL : 0);
 		if (full)
 		{
-			relations: &mut List = vacstmt->rels;
+			pub static mut LIST: *mut relations = vacstmt->rels;
 
 			if (relations != NIL)
 			{
-				newrels: &mut List = NIL;
+				pub static mut LIST: *mut newrels = NIL;
 
 				foreach(lc, relations)
 				{
 					vrel: &mut VacuumRelation = lfirst_node(VacuumRelation, lc);
-					sublist: &mut List;
+					pub static mut LIST: *mut sublist = std::ptr::null_mut();
 
 					sublist = expand_vacuum_rel(vrel, options);
 					newrels = list_concat(newrels, sublist);
@@ -1218,8 +1218,8 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 			foreach(lc, relations)
 			{
 				vrel: &mut VacuumRelation = lfirst_node(VacuumRelation, lc);
-				Relation	rel;
-				bool		orioledb;
+				pub static mut REL: Relation = std::mem::zeroed();
+				pub static mut ORIOLEDB: bool = false;
 
 				if (options & VACOPT_SKIP_LOCKED)
 				{
@@ -1246,7 +1246,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 					}
 					else
 					{
-						lc2: &mut ListCell;
+						pub static mut LIST_CELL: *mut lc2 = std::ptr::null_mut();
 
 						ereport(WARNING,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1269,10 +1269,10 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 	else if (IsA(pstmt->utilityStmt, ReindexStmt))
 	{
 		stmt: &mut ReindexStmt = (ReindexStmt *) pstmt->utilityStmt;
-		tablespacename: &mut char = NULL;
-		bool		concurrently = false;
-		bool		has_orioledb = false;
-		lc: &mut ListCell;
+		pub static mut CHAR: *mut tablespacename = std::ptr::null_mut();
+		pub static mut CONCURRENTLY: bool = false;
+		pub static mut HAS_ORIOLEDB: bool = false;
+		pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 		foreach(lc, stmt->params)
 		{
@@ -1303,7 +1303,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 			if (OidIsValid(tablespaceOid) &&
 				tablespaceOid != MyDatabaseTableSpace)
 			{
-				AclResult	aclresult;
+				pub static mut ACLRESULT: AclResult = std::mem::zeroed();
 
 				aclresult = object_aclcheck(TableSpaceRelationId, tablespaceOid,
 											GetUserId(), ACL_CREATE);
@@ -1322,7 +1322,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 														  false);
 					Relation	iRel,
 								tbl;
-					options: &mut OBTOptions;
+					pub static mut OBT_OPTIONS: *mut options = std::ptr::null_mut();
 
 					if (get_rel_relkind(indOid) == RELKIND_PARTITIONED_INDEX)
 					{
@@ -1338,7 +1338,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 						iRel->rd_rel->relam == BTREE_AM_OID &&
 						!(options && !options->orioledb_index))
 					{
-						ix_name: &mut String;
+						pub static mut STRING: *mut ix_name = std::ptr::null_mut();
 
 						ix_name = makeString(pstrdup(iRel->rd_rel->relname.data));
 						reindex_list = list_append_unique(reindex_list, ix_name);
@@ -1354,7 +1354,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 					Oid			tblOid = RangeVarGetRelid(stmt->relation,
 														  AccessShareLock,
 														  false);
-					Relation	tbl;
+					pub static mut TBL: Relation = std::mem::zeroed();
 
 					if (get_rel_relkind(tblOid) == RELKIND_PARTITIONED_TABLE)
 					{
@@ -1364,7 +1364,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 					tbl = relation_open(tblOid, AccessShareLock);
 					if (is_orioledb_rel(tbl))
 					{
-						index: &mut ListCell;
+						pub static mut LIST_CELL: *mut index = std::ptr::null_mut();
 
 						foreach(index, RelationGetIndexList(tbl))
 						{
@@ -1456,7 +1456,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 	else if (IsA(pstmt->utilityStmt, CreateTableAsStmt))
 	{
 		stmt: &mut CreateTableAsStmt = (CreateTableAsStmt *) pstmt->utilityStmt;
-		into: &mut IntoClause = stmt->into;
+		pub static mut INTO_CLAUSE: *mut into = stmt->into;
 
 		if (!into->skipData)
 		{
@@ -1467,7 +1467,7 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 				 (!into->accessMethod && strcmp(default_table_access_method, "orioledb") == 0)))
 			{
 				query: &mut Query = castNode(Query, stmt->query);
-				ObjectAddress address;
+				pub static mut ADDRESS: ObjectAddress = std::mem::zeroed();
 
 				Assert(query->commandType == CMD_SELECT);
 
@@ -1499,8 +1499,8 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 	else if (IsA(pstmt->utilityStmt, RefreshMatViewStmt))
 	{
 		stmt: &mut RefreshMatViewStmt = (RefreshMatViewStmt *) pstmt->utilityStmt;
-		Oid			matviewOid;
-		Relation	matviewRel;
+		pub static mut MATVIEW_OID: Oid = std::mem::zeroed();
+		pub static mut MATVIEW_REL: Relation = std::mem::zeroed();
 #if PG_VERSION_NUM >= 170000
 		matviewOid = RangeVarGetRelidExtended(stmt->relation, NoLock, 0,
 											  RangeVarCallbackMaintainsTable, NULL);
@@ -1539,9 +1539,9 @@ orioledb_utility_command(pstmt: &mut PlannedStmt,
 
 		if (stmt->concurrent)
 		{
-			Oid			relid;
-			Relation	rel;
-			LOCKMODE	lockmode;
+			pub static mut RELID: Oid = std::mem::zeroed();
+			pub static mut REL: Relation = std::mem::zeroed();
+			pub static mut LOCKMODE: LOCKMODE = std::mem::zeroed();
 
 			PreventInTransactionBlock(context == PROCESS_UTILITY_TOPLEVEL,
 									  "CREATE INDEX CONCURRENTLY");
@@ -1714,10 +1714,10 @@ o_alter_column_type(cmd: &mut AlterTableCmd, const queryString: &mut char, Relat
 
 	if (def->raw_default)
 	{
-		cooked_default: &mut Node;
-		pstate: &mut ParseState;
-		nsitem: &mut ParseNamespaceItem;
-		AttrNumber	attnum;
+		pub static mut NODE: *mut cooked_default = std::ptr::null_mut();
+		pub static mut PARSE_STATE: *mut pstate = std::ptr::null_mut();
+		pub static mut PARSE_NAMESPACE_ITEM: *mut nsitem = std::ptr::null_mut();
+		pub static mut ATTNUM: AttrNumber = std::mem::zeroed();
 
 		pstate = make_parsestate(NULL);
 		pstate->p_sourcetext = queryString;
@@ -1749,12 +1749,12 @@ o_alter_column_type(cmd: &mut AlterTableCmd, const queryString: &mut char, Relat
 fn
 o_find_collation_dependencies(Oid colloid)
 {
-	Relation	depRel;
+	pub static mut DEP_REL: Relation = std::mem::zeroed();
 	ScanKeyData key[2];
-	SysScanDesc depScan;
-	HeapTuple	depTup;
-	HeapTuple	collationtup;
-	Form_pg_collation collform;
+	pub static mut DEP_SCAN: SysScanDesc = std::mem::zeroed();
+	pub static mut DEP_TUP: HeapTuple = std::mem::zeroed();
+	pub static mut COLLATIONTUP: HeapTuple = std::mem::zeroed();
+	pub static mut COLLFORM: Form_pg_collation = std::mem::zeroed();
 
 	// since this function recurses, it could be driven to stack overflow
 	check_stack_depth();
@@ -1785,7 +1785,7 @@ o_find_collation_dependencies(Oid colloid)
 	while (HeapTupleIsValid(depTup = systable_getnext(depScan)))
 	{
 		Form_pg_depend pg_depend = (Form_pg_depend) GETSTRUCT(depTup);
-		Relation	rel;
+		pub static mut REL: Relation = std::mem::zeroed();
 
 		// Else, ignore dependees that aren't user columns of relations
 		// (we assume system columns are never of interesting types)
@@ -1807,7 +1807,7 @@ o_find_collation_dependencies(Oid colloid)
 		}
 		else if (rel->rd_rel->relkind == RELKIND_INDEX)
 		{
-			Relation	tbl;
+			pub static mut TBL: Relation = std::mem::zeroed();
 
 			tbl = relation_open(rel->rd_index->indrelid, AccessShareLock);
 
@@ -1836,10 +1836,10 @@ o_find_collation_dependencies(Oid colloid)
 fn
 o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 {
-	Relation	depRel;
+	pub static mut DEP_REL: Relation = std::mem::zeroed();
 	ScanKeyData key[2];
-	SysScanDesc depScan;
-	HeapTuple	depTup;
+	pub static mut DEP_SCAN: SysScanDesc = std::mem::zeroed();
+	pub static mut DEP_TUP: HeapTuple = std::mem::zeroed();
 
 	// since this function recurses, it could be driven to stack overflow
 	check_stack_depth();
@@ -1865,7 +1865,7 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 	while (HeapTupleIsValid(depTup = systable_getnext(depScan)))
 	{
 		Form_pg_depend pg_depend = (Form_pg_depend) GETSTRUCT(depTup);
-		Relation	rel;
+		pub static mut REL: Relation = std::mem::zeroed();
 
 		// Check for directly dependent types
 		if (pg_depend->classid == TypeRelationId)
@@ -1892,10 +1892,10 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 			 rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 			is_orioledb_rel(rel))
 		{
-			table: &mut OTable;
-			ORelOids	table_oids;
-			bool		found = false;
-			int			i;
+			pub static mut O_TABLE: *mut table = std::ptr::null_mut();
+			pub static mut TABLE_OIDS: ORelOids = std::mem::zeroed();
+			pub static mut FOUND: bool = false;
+			pub static mut I: std::os::raw::c_int = 0;
 
 			ORelOidsSetFromRel(table_oids, rel);
 
@@ -1908,7 +1908,7 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 			{
 				for (i = 0; i < table->nindices && !found; i++)
 				{
-					int			j;
+					pub static mut J: std::os::raw::c_int = 0;
 
 					for (j = 0; j < table->indices[i].nfields && !found; j++)
 					{
@@ -1953,10 +1953,10 @@ ATColumnChangeRequiresRewrite(old_field: &mut OTableField, field: &mut OTableFie
 							  int subId)
 {
 	pstate: &mut ParseState = make_parsestate(NULL);
-	expr: &mut Node = NULL;
-	bool		rewrite = false;
-	lc: &mut ListCell;
-	bool		append_transform = false;
+	pub static mut NODE: *mut expr = std::ptr::null_mut();
+	pub static mut REWRITE: bool = false;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+	pub static mut APPEND_TRANSFORM: bool = false;
 
 	foreach(lc, alter_type_exprs)
 	{
@@ -2031,7 +2031,7 @@ ATColumnChangeRequiresRewrite(old_field: &mut OTableField, field: &mut OTableFie
 		}
 	}
 
-	return rewrite;
+	pub static mut REWRITE: return = std::mem::zeroed();
 }
 
 fn
@@ -2039,17 +2039,17 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 {
 	ORelOids	oids,
 				toastOids;
-	trees: &mut OIndexKey;
-	int			numTrees;
-	o_table: &mut OTable;
+	pub static mut O_INDEX_KEY: *mut trees = std::ptr::null_mut();
+	pub static mut NUM_TREES: std::os::raw::c_int = 0;
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
 	options: &mut ORelOptions = (ORelOptions *) rel->rd_options;
 	OCompress	compress = default_compress,
 				primary_compress = default_primary_compress,
 				toast_compress = default_toast_compress;
-	uint8		fillfactor = BTREE_DEFAULT_FILLFACTOR;
-	OXid		oxid = InvalidOXid;
-	OSnapshot	oSnapshot;
-	bool		is_temp;
+	pub static mut FILLFACTOR: uint8 = BTREE_DEFAULT_FILLFACTOR;
+	pub static mut OXID: OXid = InvalidOXid;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut IS_TEMP: bool = false;
 
 	Assert(RelIsInMyDatabase(rel));
 	ORelOidsSetFromRel(oids, rel);
@@ -2066,7 +2066,7 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 		{
 			if (options->compress_offset > 0)
 			{
-				str: &mut char;
+				pub static mut CHAR: *mut str = std::ptr::null_mut();
 
 				str = (char *) (((Pointer) options) +
 								options->compress_offset);
@@ -2075,7 +2075,7 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 			}
 			if (options->primary_compress_offset > 0)
 			{
-				str: &mut char;
+				pub static mut CHAR: *mut str = std::ptr::null_mut();
 
 				str = (char *) (((Pointer) options) +
 								options->primary_compress_offset);
@@ -2084,7 +2084,7 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 			}
 			if (options->toast_compress_offset > 0)
 			{
-				str: &mut char;
+				pub static mut CHAR: *mut str = std::ptr::null_mut();
 
 				str = (char *) (((Pointer) options) +
 								options->toast_compress_offset);
@@ -2152,13 +2152,13 @@ set_toast_oids_and_options(Relation rel, Relation toast_rel, bool only_fillfacto
 fn
 create_o_table_for_rel(Relation rel)
 {
-	ORelOids	oids;
-	TupleDesc	tupdesc;
-	o_table: &mut OTable;
-	OSnapshot	oSnapshot;
-	OXid		oxid = InvalidOXid;
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = InvalidOXid;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
 
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
@@ -2185,10 +2185,10 @@ create_o_table_for_rel(Relation rel)
 typedef struct
 {
 	DestReceiver pub;			// publicly-known function pointers
-	Relation	rel;
-	descr: &mut OTableDescr;
-	CommitSeqNo csn;
-	OXid		oxid;
+	pub static mut REL: Relation = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
 } DR_transientrel;
 
 //
@@ -2198,7 +2198,7 @@ fn
 transientrel_startup(self: &mut DestReceiver, int operation, TupleDesc typeinfo)
 {
 	myState: &mut DR_transientrel = (DR_transientrel *) self;
-	OSnapshot	oSnapshot;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
 
 	fill_current_oxid_osnapshot(&myState->oxid, &oSnapshot);
 	myState->csn = oSnapshot.csn;
@@ -2216,7 +2216,7 @@ transientrel_receive(slot: &mut TupleTableSlot, self: &mut DestReceiver)
 
 	// We know this is a newly created relation, so there are no indexes
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -2256,11 +2256,11 @@ CreateOrioledbDestReceiver(Relation rel)
 fn
 o_drop_table(ORelOids oids)
 {
-	OSnapshot	oSnapshot;
-	OXid		oxid;
-	table: &mut OTable;
-	trees: &mut OIndexKey;
-	int			numTrees;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut O_TABLE: *mut table = std::ptr::null_mut();
+	pub static mut O_INDEX_KEY: *mut trees = std::ptr::null_mut();
+	pub static mut NUM_TREES: std::os::raw::c_int = 0;
 
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
@@ -2277,11 +2277,11 @@ fn
 rewrite_matview(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 {
 	dest: &mut DestReceiver = CreateOrioledbDestReceiver(rel);
-	rewritten: &mut List;
-	plan: &mut PlannedStmt;
-	queryDesc: &mut QueryDesc;
-	copied_query: &mut Query;
-	query: &mut Query;
+	pub static mut LIST: *mut rewritten = std::ptr::null_mut();
+	pub static mut PLANNED_STMT: *mut plan = std::ptr::null_mut();
+	pub static mut QUERY_DESC: *mut queryDesc = std::ptr::null_mut();
+	pub static mut QUERY: *mut copied_query = std::ptr::null_mut();
+	pub static mut QUERY: *mut query = std::ptr::null_mut();
 
 	// Lock and rewrite, using a copy to preserve the original query.
 	copied_query = copyObject(savedDataQuery);
@@ -2339,21 +2339,21 @@ rewrite_matview(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable
 fn
 rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 {
-	old_descr: &mut OTableDescr = NULL;
+	pub static mut O_TABLE_DESCR: *mut old_descr = std::ptr::null_mut();
 		   *sscan;
-	old_slot: &mut TupleTableSlot;
-	new_slot: &mut TupleTableSlot;
-	OTuple		tup;
-	CommitSeqNo tupleCsn;
-	BTreeLocationHint hint;
-	descr: &mut OTableDescr;
-	OSnapshot	oSnapshot;
-	OXid		oxid;
-	int			primary_init_nfields = old_o_table->primary_init_nfields;
-	int			num_check = rel->rd_att->constr ? rel->rd_att->constr->num_check : 0;
-	check_estate: &mut EState = NULL;
+	pub static mut TUPLE_TABLE_SLOT: *mut old_slot = std::ptr::null_mut();
+	pub static mut TUPLE_TABLE_SLOT: *mut new_slot = std::ptr::null_mut();
+	pub static mut TUP: OTuple = std::mem::zeroed();
+	pub static mut TUPLE_CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut HINT: BTreeLocationHint = std::mem::zeroed();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut PRIMARY_INIT_NFIELDS: std::os::raw::c_int = old_o_table->primary_init_nfields;
+	pub static mut NUM_CHECK: std::os::raw::c_int = rel->rd_att->constr ? rel->rd_att->constr->num_check : 0;
+	pub static mut E_STATE: *mut check_estate = std::ptr::null_mut();
 	ExprState **check_exprs = NULL;
-	check_econtext: &mut ExprContext = NULL;
+	pub static mut EXPR_CONTEXT: *mut check_econtext = std::ptr::null_mut();
 
 	if (!old_o_table->has_primary)
 		primary_init_nfields--;
@@ -2380,9 +2380,9 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 	{
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
 		{
-			lc: &mut ListCell;
+			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 #if PG_VERSION_NUM >= 180000
-			bool		attUpdated = false;
+			pub static mut ATT_UPDATED: bool = false;
 #else
 			bool		attUpdated pg_attribute_unused() = false;
 #endif
@@ -2413,8 +2413,8 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 	// Prepare CHECK constraint expressions for validation during rewrite
 	if (num_check > 0)
 	{
-		int			i;
-		check: &mut ConstrCheck = rel->rd_att->constr->check;
+		pub static mut I: std::os::raw::c_int = 0;
+		pub static mut CONSTR_CHECK: *mut check = rel->rd_att->constr->check;
 
 		check_estate = CreateExecutorState();
 		check_econtext = GetPerTupleExprContext(check_estate);
@@ -2465,9 +2465,9 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 //
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
 		{
-			expr: &mut Node = NULL;
-			bool		has_def = false;
-			bool		should_build_def = false;
+			pub static mut NODE: *mut expr = std::ptr::null_mut();
+			pub static mut HAS_DEF: bool = false;
+			pub static mut SHOULD_BUILD_DEF: bool = false;
 			old_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
 			rel_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(rel->rd_att, i);
 
@@ -2535,10 +2535,10 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 			if (!old_attr->attisdropped && !expr && DomainHasConstraints(old_attr->atttypid) &&
 				old_slot->tts_isnull[i])
 			{
-				Oid			baseTypeId;
-				int32		baseTypeMod;
-				Oid			baseTypeColl;
-				defval: &mut Node;
+				pub static mut BASE_TYPE_ID: Oid = std::mem::zeroed();
+				pub static mut BASE_TYPE_MOD: int32 = std::mem::zeroed();
+				pub static mut BASE_TYPE_COLL: Oid = std::mem::zeroed();
+				pub static mut NODE: *mut defval = std::ptr::null_mut();
 
 				defval = build_column_default(rel, i + 1);
 
@@ -2567,7 +2567,7 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 			}
 			else if (rel_attr->attidentity && old_slot->tts_isnull[i])
 			{
-				lc: &mut ListCell;
+				pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 
 				foreach(lc, o_added_columns)
 				{
@@ -2593,7 +2593,7 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
 		{
-			expr: &mut Node = NULL;
+			pub static mut NODE: *mut expr = std::ptr::null_mut();
 			old_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
 			rel_attr: &mut OTupleAttrFull = OTupleDescAttrSlow(rel->rd_att, i);
 
@@ -2637,7 +2637,7 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 		// Validate CHECK constraints on the rewritten tuple
 		if (num_check > 0)
 		{
-			int			j;
+			pub static mut J: std::os::raw::c_int = 0;
 
 			check_econtext->ecxt_scantuple = new_slot;
 			for (j = 0; j < num_check; j++)
@@ -2706,11 +2706,11 @@ rewrite_table(Relation rel, old_o_table: &mut OTable, new_o_table: &mut OTable)
 fn
 redefine_indices(Relation rel, new_o_table: &mut OTable, bool primary, Oid oldRelnode)
 {
-	index: &mut ListCell;
+	pub static mut LIST_CELL: *mut index = std::ptr::null_mut();
 
 	foreach(index, RelationGetIndexList(rel))
 	{
-		bool		closed = false;
+		pub static mut CLOSED: bool = false;
 		Oid			indexOid = lfirst_oid(index);
 		Relation	ind = relation_open(indexOid, AccessShareLock);
 
@@ -2745,8 +2745,8 @@ redefine_indices(Relation rel, new_o_table: &mut OTable, bool primary, Oid oldRe
 
 	if (primary)
 	{
-		ORelOids	oids;
-		updated_o_table: &mut OTable;
+		pub static mut OIDS: ORelOids = std::mem::zeroed();
+		pub static mut O_TABLE: *mut updated_o_table = std::ptr::null_mut();
 
 		//
 // Partial reimplementation of assign_new_oids just for toast, because
@@ -2759,10 +2759,10 @@ redefine_indices(Relation rel, new_o_table: &mut OTable, bool primary, Oid oldRe
 
 		if (!updated_o_table->has_primary)
 		{
-			Oid			toast_relid;
-			Relation	toast_rel;
-			OSnapshot	oSnapshot;
-			OXid		oxid;
+			pub static mut TOAST_RELID: Oid = std::mem::zeroed();
+			pub static mut TOAST_REL: Relation = std::mem::zeroed();
+			pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+			pub static mut OXID: OXid = std::mem::zeroed();
 
 			toast_relid = rel->rd_rel->reltoastrelid;
 			toast_rel = table_open(toast_relid, AccessExclusiveLock);
@@ -2786,8 +2786,8 @@ redefine_indices(Relation rel, new_o_table: &mut OTable, bool primary, Oid oldRe
 
 redefine_pkey_for_rel(Relation rel)
 {
-	ORelOids	oids;
-	o_table: &mut OTable;
+	pub static mut OIDS: ORelOids = std::mem::zeroed();
+	pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
 
 	ORelOidsSetFromRel(oids, rel);
 	o_table = o_tables_get(oids);
@@ -2801,13 +2801,13 @@ redefine_pkey_for_rel(Relation rel)
 fn
 change_bridging_option(Relation rel, bool value, bool isReset)
 {
-	Oid			relid;
-	Relation	pgclass;
-	HeapTuple	tuple;
-	HeapTuple	newtuple;
-	Datum		datum;
-	bool		isnull;
-	Datum		newOptions;
+	pub static mut RELID: Oid = std::mem::zeroed();
+	pub static mut PGCLASS: Relation = std::mem::zeroed();
+	pub static mut TUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut NEWTUPLE: HeapTuple = std::mem::zeroed();
+	pub static mut DATUM: Datum = std::mem::zeroed();
+	pub static mut ISNULL: bool = false;
+	pub static mut NEW_OPTIONS: Datum = std::mem::zeroed();
 	Datum		repl_val[Natts_pg_class];
 	bool		repl_null[Natts_pg_class];
 	bool		repl_repl[Natts_pg_class];
@@ -2816,7 +2816,7 @@ change_bridging_option(Relation rel, bool value, bool isReset)
 #else
 	const validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #endif
-	bridging_def: &mut DefElem;
+	pub static mut DEF_ELEM: *mut bridging_def = std::ptr::null_mut();
 
 	pgclass = table_open(RelationRelationId, RowExclusiveLock);
 
@@ -2868,17 +2868,17 @@ change_bridging_option(Relation rel, bool value, bool isReset)
 fn
 add_bridge_index(Relation tbl, o_table: &mut OTable, bool manually, Oid amoid)
 {
-	OSnapshot	oSnapshot;
-	OXid		oxid;
-	old_o_table: &mut OTable;
-	descr: &mut OTableDescr;
-	old_descr: &mut OTableDescr;
-	int			ix_num = InvalidIndexNumber;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut O_TABLE: *mut old_o_table = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut old_descr = std::ptr::null_mut();
+	pub static mut IX_NUM: std::os::raw::c_int = InvalidIndexNumber;
 
 	if (!manually)
 	{
-		HeapTuple	tuple;
-		Form_pg_am	amform;
+		pub static mut TUPLE: HeapTuple = std::mem::zeroed();
+		pub static mut AMFORM: Form_pg_am = std::mem::zeroed();
 
 		tuple = SearchSysCache1(AMOID, ObjectIdGetDatum(amoid));
 		if (!HeapTupleIsValid(tuple))
@@ -2923,8 +2923,8 @@ add_bridge_index(Relation tbl, o_table: &mut OTable, bool manually, Oid amoid)
 	o_tables_rel_meta_lock(tbl);
 	for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 	{
-		int			ctid_idx_off;
-		index: &mut OTableIndex;
+		pub static mut CTID_IDX_OFF: std::os::raw::c_int = 0;
+		pub static mut O_TABLE_INDEX: *mut index = std::ptr::null_mut();
 
 		ctid_idx_off = o_table->has_primary ? 0 : 1;
 		index = &o_table->indices[ix_num];
@@ -2949,12 +2949,12 @@ add_bridge_index(Relation tbl, o_table: &mut OTable, bool manually, Oid amoid)
 fn
 drop_bridge_index(Relation tbl, o_table: &mut OTable)
 {
-	OSnapshot	oSnapshot;
-	OXid		oxid;
-	old_o_table: &mut OTable;
-	descr: &mut OTableDescr;
-	old_descr: &mut OTableDescr;
-	int			ix_num = InvalidIndexNumber;
+	pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut O_TABLE: *mut old_o_table = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_TABLE_DESCR: *mut old_descr = std::ptr::null_mut();
+	pub static mut IX_NUM: std::os::raw::c_int = InvalidIndexNumber;
 
 	old_o_table = o_table;
 	o_table = o_tables_get(o_table->oids);
@@ -2976,8 +2976,8 @@ drop_bridge_index(Relation tbl, o_table: &mut OTable)
 	o_tables_rel_meta_lock(tbl);
 	for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 	{
-		int			ctid_idx_off;
-		index: &mut OTableIndex;
+		pub static mut CTID_IDX_OFF: std::os::raw::c_int = 0;
+		pub static mut O_TABLE_INDEX: *mut index = std::ptr::null_mut();
 
 		ctid_idx_off = o_table->has_primary ? 0 : 1;
 		index = &o_table->indices[ix_num];
@@ -3002,8 +3002,8 @@ drop_bridge_index(Relation tbl, o_table: &mut OTable)
 fn
 cleanup_tablespace_dir(tablespace_path: &mut char)
 {
-	dir: &mut DIR;
-	struct file: &mut dirent;
+	pub static mut DIR: *mut dir = std::ptr::null_mut();
+	pub static mut DIRENT: *mut struct file = std::ptr::null_mut();
 
 	dir = opendir(tablespace_path);
 	if (dir == NULL)
@@ -3011,8 +3011,8 @@ cleanup_tablespace_dir(tablespace_path: &mut char)
 
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
-		Oid			dbOid;
-		dbDirName: &mut char;
+		pub static mut DB_OID: Oid = std::mem::zeroed();
+		pub static mut CHAR: *mut dbDirName = std::ptr::null_mut();
 
 		if (sscanf(file->d_name, "%u", &dbOid) != 1)
 			continue;
@@ -3058,11 +3058,11 @@ cleanup_tablespace_dir(tablespace_path: &mut char)
 static List *
 get_collation(Oid collation, Oid actual_datatype)
 {
-	result: &mut List;
-	HeapTuple	ht_coll;
-	Form_pg_collation coll_rec;
-	nsp_name: &mut char;
-	coll_name: &mut char;
+	pub static mut LIST: *mut result = std::ptr::null_mut();
+	pub static mut HT_COLL: HeapTuple = std::mem::zeroed();
+	pub static mut COLL_REC: Form_pg_collation = std::mem::zeroed();
+	pub static mut CHAR: *mut nsp_name = std::ptr::null_mut();
+	pub static mut CHAR: *mut coll_name = std::ptr::null_mut();
 
 	if (!OidIsValid(collation))
 		return NIL;				// easy case
@@ -3081,7 +3081,7 @@ get_collation(Oid collation, Oid actual_datatype)
 	result = list_make2(makeString(nsp_name), makeString(coll_name));
 
 	ReleaseSysCache(ht_coll);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -3093,9 +3093,9 @@ get_collation(Oid collation, Oid actual_datatype)
 static List *
 get_opclass(Oid opclass, Oid actual_datatype)
 {
-	result: &mut List = NIL;
-	HeapTuple	ht_opc;
-	Form_pg_opclass opc_rec;
+	pub static mut LIST: *mut result = NIL;
+	pub static mut HT_OPC: HeapTuple = std::mem::zeroed();
+	pub static mut OPC_REC: Form_pg_opclass = std::mem::zeroed();
 
 	ht_opc = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
 	if (!HeapTupleIsValid(ht_opc))
@@ -3113,21 +3113,21 @@ get_opclass(Oid opclass, Oid actual_datatype)
 	}
 
 	ReleaseSysCache(ht_opc);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
 orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							int subId,  *arg)
 {
-	Relation	rel;
+	pub static mut REL: Relation = std::mem::zeroed();
 
 	if (access == OAT_POST_CREATE && classId == ExtensionRelationId)
 	{
 #if PG_VERSION_NUM >= 170000
 		if (IsTransactionState())
 		{
-			XLogRecPtr	cur_lsn;
+			pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
 
 			o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 			o_database_cache_add_if_needed(Template1DbOid, Template1DbOid, cur_lsn, NULL);
@@ -3142,7 +3142,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 #ifdef USE_ASSERT_CHECKING
 		{
-			LOCKTAG		locktag;
+			pub static mut LOCKTAG: LOCKTAG = std::mem::zeroed();
 
 			memset(&locktag, 0, sizeof(LOCKTAG));
 			SET_LOCKTAG_RELATION(locktag, MyDatabaseId, objectId);
@@ -3155,16 +3155,16 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 		if (rel != NULL)
 		{
-			bool		is_open = true;
+			pub static mut IS_OPEN: bool = true;
 
 			if ((rel->rd_rel->relkind == RELKIND_RELATION ||
 				 rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 				(subId == 0) && is_orioledb_rel(rel) &&
 				!OidIsValid(rel->rd_rel->relrewrite))
 			{
-				lc: &mut ListCell;
-				ORelOids	oids;
-				descr: &mut OTableDescr;
+				pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+				pub static mut OIDS: ORelOids = std::mem::zeroed();
+				pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
 
 				ORelOidsSetFromRel(oids, rel);
 				foreach(lc, partition_drop_index_list)
@@ -3192,9 +3192,9 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					  rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 					 (subId != 0) && is_orioledb_rel(rel))
 			{
-				o_table: &mut OTable;
-				o_field: &mut OTableField = NULL;
-				ORelOids	oids;
+				pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+				pub static mut O_TABLE_FIELD: *mut o_field = std::ptr::null_mut();
+				pub static mut OIDS: ORelOids = std::mem::zeroed();
 
 				ORelOidsSetFromRel(oids, rel);
 				o_table = o_tables_get(oids);
@@ -3210,8 +3210,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 					if (o_field && !o_field->droped)
 					{
-						OSnapshot	oSnapshot;
-						OXid		oxid;
+						pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+						pub static mut OXID: OXid = std::mem::zeroed();
 
 						o_field->droped = true;
 
@@ -3241,7 +3241,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 tbl->rd_rel->relkind == RELKIND_MATVIEW) &&
 					is_orioledb_rel(tbl))
 				{
-					OIndexNumber ix_num;
+					pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
 					descr: &mut OTableDescr = relation_get_descr(tbl);
 
 					Assert(descr != NULL);
@@ -3249,7 +3249,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 												   rel->rd_rel->relname.data);
 					if (ix_num != InvalidIndexNumber)
 					{
-						relname: &mut String;
+						pub static mut STRING: *mut relname = std::ptr::null_mut();
 
 						if (descr->indices[ix_num]->primaryIsCtid)
 							ix_num--;
@@ -3305,12 +3305,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 // them
 //
 
-					Relation	depRel;
-					ObjectAddress object;
+					pub static mut DEP_REL: Relation = std::mem::zeroed();
+					pub static mut OBJECT: ObjectAddress = std::mem::zeroed();
 					ScanKeyData key[2];
-					int			nkeys;
-					SysScanDesc scan;
-					HeapTuple	tup;
+					pub static mut NKEYS: std::os::raw::c_int = 0;
+					pub static mut SCAN: SysScanDesc = std::mem::zeroed();
+					pub static mut TUP: HeapTuple = std::mem::zeroed();
 
 					depRel = table_open(DependRelationId, RowExclusiveLock);
 
@@ -3353,7 +3353,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			}
 			else if (rel->rd_rel->relkind == RELKIND_PARTITIONED_INDEX)
 			{
-				lc: &mut ListCell;
+				pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 				Relation	tbl = relation_open(rel->rd_index->indrelid,
 												AccessShareLock);
 
@@ -3368,9 +3368,9 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					{
 						oids: &mut List = (List *) lfirst(lc);
 						Relation	part_tbl = relation_open(lsecond_oid(oids), AccessShareLock);
-						OIndexNumber ix_num;
-						descr: &mut OTableDescr;
-						int			i;
+						pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
+						pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+						pub static mut I: std::os::raw::c_int = 0;
 
 						Assert((part_tbl->rd_rel->relkind == RELKIND_RELATION ||
 								part_tbl->rd_rel->relkind == RELKIND_MATVIEW) &&
@@ -3408,8 +3408,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_DROP && classId == DatabaseRelationId)
 	{
-		OSnapshot	oSnapshot;
-		OXid		oxid;
+		pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+		pub static mut OXID: OXid = std::mem::zeroed();
 
 		Assert(OidIsValid(objectId));
 
@@ -3422,10 +3422,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	else if (access == OAT_DROP && classId == TypeRelationId &&
 			 ActiveSnapshotSet())
 	{
-		OSnapshot	oSnapshot;
-		OXid		oxid;
-		Form_pg_type typeform;
-		HeapTuple	tuple = NULL;
+		pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+		pub static mut OXID: OXid = std::mem::zeroed();
+		pub static mut TYPEFORM: Form_pg_type = std::mem::zeroed();
+		pub static mut TUPLE: HeapTuple = std::ptr::null_mut();
 
 		Assert(OidIsValid(objectId));
 
@@ -3462,7 +3462,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_POST_CREATE && classId == RelationRelationId)
 	{
-		bool		closed = false;
+		pub static mut CLOSED: bool = false;
 
 		rel = relation_open(objectId, AccessShareLock);
 
@@ -3478,11 +3478,11 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 (subId != 0) && is_orioledb_rel(rel))
 			{
 				// Branch is taken during ALTER TABLE ... ADD COLUMN
-				field: &mut OTableField;
-				o_table: &mut OTable;
-				ORelOids	oids;
-				OSnapshot	oSnapshot;
-				OXid		oxid;
+				pub static mut O_TABLE_FIELD: *mut field = std::ptr::null_mut();
+				pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+				pub static mut OIDS: ORelOids = std::mem::zeroed();
+				pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+				pub static mut OXID: OXid = std::mem::zeroed();
 
 				ORelOidsSetFromRel(oids, rel);
 
@@ -3555,8 +3555,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			else if ((rel->rd_rel->relkind == RELKIND_TOASTVALUE) &&
 					 (subId == 0) && !OidIsValid(rel->rd_rel->relrewrite))
 			{
-				Oid			tbl_oid;
-				Relation	tbl = NULL;
+				pub static mut TBL_OID: Oid = std::mem::zeroed();
+				pub static mut TBL: Relation = std::ptr::null_mut();
 
 				// This is faster than dependency scan
 				tbl_oid = pg_strtoint64(strrchr(rel->rd_rel->relname.data,
@@ -3573,7 +3573,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			else if (rel->rd_rel->relkind == RELKIND_INDEX)
 			{
 				// Checks and adds bridged indexes
-				Relation	tbl;
+				pub static mut TBL: Relation = std::mem::zeroed();
 
 				CommandCounterIncrement();
 				tbl = relation_open(rel->rd_index->indrelid, AccessShareLock);
@@ -3582,10 +3582,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 tbl->rd_rel->relkind == RELKIND_MATVIEW) &&
 					is_orioledb_rel(tbl))
 				{
-					OSnapshot	oSnapshot;
-					OXid		oxid;
-					o_table: &mut OTable;
-					ORelOids	table_oids;
+					pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+					pub static mut OXID: OXid = std::mem::zeroed();
+					pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+					pub static mut TABLE_OIDS: ORelOids = std::mem::zeroed();
 
 					fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
@@ -3598,10 +3598,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					}
 					else
 					{
-						int			ix_num = InvalidIndexNumber;
-						int			i;
-						bool		add_bridging = false;
-						bool		btree_bridging = false;
+						pub static mut IX_NUM: std::os::raw::c_int = InvalidIndexNumber;
+						pub static mut I: std::os::raw::c_int = 0;
+						pub static mut ADD_BRIDGING: bool = false;
+						pub static mut BTREE_BRIDGING: bool = false;
 
 						for (i = 0; i < o_table->nindices; i++)
 						{
@@ -3617,7 +3617,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						// In case of index reuse, update the index oid
 						if (ix_num != InvalidIndexNumber && list_member_oid(o_reuse_indices, o_table->indices[ix_num].oids.reloid))
 						{
-							Oid			old_oid = o_table->indices[ix_num].oids.reloid;
+							pub static mut OLD_OID: Oid = o_table->indices[ix_num].oids.reloid;
 
 							elog(DEBUG1, "object_access_hook: updating index oid %d to %d", old_oid, objectId);
 							o_table->indices[ix_num].oids.reloid = objectId;
@@ -3678,7 +3678,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 //
 							if (!ORelOidsIsValid(o_table->toast_oids))
 							{
-								Datum		toast_options;
+								pub static mut TOAST_OPTIONS: Datum = std::mem::zeroed();
 #if PG_VERSION_NUM < 180000
 								static validnsps: &mut char[] = HEAP_RELOPT_NAMESPACES;
 #else
@@ -3731,10 +3731,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		if (rel != NULL && (rel->rd_rel->relkind == RELKIND_RELATION) &&
 			(subId != 0) && is_orioledb_rel(rel))
 		{
-			o_table: &mut OTable;
-			ORelOids	oids;
-			OSnapshot	oSnapshot;
-			OXid		oxid;
+			pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+			pub static mut OIDS: ORelOids = std::mem::zeroed();
+			pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+			pub static mut OXID: OXid = std::mem::zeroed();
 
 			ORelOidsSetFromRel(oids, rel);
 			o_table = o_tables_get(oids);
@@ -3746,9 +3746,9 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			}
 			else
 			{
-				OTableField old_field;
-				field: &mut OTableField;
-				bool		changed;
+				pub static mut OLD_FIELD: OTableField = std::mem::zeroed();
+				pub static mut O_TABLE_FIELD: *mut field = std::ptr::null_mut();
+				pub static mut CHANGED: bool = false;
 
 				old_field = o_table->fields[subId - 1];
 				CommandCounterIncrement();
@@ -3804,7 +3804,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 											   (Pointer) &arg);
 				if (arg.found)
 				{
-					XLogRecPtr	cur_lsn;
+					pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
 
 					o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 					o_cache_type(MyDatabaseId, rel->rd_rel->reltype, InvalidOid,
@@ -3815,8 +3815,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					  rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 					 (subId != 0) && is_orioledb_rel(rel))
 			{
-				o_table: &mut OTable;
-				ORelOids	oids;
+				pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+				pub static mut OIDS: ORelOids = std::mem::zeroed();
 
 				ORelOidsSetFromRel(oids, rel);
 				o_table = o_tables_get(oids);
@@ -3828,12 +3828,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				}
 				else
 				{
-					OTableField old_field;
-					field: &mut OTableField;
-					OSnapshot	oSnapshot;
-					OXid		oxid;
-					int			ix_num;
-					bool		changed_ty;
+					pub static mut OLD_FIELD: OTableField = std::mem::zeroed();
+					pub static mut O_TABLE_FIELD: *mut field = std::ptr::null_mut();
+					pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+					pub static mut OXID: OXid = std::mem::zeroed();
+					pub static mut IX_NUM: std::os::raw::c_int = 0;
+					pub static mut CHANGED_TY: bool = false;
 
 					old_field = o_table->fields[subId - 1];
 					CommandCounterIncrement();
@@ -3874,14 +3874,14 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						o_tables_rel_meta_lock(rel);
 						for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 						{
-							bool		compatible = false;
-							int			field_num;
-							int			ctid_idx_off;
-							o_table_index: &mut OTableIndex;
-							attributeList: &mut List = NIL;
-							int			expr_field = 0;
-							indexpr: &mut ListCell;
-							bool		has_field = false;
+							pub static mut COMPATIBLE: bool = false;
+							pub static mut FIELD_NUM: std::os::raw::c_int = 0;
+							pub static mut CTID_IDX_OFF: std::os::raw::c_int = 0;
+							pub static mut O_TABLE_INDEX: *mut o_table_index = std::ptr::null_mut();
+							pub static mut LIST: *mut attributeList = NIL;
+							pub static mut EXPR_FIELD: std::os::raw::c_int = 0;
+							pub static mut LIST_CELL: *mut indexpr = std::ptr::null_mut();
+							pub static mut HAS_FIELD: bool = false;
 
 							ctid_idx_off = o_table->has_primary ? 0 : 1;
 							o_table_index = &o_table->indices[ix_num];
@@ -3889,10 +3889,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 							for (field_num = 0; field_num < o_table_index->nkeyfields; field_num++)
 							{
-								iparam: &mut IndexElem;
-								iField: &mut OTableIndexField = &o_table_index->fields[field_num];
-								int			attnum = iField->attnum;
-								table_field: &mut OTableField;
+								pub static mut INDEX_ELEM: *mut iparam = std::ptr::null_mut();
+								pub static mut O_TABLE_INDEX_FIELD: *mut iField = &o_table_index->fields[field_num];
+								pub static mut ATTNUM: std::os::raw::c_int = iField->attnum;
+								pub static mut O_TABLE_FIELD: *mut table_field = std::ptr::null_mut();
 
 								iparam = makeNode(IndexElem);
 								if (attnum != EXPR_ATTNUM)
@@ -3952,7 +3952,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 							if (changed_ty && has_field && (o_table_index->type == oIndexPrimary || !compatible))
 							{
-								ix_name: &mut String;
+								pub static mut STRING: *mut ix_name = std::ptr::null_mut();
 
 								ix_name =
 									makeString(pstrdup(o_table_index->name.data));
@@ -3980,8 +3980,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 tbl->rd_rel->relkind == RELKIND_MATVIEW) &&
 					is_orioledb_rel(tbl))
 				{
-					o_table: &mut OTable;
-					ORelOids	table_oids;
+					pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+					pub static mut TABLE_OIDS: ORelOids = std::mem::zeroed();
 
 					ORelOidsSetFromRel(table_oids, tbl);
 					o_table = o_tables_get(table_oids);
@@ -3994,11 +3994,11 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							 !(rel->rd_options &&
 							   !((OBTOptions *) rel->rd_options)->orioledb_index))
 					{
-						int			ix_num;
-						OSnapshot	oSnapshot;
-						OXid		oxid;
-						ORelOids	idx_oids;
-						Oid			reltablespace;
+						pub static mut IX_NUM: std::os::raw::c_int = 0;
+						pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+						pub static mut OXID: OXid = std::mem::zeroed();
+						pub static mut IDX_OIDS: ORelOids = std::mem::zeroed();
+						pub static mut RELTABLESPACE: Oid = std::mem::zeroed();
 
 						ORelOidsSetFromRel(idx_oids, rel);
 						CommandCounterIncrement();
@@ -4007,7 +4007,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						reltablespace = rel->rd_rel->reltablespace;
 						for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 						{
-							index: &mut OTableIndex = &o_table->indices[ix_num];
+							pub static mut O_TABLE_INDEX: *mut index = &o_table->indices[ix_num];
 							options: &mut OBTOptions = (OBTOptions *) rel->rd_options;
 
 							if (ORelOidsIsEqual(index->oids, idx_oids))
@@ -4023,7 +4023,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							reltablespace = MyDatabaseTableSpace;
 						if (o_table->indices[ix_num].tablespace == reltablespace)
 						{
-							int			ctid_idx_off = o_table->has_primary ? 0 : 1;
+							pub static mut CTID_IDX_OFF: std::os::raw::c_int = o_table->has_primary ? 0 : 1;
 
 							fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 							o_tables_rel_meta_lock(tbl);
@@ -4051,8 +4051,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					}
 					else if (rel->rd_options)
 					{
-						bool		old_orioledb_index = false;
-						bool		new_orioledb_index = false;
+						pub static mut OLD_ORIOLEDB_INDEX: bool = false;
+						pub static mut NEW_ORIOLEDB_INDEX: bool = false;
 
 						switch (rel->rd_amhandler)
 						{
@@ -4082,8 +4082,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 //
 				if (is_orioledb_rel(rel))
 				{
-					ORelOids	old_oids;
-					Oid			old_reltablespace = rel->rd_rel->reltablespace;
+					pub static mut OLD_OIDS: ORelOids = std::mem::zeroed();
+					pub static mut OLD_RELTABLESPACE: Oid = rel->rd_rel->reltablespace;
 
 					if (!OidIsValid(old_reltablespace))
 						old_reltablespace = MyDatabaseTableSpace;
@@ -4101,12 +4101,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 OidIsValid(rel->rd_rel->relrewrite) &&
 					 (subId == 0))
 			{
-				Relation	tbl = NULL;
+				pub static mut TBL: Relation = std::ptr::null_mut();
 
 				tbl = table_open(o_saved_relrewrite, AccessShareLock);
 				if (is_orioledb_rel(tbl))
 				{
-					ORelOids	new_oids;
+					pub static mut NEW_OIDS: ORelOids = std::mem::zeroed();
 					old_o_table: &mut OTable,
 							   *new_o_table;
 
@@ -4164,8 +4164,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			else if (rel->rd_rel->relkind == RELKIND_TOASTVALUE &&
 					 (subId == 0))
 			{
-				Oid			tbl_oid;
-				Relation	tbl = NULL;
+				pub static mut TBL_OID: Oid = std::mem::zeroed();
+				pub static mut TBL: Relation = std::ptr::null_mut();
 
 				// This is faster than dependency scan
 				tbl_oid = pg_strtoint64(strrchr(rel->rd_rel->relname.data,
@@ -4175,12 +4175,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				tbl = try_table_open(tbl_oid, AccessShareLock);
 				if (tbl && is_orioledb_rel(tbl))
 				{
-					ORelOids	oids;
-					descr: &mut OTableDescr;
+					pub static mut OIDS: ORelOids = std::mem::zeroed();
+					pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
 					options: &mut ORelOptions = (ORelOptions *) tbl->rd_options;
-					uint8		new_fillfactor;
-					bool		new_index_bridging;
-					Oid			reltablespace = rel->rd_rel->reltablespace;
+					pub static mut NEW_FILLFACTOR: uint8 = std::mem::zeroed();
+					pub static mut NEW_INDEX_BRIDGING: bool = false;
+					pub static mut RELTABLESPACE: Oid = rel->rd_rel->reltablespace;
 
 					if (reltablespace == 0)
 						reltablespace = MyDatabaseTableSpace;
@@ -4267,10 +4267,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 						if (GET_PRIMARY(descr)->bridging != new_index_bridging)
 						{
-							o_table: &mut OTable;
-							ORelOids	table_oids;
-							index: &mut ListCell;
-							bool		has_bridged = false;
+							pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
+							pub static mut TABLE_OIDS: ORelOids = std::mem::zeroed();
+							pub static mut LIST_CELL: *mut index = std::ptr::null_mut();
+							pub static mut HAS_BRIDGED: bool = false;
 
 							foreach(index, RelationGetIndexList(tbl))
 							{
@@ -4316,8 +4316,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_POST_ALTER && classId == TypeRelationId)
 	{
-		HeapTuple	typeTuple;
-		Form_pg_type tform;
+		pub static mut TYPE_TUPLE: HeapTuple = std::mem::zeroed();
+		pub static mut TFORM: Form_pg_type = std::mem::zeroed();
 
 		typeTuple = typeidType(objectId);
 
@@ -4327,8 +4327,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		{
 			case TYPTYPE_ENUM:
 				{
-					XLogRecPtr	cur_lsn;
-					Oid			datoid;
+					pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+					pub static mut DATOID: Oid = std::mem::zeroed();
 
 					CommandCounterIncrement();
 					o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
@@ -4348,7 +4348,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 												   (Pointer) &arg);
 					if (arg.found)
 					{
-						XLogRecPtr	cur_lsn;
+						pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
 
 						o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 						o_cache_type(MyDatabaseId, rel->rd_rel->reltype, InvalidOid,
@@ -4364,13 +4364,13 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_POST_CREATE && classId == DatabaseRelationId)
 	{
-		HeapTuple	dbTuple;
-		Form_pg_database dbform;
-		int32		cluster_encoding;
+		pub static mut DB_TUPLE: HeapTuple = std::mem::zeroed();
+		pub static mut DBFORM: Form_pg_database = std::mem::zeroed();
+		pub static mut CLUSTER_ENCODING: int32 = std::mem::zeroed();
 
 		if (IsTransactionState())
 		{
-			XLogRecPtr	cur_lsn;
+			pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
 
 			o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 			o_database_cache_add_if_needed(Template1DbOid, Template1DbOid, cur_lsn, NULL);
@@ -4407,12 +4407,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			OidIsValid(o_movedb_data.dest_tsoid) &&
 			o_tables_num(o_movedb_data.dest_dboid))
 		{
-			src_dbpath: &mut char = NULL;
-			dst_dbpath: &mut char = NULL;
-			dst_prefix: &mut char = NULL;
-			dir: &mut DIR;
-			struct xlde: &mut dirent;
-			bool		skipMoving = true;
+			pub static mut CHAR: *mut src_dbpath = std::ptr::null_mut();
+			pub static mut CHAR: *mut dst_dbpath = std::ptr::null_mut();
+			pub static mut CHAR: *mut dst_prefix = std::ptr::null_mut();
+			pub static mut DIR: *mut dir = std::ptr::null_mut();
+			pub static mut DIRENT: *mut struct xlde = std::ptr::null_mut();
+			pub static mut SKIP_MOVING: bool = true;
 
 			o_get_prefixes_for_tablespace(o_movedb_data.dest_dboid, o_movedb_data.src_tsoid, NULL, &src_dbpath);
 			o_get_prefixes_for_tablespace(o_movedb_data.dest_dboid, o_movedb_data.dest_tsoid, &dst_prefix, &dst_dbpath);
@@ -4423,7 +4423,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			dir = AllocateDir(src_dbpath);
 			if (dir != NULL)
 			{
-				bool		hasFiles = false;
+				pub static mut HAS_FILES: bool = false;
 
 				while ((xlde = ReadDir(dir, src_dbpath)) != NULL)
 				{
@@ -4470,8 +4470,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				PG_ENSURE_ERROR_CLEANUP(o_movedb_failure_callback,
 										PointerGetDatum(&o_movedb_data));
 				{
-					OSnapshot	oSnapshot;
-					OXid		oxid;
+					pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+					pub static mut OXID: OXid = std::mem::zeroed();
 
 					fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
@@ -4497,7 +4497,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_POST_ALTER && classId == IndexRelationId)
 	{
-		bool		old_indisprimary;
+		pub static mut OLD_INDISPRIMARY: bool = false;
 
 		rel = relation_open(objectId, AccessShareLock);
 		old_indisprimary = rel->rd_index->indisprimary;
@@ -4505,15 +4505,15 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		if (!old_indisprimary && rel->rd_index->indisprimary)
 		{
 			// Executed during ADD PRIMARY KEY USING INDEX
-			Relation	tbl;
+			pub static mut TBL: Relation = std::mem::zeroed();
 
 			tbl = relation_open(rel->rd_index->indrelid, AccessShareLock);
 			if ((tbl->rd_rel->relkind == RELKIND_RELATION ||
 				 tbl->rd_rel->relkind == RELKIND_MATVIEW) &&
 				is_orioledb_rel(tbl))
 			{
-				int			i;
-				int			ix_num = InvalidIndexNumber;
+				pub static mut I: std::os::raw::c_int = 0;
+				pub static mut IX_NUM: std::os::raw::c_int = InvalidIndexNumber;
 				descr: &mut OTableDescr = relation_get_descr(tbl);
 
 				Assert(RelIsInMyDatabase(tbl));
@@ -4555,18 +4555,18 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_DROP && classId == TableSpaceRelationId)
 	{
-		dir: &mut DIR;
+		pub static mut DIR: *mut dir = std::ptr::null_mut();
 		char		path[MAXPGPATH];
 		char		targetpath[MAXPGPATH];
-		struct file: &mut dirent;
+		pub static mut DIRENT: *mut struct file = std::ptr::null_mut();
 
 #define PG_TBLSPC "pg_tblspc"
 
 		dir = opendir(PG_TBLSPC);
 		while (errno = 0, (file = readdir(dir)) != NULL)
 		{
-			struct stat st;
-			int			rllen;
+			pub static mut ST: struct stat = std::mem::zeroed();
+			pub static mut RLLEN: std::os::raw::c_int = 0;
 
 			// Skip special stuff
 			if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0)
@@ -4631,12 +4631,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			   )) &&
 			 classId == ConstraintRelationId)
 	{
-		HeapTuple	conTup = NULL;
-		Relation	conRel = NULL;
-		SysScanDesc scan = NULL;
-		ScanKeyData skey;
-		bool		use_self_scan = access == OAT_POST_CREATE || access == OAT_POST_ALTER;
-		Form_pg_constraint conForm;
+		pub static mut CON_TUP: HeapTuple = std::ptr::null_mut();
+		pub static mut CON_REL: Relation = std::ptr::null_mut();
+		pub static mut SCAN: SysScanDesc = std::ptr::null_mut();
+		pub static mut SKEY: ScanKeyData = std::mem::zeroed();
+		pub static mut USE_SELF_SCAN: bool = access == OAT_POST_CREATE || access == OAT_POST_ALTER;
+		pub static mut CON_FORM: Form_pg_constraint = std::mem::zeroed();
 
 		//
 // TODO: Should we optimize the following commands and do not update
@@ -4674,10 +4674,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 		if (conForm->contype == CONSTRAINT_NOTNULL && conForm->conrelid != InvalidOid)
 		{
-			Datum		adatum;
-			arr: &mut ArrayType;
-			attnums: &mut int16;
-			int			numkeys;
+			pub static mut ADATUM: Datum = std::mem::zeroed();
+			pub static mut ARRAY_TYPE: *mut arr = std::ptr::null_mut();
+			pub static mut INT16: *mut attnums = std::ptr::null_mut();
+			pub static mut NUMKEYS: std::os::raw::c_int = 0;
 			Relation	conrel = relation_open(conForm->conrelid, AccessShareLock);
 
 			adatum = SysCacheGetAttrNotNull(CONSTROID, conTup, Anum_pg_constraint_conkey);
@@ -4688,16 +4688,16 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 			if (is_orioledb_rel(conrel))
 			{
-				ORelOids	oids;
-				o_table: &mut OTable;
+				pub static mut OIDS: ORelOids = std::mem::zeroed();
+				pub static mut O_TABLE: *mut o_table = std::ptr::null_mut();
 
 				ORelOidsSetFromRel(oids, conrel);
 				o_table = o_tables_get(oids);
 				if (o_table != NULL)
 				{
-					OSnapshot	oSnapshot;
-					OXid		oxid;
-					bool		changed = false;
+					pub static mut O_SNAPSHOT: OSnapshot = std::mem::zeroed();
+					pub static mut OXID: OXid = std::mem::zeroed();
+					pub static mut CHANGED: bool = false;
 					bool		is_add = (access == OAT_POST_CREATE || access == OAT_POST_ALTER);
 
 					fill_current_oxid_osnapshot(&oxid, &oSnapshot);
@@ -4711,7 +4711,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 //
 					for (int i = 0; i < numkeys; i++)
 					{
-						int			attnum = attnums[i];
+						pub static mut ATTNUM: std::os::raw::c_int = attnums[i];
 
 						if (attnum > 0 && attnum <= o_table->nfields && !o_table->fields[attnum - 1].droped)
 						{
@@ -4766,8 +4766,8 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 static bool
 get_db_info(const name: &mut char, LOCKMODE lockmode, dbIdP: &mut Oid)
 {
-	bool		result = false;
-	Relation	relation;
+	pub static mut RESULT: bool = false;
+	pub static mut RELATION: Relation = std::mem::zeroed();
 
 	Assert(name);
 
@@ -4781,10 +4781,10 @@ get_db_info(const name: &mut char, LOCKMODE lockmode, dbIdP: &mut Oid)
 //
 	for (;;)
 	{
-		ScanKeyData scanKey;
-		SysScanDesc scan;
-		HeapTuple	tuple;
-		Oid			dbOid;
+		pub static mut SCAN_KEY: ScanKeyData = std::mem::zeroed();
+		pub static mut SCAN: SysScanDesc = std::mem::zeroed();
+		pub static mut TUPLE: HeapTuple = std::mem::zeroed();
+		pub static mut DB_OID: Oid = std::mem::zeroed();
 
 		//
 // there's no syscache for database-indexed-by-name, so must do it the
@@ -4847,7 +4847,7 @@ get_db_info(const name: &mut char, LOCKMODE lockmode, dbIdP: &mut Oid)
 
 	table_close(relation, AccessShareLock);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -4856,11 +4856,11 @@ get_db_info(const name: &mut char, LOCKMODE lockmode, dbIdP: &mut Oid)
 static Oid
 o_createdb(pstate: &mut ParseState, const stmt: &mut CreatedbStmt)
 {
-	Oid			src_dboid;
-	option: &mut ListCell;
-	dtemplate: &mut DefElem = NULL;
-	const dbtemplate: &mut char = NULL;
-	Oid			result;
+	pub static mut SRC_DBOID: Oid = std::mem::zeroed();
+	pub static mut LIST_CELL: *mut option = std::ptr::null_mut();
+	pub static mut DEF_ELEM: *mut dtemplate = std::ptr::null_mut();
+	pub static mut CHAR: *mut const dbtemplate = std::ptr::null_mut();
+	pub static mut RESULT: Oid = std::mem::zeroed();
 
 	//
 // Currently we don't support a template database which has OrioleDB
@@ -4910,17 +4910,17 @@ o_createdb(pstate: &mut ParseState, const stmt: &mut CreatedbStmt)
 // Now we need to copy OrioleDB objects.
 //
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
 o_check_movedb(const stmt: &mut AlterDatabaseStmt, movedb: &mut movedb_params)
 {
-	Oid			src_tblspcoid = InvalidOid;
-	Oid			db_id = InvalidOid;
-	option: &mut ListCell;
-	dtablespace: &mut DefElem = NULL;
-	HeapTuple	tuple = NULL;
+	pub static mut SRC_TBLSPCOID: Oid = InvalidOid;
+	pub static mut DB_ID: Oid = InvalidOid;
+	pub static mut LIST_CELL: *mut option = std::ptr::null_mut();
+	pub static mut DEF_ELEM: *mut dtablespace = std::ptr::null_mut();
+	pub static mut TUPLE: HeapTuple = std::ptr::null_mut();
 
 	if (!get_db_info(stmt->dbname, NoLock, &db_id))
 
@@ -4964,7 +4964,7 @@ fn
 o_movedb_failure_callback(int code, Datum arg)
 {
 	fparms: &mut movedb_params = (movedb_params *) DatumGetPointer(arg);
-	dstpath: &mut char = NULL;
+	pub static mut CHAR: *mut dstpath = std::ptr::null_mut();
 
 	// Get rid of anything we managed to copy to the target directory
 	o_get_prefixes_for_tablespace(fparms->dest_dboid, fparms->dest_tsoid, NULL, &dstpath);
@@ -4979,11 +4979,11 @@ o_movedb_failure_callback(int code, Datum arg)
 int16
 o_parse_compress(const value: &mut char)
 {
-	const ptr: &mut char = value;
-	int16		result = 0;
-	bool		neg = false;
-	bool		invalid_syntax = false;
-	bool		out_of_range = false;
+	pub static mut CHAR: *mut const ptr = value;
+	pub static mut RESULT: int16 = 0;
+	pub static mut NEG: bool = false;
+	pub static mut INVALID_SYNTAX: bool = false;
+	pub static mut OUT_OF_RANGE: bool = false;
 
 	// skip leading spaces
 	while (likely(*ptr) && isspace((unsigned char) *ptr))
@@ -5056,7 +5056,7 @@ o_parse_compress(const value: &mut char)
 								   value)));
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -5112,8 +5112,8 @@ o_ddl_cleanup()
 static Node *
 o_get_alter_type_expr(Relation rel, int attidx)
 {
-	lc: &mut ListCell;
-	expr: &mut Node = NULL;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
+	pub static mut NODE: *mut expr = std::ptr::null_mut();
 
 	foreach(lc, alter_type_exprs)
 	{
@@ -5132,7 +5132,7 @@ o_get_alter_type_expr(Relation rel, int attidx)
 		}
 	}
 
-	return expr;
+	pub static mut EXPR: return = std::mem::zeroed();
 }
 
 fn
@@ -5174,10 +5174,10 @@ o_fill_new_slot(new_o_table: &mut OTable, Relation rel, int attidx,
 fn
 o_process_added_column(cmd: &mut AlterTableCmd)
 {
-	lc: &mut ListCell;
+	pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
 	def: &mut ColumnDef = (ColumnDef *) cmd->def;
-	Oid			typeid = def->typeName->typeOid;
-	bool		is_identity = false;
+	pub static mut TYPEID: Oid = def->typeName->typeOid;
+	pub static mut IS_IDENTITY: bool = false;
 
 	foreach(lc, def->constraints)
 	{

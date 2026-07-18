@@ -40,29 +40,29 @@ use pgrx::pg_sys;
 //
 typedef struct
 {
-	pageFindContext: &mut OBTreeFindPageContext;
-	OTuple		tuple;
-	BTreeKeyType tupleType;
-	BTreeLeafTuphdr leafTuphdr;
-	BTreeLeafTuphdr conflictTupHdr;
-	bool		replace;
-	UndoLocation conflictUndoLocation;
-	OXid		opOxid;
-	CommitSeqNo opCsn;
-	RowLockMode lockMode;
-	LOCKTAG		hwLockTag;
-	LOCKMODE	hwLockMode;
-	bool		needsUndo;
-	int			pageReserveKind;
-	int			cmp;
-	BTreeModifyLockStatus lockStatus;
-	bool		pagesAreReserved;
-	bool		undoIsReserved;
-	BTreeOperationType action;
-	Pointer		key;
-	BTreeKeyType keyType;
-	UndoLocation savepointUndoLocation;
-	callbackInfo: &mut BTreeModifyCallbackInfo;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = std::ptr::null_mut();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut TUPLE_TYPE: BTreeKeyType = std::mem::zeroed();
+	pub static mut LEAF_TUPHDR: BTreeLeafTuphdr = std::mem::zeroed();
+	pub static mut CONFLICT_TUP_HDR: BTreeLeafTuphdr = std::mem::zeroed();
+	pub static mut REPLACE: bool = false;
+	pub static mut CONFLICT_UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut OP_OXID: OXid = std::mem::zeroed();
+	pub static mut OP_CSN: CommitSeqNo = std::mem::zeroed();
+	pub static mut LOCK_MODE: RowLockMode = std::mem::zeroed();
+	pub static mut HW_LOCK_TAG: LOCKTAG = std::mem::zeroed();
+	pub static mut HW_LOCK_MODE: LOCKMODE = std::mem::zeroed();
+	pub static mut NEEDS_UNDO: bool = false;
+	pub static mut PAGE_RESERVE_KIND: std::os::raw::c_int = 0;
+	pub static mut CMP: std::os::raw::c_int = 0;
+	pub static mut LOCK_STATUS: BTreeModifyLockStatus = std::mem::zeroed();
+	pub static mut PAGES_ARE_RESERVED: bool = false;
+	pub static mut UNDO_IS_RESERVED: bool = false;
+	pub static mut ACTION: BTreeOperationType = std::mem::zeroed();
+	pub static mut KEY: Pointer = std::ptr::null_mut();
+	pub static mut KEY_TYPE: BTreeKeyType = std::mem::zeroed();
+	pub static mut SAVEPOINT_UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut B_TREE_MODIFY_CALLBACK_INFO: *mut callbackInfo = std::ptr::null_mut();
 } BTreeModifyInternalContext;
 
 typedef enum ConflictResolution
@@ -118,14 +118,14 @@ o_btree_modify_internal(pageFindContext: &mut OBTreeFindPageContext,
 						int pageReserveKind,
 						callbackInfo: &mut BTreeModifyCallbackInfo)
 {
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	Page		page;
-	BTreePageItemLocator loc;
-	OInMemoryBlkno blkno;
-	OBTreeModifyResult result = OBTreeModifyResultInserted;
-	OTuple		curTuple;
-	tuphdr: &mut BTreeLeafTuphdr;
-	BTreeModifyInternalContext context;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut RESULT: OBTreeModifyResult = OBTreeModifyResultInserted;
+	pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
+	pub static mut CONTEXT: BTreeModifyInternalContext = std::mem::zeroed();
 	OXid		tupleOxid = OXidIsValid(opOxid) ? opOxid : BootstrapTransactionId;
 
 	ASAN_UNPOISON_MEMORY_REGION(&context, sizeof(context));
@@ -191,14 +191,14 @@ retry:
 	}
 	else if (context.cmp == 0)
 	{
-		ConflictResolution resolution;
+		pub static mut RESOLUTION: ConflictResolution = std::mem::zeroed();
 
 		resolution = o_btree_modify_handle_conflicts(&context);
 
 		if (resolution == ConflictResolutionFound)
-			return OBTreeModifyResultFound;
+			pub static mut OB_TREE_MODIFY_RESULT_FOUND: return = std::mem::zeroed();
 		else if (resolution == ConflictResolutionRetry)
-			goto retry;
+			pub static mut RETRY: goto = std::mem::zeroed();
 	}
 
 	Assert(page_is_locked(blkno) || O_PAGE_IS_LOCAL(blkno));
@@ -209,15 +209,15 @@ retry:
 	if (tuphdr->deleted == BTreeLeafTupleNonDeleted)
 	{
 		// Existing (non-deleted) tuple is found
-		OBTreeModifyCallbackAction cbAction = OBTreeCallbackActionDoNothing;
-		RowLockMode prev_lock_mode = context.lockMode;
+		pub static mut CB_ACTION: OBTreeModifyCallbackAction = OBTreeCallbackActionDoNothing;
+		pub static mut PREV_LOCK_MODE: RowLockMode = context.lockMode;
 
 		//
 // We should have set conflictTupHdr in the (cmp == 0) branch above.
 //
 		if (callbackInfo->modifyCallback)
 		{
-			BTreeLocationHint cbHint;
+			pub static mut CB_HINT: BTreeLocationHint = std::mem::zeroed();
 
 			cbHint.blkno = pageFindContext->items[pageFindContext->index].blkno;
 			cbHint.pageChangeCount = pageFindContext->items[pageFindContext->index].pageChangeCount;
@@ -231,7 +231,7 @@ retry:
 		if (cbAction == OBTreeCallbackActionUndo)
 		{
 			() o_btree_modify_item_rollback(&context);
-			goto retry;
+			pub static mut RETRY: goto = std::mem::zeroed();
 		}
 
 		Assert(page_is_locked(blkno) || O_PAGE_IS_LOCAL(blkno));
@@ -243,13 +243,13 @@ retry:
 			if (cbAction == OBTreeCallbackActionDoNothing)
 			{
 				unlock_release(&context, true);
-				return OBTreeModifyResultFound;
+				pub static mut OB_TREE_MODIFY_RESULT_FOUND: return = std::mem::zeroed();
 			}
 			else
 			{
 				if (context.lockMode > prev_lock_mode)
 				{
-					OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
+					pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult result = std::mem::zeroed();
 
 					unlock_page(blkno);
 
@@ -260,7 +260,7 @@ retry:
 										 pageFindContext->items[pageFindContext->index].blkno,
 										 pageFindContext->items[pageFindContext->index].pageChangeCount);
 					Assert(result == OFindPageResultSuccess);
-					goto retry;
+					pub static mut RETRY: goto = std::mem::zeroed();
 				}
 
 				if (cbAction == OBTreeCallbackActionUpdate)
@@ -296,8 +296,8 @@ retry:
 
 		if (action == BTreeOperationInsert && callbackInfo->modifyDeletedCallback)
 		{
-			OBTreeModifyCallbackAction cbAction = OBTreeCallbackActionDoNothing;
-			BTreeLocationHint cbHint;
+			pub static mut CB_ACTION: OBTreeModifyCallbackAction = OBTreeCallbackActionDoNothing;
+			pub static mut CB_HINT: BTreeLocationHint = std::mem::zeroed();
 
 			cbHint.blkno = pageFindContext->items[pageFindContext->index].blkno;
 			cbHint.pageChangeCount = pageFindContext->items[pageFindContext->index].pageChangeCount;
@@ -312,13 +312,13 @@ retry:
 			if (cbAction == OBTreeCallbackActionUndo)
 			{
 				() o_btree_modify_item_rollback(&context);
-				goto retry;
+				pub static mut RETRY: goto = std::mem::zeroed();
 			}
 
 			if (cbAction == OBTreeCallbackActionDoNothing)
 			{
 				unlock_release(&context, true);
-				return OBTreeModifyResultNotFound;
+				pub static mut OB_TREE_MODIFY_RESULT_NOT_FOUND: return = std::mem::zeroed();
 			}
 			Assert(cbAction == OBTreeCallbackActionUpdate);
 		}
@@ -364,7 +364,7 @@ retry:
 													context.conflictTupHdr.undoLocation,
 													&context.lockMode, NULL,
 													callbackInfo->arg);
-			return OBTreeModifyResultNotFound;
+			pub static mut OB_TREE_MODIFY_RESULT_NOT_FOUND: return = std::mem::zeroed();
 		}
 	}
 
@@ -372,15 +372,15 @@ retry:
 
 	o_btree_modify_insert_update(&context);
 	unlock_release(&context, false);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
 unlock_release(context: &mut BTreeModifyInternalContext, bool unlock)
 {
-	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	OInMemoryBlkno blkno;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = context->pageFindContext;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 
@@ -404,7 +404,7 @@ wait_for_tuple(desc: &mut BTreeDescr, OTuple tuple, OXid oxid,
 			   RowLockMode lockMode, BTreeModifyLockStatus lockStatus,
 			   hwLockTag: &mut LOCKTAG, hwLockMode: &mut LOCKMODE)
 {
-	uint32		hash;
+	pub static mut HASH: uint32 = std::mem::zeroed();
 
 	//
 // Acquire the lock, if necessary (but skip it when we're requesting a
@@ -430,14 +430,14 @@ wait_for_tuple(desc: &mut BTreeDescr, OTuple tuple, OXid oxid,
 static ConflictResolution
 o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 {
-	bool		haveRedundantRowLocks = false;
-	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	OInMemoryBlkno blkno;
-	loc: &mut BTreePageItemLocator;
-	Page		page;
-	OTuple		curTuple;
-	tuphdr: &mut BTreeLeafTuphdr;
+	pub static mut HAVE_REDUNDANT_ROW_LOCKS: bool = false;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = context->pageFindContext;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = std::ptr::null_mut();
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = &pageFindContext->items[pageFindContext->index].locator;
@@ -453,7 +453,7 @@ o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 						   blkno, context->savepointUndoLocation,
 						   &haveRedundantRowLocks, &context->lockStatus))
 	{
-		OTupleXactInfo xactInfo = context->conflictTupHdr.xactInfo;
+		pub static mut XACT_INFO: OTupleXactInfo = context->conflictTupHdr.xactInfo;
 		OXid		oxid = XACT_INFO_GET_OXID(xactInfo);
 
 		if (oxid == context->opOxid)
@@ -487,7 +487,7 @@ o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 		}
 		else
 		{
-			CommitSeqNo csn;
+			pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 
 			//
 // Test hook: parks the backend here, with the leaf-page-content
@@ -510,7 +510,7 @@ o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 // the undo chain.  But if locker transaction commit or abort
 // concurrently, then retry.
 //
-				return ConflictResolutionRetry;
+				pub static mut CONFLICT_RESOLUTION_RETRY: return = std::mem::zeroed();
 			}
 
 			if (COMMITSEQNO_IS_ABORTED(csn))
@@ -550,14 +550,14 @@ o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 // Conflicting transaction is in-progress.  If the callback is
 // provided, ask it what to do.  Just wait otherwise.
 //
-				OBTreeWaitCallbackAction cbAction = OBTreeCallbackActionXidWait;
-				OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
+				pub static mut CB_ACTION: OBTreeWaitCallbackAction = OBTreeCallbackActionXidWait;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult result = std::mem::zeroed();
 
 				Assert(COMMITSEQNO_IS_INPROGRESS(csn));
 
 				if (context->callbackInfo->waitCallback)
 				{
-					BTreeLocationHint cbHint;
+					pub static mut CB_HINT: BTreeLocationHint = std::mem::zeroed();
 
 					cbHint.blkno = pageFindContext->items[pageFindContext->index].blkno;
 					cbHint.pageChangeCount = pageFindContext->items[pageFindContext->index].pageChangeCount;
@@ -580,7 +580,7 @@ o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 								   &context->hwLockTag,
 								   &context->hwLockMode);
 				else if (cbAction == OBTreeCallbackActionXidExit)
-					return ConflictResolutionFound;
+					pub static mut CONFLICT_RESOLUTION_FOUND: return = std::mem::zeroed();
 				else
 				{
 					Assert(cbAction == OBTreeCallbackActionXidNoWait);
@@ -593,7 +593,7 @@ o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 									 pageFindContext->items[pageFindContext->index].blkno,
 									 pageFindContext->items[pageFindContext->index].pageChangeCount);
 				Assert(result == OFindPageResultSuccess);
-				return ConflictResolutionRetry;
+				pub static mut CONFLICT_RESOLUTION_RETRY: return = std::mem::zeroed();
 			}
 
 			// Update tuple and header pointer after page_item_rollback()
@@ -640,7 +640,7 @@ o_btree_modify_handle_conflicts(context: &mut BTreeModifyInternalContext)
 
 	if (!context->needsUndo)
 		context->leafTuphdr.undoLocation = tuphdr->undoLocation;
-	return ConflictResolutionOK;
+	pub static mut CONFLICT_RESOLUTION_OK: return = std::mem::zeroed();
 }
 
 static OBTreeModifyResult
@@ -658,7 +658,7 @@ o_btree_modify_handle_tuple_not_found(context: &mut BTreeModifyInternalContext)
 		context->action == BTreeOperationLock)
 	{
 		unlock_release(context, true);
-		return OBTreeModifyResultNotFound;
+		pub static mut OB_TREE_MODIFY_RESULT_NOT_FOUND: return = std::mem::zeroed();
 	}
 	else
 	{
@@ -666,19 +666,19 @@ o_btree_modify_handle_tuple_not_found(context: &mut BTreeModifyInternalContext)
 
 		o_btree_modify_insert_update(context);
 		unlock_release(context, false);
-		return OBTreeModifyResultInserted;
+		pub static mut OB_TREE_MODIFY_RESULT_INSERTED: return = std::mem::zeroed();
 	}
 }
 
 static bool
 o_btree_modify_item_rollback(context: &mut BTreeModifyInternalContext)
 {
-	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	OInMemoryBlkno blkno;
-	BTreePageItemLocator loc;
-	Page		page;
-	bool		applyResult;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = context->pageFindContext;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut APPLY_RESULT: bool = false;
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = pageFindContext->items[pageFindContext->index].locator;
@@ -699,15 +699,15 @@ o_btree_modify_item_rollback(context: &mut BTreeModifyInternalContext)
 		pageFindContext->items[pageFindContext->index].locator = loc;
 	}
 
-	return applyResult;
+	pub static mut APPLY_RESULT: return = std::mem::zeroed();
 }
 
 fn
 o_btree_modify_insert_update(context: &mut BTreeModifyInternalContext)
 {
-	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	int			tuplen;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = context->pageFindContext;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut TUPLEN: std::os::raw::c_int = 0;
 
 	if (context->undoIsReserved && context->needsUndo)
 	{
@@ -715,7 +715,7 @@ o_btree_modify_insert_update(context: &mut BTreeModifyInternalContext)
 	}
 	else if (!context->needsUndo)
 	{
-		leafTuphdr: &mut BTreeLeafTuphdr = &context->leafTuphdr;
+		pub static mut B_TREE_LEAF_TUPHDR: *mut leafTuphdr = &context->leafTuphdr;
 
 		if (desc->undoType == UndoLogRegular)
 		{
@@ -754,13 +754,13 @@ o_btree_modify_insert_update(context: &mut BTreeModifyInternalContext)
 fn
 o_btree_modify_add_undo_record(context: &mut BTreeModifyInternalContext)
 {
-	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	leafTuphdr: &mut BTreeLeafTuphdr = &context->leafTuphdr;
-	UndoLocation undoLocation = InvalidUndoLocation;
-	OInMemoryBlkno blkno;
-	BTreePageItemLocator loc;
-	Page		page;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = context->pageFindContext;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut B_TREE_LEAF_TUPHDR: *mut leafTuphdr = &context->leafTuphdr;
+	pub static mut UNDO_LOCATION: UndoLocation = InvalidUndoLocation;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut PAGE: Page = std::mem::zeroed();
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = pageFindContext->items[pageFindContext->index].locator;
@@ -769,8 +769,8 @@ o_btree_modify_add_undo_record(context: &mut BTreeModifyInternalContext)
 	if (context->replace)
 	{
 		// Make undo item and connect it with page tuple
-		OTuple		curTuple;
-		tuphdr: &mut BTreeLeafTuphdr;
+		pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+		pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
 
 		BTREE_PAGE_READ_LEAF_ITEM(tuphdr, curTuple, page, &loc);
 
@@ -809,15 +809,15 @@ o_btree_modify_add_undo_record(context: &mut BTreeModifyInternalContext)
 static OBTreeModifyResult
 o_btree_modify_delete(context: &mut BTreeModifyInternalContext)
 {
-	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	uint32		pageChangeCount;
-	UndoLocation undoLocation;
-	OInMemoryBlkno blkno;
-	BTreePageItemLocator loc;
-	Page		page;
-	OTuple		curTuple;
-	tuphdr: &mut BTreeLeafTuphdr;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = context->pageFindContext;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut PAGE_CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = pageFindContext->items[pageFindContext->index].locator;
@@ -827,7 +827,7 @@ o_btree_modify_delete(context: &mut BTreeModifyInternalContext)
 
 	if (!context->needsUndo)
 	{
-		bool		stillExists;
+		pub static mut STILL_EXISTS: bool = false;
 
 		stillExists = o_btree_modify_item_rollback(context);
 
@@ -843,7 +843,7 @@ o_btree_modify_delete(context: &mut BTreeModifyInternalContext)
 			// Already deleted
 			unlock_release(context, true);
 
-			return OBTreeModifyResultDeleted;
+			pub static mut OB_TREE_MODIFY_RESULT_DELETED: return = std::mem::zeroed();
 		}
 		else
 		{
@@ -857,8 +857,8 @@ o_btree_modify_delete(context: &mut BTreeModifyInternalContext)
 
 	if (context->undoIsReserved && context->needsUndo)
 	{
-		OTuple		key;
-		bool		key_is_tuple;
+		pub static mut KEY: OTuple = std::mem::zeroed();
+		pub static mut KEY_IS_TUPLE: bool = false;
 
 		if (context->tupleType == BTreeKeyNonLeafKey)
 		{
@@ -922,23 +922,23 @@ o_btree_modify_delete(context: &mut BTreeModifyInternalContext)
 		unlock_release(context, true);
 	}
 
-	return OBTreeModifyResultDeleted;
+	pub static mut OB_TREE_MODIFY_RESULT_DELETED: return = std::mem::zeroed();
 }
 
 static OBTreeModifyResult
 o_btree_modify_lock(context: &mut BTreeModifyInternalContext)
 {
-	pageFindContext: &mut OBTreeFindPageContext = context->pageFindContext;
-	desc: &mut BTreeDescr = pageFindContext->desc;
-	UndoLocation undoLocation;
-	uint32		pageChangeCount;
-	OTuple		key;
-	bool		key_is_tuple;
-	OInMemoryBlkno blkno;
-	BTreePageItemLocator loc;
-	Page		page;
-	OTuple		curTuple;
-	tuphdr: &mut BTreeLeafTuphdr;
+	pub static mut OB_TREE_FIND_PAGE_CONTEXT: *mut pageFindContext = context->pageFindContext;
+	pub static mut B_TREE_DESCR: *mut desc = pageFindContext->desc;
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut PAGE_CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut KEY: OTuple = std::mem::zeroed();
+	pub static mut KEY_IS_TUPLE: bool = false;
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut PAGE: Page = std::mem::zeroed();
+	pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
 
 	blkno = pageFindContext->items[pageFindContext->index].blkno;
 	loc = pageFindContext->items[pageFindContext->index].locator;
@@ -949,7 +949,7 @@ o_btree_modify_lock(context: &mut BTreeModifyInternalContext)
 	if (context->lockStatus == BTreeModifySameOrStrongerLock)
 	{
 		unlock_release(context, true);
-		return OBTreeModifyResultLocked;
+		pub static mut OB_TREE_MODIFY_RESULT_LOCKED: return = std::mem::zeroed();
 	}
 
 	Assert(context->needsUndo);
@@ -987,14 +987,14 @@ o_btree_modify_lock(context: &mut BTreeModifyInternalContext)
 	END_CRIT_SECTION();
 	unlock_release(context, true);
 
-	return OBTreeModifyResultLocked;
+	pub static mut OB_TREE_MODIFY_RESULT_LOCKED: return = std::mem::zeroed();
 }
 
 static Jsonb *
 prepare_modify_start_params(desc: &mut BTreeDescr)
 {
-	state: &mut JsonbParseState = NULL;
-	res: &mut Jsonb;
+	pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
+	pub static mut JSONB: *mut res = std::ptr::null_mut();
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
@@ -1003,7 +1003,7 @@ prepare_modify_start_params(desc: &mut BTreeDescr)
 	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
 	MemoryContextSwitchTo(mctx);
 
-	return res;
+	pub static mut RES: return = std::mem::zeroed();
 }
 
 fn
@@ -1032,10 +1032,10 @@ o_btree_normal_modify(desc: &mut BTreeDescr, BTreeOperationType action,
 					  BTreeLeafTupleDeletedStatus deleted,
 					  callbackInfo: &mut BTreeModifyCallbackInfo)
 {
-	OBTreeFindPageContext pageFindContext;
-	int			pageReserveKind;
-	params: &mut Jsonb = NULL;
-	OFindPageResult findResult;
+	pub static mut PAGE_FIND_CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut PAGE_RESERVE_KIND: std::os::raw::c_int = 0;
+	pub static mut JSONB: *mut params = std::ptr::null_mut();
+	pub static mut FIND_RESULT: OFindPageResult = std::mem::zeroed();
 
 	if (STOPEVENTS_ENABLED())
 		params = prepare_modify_start_params(desc);
@@ -1088,7 +1088,7 @@ o_btree_normal_modify(desc: &mut BTreeDescr, BTreeOperationType action,
 		}
 		ppool_release_reserved(desc->ppool, PPOOL_RESERVE_INSERT);
 		Assert(!have_locked_pages());
-		return OBTreeModifyResultInserted;
+		pub static mut OB_TREE_MODIFY_RESULT_INSERTED: return = std::mem::zeroed();
 	}
 	Assert(findResult == OFindPageResultSuccess);
 
@@ -1107,8 +1107,8 @@ page_unique_check(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageItemLoca
 
 	while (BTREE_PAGE_LOCATOR_IS_VALID(p, locator))
 	{
-		int			cmp;
-		OTuple		tuple;
+		pub static mut CMP: std::os::raw::c_int = 0;
+		pub static mut TUPLE: OTuple = std::mem::zeroed();
 		pageTuphdr: &mut BTreeLeafTuphdr,
 					tuphdr;
 
@@ -1116,7 +1116,7 @@ page_unique_check(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageItemLoca
 		cmp = o_btree_cmp(desc, &tuple, BTreeKeyLeafTuple,
 						  key, BTreeKeyUniqueUpperBound);
 		if (cmp > 0)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		else if (cmp < 0 && checkUnique == UNIQUE_CHECK_EXISTING)
 		{
 			cmp = o_btree_cmp(desc, &tuple, BTreeKeyLeafTuple,
@@ -1138,13 +1138,13 @@ page_unique_check(desc: &mut BTreeDescr, Page p, locator: &mut BTreePageItemLoca
 				continue;
 			}
 			*xactInfo = tuphdr.xactInfo;
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 
 		*xactInfo = tuphdr.xactInfo;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 static bool
@@ -1152,8 +1152,8 @@ slowpath_unique_check(desc: &mut BTreeDescr, pageFindContext: &mut OBTreeFindPag
 					  Pointer key, OXid opOxid, xactInfo: &mut OTupleXactInfo,
 					  IndexUniqueCheck checkUnique)
 {
-	Page		p;
-	OFixedKey	hikey_buf;
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut HIKEY_BUF: OFixedKey = std::mem::zeroed();
 
 	btree_find_context_from_modify_to_read(pageFindContext,
 										   key, BTreeKeyUniqueLowerBound, 0);
@@ -1162,12 +1162,12 @@ slowpath_unique_check(desc: &mut BTreeDescr, pageFindContext: &mut OBTreeFindPag
 
 	while (true)
 	{
-		int			cmp;
-		OTuple		hikey;
+		pub static mut CMP: std::os::raw::c_int = 0;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 		if (page_unique_check(desc, p, &pageFindContext->items[pageFindContext->index].locator,
 							  key, opOxid, xactInfo, checkUnique))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		if (O_PAGE_IS(p, RIGHTMOST))
 			break;
@@ -1189,7 +1189,7 @@ slowpath_unique_check(desc: &mut BTreeDescr, pageFindContext: &mut OBTreeFindPag
 		btree_page_search(desc, p, key, BTreeKeyUniqueLowerBound,
 						  NULL, &pageFindContext->items[pageFindContext->index].locator);
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 OBTreeModifyResult
@@ -1200,17 +1200,17 @@ o_btree_insert_unique(desc: &mut BTreeDescr, OTuple tuple, BTreeKeyType tupleTyp
 					  callbackInfo: &mut BTreeModifyCallbackInfo,
 					  IndexUniqueCheck checkUnique)
 {
-	OBTreeFindPageContext pageFindContext;
-	int			pageReserveKind;
-	bool		fastpath;
-	Page		p;
-	OInMemoryBlkno blkno;
-	uint32		pageChangeCount;
-	uniqueLock: &mut LWLock;
-	OBTreeModifyResult result;
-	params: &mut Jsonb = NULL;
-	OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
-	bool		found_but_insert;
+	pub static mut PAGE_FIND_CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut PAGE_RESERVE_KIND: std::os::raw::c_int = 0;
+	pub static mut FASTPATH: bool = false;
+	pub static mut P: Page = std::mem::zeroed();
+	pub static mut BLKNO: OInMemoryBlkno = std::mem::zeroed();
+	pub static mut PAGE_CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut LW_LOCK: *mut uniqueLock = std::ptr::null_mut();
+	pub static mut RESULT: OBTreeModifyResult = std::mem::zeroed();
+	pub static mut JSONB: *mut params = std::ptr::null_mut();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OFindPageResult findResult = std::mem::zeroed();
+	pub static mut FOUND_BUT_INSERT: bool = false;
 
 	Assert(checkUnique == UNIQUE_CHECK_YES || checkUnique == UNIQUE_CHECK_EXISTING || checkUnique == UNIQUE_CHECK_PARTIAL);
 
@@ -1257,7 +1257,7 @@ retry:
 	}
 	else
 	{
-		OTuple		hikey;
+		pub static mut HIKEY: OTuple = std::mem::zeroed();
 
 		BTREE_PAGE_GET_HIKEY(hikey, p);
 		fastpath = (o_btree_cmp(desc, &hikey, BTreeKeyNonLeafKey,
@@ -1286,21 +1286,21 @@ retry:
 //
 	if (fastpath && LWLockConditionalAcquire(uniqueLock, LW_EXCLUSIVE))
 	{
-		OTupleXactInfo xactInfo;
-		bool		refind = false;
+		pub static mut XACT_INFO: OTupleXactInfo = std::mem::zeroed();
+		pub static mut REFIND: bool = false;
 
 		if (page_unique_check(desc, p, &pageFindContext.items[pageFindContext.index].locator,
 							  key, opOxid, &xactInfo, checkUnique))
 		{
-			OTuple		curTuple;
+			pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
 			BTreeLocationHint cbHint = {pageFindContext.items[pageFindContext.index].blkno, pageFindContext.items[pageFindContext.index].pageChangeCount};
-			tuphdr: &mut BTreeLeafTuphdr;
+			pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
 
 			BTREE_PAGE_READ_LEAF_ITEM(tuphdr, curTuple, p, &pageFindContext.items[pageFindContext.index].locator);
 
 			if (XACT_INFO_OXID_EQ(xactInfo, opOxid) || XACT_INFO_IS_FINISHED(xactInfo))
 			{
-				OBTreeModifyCallbackAction cbAction PG_USED_FOR_ASSERTS_ONLY;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: OBTreeModifyCallbackAction cbAction = std::mem::zeroed();
 
 				if (callbackInfo->modifyCallback)
 				{
@@ -1319,7 +1319,7 @@ retry:
 				{
 					unlock_page(blkno);
 					LWLockRelease(uniqueLock);
-					return OBTreeModifyResultFound;
+					pub static mut OB_TREE_MODIFY_RESULT_FOUND: return = std::mem::zeroed();
 				}
 				else
 				{
@@ -1329,7 +1329,7 @@ retry:
 			}
 			else
 			{
-				OBTreeWaitCallbackAction cbAction;
+				pub static mut CB_ACTION: OBTreeWaitCallbackAction = std::mem::zeroed();
 
 				LWLockRelease(uniqueLock);
 				if (callbackInfo->waitCallback)
@@ -1344,7 +1344,7 @@ retry:
 						if (checkUnique == UNIQUE_CHECK_YES)
 						{
 							unlock_page(blkno);
-							return OBTreeModifyResultFound;
+							pub static mut OB_TREE_MODIFY_RESULT_FOUND: return = std::mem::zeroed();
 						}
 						else
 						{
@@ -1359,7 +1359,7 @@ retry:
 										 BTreeKeyUniqueLowerBound, 0,
 										 blkno, pageChangeCount);
 				Assert(findResult == OFindPageResultSuccess);
-				goto retry;
+				pub static mut RETRY: goto = std::mem::zeroed();
 			}
 		}
 		else
@@ -1378,8 +1378,8 @@ retry:
 	}
 	else
 	{
-		OTupleXactInfo xactInfo;
-		bool		refind = false;
+		pub static mut XACT_INFO: OTupleXactInfo = std::mem::zeroed();
+		pub static mut REFIND: bool = false;
 
 		//
 // Evade deadlock: unlock the page before taking an unique lwlock.
@@ -1391,16 +1391,16 @@ retry:
 		if (slowpath_unique_check(desc, &pageFindContext, key,
 								  opOxid, &xactInfo, checkUnique))
 		{
-			loc: &mut BTreePageItemLocator = &pageFindContext.items[pageFindContext.index].locator;
-			OTuple		curTuple;
+			pub static mut B_TREE_PAGE_ITEM_LOCATOR: *mut loc = &pageFindContext.items[pageFindContext.index].locator;
+			pub static mut CUR_TUPLE: OTuple = std::mem::zeroed();
 			BTreeLocationHint cbHint = {pageFindContext.items[pageFindContext.index].blkno, pageFindContext.items[pageFindContext.index].pageChangeCount};
-			tuphdr: &mut BTreeLeafTuphdr;
+			pub static mut B_TREE_LEAF_TUPHDR: *mut tuphdr = std::ptr::null_mut();
 
 			p = O_GET_IN_MEMORY_PAGE(pageFindContext.items[pageFindContext.index].blkno);
 			BTREE_PAGE_READ_LEAF_ITEM(tuphdr, curTuple, p, loc);
 			if (XACT_INFO_OXID_EQ(xactInfo, opOxid) || XACT_INFO_IS_FINISHED(xactInfo))
 			{
-				OBTreeModifyCallbackAction cbAction PG_USED_FOR_ASSERTS_ONLY;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: OBTreeModifyCallbackAction cbAction = std::mem::zeroed();
 
 				if (callbackInfo->modifyCallback)
 				{
@@ -1417,7 +1417,7 @@ retry:
 				}
 				LWLockRelease(uniqueLock);
 				if (checkUnique == UNIQUE_CHECK_YES)
-					return OBTreeModifyResultFound;
+					pub static mut OB_TREE_MODIFY_RESULT_FOUND: return = std::mem::zeroed();
 				else
 				{
 					found_but_insert = true;
@@ -1426,7 +1426,7 @@ retry:
 			}
 			else
 			{
-				OBTreeWaitCallbackAction cbAction;
+				pub static mut CB_ACTION: OBTreeWaitCallbackAction = std::mem::zeroed();
 
 				LWLockRelease(uniqueLock);
 
@@ -1440,7 +1440,7 @@ retry:
 					if (cbAction == OBTreeCallbackActionXidExit)
 					{
 						if (checkUnique == UNIQUE_CHECK_YES)
-							return OBTreeModifyResultFound;
+							pub static mut OB_TREE_MODIFY_RESULT_FOUND: return = std::mem::zeroed();
 						else
 						{
 							found_but_insert = true;
@@ -1454,7 +1454,7 @@ retry:
 										 BTreeKeyUniqueLowerBound, 0,
 										 blkno, pageChangeCount);
 				Assert(findResult == OFindPageResultSuccess);
-				goto retry;
+				pub static mut RETRY: goto = std::mem::zeroed();
 			}
 		}
 		else
@@ -1485,7 +1485,7 @@ retry:
 		result = OBTreeModifyResultFound;
 
 	LWLockRelease(uniqueLock);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 OBTreeModifyResult
@@ -1507,7 +1507,7 @@ o_btree_delete_moved_partitions(desc: &mut BTreeDescr, Pointer key,
 								hint: &mut BTreeLocationHint,
 								callbackInfo: &mut BTreeModifyCallbackInfo)
 {
-	OTuple		nullTup;
+	pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 
 	O_TUPLE_SET_NULL(nullTup);
 
@@ -1525,7 +1525,7 @@ o_btree_delete_pk_changed(desc: &mut BTreeDescr, Pointer key,
 						  hint: &mut BTreeLocationHint,
 						  callbackInfo: &mut BTreeModifyCallbackInfo)
 {
-	OTuple		nullTup;
+	pub static mut NULL_TUP: OTuple = std::mem::zeroed();
 
 	O_TUPLE_SET_NULL(nullTup);
 
@@ -1539,8 +1539,8 @@ o_btree_delete_pk_changed(desc: &mut BTreeDescr, Pointer key,
 bool
 o_btree_autonomous_insert(desc: &mut BTreeDescr, OTuple tuple)
 {
-	OAutonomousTxState state;
-	OBTreeModifyResult result;
+	pub static mut STATE: OAutonomousTxState = std::mem::zeroed();
+	pub static mut RESULT: OBTreeModifyResult = std::mem::zeroed();
 
 	if (desc->undoType != UndoLogNone)
 	{
@@ -1586,8 +1586,8 @@ bool
 o_btree_autonomous_delete(desc: &mut BTreeDescr, OTuple key, BTreeKeyType keyType,
 						  hint: &mut BTreeLocationHint)
 {
-	OAutonomousTxState state;
-	OBTreeModifyResult result;
+	pub static mut STATE: OAutonomousTxState = std::mem::zeroed();
+	pub static mut RESULT: OBTreeModifyResult = std::mem::zeroed();
 
 	Assert(keyType == BTreeKeyLeafTuple || keyType == BTreeKeyNonLeafKey);
 

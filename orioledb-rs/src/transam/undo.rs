@@ -82,8 +82,8 @@ static pairingheap retainUndoLocHeaps[(int) UndoLogsCount] =
 };
 
 // A minimal subtransaction id, where OrioleDB got involved
-static SubTransactionId minParentSubId = InvalidSubTransactionId;
-static XLogRecPtr xidless_commit_lsn = InvalidXLogRecPtr;
+static mut MIN_PARENT_SUB_ID: SubTransactionId = InvalidSubTransactionId;
+static mut XIDLESS_COMMIT_LSN: XLogRecPtr = InvalidXLogRecPtr;
 
 typedef  (*UndoCallback) (UndoLogType undoType, UndoLocation location,
 							  item: &mut UndoStackItem, OXid oxid,
@@ -109,16 +109,16 @@ fn o_rewind_relfilenode_item_callback(UndoLogType undoType,
 //
 typedef struct
 {
-	UndoItemType type;
+	pub static mut TYPE: UndoItemType = std::mem::zeroed();
 	bool		callOnCommit;	// call the callback on commit
 	UndoCallback callback;		// callback to be called on transaction finish
 } UndoItemTypeDescr;
 
 typedef struct
 {
-	OnCommitUndoStackItem header;
-	int			nCommitRels;
-	int			nAbortRels;
+	pub static mut HEADER: OnCommitUndoStackItem = std::mem::zeroed();
+	pub static mut N_COMMIT_RELS: std::os::raw::c_int = 0;
+	pub static mut N_ABORT_RELS: std::os::raw::c_int = 0;
 	RelFileNode rels[FLEXIBLE_ARRAY_MEMBER];
 } RewindRelFileNodeUndoStackItem;
 
@@ -177,7 +177,7 @@ static UndoItemTypeDescr undoItemTypeDescrs[] = {
 
 PG_FUNCTION_INFO_V1(orioledb_has_retained_undo);
 
-static undo_metas: &mut UndoMeta = NULL;
+static mut UNDO_META: *mut undo_metas = std::ptr::null_mut();
 static Pointer o_undo_buffers[(int) UndoLogsCount] =
 {
 	NULL
@@ -238,8 +238,8 @@ mark_undo_page_dirty(UndoLogType undoType, uint32 page)
 static inline 
 mark_undo_range_dirty(UndoLogType undoType, UndoLocation location, Size size)
 {
-	UndoLocation end = location + size;
-	UndoLocation pageLoc;
+	pub static mut END: UndoLocation = location + size;
+	pub static mut PAGE_LOC: UndoLocation = std::mem::zeroed();
 
 	Assert(size > 0);
 	Assert(size <= o_undo_circular_sizes[(int) undoType]);
@@ -278,13 +278,13 @@ undo_page_dirty(UndoLogType undoType, uint32 page)
 			& mask) != 0;
 }
 
-pending_truncates_meta: &mut PendingTruncatesMeta;
+pub static mut PENDING_TRUNCATES_META: *mut pending_truncates_meta = std::ptr::null_mut();
 
 UndoLocation curRetainUndoLocations[(int) UndoLogsCount] =
 {
 	InvalidUndoLocation
 };
-bool		oxid_needs_wal_flush = false;
+pub static mut OXID_NEEDS_WAL_FLUSH: bool = false;
 
 static Size reserved_undo_sizes[(int) UndoLogsCount] =
 {
@@ -319,7 +319,7 @@ assign_xidless_commit_lsn(OXid oxid, wrote_xlog: &mut bool)
 		*wrote_xlog = true;
 	}
 
-	return xidless_commit_lsn;
+	pub static mut XIDLESS_COMMIT_LSN: return = std::mem::zeroed();
 }
 
 //
@@ -341,7 +341,7 @@ orioledb_get_xidless_commit_lsn(wrote_xlog: &mut bool)
 		TransactionIdIsValid(get_current_logical_xid()))
 		return assign_xidless_commit_lsn(oxid, wrote_xlog);
 	else
-		return InvalidXLogRecPtr;
+		pub static mut INVALID_X_LOG_REC_PTR: return = std::mem::zeroed();
 }
 
 //
@@ -356,15 +356,15 @@ orioledb_get_xidless_commit_lsn(wrote_xlog: &mut bool)
 //
 typedef struct
 {
-	CommandId	cid;
-	UndoLocation undoLocation;
+	pub static mut CID: CommandId = std::mem::zeroed();
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
 } CommandIdInfo;
 
 static CommandIdInfo commandInfosStatic[16];
-static commandInfos: &mut CommandIdInfo = commandInfosStatic;
+static mut COMMAND_ID_INFO: *mut commandInfos = commandInfosStatic;
 static int	commandIndex = -1,
 			commandInfosLength = lengthof(commandInfosStatic);
-static CommandId currentCommandId;
+static mut CURRENT_COMMAND_ID: CommandId = std::mem::zeroed();
 
 //
 // For better caching ReplicationRetainUndoTuple we remember
@@ -378,10 +378,10 @@ static CommandId currentCommandId;
 //
 typedef struct
 {
-	TransactionId queried_xmin;
-	TransactionId output_xid;
-	UndoLocation undoLocation;
-	uint32		change_count;
+	pub static mut QUERIED_XMIN: TransactionId = std::mem::zeroed();
+	pub static mut OUTPUT_XID: TransactionId = std::mem::zeroed();
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut CHANGE_COUNT: uint32 = std::mem::zeroed();
 } CachedReplicationRetainUndoTuple;
 
 static CachedReplicationRetainUndoTuple cachedReplicationRetainUndoTuple =
@@ -392,8 +392,8 @@ static CachedReplicationRetainUndoTuple cachedReplicationRetainUndoTuple =
 Size
 undo_shmem_needs()
 {
-	Size		size;
-	double		regular_row_undo_circular_buffer_fraction;
+	pub static mut SIZE: Size = 0;
+	pub static mut REGULAR_ROW_UNDO_CIRCULAR_BUFFER_FRACTION: double = std::mem::zeroed();
 
 	regular_row_undo_circular_buffer_fraction = 1.0 - regular_block_undo_circular_buffer_fraction - system_undo_circular_buffer_fraction;
 	o_undo_circular_sizes[UndoLogRegular] = regular_row_undo_circular_buffer_fraction * undo_circular_buffer_size;
@@ -415,11 +415,11 @@ undo_shmem_needs()
 
 	// Dirty bitmaps, one cacheline-aligned chunk per undo log type.
 	{
-		int			t;
+		pub static mut T: std::os::raw::c_int = 0;
 
 		for (t = 0; t < (int) UndoLogsCount; t++)
 		{
-			Size		npages = o_undo_circular_sizes[t] / ORIOLEDB_BLCKSZ;
+			pub static mut NPAGES: Size = o_undo_circular_sizes[t] / ORIOLEDB_BLCKSZ;
 			Size		nwords = (npages + 31) / 32;
 
 			Assert(o_undo_circular_sizes[t] % ORIOLEDB_BLCKSZ == 0);
@@ -433,14 +433,14 @@ undo_shmem_needs()
 
 	size = add_size(size, o_buffers_shmem_needs(&undoBuffersDesc));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 
 undo_shmem_init(Pointer buf, bool found)
 {
-	Pointer		ptr = buf;
-	int			i;
+	pub static mut PTR: Pointer = buf;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	undo_metas = (UndoMeta *) ptr;
 	ptr += CACHELINEALIGN(sizeof(UndoMeta) * (int) UndoLogsCount);
@@ -469,7 +469,7 @@ undo_shmem_init(Pointer buf, bool found)
 	{
 		for (i = 0; i < (int) UndoLogsCount; i++)
 		{
-			Size		w;
+			pub static mut W: Size = 0;
 
 			for (w = 0; w < o_undo_dirty_words[i]; w++)
 				pg_atomic_init_u32(&o_undo_dirty_bitmaps[i][w], 0);
@@ -514,13 +514,13 @@ init_undo_meta(meta: &mut UndoMeta, bool found)
 static UndoItemTypeDescr *
 item_type_get_descr(UndoItemType type)
 {
-	result: &mut UndoItemTypeDescr;
+	pub static mut UNDO_ITEM_TYPE_DESCR: *mut result = std::ptr::null_mut();
 
 	Assert((int) type >= 1 && (int) type <= sizeof(undoItemTypeDescrs) / sizeof(undoItemTypeDescrs[0]));
 
 	result = &undoItemTypeDescrs[(int) type - 1];
 	Assert(result->type == type);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 UndoMeta *
@@ -567,9 +567,9 @@ update_min_undo_locations(UndoLogType undoType,
 				oldCheckpointEndLocation = InvalidUndoLocation,
 				newCheckpointStartLocation = InvalidUndoLocation,
 				newCheckpointEndLocation = InvalidUndoLocation;
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
-	UndoLocation replicationCatalogUndoRetainLocation = InvalidUndoLocation;
+	pub static mut REPLICATION_CATALOG_UNDO_RETAIN_LOCATION: UndoLocation = InvalidUndoLocation;
 
 	Assert(!undoEviction || !do_cleanup);
 
@@ -599,7 +599,7 @@ update_min_undo_locations(UndoLogType undoType,
 
 	for (i = 0; i < max_procs; i++)
 	{
-		UndoLocation tmp;
+		pub static mut TMP: UndoLocation = std::mem::zeroed();
 
 		tmp = pg_atomic_read_u64(&oProcData[i].undoRetainLocations[undoType].reservedUndoLocation);
 		minReservedLocation = Min(minReservedLocation, tmp);
@@ -734,7 +734,7 @@ update_min_undo_locations(UndoLogType undoType,
 fn
 wait_for_even_min_undo_locations_changecount(meta: &mut UndoMeta)
 {
-	SpinDelayStatus status;
+	pub static mut STATUS: SpinDelayStatus = std::mem::zeroed();
 
 	init_local_spin_delay(&status);
 	while (meta->minUndoLocationsChangeCount & 1)
@@ -751,7 +751,7 @@ wait_for_even_min_undo_locations_changecount(meta: &mut UndoMeta)
 fn
 wait_for_even_write_in_progress_changecount(meta: &mut UndoMeta)
 {
-	SpinDelayStatus status;
+	pub static mut STATUS: SpinDelayStatus = std::mem::zeroed();
 
 	init_local_spin_delay(&status);
 	while (meta->writeInProgressChangeCount & 1)
@@ -771,16 +771,16 @@ static UndoLocation
 read_replication_catalog_retain_undo_location(TransactionId xmin, ndeleted: &mut int, bool nocheck)
 {
 	td: &mut BTreeDescr = get_sys_tree(SYS_TREES_CATALOG_XID_UNDO_LOCATION);
-	OTuple		keyTuple;
-	OTuple		tuple;
-	OBTreeFindPageContext context;
-	bool		have_page = false;
-	UndoLocation result;
-	TransactionId cached_output_xid;
-	TransactionId cached_queried_xmin;
-	uint32		cached_change_count;
-	uint32		change_count = 0;
-	bool		change_count_needs_update = false;
+	pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut CONTEXT: OBTreeFindPageContext = std::mem::zeroed();
+	pub static mut HAVE_PAGE: bool = false;
+	pub static mut RESULT: UndoLocation = std::mem::zeroed();
+	pub static mut CACHED_OUTPUT_XID: TransactionId = std::mem::zeroed();
+	pub static mut CACHED_QUERIED_XMIN: TransactionId = std::mem::zeroed();
+	pub static mut CACHED_CHANGE_COUNT: uint32 = std::mem::zeroed();
+	pub static mut CHANGE_COUNT: uint32 = 0;
+	pub static mut CHANGE_COUNT_NEEDS_UPDATE: bool = false;
 
 	if (!nocheck)
 		Assert(wal_level >= WAL_LEVEL_LOGICAL);
@@ -826,12 +826,12 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, ndeleted: &mut
 
 	while (true)
 	{
-		item: &mut OBtreePageFindItem;
-		Page		p;
+		pub static mut O_BTREE_PAGE_FIND_ITEM: *mut item = std::ptr::null_mut();
+		pub static mut P: Page = std::mem::zeroed();
 
 		if (!have_page)
 		{
-			OFindPageResult findResult;
+			pub static mut FIND_RESULT: OFindPageResult = std::mem::zeroed();
 
 			findResult = find_page(&context, NULL, BTreeKeyNone, 0);
 			if (findResult != OFindPageResultSuccess)
@@ -908,33 +908,33 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, ndeleted: &mut
 
 	cachedReplicationRetainUndoTuple.undoLocation = result;
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 UndoLocation
 get_current_replication_catalog_retain_undo_location()
 {
-	TransactionId xmin;
-	TransactionId catalog_xmin;
-	int			ndeleted;
-	UndoLocation result;
+	pub static mut XMIN: TransactionId = std::mem::zeroed();
+	pub static mut CATALOG_XMIN: TransactionId = std::mem::zeroed();
+	pub static mut NDELETED: std::os::raw::c_int = 0;
+	pub static mut RESULT: UndoLocation = std::mem::zeroed();
 
 	if (wal_level < WAL_LEVEL_LOGICAL)
-		return InvalidUndoLocation;
+		pub static mut INVALID_UNDO_LOCATION: return = std::mem::zeroed();
 
 	if (!LWLockHeldByMe(ProcArrayLock))
 		ReplicationSlotsComputeRequiredXmin(false);
 	ProcArrayGetReplicationSlotXmin(&xmin, &catalog_xmin);
 
 	if (!TransactionIdIsValid(catalog_xmin))
-		return InvalidUndoLocation;
+		pub static mut INVALID_UNDO_LOCATION: return = std::mem::zeroed();
 
 	result = read_replication_catalog_retain_undo_location(catalog_xmin, &ndeleted, false);
 	elog(DEBUG4, "Current undoLocation from SYS_TREES_CATALOG_XID_UNDO_LOCATION is "
 		 UINT64_FORMAT " for catalog_xmin %u. Deleted %d old items",
 		 result, catalog_xmin, ndeleted);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -944,12 +944,12 @@ get_current_replication_catalog_retain_undo_location()
 fn
 insert_replication_catalog_retain_undo_location(TransactionId xid, UndoLocation undoLocation, bool nocheck)
 {
-	TransactionId key = xid;
-	OTuple		keyTuple;
-	OTuple		tuple;
-	OTuple		existing_tuple;
-	bool		success PG_USED_FOR_ASSERTS_ONLY;
-	ReplicationRetainUndoTuple data;
+	pub static mut KEY: TransactionId = xid;
+	pub static mut KEY_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut EXISTING_TUPLE: OTuple = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: bool		success = std::mem::zeroed();
+	pub static mut DATA: ReplicationRetainUndoTuple = std::mem::zeroed();
 
 	if (!nocheck)
 		Assert(wal_level >= WAL_LEVEL_LOGICAL);
@@ -1004,9 +1004,9 @@ insert_replication_catalog_retain_undo_location(TransactionId xid, UndoLocation 
 Datum
 orioledb_read_sys_xid_undo_location(PG_FUNCTION_ARGS)
 {
-	TransactionId xid;
-	UndoLocation undoLocation;
-	int			ndeleted;
+	pub static mut XID: TransactionId = std::mem::zeroed();
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut NDELETED: std::os::raw::c_int = 0;
 
 	if (PG_ARGISNULL(0))
 		return (Datum) NULL;
@@ -1022,8 +1022,8 @@ orioledb_read_sys_xid_undo_location(PG_FUNCTION_ARGS)
 Datum
 orioledb_insert_sys_xid_undo_location(PG_FUNCTION_ARGS)
 {
-	TransactionId xid;
-	UndoLocation undoLocation;
+	pub static mut XID: TransactionId = std::mem::zeroed();
+	pub static mut UNDO_LOCATION: UndoLocation = std::mem::zeroed();
 
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		return (Datum) NULL;
@@ -1058,10 +1058,10 @@ fn
 set_my_reserved_location(UndoLogType undoType)
 {
 	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
-	UndoLocation lastUsedLocation;
-	bool		overwriteTransactionRetainUndoLoc;
+	pub static mut LAST_USED_LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut OVERWRITE_TRANSACTION_RETAIN_UNDO_LOC: bool = false;
 	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
-	shared: &mut UndoRetainSharedLocations = &curProcData->undoRetainLocations[undoType];
+	pub static mut UNDO_RETAIN_SHARED_LOCATIONS: *mut shared = &curProcData->undoRetainLocations[undoType];
 
 	Assert(!UndoLocationIsValid(pg_atomic_read_u64(&shared->reservedUndoLocation)));
 
@@ -1140,7 +1140,7 @@ set_my_snapshot_retain_location(UndoLogType undoType)
 
 		break;
 	}
-	return retainUndoLocation;
+	pub static mut RETAIN_UNDO_LOCATION: return = std::mem::zeroed();
 }
 
 
@@ -1156,9 +1156,9 @@ fn
 wait_for_reserved_location(UndoLogType undoType,
 						   UndoLocation undoLocationToWait)
 {
-	SpinDelayStatus delay;
-	bool		delay_inited;
-	int			i;
+	pub static mut DELAY: SpinDelayStatus = std::mem::zeroed();
+	pub static mut DELAY_INITED: bool = false;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < max_procs; i++)
 	{
@@ -1186,8 +1186,8 @@ wait_for_reserved_location(UndoLogType undoType,
 typedef struct
 {
 	char		staticData[UNDO_ITEM_BUF_SIZE];
-	Pointer		data;
-	Size		length;
+	pub static mut DATA: Pointer = std::ptr::null_mut();
+	pub static mut LENGTH: Size = 0;
 } UndoItemBuf;
 
 fn
@@ -1202,7 +1202,7 @@ undo_item_buf_read_item(buf: &mut UndoItemBuf,
 						UndoLogType undoType,
 						UndoLocation location)
 {
-	LocationIndex itemSize;
+	pub static mut ITEM_SIZE: LocationIndex = std::mem::zeroed();
 
 	if (!UNDO_REC_EXISTS(undoType, location))
 	{
@@ -1261,10 +1261,10 @@ free_undo_item_buf(buf: &mut UndoItemBuf)
 static UndoLocation
 o_add_branch_undo_item(UndoLogType undoType, UndoLocation newLocation)
 {
-	UndoLocation location;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
 	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
-	item: &mut BranchUndoStackItem;
-	LocationIndex size;
+	pub static mut BRANCH_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut SIZE: LocationIndex = std::mem::zeroed();
 
 	size = sizeof(BranchUndoStackItem);
 	item = (BranchUndoStackItem *) get_undo_record_unreserved(undoType,
@@ -1281,7 +1281,7 @@ o_add_branch_undo_item(UndoLogType undoType, UndoLocation newLocation)
 	release_reserved_undo_location(undoType);
 	release_undo_size(undoType);
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -1293,8 +1293,8 @@ walk_undo_range(UndoLogType undoType,
 				OXid oxid, OUndoCallbackStage stage, onCommitLocation: &mut UndoLocation,
 				bool changeCountsValid)
 {
-	item: &mut UndoStackItem;
-	descr: &mut UndoItemTypeDescr;
+	pub static mut UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut UNDO_ITEM_TYPE_DESCR: *mut descr = std::ptr::null_mut();
 
 	while (UndoLocationIsValid(location) && (location > toLoc || !UndoLocationIsValid(toLoc)))
 	{
@@ -1330,7 +1330,7 @@ walk_undo_range(UndoLogType undoType,
 		}
 	}
 
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 UndoLocation
@@ -1340,7 +1340,7 @@ walk_undo_range_with_buf(UndoLogType undoType,
 						 onCommitLocation: &mut UndoLocation,
 						 bool changeCountsValid)
 {
-	UndoItemBuf buf;
+	pub static mut BUF: UndoItemBuf = std::mem::zeroed();
 
 	ASAN_UNPOISON_MEMORY_REGION(&buf, sizeof(buf));
 
@@ -1348,7 +1348,7 @@ walk_undo_range_with_buf(UndoLogType undoType,
 	location = walk_undo_range(undoType, location, toLoc, &buf, oxid, stage,
 							   onCommitLocation, changeCountsValid);
 	free_undo_item_buf(&buf);
-	return location;
+	pub static mut LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -1359,10 +1359,10 @@ walk_undo_range_with_buf(UndoLogType undoType,
 
 apply_undo_branches(UndoLogType undoType, OXid oxid)
 {
-	UndoItemBuf buf;
+	pub static mut BUF: UndoItemBuf = std::mem::zeroed();
 	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
-	item: &mut BranchUndoStackItem;
-	UndoLocation location;
+	pub static mut BRANCH_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
 
 	init_undo_item_buf(&buf);
 
@@ -1394,8 +1394,8 @@ walk_undo_stack(UndoLogType undoType, OXid oxid,
 
 	if (STOPEVENTS_ENABLED())
 	{
-		params: &mut Jsonb;
-		state: &mut JsonbParseState = NULL;
+		pub static mut JSONB: *mut params = std::ptr::null_mut();
+		pub static mut JSONB_PARSE_STATE: *mut state = std::ptr::null_mut();
 
 		pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 		jsonb_push_bool_key(&state, "commit", !abortTrx);
@@ -1449,7 +1449,7 @@ walk_undo_stack(UndoLogType undoType, OXid oxid,
 //
 	if (!toLocation && curProcData->flushUndoLocations)
 	{
-		XidFileRec	rec;
+		pub static mut REC: XidFileRec = std::mem::zeroed();
 
 		rec.oxid = oxid;
 		rec.kind = (XidRecKind) undoType;
@@ -1475,7 +1475,7 @@ apply_undo_stack(UndoLogType undoType, OXid oxid, toLocation: &mut UndoStackLoca
 precommit_undo_stack(UndoLogType undoType, OXid oxid, bool changeCountsValid)
 {
 	sharedLocations: &mut UndoStackSharedLocations = GET_CUR_UNDO_STACK_LOCATIONS(undoType);
-	UndoLocation location;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
 
 	location = pg_atomic_read_u64(&sharedLocations->onCommitLocation);
 	walk_undo_range_with_buf(undoType, location, InvalidUndoLocation,
@@ -1500,15 +1500,15 @@ undo_type_has_retained_location(UndoLogType undoType)
 bool
 have_retained_undo_location()
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 	{
 		if (undo_type_has_retained_location((UndoLogType) i))
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 UndoLocation
@@ -1554,19 +1554,19 @@ check_reserved_undo_location(UndoLogType undoType, UndoLocation location,
 	while (location > *minProcReservedLocation + o_undo_circular_sizes[(int) undoType])
 	{
 		if (!waitForUndoLocation)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		wait_for_reserved_location(undoType, location);
 
 		*minProcReservedLocation = pg_atomic_read_u64(&meta->minProcReservedLocation);
 		if (location <= *minProcReservedLocation + o_undo_circular_sizes[(int) undoType])
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 
 		update_min_undo_locations(undoType, false, waitForUndoLocation);
 		*minProcReservedLocation = pg_atomic_read_u64(&meta->minProcReservedLocation);
 	}
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 fn
@@ -1610,7 +1610,7 @@ write_undo_range_if_exists(desc: &mut OBuffersDesc, Pointer buf, UndoLogType und
 	if (maxLoc > minLoc)
 		return o_buffers_write(desc, buf, (uint32) undoType, minLoc,
 							   maxLoc - minLoc, true, false);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static bool
@@ -1663,7 +1663,7 @@ flush_dirty_undo_range(UndoLogType undoType,
 
 	alignedFrom = fromLoc - (fromLoc % ORIOLEDB_BLCKSZ);
 	alignedTo = ((toLoc + ORIOLEDB_BLCKSZ - 1) / ORIOLEDB_BLCKSZ)
-		* ORIOLEDB_BLCKSZ;
+		pub static mut ORIOLEDB_BLCKSZ: *mut  = std::ptr::null_mut();
 
 	// Cap to ring size: revisiting the same physical page is pointless.
 	if (alignedTo - alignedFrom > circularBufferSize)
@@ -1672,7 +1672,7 @@ flush_dirty_undo_range(UndoLogType undoType,
 	pageLoc = alignedFrom;
 	while (pageLoc < alignedTo)
 	{
-		int			processed;
+		pub static mut PROCESSED: std::os::raw::c_int = 0;
 
 		LWLockAcquire(&meta->undoWriteLock, LW_EXCLUSIVE);
 
@@ -1814,18 +1814,18 @@ evict_undo_to_disk(UndoLogType undoType,
 // clearing the bit could mask their updates.
 //
 	{
-		UndoLocation loc;
+		pub static mut LOC: UndoLocation = std::mem::zeroed();
 
 		for (loc = retainUndoLocation; loc < targetUndoLocation;)
 		{
 			UndoLocation pageBase = loc - (loc % ORIOLEDB_BLCKSZ);
-			UndoLocation writeStart = loc;
+			pub static mut WRITE_START: UndoLocation = loc;
 			UndoLocation writeEnd = Min(pageBase + ORIOLEDB_BLCKSZ,
 										targetUndoLocation);
 			uint32		page = UNDO_PAGE_INDEX(undoType, loc);
 			bool		isFull = (writeStart == pageBase &&
 								  writeEnd == pageBase + ORIOLEDB_BLCKSZ);
-			bool		dirty;
+			pub static mut DIRTY: bool = false;
 
 			if (isFull)
 				dirty = test_clear_undo_page_dirty(undoType, page);
@@ -1857,8 +1857,8 @@ bool
 reserve_undo_size_extended(UndoLogType undoType, Size size,
 						   bool waitForUndoLocation)
 {
-	UndoLocation location;
-	uint64		minProcReservedLocation;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut MIN_PROC_RESERVED_LOCATION: uint64 = std::mem::zeroed();
 	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 	Size		circularBufferSize = o_undo_circular_sizes[(int) undoType];
 	curProcData: &mut ODBProcData PG_USED_FOR_ASSERTS_ONLY = GET_CUR_PROCDATA();
@@ -1876,8 +1876,8 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 // Add element to mapping (xid -> transactionUndoRetainLocation) for
 // system tree modification in logical decoding.
 //
-		TransactionId xid;
-		static TransactionId insertedXid = InvalidTransactionId;
+		pub static mut XID: TransactionId = std::mem::zeroed();
+		static mut INSERTED_XID: TransactionId = InvalidTransactionId;
 
 		if (!is_recovery_in_progress())
 			xid = GetCurrentTransactionIdIfAny();
@@ -1904,7 +1904,7 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 	}
 
 	if (reserved_undo_sizes[(int) undoType] >= size)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	size -= reserved_undo_sizes[(int) undoType];
 
@@ -1913,7 +1913,7 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 
 	if (location + size <=
 		pg_atomic_read_u64(&meta->writtenLocation) + circularBufferSize)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (undoType != UndoLogSystem || !have_locked_pages())
 		update_min_undo_locations(undoType, false, waitForUndoLocation);
@@ -1928,13 +1928,13 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 //
 		pg_atomic_fetch_sub_u64(&meta->advanceReservedLocation, size);
 		reserved_undo_sizes[(int) undoType] -= size;
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	// Recheck if the required location was already written
 	if (location + size <=
 		pg_atomic_read_u64(&meta->writtenLocation) + circularBufferSize)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	if (!waitForUndoLocation)
 	{
@@ -1943,7 +1943,7 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 //
 		pg_atomic_fetch_sub_u64(&meta->advanceReservedLocation, size);
 		reserved_undo_sizes[(int) undoType] -= size;
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	if (location + size <=
@@ -1961,14 +1961,14 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 		SpinLockAcquire(&meta->minUndoLocationsMutex);
 		Assert(location + size <= pg_atomic_read_u64(&meta->writtenLocation) + circularBufferSize);
 		SpinLockRelease(&meta->minUndoLocationsMutex);
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	evict_undo_to_disk(undoType, location + size - circularBufferSize,
 					   minProcReservedLocation, false);
 	Assert(location + size <= pg_atomic_read_u64(&meta->writtenLocation) + circularBufferSize);
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -2004,9 +2004,9 @@ fsync_undo_range(UndoLogType undoType,
 				 UndoLocation fromLoc, UndoLocation toLoc,
 				 uint32 wait_event_info)
 {
-	UndoLocation minProcReservedLocation;
+	pub static mut MIN_PROC_RESERVED_LOCATION: UndoLocation = std::mem::zeroed();
 	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
-	UndoLocation writtenLocation;
+	pub static mut WRITTEN_LOCATION: UndoLocation = std::mem::zeroed();
 
 	() check_reserved_undo_location(undoType,
 										toLoc + o_undo_circular_sizes[(int) undoType],
@@ -2047,7 +2047,7 @@ get_undo_record(UndoLogType undoType, undoLocation: &mut UndoLocation, Size size
 
 	while (true)
 	{
-		UndoLocation location;
+		pub static mut LOCATION: UndoLocation = std::mem::zeroed();
 
 		if (reserved_undo_sizes[(int) undoType] < size)
 			elog(PANIC, "get_undo_record(): not enough reserved undo (undoType: %d, reservedSize %u, requestedSize: %u",
@@ -2176,7 +2176,7 @@ add_new_undo_stack_item_to_process(UndoLogType undoType,
 								   int autonomousNestingLevel)
 {
 	item: &mut UndoStackItem = (UndoStackItem *) GET_UNDO_REC(undoType, location);
-	sharedLocations: &mut UndoStackSharedLocations;
+	pub static mut UNDO_STACK_SHARED_LOCATIONS: *mut sharedLocations = std::ptr::null_mut();
 	descr: &mut UndoItemTypeDescr PG_USED_FOR_ASSERTS_ONLY = item_type_get_descr(item->type);
 
 	Assert(!descr->callOnCommit);
@@ -2203,7 +2203,7 @@ get_subxact_undo_location(UndoLogType undoType)
 	}
 	else
 	{
-		return InvalidUndoLocation;
+		pub static mut INVALID_UNDO_LOCATION: return = std::mem::zeroed();
 	}
 }
 
@@ -2247,7 +2247,7 @@ set_cur_undo_locations(UndoLogType undoType, UndoStackLocations locations)
 reset_cur_undo_locations()
 {
 	UndoStackLocations location = {InvalidUndoLocation, InvalidUndoLocation, InvalidUndoLocation, InvalidUndoLocation};
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		set_cur_undo_locations((UndoLogType) i, location);
@@ -2260,9 +2260,9 @@ reset_cur_undo_locations()
 orioledb_reset_xmin_hook()
 {
 	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
-	location: &mut RetainUndoLocationPHNode;
-	OXid		xmin = InvalidOXid;
-	int			i;
+	pub static mut RETAIN_UNDO_LOCATION_PH_NODE: *mut location = std::ptr::null_mut();
+	pub static mut XMIN: OXid = InvalidOXid;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	if (ActiveSnapshotSet())
 		return;
@@ -2277,7 +2277,7 @@ orioledb_reset_xmin_hook()
 		}
 		else
 		{
-			Snapshot	snapshot;
+			pub static mut SNAPSHOT: Snapshot = std::mem::zeroed();
 
 			location = pairingheap_container(RetainUndoLocationPHNode, ph_node,
 											 pairingheap_first(&retainUndoLocHeaps[undoType]));
@@ -2321,16 +2321,16 @@ rewind_handle_pending_deletes()
 undo_xact_callback(XactEvent event,  *arg)
 {
 	OXid		oxid = get_current_oxid_if_any();
-	CommitSeqNo csn;
+	pub static mut CSN: CommitSeqNo = std::mem::zeroed();
 	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
-	bool		isParallelWorker;
-	int			i;
-	TransactionId xid1 = InvalidTransactionId;
-	int			nsubxids = 0;
-	subxids: &mut TransactionId = NULL;
-	TransactionId heapXid;
-	XLogRecPtr	flushPos;
-	LogicalXidCtx logicalXidContext;
+	pub static mut IS_PARALLEL_WORKER: bool = false;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut XID1: TransactionId = InvalidTransactionId;
+	pub static mut NSUBXIDS: std::os::raw::c_int = 0;
+	pub static mut TRANSACTION_ID: *mut subxids = std::ptr::null_mut();
+	pub static mut HEAP_XID: TransactionId = std::mem::zeroed();
+	pub static mut FLUSH_POS: XLogRecPtr = std::mem::zeroed();
+	pub static mut LOGICAL_XID_CONTEXT: LogicalXidCtx = std::mem::zeroed();
 
 	// elog(LOG, "UNDO XACT CALLBACK");
 	isParallelWorker = (MyProc->lockGroupLeader != NULL &&
@@ -2481,7 +2481,7 @@ undo_xact_callback(XactEvent event,  *arg)
 
 				if (!TransactionIdIsValid(heapXid))
 				{
-					bool		wrote_xlog;
+					pub static mut WROTE_XLOG: bool = false;
 
 					// Commit o - o : independent Oriole transaction
 					flushPos = Max(assign_xidless_commit_lsn(oxid, &wrote_xlog), XactLastCommitEnd);
@@ -2648,11 +2648,11 @@ undo_xact_callback(XactEvent event,  *arg)
 
 add_subxact_undo_item(SubTransactionId parentSubid)
 {
-	item: &mut SubXactUndoStackItem;
-	sharedLocations: &mut UndoStackSharedLocations;
-	UndoLocation location;
-	Size		size;
-	int			i;
+	pub static mut SUB_XACT_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
+	pub static mut UNDO_STACK_SHARED_LOCATIONS: *mut sharedLocations = std::ptr::null_mut();
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut SIZE: Size = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 	{
@@ -2684,7 +2684,7 @@ search_for_undo_sub_location(UndoLogType undoType,
 							 buf: &mut UndoItemBuf, SubTransactionId parentSubid,
 							 toLoc: &mut UndoLocation, toSubLoc: &mut UndoLocation)
 {
-	item: &mut SubXactUndoStackItem;
+	pub static mut SUB_XACT_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
 
 	Assert(undoType != UndoLogRegularPageLevel);
 
@@ -2698,11 +2698,11 @@ search_for_undo_sub_location(UndoLogType undoType,
 		{
 			*toLoc = InvalidUndoLocation;
 			*toSubLoc = InvalidUndoLocation;
-			return true;
+			pub static mut TRUE: return = std::mem::zeroed();
 		}
 		else
 		{
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 
@@ -2720,7 +2720,7 @@ search_for_undo_sub_location(UndoLogType undoType,
 			{
 				*toLoc = InvalidUndoLocation;
 				*toSubLoc = InvalidUndoLocation;
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 			}
 			else if (kind == UndoStackHead)
 			{
@@ -2731,13 +2731,13 @@ search_for_undo_sub_location(UndoLogType undoType,
 				}
 				else
 				{
-					return false;
+					pub static mut FALSE: return = std::mem::zeroed();
 				}
 			}
 		}
 		*toLoc = location;
 		*toSubLoc = item->prevSubLocation;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 }
 
@@ -2758,12 +2758,12 @@ update_subxact_undo_location(UndoLogType undoType, UndoLocation subxactLocation)
 rollback_to_savepoint(UndoLogType undoType, UndoStackKind kind,
 					  SubTransactionId parentSubid, bool changeCountsValid)
 {
-	UndoStackLocations toLoc;
-	UndoLocation location;
-	sharedLocations: &mut UndoStackSharedLocations;
-	UndoItemBuf buf;
-	OXid		oxid;
-	bool		applyResult;
+	pub static mut TO_LOC: UndoStackLocations = std::mem::zeroed();
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut UNDO_STACK_SHARED_LOCATIONS: *mut sharedLocations = std::ptr::null_mut();
+	pub static mut BUF: UndoItemBuf = std::mem::zeroed();
+	pub static mut OXID: OXid = std::mem::zeroed();
+	pub static mut APPLY_RESULT: bool = false;
 
 	if (undoType == UndoLogRegularPageLevel)
 		return;
@@ -2796,11 +2796,11 @@ rollback_to_savepoint(UndoLogType undoType, UndoStackKind kind,
 fn
 update_subxact_undo_location_on_commit(SubTransactionId parentSubid)
 {
-	UndoStackLocations toLoc;
-	UndoLocation location;
-	sharedLocations: &mut UndoStackSharedLocations;
-	UndoItemBuf buf;
-	int			i;
+	pub static mut TO_LOC: UndoStackLocations = std::mem::zeroed();
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut UNDO_STACK_SHARED_LOCATIONS: *mut sharedLocations = std::ptr::null_mut();
+	pub static mut BUF: UndoItemBuf = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	for (i = 0; i < (int) UndoLogsCount; i++)
 	{
@@ -2824,9 +2824,9 @@ update_subxact_undo_location_on_commit(SubTransactionId parentSubid)
 undo_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 					  SubTransactionId parentSubid,  *arg)
 {
-	TransactionId prentLogicalXid;
-	int			i;
-	LogicalXidCtx logicalXidContext;
+	pub static mut PRENT_LOGICAL_XID: TransactionId = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut LOGICAL_XID_CONTEXT: LogicalXidCtx = std::mem::zeroed();
 
 	//
 // Cleanup EXPLAIN ANALYZE counters pointer to handle case when execution
@@ -2901,11 +2901,11 @@ have_current_undo(UndoLogType undoType)
 {
 	if (undoType == UndoLogNone)
 	{
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	}
 	else
 	{
-		UndoStackLocations locations;
+		pub static mut LOCATIONS: UndoStackLocations = std::mem::zeroed();
 
 		get_cur_undo_locations(&locations, undoType);
 
@@ -2916,8 +2916,8 @@ have_current_undo(UndoLogType undoType)
 Datum
 orioledb_has_retained_undo(PG_FUNCTION_ARGS)
 {
-	UndoLocation location;
-	bool		result = false;
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut RESULT: bool = false;
 	int			i,
 				j;
 
@@ -2940,7 +2940,7 @@ orioledb_has_retained_undo(PG_FUNCTION_ARGS)
 
 start_autonomous_transaction(state: &mut OAutonomousTxState)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(!is_recovery_process());
 
@@ -2968,7 +2968,7 @@ abort_autonomous_transaction(state: &mut OAutonomousTxState)
 
 	if (OXidIsValid(oxid))
 	{
-		int			i;
+		pub static mut I: std::os::raw::c_int = 0;
 
 		if (!is_recovery_process())
 			wal_rollback(oxid, get_current_logical_xid(), true);
@@ -3000,8 +3000,8 @@ finish_autonomous_transaction(state: &mut OAutonomousTxState)
 
 	if (OXidIsValid(oxid))
 	{
-		CommitSeqNo csn;
-		int			i;
+		pub static mut CSN: CommitSeqNo = std::mem::zeroed();
+		pub static mut I: std::os::raw::c_int = 0;
 
 		for (i = 0; i < (int) UndoLogsCount; i++)
 			precommit_undo_stack((UndoLogType) i, oxid, true);
@@ -3045,7 +3045,7 @@ finish_autonomous_transaction(state: &mut OAutonomousTxState)
 
 undo_read(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 {
-	UndoLocation writtenLocation;
+	pub static mut WRITTEN_LOCATION: UndoLocation = std::mem::zeroed();
 	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 	writtenLocation = pg_atomic_read_u64(&meta->writtenLocation);
@@ -3083,11 +3083,11 @@ undo_read(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 bool
 undo_read_if_exists(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 {
-	UndoLocation writtenLocation;
+	pub static mut WRITTEN_LOCATION: UndoLocation = std::mem::zeroed();
 	meta: &mut UndoMeta = get_undo_meta_by_type(undoType);
 
 	if (!UNDO_REC_EXISTS(undoType, location))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	writtenLocation = pg_atomic_read_u64(&meta->writtenLocation);
 
@@ -3110,14 +3110,14 @@ undo_read_if_exists(UndoLogType undoType, UndoLocation location, Size size, Poin
 			if (!read_undo_range_if_exists(&undoBuffersDesc, buf, undoType,
 										   location,
 										   Min(location + size, writtenLocation)))
-				return false;
+				pub static mut FALSE: return = std::mem::zeroed();
 		}
 	}
 	else
 	{
 		if (!read_undo_range_if_exists(&undoBuffersDesc, buf, undoType,
 									   location, location + size))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
 	//
@@ -3125,9 +3125,9 @@ undo_read_if_exists(UndoLogType undoType, UndoLocation location, Size size, Poin
 // just read may be garbage from a reused circular buffer.
 //
 	if (!UNDO_REC_EXISTS(undoType, location))
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -3222,7 +3222,7 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 	if (memoryUndoLocation == location)
 	{
 		// Everything is written to the in-memory buffer
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 
 	// Wait for in-progress write if needed
@@ -3243,10 +3243,10 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 	{
 		if (!write_undo_range_if_exists(&undoBuffersDesc, buf, undoType,
 										location, memoryUndoLocation))
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 	}
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -3260,11 +3260,11 @@ undoLocCmp(const a: &mut pairingheap_node, const b: &mut pairingheap_node,  *arg
 	const bloc: &mut RetainUndoLocationPHNode = pairingheap_const_container(RetainUndoLocationPHNode, ph_node, b);
 
 	if (aloc->undoLocation < bloc->undoLocation)
-		return 1;
+		pub static mut 1: return = std::mem::zeroed();
 	else if (aloc->undoLocation > bloc->undoLocation)
 		return -1;
 	else
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 }
 
 
@@ -3302,7 +3302,7 @@ orioledb_snapshot_hook(Snapshot snapshot)
 	OXid		curXmin,
 				xmin;
 	curProcData: &mut ODBProcData = GET_CUR_PROCDATA();
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	//
 // It means that there was a crash recovery and we need to cleanup. This
@@ -3382,7 +3382,7 @@ undo_location_get_command(UndoLocation location)
 // need it?
 //
 	if (IsParallelWorker())
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 
 	Assert(commandIndex >= 0);
 
@@ -3407,7 +3407,7 @@ current_command_get_undo_location()
 
 	if (commandIndex < 0 || commandInfos[commandIndex].cid != cid)
 	{
-		UndoLocation loc;
+		pub static mut LOC: UndoLocation = std::mem::zeroed();
 
 		() get_undo_record(UndoLogRegular, &loc, MAXIMUM_ALIGNOF);
 		release_reserved_undo_location(UndoLogRegular);
@@ -3454,7 +3454,7 @@ o_set_current_command(CommandId commandId)
 CommandId
 o_get_current_command()
 {
-	return currentCommandId;
+	pub static mut CURRENT_COMMAND_ID: return = std::mem::zeroed();
 }
 
 fn
@@ -3482,17 +3482,17 @@ fn
 o_add_rewind_relfilenode_undo_item(onCommit: &mut RelFileNode, onAbort: &mut RelFileNode,
 								   int nOnCommit, int nOnAbort)
 {
-	LocationIndex size;
-	UndoLocation location;
-	item: &mut RewindRelFileNodeUndoStackItem;
+	pub static mut SIZE: LocationIndex = std::mem::zeroed();
+	pub static mut LOCATION: UndoLocation = std::mem::zeroed();
+	pub static mut REWIND_REL_FILE_NODE_UNDO_STACK_ITEM: *mut item = std::ptr::null_mut();
 	int			stepItemsCapacity = (O_MAX_UNDO_RECORD_SIZE - offsetof(RewindRelFileNodeUndoStackItem, rels)) / sizeof(RelFileNode);
 
 	Assert(nOnCommit >= 0 && nOnAbort >= 0);
 
 	while (nOnCommit + nOnAbort > 0)
 	{
-		int			stepOnCommit;
-		int			stepOnAbort;
+		pub static mut STEP_ON_COMMIT: std::os::raw::c_int = 0;
+		pub static mut STEP_ON_ABORT: std::os::raw::c_int = 0;
 
 		stepOnCommit = Min(nOnCommit, stepItemsCapacity);
 		stepOnAbort = Min(nOnAbort, stepItemsCapacity - stepOnCommit);
@@ -3529,8 +3529,8 @@ Datum
 orioledb_undo_size(PG_FUNCTION_ARGS)
 {
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	struct direntry: &mut dirent;
-	dirdesc: &mut DIR;
+	pub static mut DIRENT: *mut struct direntry = std::ptr::null_mut();
+	pub static mut DIR: *mut dirdesc = std::ptr::null_mut();
 	char		filename[MAXPGPATH * 2];
 	const char	path[15] = "orioledb_undo";
 	int64		totalsize[UndoLogsCount];
@@ -3548,7 +3548,7 @@ orioledb_undo_size(PG_FUNCTION_ARGS)
 
 	while ((direntry = ReadDir(dirdesc, path)) != NULL)
 	{
-		struct stat fst;
+		pub static mut FST: struct stat = std::mem::zeroed();
 		char		undo_type[7];
 
 		CHECK_FOR_INTERRUPTS();
@@ -3609,12 +3609,12 @@ orioledb_get_undo_meta(PG_FUNCTION_ARGS)
 #define UNDO_META_NATTS 14
 	Datum		values[UNDO_META_NATTS];
 	bool		nulls[UNDO_META_NATTS];
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
-	int			i;
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 
 	orioledb_check_shmem();
 
@@ -3666,11 +3666,11 @@ orioledb_get_proc_retain_undo_locations(PG_FUNCTION_ARGS)
 #define PROC_RETAIN_NATTS 7
 	Datum		values[PROC_RETAIN_NATTS];
 	bool		nulls[PROC_RETAIN_NATTS];
-	TupleDesc	tupdesc;
-	tupstore: &mut Tuplestorestate;
+	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
+	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
 	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	MemoryContext per_query_ctx;
-	MemoryContext oldcontext;
+	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
+	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
 	int			i,
 				j;
 
@@ -3720,7 +3720,7 @@ orioledb_get_proc_retain_undo_locations(PG_FUNCTION_ARGS)
 
 			// Show the effective minimum retain for this proc/type
 			{
-				UndoLocation effective = InvalidUndoLocation;
+				pub static mut EFFECTIVE: UndoLocation = InvalidUndoLocation;
 
 				if (UndoLocationIsValid(reserved))
 					effective = Min(effective, reserved);

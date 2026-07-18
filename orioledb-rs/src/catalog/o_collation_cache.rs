@@ -20,20 +20,20 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static collation_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut collation_cache = std::ptr::null_mut();
 
 typedef struct OCollation
 {
-	OSysCacheKey1 key;
-	uint16		data_version;
-	char		collprovider;
-	bool		collisdeterministic;
-	NameData	collname;
-	collcollate: &mut char;
-	collctype: &mut char;
-	colliculocale: &mut char;
-	collicurules: &mut char;
-	collversion: &mut char;
+	pub static mut KEY: OSysCacheKey1 = std::mem::zeroed();
+	pub static mut DATA_VERSION: uint16 = std::mem::zeroed();
+	pub static mut COLLPROVIDER: char = std::mem::zeroed();
+	pub static mut COLLISDETERMINISTIC: bool = false;
+	pub static mut COLLNAME: NameData = std::mem::zeroed();
+	pub static mut CHAR: *mut collcollate = std::ptr::null_mut();
+	pub static mut CHAR: *mut collctype = std::ptr::null_mut();
+	pub static mut CHAR: *mut colliculocale = std::ptr::null_mut();
+	pub static mut CHAR: *mut collicurules = std::ptr::null_mut();
+	pub static mut CHAR: *mut collversion = std::ptr::null_mut();
 } OCollation;
 
 fn o_collation_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
@@ -70,14 +70,14 @@ fn
 o_collation_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							 Pointer arg)
 {
-	HeapTuple	collationtup;
-	Form_pg_collation collform;
+	pub static mut COLLATIONTUP: HeapTuple = std::mem::zeroed();
+	pub static mut COLLFORM: Form_pg_collation = std::mem::zeroed();
 	o_collation: &mut OCollation = (OCollation *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			colloid;
-	Datum		datum;
-	bool		isNull;
-	bool		valid;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut COLLOID: Oid = std::mem::zeroed();
+	pub static mut DATUM: Datum = std::mem::zeroed();
+	pub static mut IS_NULL: bool = false;
+	pub static mut VALID: bool = false;
 
 	colloid = DatumGetObjectId(key->keys[0]);
 
@@ -169,7 +169,7 @@ o_collation_cache_free_entry(Pointer entry)
 static Pointer
 o_collation_cache_serialize_entry(Pointer entry, len: &mut int)
 {
-	StringInfoData str;
+	pub static mut STR: StringInfoData = std::mem::zeroed();
 	o_collation: &mut OCollation = (OCollation *) entry;
 
 	if (o_collation->data_version != ORIOLEDB_SYS_TREE_VERSION)
@@ -195,9 +195,9 @@ static Pointer
 o_collation_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 									Size length)
 {
-	Pointer		ptr = data;
-	o_collation: &mut OCollation;
-	int			len;
+	pub static mut PTR: Pointer = data;
+	pub static mut O_COLLATION: *mut o_collation = std::ptr::null_mut();
+	pub static mut LEN: std::os::raw::c_int = 0;
 
 	o_collation = (OCollation *) palloc0(sizeof(OCollation));
 	len = offsetof(OCollation, collcollate);
@@ -221,12 +221,12 @@ o_collation_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 HeapTuple
 o_collation_cache_search_htup(TupleDesc tupdesc, Oid colloid)
 {
-	XLogRecPtr	cur_lsn;
-	Oid			datoid;
-	HeapTuple	result = NULL;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut DATOID: Oid = std::mem::zeroed();
+	pub static mut RESULT: HeapTuple = std::ptr::null_mut();
 	Datum		values[Natts_pg_collation] = {0};
 	bool		nulls[Natts_pg_collation] = {0};
-	o_collation: &mut OCollation;
+	pub static mut O_COLLATION: *mut o_collation = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 	o_collation = o_collation_cache_search(datoid, colloid, cur_lsn,
@@ -280,7 +280,7 @@ o_collation_cache_search_htup(TupleDesc tupdesc, Oid colloid)
 
 		result = heap_form_tuple(tupdesc, values, nulls);
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -288,8 +288,8 @@ orioledb_save_collation(Oid colloid)
 {
 	if (OidIsValid(colloid))
 	{
-		XLogRecPtr	cur_lsn;
-		Oid			datoid;
+		pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+		pub static mut DATOID: Oid = std::mem::zeroed();
 
 		o_sys_cache_set_datoid_lsn(&cur_lsn, &datoid);
 		o_class_cache_add_if_needed(datoid, CollationRelationId, cur_lsn, NULL);

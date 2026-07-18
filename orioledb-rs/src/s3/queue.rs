@@ -23,18 +23,18 @@ use pgrx::pg_sys;
 typedef struct
 {
 	// Location to insert new tasks
-	pg_atomic_uint64 insertLocation;
-	ConditionVariable insertLocationCV;
+	pub static mut INSERT_LOCATION: pg_atomic_uint64 = std::mem::zeroed();
+	pub static mut INSERT_LOCATION_CV: ConditionVariable = std::mem::zeroed();
 
 	// Location to pick the existing tasks by workers
-	pg_atomic_uint64 pickLocation;
+	pub static mut PICK_LOCATION: pg_atomic_uint64 = std::mem::zeroed();
 
 	//
 // All the tasks before this location has been already erased in the
 // buffer.
 //
-	pg_atomic_uint64 erasedLocation;
-	ConditionVariable erasedLocationCV;
+	pub static mut ERASED_LOCATION: pg_atomic_uint64 = std::mem::zeroed();
+	pub static mut ERASED_LOCATION_CV: ConditionVariable = std::mem::zeroed();
 } S3TaskQueueMeta;
 
 //
@@ -43,22 +43,22 @@ typedef struct
 //
 #define	LENGTH_ERASED_FLAG	(0x80000000)
 
-static Size s3_queue_size = 0;
-static s3_queue_meta: &mut S3TaskQueueMeta = NULL;
-static Pointer s3_queue_buffer = NULL;
+static mut S3_QUEUE_SIZE: Size = 0;
+static mut S3_TASK_QUEUE_META: *mut s3_queue_meta = std::ptr::null_mut();
+static mut S3_QUEUE_BUFFER: Pointer = std::ptr::null_mut();
 
 Size
 s3_queue_shmem_needs()
 {
-	Size		size = 0;
+	pub static mut SIZE: Size = 0;
 
 	if (!orioledb_s3_mode)
-		return size;
+		pub static mut SIZE: return = std::mem::zeroed();
 
 	size = add_size(size, CACHELINEALIGN(sizeof(S3TaskQueueMeta)));
 	size = add_size(size, CACHELINEALIGN((Size) s3_queue_size_guc * 1024));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 
@@ -99,8 +99,8 @@ s3_queue_get_insert_location()
 S3TaskLocation
 s3_queue_put_task(Pointer data, uint32 len)
 {
-	S3TaskLocation insertLocation;
-	bool		slept = false;
+	pub static mut INSERT_LOCATION: S3TaskLocation = std::mem::zeroed();
+	pub static mut SLEPT: bool = false;
 	uint32		totallen = len + sizeof(uint32);
 
 	Assert(totallen = INTALIGN(totallen));
@@ -134,7 +134,7 @@ s3_queue_put_task(Pointer data, uint32 len)
 // More complex case: we hit the buffer end boundary.  In this case we
 // need to split the task into two distinct chunks.
 //
-		uint32		firstChunkLen = s3_queue_size - insertLocation % s3_queue_size;
+		pub static mut FIRST_CHUNK_LEN: uint32 = s3_queue_size - insertLocation % s3_queue_size;
 
 		Assert(firstChunkLen >= sizeof(uint32));
 
@@ -153,7 +153,7 @@ s3_queue_put_task(Pointer data, uint32 len)
 	pg_write_barrier();
 	*((uint32 *) (s3_queue_buffer + insertLocation % s3_queue_size)) = totallen;
 
-	return insertLocation;
+	pub static mut INSERT_LOCATION: return = std::mem::zeroed();
 }
 
 //
@@ -168,7 +168,7 @@ s3_queue_try_pick_task()
 		S3TaskLocation insertLocation,
 					pickLocation,
 					erasedLocation;
-		uint32		taskLen;
+		pub static mut TASK_LEN: uint32 = std::mem::zeroed();
 
 		pickLocation = pg_atomic_read_u64(&s3_queue_meta->pickLocation);
 		pg_read_barrier();
@@ -179,13 +179,13 @@ s3_queue_try_pick_task()
 		{
 			// Nothing inserted yet
 			Assert(pickLocation == insertLocation);
-			return InvalidS3TaskLocation;
+			pub static mut INVALID_S3_TASK_LOCATION: return = std::mem::zeroed();
 		}
 
 		if (pickLocation + sizeof(uint32) >= erasedLocation + s3_queue_size)
 		{
 			// Insert location is advanced, but the area wasn't erased yet
-			return InvalidS3TaskLocation;
+			pub static mut INVALID_S3_TASK_LOCATION: return = std::mem::zeroed();
 		}
 
 		taskLen = *((uint32 *) (s3_queue_buffer + pickLocation % s3_queue_size));
@@ -195,7 +195,7 @@ s3_queue_try_pick_task()
 		if (taskLen == 0)
 		{
 			// Insert location is advanced, but the data wasn't written yet
-			return InvalidS3TaskLocation;
+			pub static mut INVALID_S3_TASK_LOCATION: return = std::mem::zeroed();
 		}
 
 		//
@@ -206,7 +206,7 @@ s3_queue_try_pick_task()
 										   &pickLocation,
 										   pickLocation + taskLen))
 		{
-			return pickLocation;
+			pub static mut PICK_LOCATION: return = std::mem::zeroed();
 		}
 	}
 }
@@ -217,8 +217,8 @@ s3_queue_try_pick_task()
 Pointer
 s3_queue_get_task(S3TaskLocation taskLocation)
 {
-	uint32		taskLen;
-	Pointer		result;
+	pub static mut TASK_LEN: uint32 = std::mem::zeroed();
+	pub static mut RESULT: Pointer = std::ptr::null_mut();
 
 	// Get the task length
 	taskLen = *((uint32 *) (s3_queue_buffer + taskLocation % s3_queue_size));
@@ -242,7 +242,7 @@ s3_queue_get_task(S3TaskLocation taskLocation)
 // More complex case: we hit the buffer end boundary.  In this case we
 // have to assemble task from the two distinct chunks.
 //
-		uint32		firstChunkLen = s3_queue_size - taskLocation % s3_queue_size;
+		pub static mut FIRST_CHUNK_LEN: uint32 = s3_queue_size - taskLocation % s3_queue_size;
 
 		Assert(firstChunkLen >= sizeof(uint32));
 
@@ -254,7 +254,7 @@ s3_queue_get_task(S3TaskLocation taskLocation)
 			   taskLen - firstChunkLen);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -263,7 +263,7 @@ s3_queue_get_task(S3TaskLocation taskLocation)
 
 s3_queue_erase_task(S3TaskLocation taskLocation)
 {
-	uint32		taskLen;
+	pub static mut TASK_LEN: uint32 = std::mem::zeroed();
 
 	taskLen = *((uint32 *) (s3_queue_buffer + taskLocation % s3_queue_size));
 
@@ -284,7 +284,7 @@ s3_queue_erase_task(S3TaskLocation taskLocation)
 // More complex case: we hit the buffer end boundary.  In this case we
 // have to erase the two distinct chunks.
 //
-		int			firstChunkLen = s3_queue_size - taskLocation % s3_queue_size;
+		pub static mut FIRST_CHUNK_LEN: std::os::raw::c_int = s3_queue_size - taskLocation % s3_queue_size;
 
 		Assert(firstChunkLen >= sizeof(uint32));
 
@@ -332,7 +332,7 @@ s3_queue_erase_task(S3TaskLocation taskLocation)
 
 s3_queue_wait_for_location(S3TaskLocation location)
 {
-	bool		slept = false;
+	pub static mut SLEPT: bool = false;
 
 	while (pg_atomic_read_u64(&s3_queue_meta->erasedLocation) <= location)
 	{

@@ -40,8 +40,8 @@ fn
 tts_copy_identity(srcSlot: &mut TupleTableSlot, dstSlot: &mut TupleTableSlot,
 				  idx: &mut OIndexDescr)
 {
-	int			i;
-	int			nattrs = dstSlot->tts_tupleDescriptor->natts;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut NATTRS: std::os::raw::c_int = dstSlot->tts_tupleDescriptor->natts;
 
 	slot_getallattrs(srcSlot);
 
@@ -54,7 +54,7 @@ tts_copy_identity(srcSlot: &mut TupleTableSlot, dstSlot: &mut TupleTableSlot,
 
 	for (i = 0; i < idx->nonLeafTupdesc->natts; i++)
 	{
-		int			attnum;
+		pub static mut ATTNUM: std::os::raw::c_int = 0;
 
 		attnum = idx->tableAttnums[i] - 1;
 		if (attnum >= 0)
@@ -77,8 +77,8 @@ tts_copy_identity(srcSlot: &mut TupleTableSlot, dstSlot: &mut TupleTableSlot,
 static REORDER_BUFFER_TUPLE_TYPE
 record_buffer_tuple(reorder: &mut ReorderBuffer, HeapTuple htup, bool freeHtup)
 {
-	HeapTuple	changeTup;
-	REORDER_BUFFER_TUPLE_TYPE result;
+	pub static mut CHANGE_TUP: HeapTuple = std::mem::zeroed();
+	pub static mut RESULT: REORDER_BUFFER_TUPLE_TYPE = std::mem::zeroed();
 
 #if PG_VERSION_NUM >= 180000
 	result = ReorderBufferAllocTupleBuf(reorder, htup->t_len);
@@ -98,7 +98,7 @@ record_buffer_tuple(reorder: &mut ReorderBuffer, HeapTuple htup, bool freeHtup)
 	if (freeHtup)
 		heap_freetuple(htup);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -107,8 +107,8 @@ record_buffer_tuple(reorder: &mut ReorderBuffer, HeapTuple htup, bool freeHtup)
 static REORDER_BUFFER_TUPLE_TYPE
 record_buffer_tuple_slot(reorder: &mut ReorderBuffer, slot: &mut TupleTableSlot)
 {
-	HeapTuple	htup;
-	bool		freeHtup;
+	pub static mut HTUP: HeapTuple = std::mem::zeroed();
+	pub static mut FREE_HTUP: bool = false;
 
 	htup = ExecFetchSlotHeapTuple(slot, false, &freeHtup);
 
@@ -118,15 +118,15 @@ record_buffer_tuple_slot(reorder: &mut ReorderBuffer, slot: &mut TupleTableSlot)
 // entry for a hash table we use to map from xid to our transaction state
 typedef struct ReorderBufferTXNByIdEnt
 {
-	TransactionId xid;
-	txn: &mut ReorderBufferTXN;
+	pub static mut XID: TransactionId = std::mem::zeroed();
+	pub static mut REORDER_BUFFER_TXN: *mut txn = std::ptr::null_mut();
 } ReorderBufferTXNByIdEnt;
 
 static ReorderBufferTXN *
 get_reorder_buffer_txn(rb: &mut ReorderBuffer, TransactionId xid)
 {
-	ent: &mut ReorderBufferTXNByIdEnt;
-	bool		found;
+	pub static mut REORDER_BUFFER_TXN_BY_ID_ENT: *mut ent = std::ptr::null_mut();
+	pub static mut FOUND: bool = false;
 
 	if (TransactionIdIsValid(rb->by_txn_last_xid) &&
 		rb->by_txn_last_xid == xid)
@@ -138,7 +138,7 @@ get_reorder_buffer_txn(rb: &mut ReorderBuffer, TransactionId xid)
 	if (found)
 		return ent->txn;
 	else
-		return NULL;
+		pub static mut NULL: return = std::mem::zeroed();
 }
 
 //
@@ -149,11 +149,11 @@ static HeapTuple
 o_convert_toast_pointers(descr: &mut OTableDescr, indexDescr: &mut OIndexDescr,
 						 OTuple tuple)
 {
-	int			natts = descr->tupdesc->natts;
+	pub static mut NATTS: std::os::raw::c_int = descr->tupdesc->natts;
 	old_values: &mut Datum = palloc0(natts * sizeof(Datum));
 	new_values: &mut Datum = palloc0(natts * sizeof(Datum));
 	isnull: &mut bool = palloc0(natts * sizeof(bool));
-	int			ctid_off = 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = 0;
 
 	if (indexDescr->primaryIsCtid)
 		ctid_off++;
@@ -176,11 +176,11 @@ o_convert_toast_pointers(descr: &mut OTableDescr, indexDescr: &mut OIndexDescr,
 	// Convert TOAST pointers
 	for (int i = 0; i < descr->ntoastable; i++)
 	{
-		int			toast_attn = descr->toastable[i] - ctid_off;
-		struct old_toastptr: &mut varlena;
-		struct new_toastptr: &mut varlena;
-		OToastValue otv;
-		varatt_external ve;
+		pub static mut TOAST_ATTN: std::os::raw::c_int = descr->toastable[i] - ctid_off;
+		pub static mut VARLENA: *mut struct old_toastptr = std::ptr::null_mut();
+		pub static mut VARLENA: *mut struct new_toastptr = std::ptr::null_mut();
+		pub static mut OTV: OToastValue = std::mem::zeroed();
+		pub static mut VE: varatt_external = std::mem::zeroed();
 
 		if (isnull[toast_attn])
 		{
@@ -228,10 +228,10 @@ set_snapshot(ctx: &mut LogicalDecodingContext,
 //
 	if (!ReorderBufferXidHasBaseSnapshot(ctx->reorder, logicalXid))
 	{
-		Snapshot	snap;
+		pub static mut SNAP: Snapshot = std::mem::zeroed();
 
 		if (SnapBuildCurrentState(ctx->snapshot_builder) < SNAPBUILD_CONSISTENT)
-			return false;
+			pub static mut FALSE: return = std::mem::zeroed();
 
 		snap = SnapBuildGetOrBuildSnapshot(ctx->snapshot_builder);
 		ReorderBufferSetBaseSnapshot(ctx->reorder, logicalXid,
@@ -240,7 +240,7 @@ set_snapshot(ctx: &mut LogicalDecodingContext,
 		snap->active_count++;
 	}
 
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 //
@@ -257,7 +257,7 @@ set_snapshot(ctx: &mut LogicalDecodingContext,
 static REORDER_BUFFER_TUPLE_TYPE
 o_convert_non_toast_tuple(reorderbuf: &mut ReorderBuffer, descr: &mut OTableDescr, indexDescr: &mut OIndexDescr, OTuple tuple, bool force_store_to_slot, store_slot: &mut TupleTableSlot, heaptuple: &mut HeapTuple, bool leafTuple)
 {
-	REORDER_BUFFER_TUPLE_TYPE result;
+	pub static mut RESULT: REORDER_BUFFER_TUPLE_TYPE = std::mem::zeroed();
 
 	if (leafTuple)
 	{
@@ -307,7 +307,7 @@ o_convert_non_toast_tuple(reorderbuf: &mut ReorderBuffer, descr: &mut OTableDesc
 		result = record_buffer_tuple_slot(reorderbuf, store_slot);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 // Convert chunk in a TOAST relation from OrioleDB format to reorder buffer (heap) format
@@ -316,20 +316,20 @@ o_convert_toast_chunk(reorderbuf: &mut ReorderBuffer, indexDescr: &mut OIndexDes
 					  OTuple tuple, o_toast_tupDesc: &mut TupleDescData,
 					  heap_toast_tupDesc: &mut TupleDescData, OffsetNumber debug_length)
 {
-	uint16		attnum;
-	uint32		chunk_seq;
+	pub static mut ATTNUM: uint16 = std::mem::zeroed();
+	pub static mut CHUNK_SEQ: uint32 = std::mem::zeroed();
 	uint32		old_chunk_size, // without header
 				new_chunk_size; // without header
-	Pointer		old_chunk;
-	Pointer		new_chunk = NULL;
-	HeapTuple	toasttup;
+	pub static mut OLD_CHUNK: Pointer = std::ptr::null_mut();
+	pub static mut NEW_CHUNK: Pointer = std::ptr::null_mut();
+	pub static mut TOASTTUP: HeapTuple = std::mem::zeroed();
 	Datum		t_values[3];
 	bool		t_isnull[3];
 	bool		attnum_isnull,
 				chunk_seq_isnull;
-	int			pk_natts;
-	bool		need_to_free = false;
-	REORDER_BUFFER_TUPLE_TYPE result;
+	pub static mut PK_NATTS: std::os::raw::c_int = 0;
+	pub static mut NEED_TO_FREE: bool = false;
+	pub static mut RESULT: REORDER_BUFFER_TUPLE_TYPE = std::mem::zeroed();
 
 	Assert(o_toast_tupDesc);
 	pk_natts = o_toast_tupDesc->natts - TOAST_LEAF_FIELDS_NUM;
@@ -349,7 +349,7 @@ o_convert_toast_chunk(reorderbuf: &mut ReorderBuffer, indexDescr: &mut OIndexDes
 //
 	if (chunk_seq == 0)
 	{
-		int			extra_header_size;
+		pub static mut EXTRA_HEADER_SIZE: std::os::raw::c_int = 0;
 
 		Assert(VARATT_IS_4B(VARDATA(old_chunk)));
 		extra_header_size = VARHDRSZ;
@@ -389,7 +389,7 @@ o_convert_toast_chunk(reorderbuf: &mut ReorderBuffer, indexDescr: &mut OIndexDes
 		need_to_free = false;
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
@@ -420,7 +420,7 @@ o_decode_modify_tuples(reorderbuf: &mut ReorderBuffer, WalRecordType rec_type,
 		}
 		else
 		{
-			HeapTuple	newheaptuple = NULL;
+			pub static mut NEWHEAPTUPLE: HeapTuple = std::ptr::null_mut();
 
 			Assert(ix_type != oIndexToast);
 
@@ -432,7 +432,7 @@ o_decode_modify_tuples(reorderbuf: &mut ReorderBuffer, WalRecordType rec_type,
 	}
 	else if (rec_type == WAL_REC_UPDATE)
 	{
-		HeapTuple	newheaptuple = NULL;
+		pub static mut NEWHEAPTUPLE: HeapTuple = std::ptr::null_mut();
 
 		Assert(ix_type != oIndexToast);
 
@@ -444,7 +444,7 @@ o_decode_modify_tuples(reorderbuf: &mut ReorderBuffer, WalRecordType rec_type,
 
 		if (relreplident == REPLICA_IDENTITY_FULL)
 		{
-			HeapTuple	oldheaptuple = NULL;
+			pub static mut OLDHEAPTUPLE: HeapTuple = std::ptr::null_mut();
 
 			elog(DEBUG4, "WAL_REC_UPDATE OLDTUPLE REPLIDENT FULL");
 
@@ -485,7 +485,7 @@ o_decode_modify_tuples(reorderbuf: &mut ReorderBuffer, WalRecordType rec_type,
 		}
 		else
 		{
-			HeapTuple	oldheaptuple = NULL;
+			pub static mut OLDHEAPTUPLE: HeapTuple = std::ptr::null_mut();
 
 			elog(DEBUG4, "WAL_REC_DELETE NON-TOAST");
 
@@ -495,8 +495,8 @@ o_decode_modify_tuples(reorderbuf: &mut ReorderBuffer, WalRecordType rec_type,
 	}
 	else if (rec_type == WAL_REC_REINSERT)
 	{
-		HeapTuple	oldheaptuple = NULL;
-		HeapTuple	newheaptuple = NULL;
+		pub static mut OLDHEAPTUPLE: HeapTuple = std::ptr::null_mut();
+		pub static mut NEWHEAPTUPLE: HeapTuple = std::ptr::null_mut();
 
 		Assert(ix_type != oIndexToast);
 		Assert(!O_TUPLE_IS_NULL(tuple2));
@@ -537,7 +537,7 @@ create_skipped_dml(HTAB **cache)
 	Assert(cache);
 	if (cache && !(*cache))
 	{
-		HASHCTL		ctl;
+		pub static mut CTL: HASHCTL = std::mem::zeroed();
 
 		MemSet(&ctl, 0, sizeof(ctl));
 		ctl.keysize = sizeof(uint64);
@@ -581,12 +581,12 @@ register_skipped_dml(HTAB **cache, uint64 oxid)
 static bool
 remove_skipped_dml(HTAB **cache, uint64 oxid)
 {
-	bool		found = false;
+	pub static mut FOUND: bool = false;
 
 	create_skipped_dml(cache);
 	Assert(cache && *cache);
 	hash_search(*cache, &oxid, HASH_REMOVE, &found);
-	return found;
+	pub static mut FOUND: return = std::mem::zeroed();
 }
 
 //
@@ -622,7 +622,7 @@ remove_skipped_dml(HTAB **cache, uint64 oxid)
 // transaction finish record
 // (COMMIT/ROLLBACK/ROLLBACK_TO_SAVEPOINT/JOIN_COMMIT as applicable).
 //
-static skippedDMLHash: &mut HTAB = NULL;
+static mut HTAB: *mut skippedDMLHash = std::ptr::null_mut();
 
 static WalParseResult
 decode_check_version(const r: &mut WalReaderState)
@@ -635,27 +635,27 @@ decode_check_version(const r: &mut WalReaderState)
 		elog(ERROR,
 			 "Can't logically decode WAL version %u that is newer than supported %u",
 			 r->container.version, ORIOLEDB_WAL_VERSION);
-		return WALPARSE_BAD_VERSION;
+		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 typedef struct
 {
 	// Input params
-	XLogRecPtr	xlogRecPtr;
-	XLogRecPtr	xlogRecEndPtr;
-	decodeCtx: &mut LogicalDecodingContext;
-	decodeBuf: &mut XLogRecordBuffer;
+	pub static mut XLOG_REC_PTR: XLogRecPtr = std::mem::zeroed();
+	pub static mut XLOG_REC_END_PTR: XLogRecPtr = std::mem::zeroed();
+	pub static mut LOGICAL_DECODING_CONTEXT: *mut decodeCtx = std::ptr::null_mut();
+	pub static mut X_LOG_RECORD_BUFFER: *mut decodeBuf = std::ptr::null_mut();
 
 	// Decoder state params
-	descr: &mut OTableDescr;
-	indexDescr: &mut OIndexDescr;
-	OIndexType	ix_type;
-	o_toast_tupDesc: &mut TupleDescData;
-	heap_toast_tupDesc: &mut TupleDescData;
-	bool		has_origin;
+	pub static mut O_TABLE_DESCR: *mut descr = std::ptr::null_mut();
+	pub static mut O_INDEX_DESCR: *mut indexDescr = std::ptr::null_mut();
+	pub static mut IX_TYPE: OIndexType = std::mem::zeroed();
+	pub static mut TUPLE_DESC_DATA: *mut o_toast_tupDesc = std::ptr::null_mut();
+	pub static mut TUPLE_DESC_DATA: *mut heap_toast_tupDesc = std::ptr::null_mut();
+	pub static mut HAS_ORIGIN: bool = false;
 } DecodeWalDescCtx;
 
 static WalParseResult
@@ -668,14 +668,14 @@ decode_on_container(r: &mut WalReaderState)
 		ctx->has_origin = r->container.origin_info.id != InvalidRepOriginId;
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 static WalParseResult
 decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 {
 	ctx: &mut DecodeWalDescCtx = (DecodeWalDescCtx *) r->ctx;
-	const recname: &mut char = NULL;
+	pub static mut CHAR: *mut const recname = std::ptr::null_mut();
 
 	Assert(rec);
 
@@ -689,7 +689,7 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 			{
 				if (TransactionIdIsValid(rec->logicalXid))
 				{
-					csnSnapshot: &mut CSNSnapshotData;
+					pub static mut CSN_SNAPSHOT_DATA: *mut csnSnapshot = std::ptr::null_mut();
 
 					elog(DEBUG4, "RECEIVE record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
 						 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
@@ -712,9 +712,9 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_SWITCH_LOGICAL_XID:
 			{
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
-				TransactionId topXid = rec->u.swxid.topXid;
-				TransactionId subXid = rec->u.swxid.subXid;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut TOP_XID: TransactionId = rec->u.swxid.topXid;
+				pub static mut SUB_XID: TransactionId = rec->u.swxid.subXid;
 
 				elog(DEBUG4, "RECEIVE record type %d (%s) %u=>%u oxid " UINT64_FORMAT " logicalXId %u heapXid %u xlogPtr %X/%X",
 					 rec->type, recname, topXid, subXid,
@@ -731,10 +731,10 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 		case WAL_REC_COMMIT:
 		case WAL_REC_ROLLBACK:
 			{
-				dlist_iter	cur_txn_i;
-				txn: &mut ReorderBufferTXN = NULL;
-				csnSnapshot: &mut CSNSnapshotData = NULL;
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut CUR_TXN_I: dlist_iter = std::mem::zeroed();
+				pub static mut REORDER_BUFFER_TXN: *mut txn = std::ptr::null_mut();
+				pub static mut CSN_SNAPSHOT_DATA: *mut csnSnapshot = std::ptr::null_mut();
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				elog(DEBUG4, "RECEIVE record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
 					 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
@@ -806,7 +806,7 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 							dlist_foreach(cur_txn_i, &txn->subtxns)
 							{
-								cur_txn: &mut ReorderBufferTXN;
+								pub static mut REORDER_BUFFER_TXN: *mut cur_txn = std::ptr::null_mut();
 
 								cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 								ReorderBufferForget(ctx->decodeCtx->reorder, cur_txn->xid,
@@ -828,7 +828,7 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 //
 						dlist_foreach(cur_txn_i, &txn->subtxns)
 						{
-							cur_txn: &mut ReorderBufferTXN;
+							pub static mut REORDER_BUFFER_TXN: *mut cur_txn = std::ptr::null_mut();
 
 							cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 							ReorderBufferCommitChild(ctx->decodeCtx->reorder, txn->xid, cur_txn->xid,
@@ -865,7 +865,7 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 						dlist_foreach(cur_txn_i, &txn->subtxns)
 						{
-							cur_txn: &mut ReorderBufferTXN;
+							pub static mut REORDER_BUFFER_TXN: *mut cur_txn = std::ptr::null_mut();
 
 							cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 							ReorderBufferAbort(ctx->decodeCtx->reorder, cur_txn->xid, ctx->xlogRecPtr, 0);
@@ -887,8 +887,8 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_JOINT_COMMIT:
 			{
-				csnSnapshot: &mut CSNSnapshotData = NULL;
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut CSN_SNAPSHOT_DATA: *mut csnSnapshot = std::ptr::null_mut();
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				elog(DEBUG4, "RECEIVE record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
 					 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
@@ -966,8 +966,8 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_RELATION:
 			{
-				int			sys_tree_num = -1;
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut SYS_TREE_NUM: std::os::raw::c_int = -1;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				if (r->container.version >= 17)
 					rec->u.relation.snapshot.xlogptr = xlogPtr;
@@ -1108,10 +1108,10 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 		case WAL_REC_ROLLBACK_TO_SAVEPOINT:
 			{
-				dlist_iter	cur_txn_i;
-				txn: &mut ReorderBufferTXN = NULL;
-				csnSnapshot: &mut CSNSnapshotData = NULL;
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut CUR_TXN_I: dlist_iter = std::mem::zeroed();
+				pub static mut REORDER_BUFFER_TXN: *mut txn = std::ptr::null_mut();
+				pub static mut CSN_SNAPSHOT_DATA: *mut csnSnapshot = std::ptr::null_mut();
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
 
 				if (r->container.version < 17)
 				{
@@ -1180,7 +1180,7 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 					dlist_foreach(cur_txn_i, &txn->subtxns)
 					{
-						cur_txn: &mut ReorderBufferTXN;
+						pub static mut REORDER_BUFFER_TXN: *mut cur_txn = std::ptr::null_mut();
 
 						cur_txn = dlist_container(ReorderBufferTXN, node, cur_txn_i.cur);
 						ReorderBufferAbort(ctx->decodeCtx->reorder, cur_txn->xid, ctx->xlogRecPtr, 0);
@@ -1207,8 +1207,8 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 			{
 				OFixedTuple tuple1,
 							tuple2;
-				XLogRecPtr	xlogPtr = ctx->xlogRecPtr + rec->offset;
-				txn: &mut ReorderBufferTXN = NULL;
+				pub static mut XLOG_PTR: XLogRecPtr = ctx->xlogRecPtr + rec->offset;
+				pub static mut REORDER_BUFFER_TXN: *mut txn = std::ptr::null_mut();
 
 				build_fixed_tuples(rec, &tuple1, &tuple2);
 
@@ -1279,7 +1279,7 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 					}
 					else
 					{
-						change: &mut ReorderBufferChange;
+						pub static mut REORDER_BUFFER_CHANGE: *mut change = std::ptr::null_mut();
 
 						Assert(ctx->descr != NULL);
 						Assert(!O_TUPLE_IS_NULL(tuple1.tuple));
@@ -1314,7 +1314,7 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 			break;
 	}
 
-	return WALPARSE_OK;
+	pub static mut WALPARSE_OK: return = std::mem::zeroed();
 }
 
 //
@@ -1323,9 +1323,9 @@ decode_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
 
 orioledb_decode(ctx: &mut LogicalDecodingContext, buf: &mut XLogRecordBuffer)
 {
-	record: &mut XLogReaderState = buf->record;
-	XLogRecPtr	startXLogPtr = record->ReadRecPtr;
-	XLogRecPtr	endXLogPtr = record->EndRecPtr;
+	pub static mut X_LOG_READER_STATE: *mut record = buf->record;
+	pub static mut START_X_LOG_PTR: XLogRecPtr = record->ReadRecPtr;
+	pub static mut END_X_LOG_PTR: XLogRecPtr = record->EndRecPtr;
 	Pointer		startPtr = (Pointer) XLogRecGetData(record);
 	Pointer		endPtr = startPtr + XLogRecGetDataLen(record);
 
@@ -1357,7 +1357,7 @@ orioledb_decode(ctx: &mut LogicalDecodingContext, buf: &mut XLogRecordBuffer)
 		.on_record = decode_on_record
 	};
 
-	WalParseResult st;
+	pub static mut ST: WalParseResult = std::mem::zeroed();
 
 	// do our best to disable streaming
 	ctx->streaming = false;
@@ -1375,7 +1375,7 @@ static inline bool
 FilterByOrigin(ctx: &mut LogicalDecodingContext, RepOriginId origin_id)
 {
 	if (ctx->callbacks.filter_by_origin_cb == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	return filter_by_origin_cb_wrapper(ctx, origin_id);
 }

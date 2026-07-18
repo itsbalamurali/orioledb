@@ -27,21 +27,21 @@ use pgrx::pg_sys;
 
 #endif
 
-static database_cache: &mut OSysCache = NULL;
+static mut O_SYS_CACHE: *mut database_cache = std::ptr::null_mut();
 
 typedef struct ODatabase
 {
-	OSysCacheKey1 key;
-	uint16		data_version;
-	int32		encoding;
-	char		datlocprovider;
+	pub static mut KEY: OSysCacheKey1 = std::mem::zeroed();
+	pub static mut DATA_VERSION: uint16 = std::mem::zeroed();
+	pub static mut ENCODING: int32 = std::mem::zeroed();
+	pub static mut DATLOCPROVIDER: char = std::mem::zeroed();
 #if PG_VERSION_NUM >= 170000
-	datlocale: &mut char;
-	daticurules: &mut char;
+	pub static mut CHAR: *mut datlocale = std::ptr::null_mut();
+	pub static mut CHAR: *mut daticurules = std::ptr::null_mut();
 #endif
-	datcollate: &mut char;
+	pub static mut CHAR: *mut datcollate = std::ptr::null_mut();
 #if PG_VERSION_NUM >= 180000
-	datctype: &mut char;
+	pub static mut CHAR: *mut datctype = std::ptr::null_mut();
 #endif
 } ODatabase;
 
@@ -79,13 +79,13 @@ fn
 o_database_cache_fill_entry(entry_ptr: &mut Pointer, key: &mut OSysCacheKey,
 							Pointer arg)
 {
-	HeapTuple	databasetup;
-	Form_pg_database dbform;
+	pub static mut DATABASETUP: HeapTuple = std::mem::zeroed();
+	pub static mut DBFORM: Form_pg_database = std::mem::zeroed();
 	o_database: &mut ODatabase = (ODatabase *) *entry_ptr;
-	MemoryContext prev_context;
-	Oid			dboid;
-	Datum		datum;
-	bool		isNull;
+	pub static mut PREV_CONTEXT: MemoryContext = std::mem::zeroed();
+	pub static mut DBOID: Oid = std::mem::zeroed();
+	pub static mut DATUM: Datum = std::mem::zeroed();
+	pub static mut IS_NULL: bool = false;
 
 	dboid = DatumGetObjectId(key->keys[0]);
 
@@ -154,8 +154,8 @@ o_database_cache_free_entry(Pointer entry)
 int32
 o_database_cache_get_database_encoding()
 {
-	XLogRecPtr	cur_lsn;
-	o_database: &mut ODatabase;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut O_DATABASE: *mut o_database = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
@@ -175,8 +175,8 @@ o_database_cache_set_database_encoding()
 
 o_database_cache_set_default_locale_provider()
 {
-	XLogRecPtr	cur_lsn;
-	o_database: &mut ODatabase;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut O_DATABASE: *mut o_database = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
@@ -222,9 +222,9 @@ o_database_cache_set_default_locale_provider()
 	else
 	{
 #if PG_VERSION_NUM >= 180000
-		pg_locale_t loc = default_locale;
+		pub static mut LOC: pg_locale_t = default_locale;
 #else
-		pg_locale_t loc = &default_locale;
+		pub static mut LOC: pg_locale_t = &default_locale;
 #endif
 		if (loc != NULL)
 		{
@@ -238,8 +238,8 @@ o_database_cache_set_default_locale_provider()
 
 o_database_cache_set_lc_collate()
 {
-	XLogRecPtr	cur_lsn;
-	o_database: &mut ODatabase;
+	pub static mut CUR_LSN: XLogRecPtr = std::mem::zeroed();
+	pub static mut O_DATABASE: *mut o_database = std::ptr::null_mut();
 
 	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
 	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
@@ -258,7 +258,7 @@ o_database_cache_set_lc_collate()
 static Pointer
 o_database_cache_serialize_entry(Pointer entry, len: &mut int)
 {
-	StringInfoData str;
+	pub static mut STR: StringInfoData = std::mem::zeroed();
 	o_database: &mut ODatabase = (ODatabase *) entry;
 
 	if (o_database->data_version != ORIOLEDB_SYS_TREE_VERSION)
@@ -291,9 +291,9 @@ static Pointer
 o_database_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
 								   Size length)
 {
-	Pointer		ptr = data;
-	o_database: &mut ODatabase;
-	int			len;
+	pub static mut PTR: Pointer = data;
+	pub static mut O_DATABASE: *mut o_database = std::ptr::null_mut();
+	pub static mut LEN: std::os::raw::c_int = 0;
 
 	o_database = (ODatabase *) palloc0(sizeof(ODatabase));
 	len = offsetof(ODatabase, datlocprovider);

@@ -40,9 +40,9 @@ use pgrx::pg_sys;
 typedef struct OIndexBuildStackItem
 {
 	char		img[ORIOLEDB_BLCKSZ];
-	BTreePageItemLocator loc;
-	OFixedKey	key;
-	int			keysize;
+	pub static mut LOC: BTreePageItemLocator = std::mem::zeroed();
+	pub static mut KEY: OFixedKey = std::mem::zeroed();
+	pub static mut KEYSIZE: std::os::raw::c_int = 0;
 } OIndexBuildStackItem;
 
 static bool put_item_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem,
@@ -62,17 +62,17 @@ stack_page_split(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int le
 				 OTuple tuple, int tuplesize, Pointer tupleheader,
 				 LocationIndex header_size, Page new_page)
 {
-	Page		img = stack[level].img;
+	pub static mut IMG: Page = stack[level].img;
 	OffsetNumber left_count,
 				rightbound_key_size;
-	bool		key_palloc = false;
-	Pointer		tuple_ptr;
-	OTuple		rightbound_key;
+	pub static mut KEY_PALLOC: bool = false;
+	pub static mut TUPLE_PTR: Pointer = std::ptr::null_mut();
+	pub static mut RIGHTBOUND_KEY: OTuple = std::mem::zeroed();
 	bool		leaf = O_PAGE_IS(img, LEAF);
 	BTreePageItemLocator loc,
 				newLoc;
-	BTreeSplitItems items;
-	OffsetNumber offset;
+	pub static mut ITEMS: BTreeSplitItems = std::mem::zeroed();
+	pub static mut OFFSET: OffsetNumber = std::mem::zeroed();
 
 	btree_page_update_max_key_len(desc, img);
 	offset = BTREE_PAGE_LOCATOR_GET_OFFSET(img, &stack[level].loc);
@@ -88,7 +88,7 @@ stack_page_split(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int le
 	BTREE_PAGE_LOCATOR_FIRST(new_page, &newLoc);
 	while (BTREE_PAGE_LOCATOR_IS_VALID(img, &loc))
 	{
-		LocationIndex itemsize;
+		pub static mut ITEMSIZE: LocationIndex = std::mem::zeroed();
 
 		itemsize = BTREE_PAGE_GET_ITEM_SIZE(img, &loc);
 
@@ -138,9 +138,9 @@ put_item_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int l
 				  LocationIndex header_size, root_level: &mut int,
 				  metaPage: &mut BTreeMetaPage)
 {
-	BTreeItemPageFitType fit;
-	Pointer		tuple_ptr;
-	uint64		downlink = 0;
+	pub static mut FIT: BTreeItemPageFitType = std::mem::zeroed();
+	pub static mut TUPLE_PTR: Pointer = std::ptr::null_mut();
+	pub static mut DOWNLINK: uint64 = 0;
 
 	Assert(level < ORIOLEDB_MAX_DEPTH);
 
@@ -169,10 +169,10 @@ put_item_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int l
 	}
 	else
 	{
-		FileExtent	extent;
+		pub static mut EXTENT: FileExtent = std::mem::zeroed();
 		char		new_page[ORIOLEDB_BLCKSZ] = {0};
-		OFixedKey	key;
-		int			keysize;
+		pub static mut KEY: OFixedKey = std::mem::zeroed();
+		pub static mut KEYSIZE: std::os::raw::c_int = 0;
 		new_page_header: &mut BTreePageHeader = (BTreePageHeader *) new_page;
 		header: &mut BTreePageHeader = (BTreePageHeader *) stack[level].img;
 		parent_header: &mut BTreePageHeader = (BTreePageHeader *) stack[level + 1].img;
@@ -252,7 +252,7 @@ put_item_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, int l
 							  key.tuple, keysize,
 							  root_level, metaPage);
 	}
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 static bool
@@ -261,14 +261,14 @@ put_downlink_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem, i
 					  root_level: &mut int, metaPage: &mut BTreeMetaPage)
 {
 	BTreeNonLeafTuphdr internal_header = {0};
-	bool		result;
+	pub static mut RESULT: bool = false;
 
 	internal_header.downlink = downlink;
 	result = put_item_to_stack(desc, stack, level, key, keysize,
 							   (Pointer) &internal_header,
 							   sizeof(internal_header), root_level,
 							   metaPage);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static bool
@@ -276,7 +276,7 @@ put_tuple_to_stack(desc: &mut BTreeDescr, stack: &mut OIndexBuildStackItem,
 				   OTuple tuple, root_level: &mut int, metaPage: &mut BTreeMetaPage)
 {
 	BTreeLeafTuphdr leaf_header = {0};
-	int			tuplesize;
+	pub static mut TUPLESIZE: std::os::raw::c_int = 0;
 
 	leaf_header.deleted = BTreeLeafTupleNonDeleted;
 	leaf_header.undoLocation = InvalidUndoLocation;
@@ -293,19 +293,19 @@ btree_write_index_data(desc: &mut BTreeDescr, TupleDesc tupdesc,
 					   uint64 ctid, uint64 bridge_ctid,
 					   file_header: &mut CheckpointFileHeader)
 {
-	OTuple		idx_tup;
-	stack: &mut OIndexBuildStackItem;
+	pub static mut IDX_TUP: OTuple = std::mem::zeroed();
+	pub static mut O_INDEX_BUILD_STACK_ITEM: *mut stack = std::ptr::null_mut();
 	int			root_level = 0,
 				saved_root_level;
-	Page		root_page;
-	uint64		downlink;
-	root_page_header: &mut BTreePageHeader;
-	FileExtent	extent;
+	pub static mut ROOT_PAGE: Page = std::mem::zeroed();
+	pub static mut DOWNLINK: uint64 = std::mem::zeroed();
+	pub static mut B_TREE_PAGE_HEADER: *mut root_page_header = std::ptr::null_mut();
+	pub static mut EXTENT: FileExtent = std::mem::zeroed();
 	BTreeMetaPage metaPage = {0};
-	int			i;
-	values: &mut Datum;
-	isnull: &mut bool;
-	uint32		chkpNum;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut DATUM: *mut values = std::ptr::null_mut();
+	pub static mut BOOL: *mut isnull = std::ptr::null_mut();
+	pub static mut CHKP_NUM: uint32 = std::mem::zeroed();
 
 	btree_open_smgr(desc);
 
@@ -407,11 +407,11 @@ btree_write_index_data(desc: &mut BTreeDescr, TupleDesc tupdesc,
 S3TaskLocation
 btree_write_file_header(desc: &mut BTreeDescr, file_header: &mut CheckpointFileHeader)
 {
-	File		file;
-	uint32		checkpoint_number;
-	bool		checkpoint_concurrent;
-	filename: &mut char;
-	S3TaskLocation result = 0;
+	pub static mut FILE: File = std::mem::zeroed();
+	pub static mut CHECKPOINT_NUMBER: uint32 = std::mem::zeroed();
+	pub static mut CHECKPOINT_CONCURRENT: bool = false;
+	pub static mut CHAR: *mut filename = std::ptr::null_mut();
+	pub static mut RESULT: S3TaskLocation = 0;
 
 	Assert(desc->storageType == BTreeStoragePersistence ||
 		   desc->storageType == BTreeStorageTemporary ||
@@ -422,7 +422,7 @@ btree_write_file_header(desc: &mut BTreeDescr, file_header: &mut CheckpointFileH
 
 	if (desc->storageType == BTreeStoragePersistence || desc->storageType == BTreeStorageUnlogged)
 	{
-		SeqBufTag	prev_chkp_tag;
+		pub static mut PREV_CHKP_TAG: SeqBufTag = std::mem::zeroed();
 
 		memset(&prev_chkp_tag, 0, sizeof(prev_chkp_tag));
 		prev_chkp_tag.key.oids = desc->oids;
@@ -479,5 +479,5 @@ btree_write_file_header(desc: &mut BTreeDescr, file_header: &mut CheckpointFileH
 		insert_evicted_data(&evicted_tree_data);
 	}
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }

@@ -40,12 +40,12 @@ use pgrx::pg_sys;
 // -------------------------------------------------------------------------
 //
 
-static volatile sig_atomic_t shutdown_requested = false;
+static mut SHUTDOWN_REQUESTED: volatile sig_atomic_t = false;
 static int	RewindHorizonCheckDelay = 1000; // Time between checking in ms
-static rewindAddBuffer: &mut RewindItem = NULL;
-static rewindCompleteBuffer: &mut RewindItem = NULL;
-static rewindMeta: &mut RewindMeta = NULL;
-static bool rewindWorker = false;
+static mut REWIND_ITEM: *mut rewindAddBuffer = std::ptr::null_mut();
+static mut REWIND_ITEM: *mut rewindCompleteBuffer = std::ptr::null_mut();
+static mut REWIND_META: *mut rewindMeta = std::ptr::null_mut();
+static mut REWIND_WORKER: bool = false;
 
 static OBuffersDesc rewindBuffersDesc = {
 	.singleFileSize = REWIND_FILE_SIZE,
@@ -56,9 +56,9 @@ static OBuffersDesc rewindBuffersDesc = {
 static FullTransactionId GetOldestFullTransactionIdConsideredRunning();
 
 // Temporary storage for heap info between pre-commit and commit in a backend
-static TransactionId precommit_xid;
-static int	precommit_nsubxids;
-static precommit_subxids: &mut TransactionId;
+static mut PRECOMMIT_XID: TransactionId = std::mem::zeroed();
+static mut PRECOMMIT_NSUBXIDS: std::os::raw::c_int = 0;
+static mut TRANSACTION_ID: *mut precommit_subxids = std::ptr::null_mut();
 
 PG_FUNCTION_INFO_V1(orioledb_rewind_by_time);
 PG_FUNCTION_INFO_V1(orioledb_rewind_to_timestamp);
@@ -97,7 +97,7 @@ Datum
 orioledb_rewind_by_time(PG_FUNCTION_ARGS)
 {
 	int			rewind_time = PG_GETARG_INT32(0);
-	bool		attempt_restart = false;
+	pub static mut ATTEMPT_RESTART: bool = false;
 
 	if (PG_NARGS() == 2)
 		attempt_restart = PG_GETARG_BOOL(1);
@@ -111,7 +111,7 @@ orioledb_rewind_to_transaction(PG_FUNCTION_ARGS)
 {
 	TransactionId xid = PG_GETARG_INT32(0);
 	OXid		oxid = PG_GETARG_INT64(1);
-	bool		attempt_restart = false;
+	pub static mut ATTEMPT_RESTART: bool = false;
 
 	if (PG_NARGS() == 3)
 		attempt_restart = PG_GETARG_BOOL(2);
@@ -124,7 +124,7 @@ Datum
 orioledb_rewind_to_timestamp(PG_FUNCTION_ARGS)
 {
 	TimestampTz rewind_timestamp = PG_GETARG_TIMESTAMPTZ(0);
-	bool		attempt_restart = false;
+	pub static mut ATTEMPT_RESTART: bool = false;
 
 	if (PG_NARGS() == 2)
 		attempt_restart = PG_GETARG_BOOL(1);
@@ -293,10 +293,10 @@ print_rewind_item(rewindItem: &mut RewindItem, uint64 pos, int source_buffer)
 fn
 log_print_rewind_queue()
 {
-	int			i;
-	uint64		pos;
-	uint64		curAddPosFilled;
-	int			freeAddSpace;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut POS: uint64 = std::mem::zeroed();
+	pub static mut CUR_ADD_POS_FILLED: uint64 = std::mem::zeroed();
+	pub static mut FREE_ADD_SPACE: std::os::raw::c_int = 0;
 
 	if (!enable_rewind)
 	{
@@ -350,10 +350,10 @@ log_print_rewind_queue()
 Size
 rewind_shmem_needs()
 {
-	Size		size;
+	pub static mut SIZE: Size = 0;
 
 	if (!enable_rewind)
-		return 0;
+		pub static mut 0: return = std::mem::zeroed();
 
 	rewindBuffersDesc.buffersCount = rewind_buffers_count;
 
@@ -361,33 +361,33 @@ rewind_shmem_needs()
 	size = add_size(size, mul_size(rewind_circular_buffer_size * 2, sizeof(RewindItem)));
 	size = add_size(size, o_buffers_shmem_needs(&rewindBuffersDesc));
 
-	return size;
+	pub static mut SIZE: return = std::mem::zeroed();
 }
 
 // Perform actual rewind within one backend left
 fn
 do_rewind(int rewind_mode, int rewind_time, TimestampTz rewindStartTimeStamp, OXid rewind_oxid, TransactionId rewind_xid, TimestampTz rewind_timestamp)
 {
-	int			i = 0;
-	int			k = 0;
-	rewindItem: &mut RewindItem;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut K: std::os::raw::c_int = 0;
+	pub static mut REWIND_ITEM: *mut rewindItem = std::ptr::null_mut();
 	RewindItem	tmpbuf[REWIND_DISK_BUFFER_LENGTH];
-	uint64		pos;
-	uint64		reserved;
-	uint64		filled;
-	int			nsubxids = 0;
-	int			subxids_count = 0;
-	bool		got_all_subxids = false;
+	pub static mut POS: uint64 = std::mem::zeroed();
+	pub static mut RESERVED: uint64 = std::mem::zeroed();
+	pub static mut FILLED: uint64 = std::mem::zeroed();
+	pub static mut NSUBXIDS: std::os::raw::c_int = 0;
+	pub static mut SUBXIDS_COUNT: std::os::raw::c_int = 0;
+	pub static mut GOT_ALL_SUBXIDS: bool = false;
 #ifdef USE_ASSERT_CHECKING
-	bool		started_subxids = false;
+	pub static mut STARTED_SUBXIDS: bool = false;
 #endif
-	subxids: &mut TransactionId = NULL;
-	TransactionId xid = InvalidTransactionId;
-	OXid		oxid = InvalidOXid;
-	CommitSeqNo csn PG_USED_FOR_ASSERTS_ONLY;
-	long		secs;
-	int			usecs;
-	int			source_buffer;
+	pub static mut TRANSACTION_ID: *mut subxids = std::ptr::null_mut();
+	pub static mut XID: TransactionId = InvalidTransactionId;
+	pub static mut OXID: OXid = InvalidOXid;
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: CommitSeqNo csn = std::mem::zeroed();
+	pub static mut SECS: long = std::mem::zeroed();
+	pub static mut USECS: std::os::raw::c_int = 0;
+	pub static mut SOURCE_BUFFER: std::os::raw::c_int = 0;
 
 #ifdef REWIND_DEBUG_MODE
 	log_print_rewind_queue();
@@ -525,19 +525,19 @@ do_rewind(int rewind_mode, int rewind_time, TimestampTz rewindStartTimeStamp, OX
 			if (rewind_mode == REWIND_MODE_TIME)
 			{
 				if (TimestampDifferenceExceeds(rewindItem->timestamp, rewindStartTimeStamp, rewind_time * 1000))
-					goto rewind_complete;
+					pub static mut REWIND_COMPLETE: goto = std::mem::zeroed();
 			}
 			else if (rewind_mode == REWIND_MODE_XID)
 			{
 				if (TransactionIdIsValid(rewind_xid) && TransactionIdIsValid(rewindItem->xid) && TransactionIdPrecedes(rewindItem->xid, rewind_xid))
-					goto rewind_complete;
+					pub static mut REWIND_COMPLETE: goto = std::mem::zeroed();
 				else if (OXidIsValid(rewind_oxid) && OXidIsValid(rewindItem->oxid) && rewindItem->oxid < rewind_oxid)
-					goto rewind_complete;
+					pub static mut REWIND_COMPLETE: goto = std::mem::zeroed();
 			}
 			else if (rewind_mode == REWIND_MODE_TIMESTAMP)
 			{
 				if (rewindItem->timestamp < rewind_timestamp)
-					goto rewind_complete;
+					pub static mut REWIND_COMPLETE: goto = std::mem::zeroed();
 			}
 			else
 			{
@@ -551,7 +551,7 @@ do_rewind(int rewind_mode, int rewind_time, TimestampTz rewindStartTimeStamp, OX
 			{
 				for (i = 0; i < (int) UndoLogsCount; i++)
 				{
-					UndoLocation location PG_USED_FOR_ASSERTS_ONLY;
+					pub static mut PG_USED_FOR_ASSERTS_ONLY: UndoLocation location = std::mem::zeroed();
 
 					elog(DEBUG3,
 						 "Rewinding: oxid " UINT64_FORMAT
@@ -661,12 +661,12 @@ rewind_complete:
 fn
 orioledb_rewind_internal(int rewind_mode, int rewind_time, OXid rewind_oxid, TransactionId rewind_xid, TimestampTz rewind_timestamp, bool attempt_restart)
 {
-	TimestampTz rewindStartTimeStamp;
-	int			retry;
-	int			nbackends;
-	int			nprepared;
-	long		secs;
-	int			usecs;
+	pub static mut REWIND_START_TIME_STAMP: TimestampTz = std::mem::zeroed();
+	pub static mut RETRY: std::os::raw::c_int = 0;
+	pub static mut NBACKENDS: std::os::raw::c_int = 0;
+	pub static mut NPREPARED: std::os::raw::c_int = 0;
+	pub static mut SECS: long = std::mem::zeroed();
+	pub static mut USECS: std::os::raw::c_int = 0;
 
 	if (!enable_rewind)
 	{
@@ -890,8 +890,8 @@ fn
 cleanup_rewind_files(desc: &mut OBuffersDesc, uint32 tag)
 {
 	char		curFileName[MAXPGPATH];
-	int			curFile;
-	uint64		fileNum = 0;
+	pub static mut CUR_FILE: std::os::raw::c_int = 0;
+	pub static mut FILE_NUM: uint64 = 0;
 
 	Assert(OBuffersMaxTagIsValid(tag));
 
@@ -943,8 +943,8 @@ FullXidRelativeTo(FullTransactionId rel, TransactionId xid)
 static FullTransactionId
 GetOldestFullTransactionIdConsideredRunning()
 {
-	TransactionId oldestConsideredRunningXid;
-	FullTransactionId latestCompletedXid;
+	pub static mut OLDEST_CONSIDERED_RUNNING_XID: TransactionId = std::mem::zeroed();
+	pub static mut LATEST_COMPLETED_XID: FullTransactionId = std::mem::zeroed();
 
 	oldestConsideredRunningXid = GetOldestTransactionIdConsideredRunning();
 	LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
@@ -971,8 +971,8 @@ rewind_init_shmem(Pointer ptr, bool found)
 
 	if (!found)
 	{
-		int64		i;
-		int			j;
+		pub static mut I: int64 = std::mem::zeroed();
+		pub static mut J: std::os::raw::c_int = 0;
 
 		for (i = 0; i < rewind_circular_buffer_size; i++)
 		{
@@ -1040,7 +1040,7 @@ handle_sigterm(SIGNAL_ARGS)
 
 register_rewind_worker()
 {
-	BackgroundWorker worker;
+	pub static mut WORKER: BackgroundWorker = std::mem::zeroed();
 
 	// Set up background worker parameters
 	memset(&worker, 0, sizeof(worker));
@@ -1057,7 +1057,7 @@ register_rewind_worker()
 bool
 is_rewind_worker()
 {
-	return rewindWorker;
+	pub static mut REWIND_WORKER: return = std::mem::zeroed();
 }
 
 //
@@ -1067,9 +1067,9 @@ is_rewind_worker()
 fn
 try_restore_evicted_rewind_page()
 {
-	int			start;
-	int			length_to_end;
-	int64		lastDeadBlock;
+	pub static mut START: std::os::raw::c_int = 0;
+	pub static mut LENGTH_TO_END: std::os::raw::c_int = 0;
+	pub static mut LAST_DEAD_BLOCK: int64 = std::mem::zeroed();
 
 	LWLockAcquire(&rewindMeta->rewindEvictLock, LW_EXCLUSIVE);
 
@@ -1178,7 +1178,7 @@ rewind_worker_main(Datum main_arg)
 {
 	int			rc,
 				wake_events = WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT;
-	rewindItem: &mut RewindItem;
+	pub static mut REWIND_ITEM: *mut rewindItem = std::ptr::null_mut();
 
 	rewindWorker = true;
 
@@ -1241,8 +1241,8 @@ rewind_worker_main(Datum main_arg)
 
 			while (rewindMeta->completePos < pg_atomic_read_u64(&rewindMeta->addPosFilledUpto))
 			{
-				uint64		location PG_USED_FOR_ASSERTS_ONLY;
-				int			i;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: uint64		location = std::mem::zeroed();
+				pub static mut I: std::os::raw::c_int = 0;
 
 				if (rewindMeta->rewindWorkerStopRequested)
 				{
@@ -1287,7 +1287,7 @@ rewind_worker_main(Datum main_arg)
 				{
 					bool		queue_exceeds_age = TimestampDifferenceExceeds(rewindItem->timestamp, GetCurrentTimestamp(), rewind_max_time * 1000);
 					bool		queue_exceeds_length = pg_atomic_read_u64(&rewindMeta->addPosFilledUpto) - rewindMeta->completePos > rewind_max_transactions;
-					bool		force_complete;
+					pub static mut FORCE_COMPLETE: bool = false;
 
 					if (OXidIsValid(rewindMeta->force_complete_oxid) || TransactionIdIsValid(rewindMeta->force_complete_xid))
 					{
@@ -1412,8 +1412,8 @@ rewind_worker_main(Datum main_arg)
 fn
 evict_rewind_items(uint64 curAddPosFilled)
 {
-	int			start;
-	int			length_to_end;
+	pub static mut START: std::os::raw::c_int = 0;
+	pub static mut LENGTH_TO_END: std::os::raw::c_int = 0;
 
 	LWLockAcquire(&rewindMeta->rewindCheckpointLock, LW_SHARED);
 	if (LWLockAcquireOrWait(&rewindMeta->rewindEvictLock, LW_EXCLUSIVE))
@@ -1553,8 +1553,8 @@ reset_precommit_xid_subxids()
 
 save_precommit_xid_subxids()
 {
-	TransactionId xid1 = InvalidTransactionId;
-	TransactionId xid2 = InvalidTransactionId;
+	pub static mut XID1: TransactionId = InvalidTransactionId;
+	pub static mut XID2: TransactionId = InvalidTransactionId;
 
 	xid1 = GetTopTransactionIdIfAny();
 	xid2 = GetCurrentTransactionIdIfAny();
@@ -1579,21 +1579,21 @@ get_precommit_xid_subxids(nsubxids: &mut int, TransactionId **subxids)
 		*subxids = precommit_subxids;
 	}
 
-	return precommit_xid;
+	pub static mut PRECOMMIT_XID: return = std::mem::zeroed();
 }
 
 
 add_to_rewind_buffer(OXid oxid, TransactionId xid, int nsubxids, subxids: &mut TransactionId)
 {
-	rewindItem: &mut RewindItem;
-	int			i;
-	uint64		curAddPos;
-	uint64		startAddPos;
-	uint64		cur;
-	int64		freeAddSpace;
-	bool		subxid_only = false;
-	int			subxids_count = 0;
-	int			nitems;
+	pub static mut REWIND_ITEM: *mut rewindItem = std::ptr::null_mut();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CUR_ADD_POS: uint64 = std::mem::zeroed();
+	pub static mut START_ADD_POS: uint64 = std::mem::zeroed();
+	pub static mut CUR: uint64 = std::mem::zeroed();
+	pub static mut FREE_ADD_SPACE: int64 = std::mem::zeroed();
+	pub static mut SUBXID_ONLY: bool = false;
+	pub static mut SUBXIDS_COUNT: std::os::raw::c_int = 0;
+	pub static mut NITEMS: std::os::raw::c_int = 0;
 
 	if (rewindMeta->addToRewindQueueDisabled)
 	{
@@ -1734,14 +1734,14 @@ next_subxids_item:
 
 		if (!OXidIsValid(pg_atomic_read_u64(&rewindMeta->runXmin)))
 		{
-			uint64		curValue = InvalidOXid;
+			pub static mut CUR_VALUE: uint64 = InvalidOXid;
 
 			() pg_atomic_compare_exchange_u64(&rewindMeta->runXmin, &curValue, rewindItem->runXmin);
 		}
 
 		if (pg_atomic_read_u64(&rewindMeta->oldestConsideredRunningXid) == InvalidTransactionId)
 		{
-			uint64		curValue = InvalidTransactionId;
+			pub static mut CUR_VALUE: uint64 = InvalidTransactionId;
 
 			() pg_atomic_compare_exchange_u64(&rewindMeta->oldestConsideredRunningXid, &curValue, rewindItem->oldestConsideredRunningXid.value);
 		}
@@ -1848,7 +1848,7 @@ next_subxids_item:
 
 checkpoint_write_rewind_xids()
 {
-	bool		buffer_loaded = false;
+	pub static mut BUFFER_LOADED: bool = false;
 	RewindItem	buffer[REWIND_DISK_BUFFER_LENGTH];
 
 	if (!enable_rewind)
@@ -1945,7 +1945,7 @@ get_rewind_run_xmin()
 fn
 try_restart_pg()
 {
-	pid_t		pid;
+	pub static mut PID: pid_t = std::mem::zeroed();
 	sigset_t	blocked_sigset,
 				old_sigset;
 
@@ -1986,15 +1986,15 @@ try_restart_pg()
 	if (setsid() < 0)
 	{
 		// setsid failed:
-		goto emergency_shutdown;
+		pub static mut EMERGENCY_SHUTDOWN: goto = std::mem::zeroed();
 	}
 
 	{
 		// We're in a session that will survive when the parent goes away
-		sigset_t	empty_mask;
+		pub static mut EMPTY_MASK: sigset_t = std::mem::zeroed();
 		char		bindir[MAXPGPATH];
 		char		cmd[PG_CTL_MAX_CMD_LEN];
-		lastslash: &mut char;
+		pub static mut CHAR: *mut lastslash = std::ptr::null_mut();
 
 		strlcpy(bindir, my_exec_path, MAXPGPATH);
 
@@ -2002,7 +2002,7 @@ try_restart_pg()
 
 		// if for some reason we got a bogus bindir
 		if (lastslash == NULL)
-			goto emergency_shutdown;
+			pub static mut EMERGENCY_SHUTDOWN: goto = std::mem::zeroed();
 
 		*lastslash = '\0';
 		snprintf(cmd, sizeof(cmd), "%s/pg_ctl", bindir);
@@ -2018,7 +2018,7 @@ try_restart_pg()
 
 		execl(cmd, cmd, "restart", "-D", DataDir, (char *) NULL);
 		// execl failed:
-		goto emergency_shutdown;
+		pub static mut EMERGENCY_SHUTDOWN: goto = std::mem::zeroed();
 	}
 
 emergency_shutdown:

@@ -116,11 +116,11 @@ tts_orioledb_make_key(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 	bool		isnull[INDEX_MAX_KEYS] = {false};
 	int			i,
 				ctid_off = id->primaryIsCtid ? 1 : 0;
-	OTuple		result;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	for (i = 0; i < id->nonLeafTupdesc->natts; i++)
 	{
-		int			attnum = id->tableAttnums[i];
+		pub static mut ATTNUM: std::os::raw::c_int = id->tableAttnums[i];
 
 		if (attnum == 1 && ctid_off == 1)
 		{
@@ -129,10 +129,10 @@ tts_orioledb_make_key(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 		}
 		else
 		{
-			int			attindex = attnum - 1 - ctid_off;
+			pub static mut ATTINDEX: std::os::raw::c_int = attnum - 1 - ctid_off;
 #ifdef USE_ASSERT_CHECKING
 			// PK attributes shouldn't be external or compressed
-			Form_pg_attribute att;
+			pub static mut ATT: Form_pg_attribute = std::mem::zeroed();
 
 			att = TupleDescAttr(slot->tts_tupleDescriptor,
 								attnum - 1 - ctid_off);
@@ -150,7 +150,7 @@ tts_orioledb_make_key(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 	result = o_form_tuple(id->nonLeafTupdesc, &id->nonLeafSpec,
 						  ((OTableSlot *) slot)->version, key, isnull,
 						  NULL);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static OTuple
@@ -158,17 +158,17 @@ make_key_from_secondary_slot(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, d
 {
 	Datum		key[INDEX_MAX_KEYS];
 	bool		isnull[INDEX_MAX_KEYS] = {false};
-	int			i;
-	OTuple		result;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut RESULT: OTuple = std::mem::zeroed();
 
 	for (i = 0; i < idx->nPrimaryFields; i++)
 	{
-		int			pk_attnum = idx->primaryFieldsAttnums[i];
-		int			attindex = pk_attnum - 1;
+		pub static mut PK_ATTNUM: std::os::raw::c_int = idx->primaryFieldsAttnums[i];
+		pub static mut ATTINDEX: std::os::raw::c_int = pk_attnum - 1;
 
 #ifdef USE_ASSERT_CHECKING
 		// PK attributes shouldn't be external or compressed
-		Form_pg_attribute att;
+		pub static mut ATT: Form_pg_attribute = std::mem::zeroed();
 
 		att = TupleDescAttr(slot->tts_tupleDescriptor, pk_attnum - 1);
 		if (!slot->tts_isnull[attindex] && att->attlen < 0)
@@ -183,14 +183,14 @@ make_key_from_secondary_slot(slot: &mut TupleTableSlot, idx: &mut OIndexDescr, d
 
 	result = o_form_tuple(GET_PRIMARY(descr)->nonLeafTupdesc, &GET_PRIMARY(descr)->nonLeafSpec,
 						  ((OTableSlot *) slot)->version, key, isnull, NULL);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 fn
 alloc_to_toast_vfree_detoasted(slot: &mut TupleTableSlot)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	int			totalNatts = slot->tts_tupleDescriptor->natts;
+	pub static mut TOTAL_NATTS: std::os::raw::c_int = slot->tts_tupleDescriptor->natts;
 
 	Assert(!oslot->to_toast && !oslot->vfree);
 	oslot->to_toast = MemoryContextAllocZero(slot->tts_mcxt,
@@ -226,10 +226,10 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 // attributes.
 	bool		hastoast = false;	// Flag to indicate presence of TOASTed
 // attributes.
-	idx: &mut OIndexDescr;
-	bool		index_order;
-	int			cur_tbl_attnum = 0;
-	isfilled: &mut bool = NULL;
+	pub static mut O_INDEX_DESCR: *mut idx = std::ptr::null_mut();
+	pub static mut INDEX_ORDER: bool = false;
+	pub static mut CUR_TBL_ATTNUM: std::os::raw::c_int = 0;
+	pub static mut BOOL: *mut isfilled = std::ptr::null_mut();
 
 	//
 // Early return if the requested number of attributes is already valid or
@@ -304,8 +304,8 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 	// Iterate over the attributes to populate values and null flags.
 	for (attnum = slot->tts_nvalid; attnum < natts; attnum++)
 	{
-		Form_pg_attribute thisatt;
-		int			res_attnum = 0;
+		pub static mut THISATT: Form_pg_attribute = std::mem::zeroed();
+		pub static mut RES_ATTNUM: std::os::raw::c_int = 0;
 
 		//
 // Determine the result attribute number based on the index type and
@@ -401,8 +401,8 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 			if (!idx->bridging)
 			{
 				// Special handling for ctid attribute.
-				Datum		iptr_value PG_USED_FOR_ASSERTS_ONLY;
-				bool		iptr_null;
+				pub static mut PG_USED_FOR_ASSERTS_ONLY: Datum		iptr_value = std::mem::zeroed();
+				pub static mut IPTR_NULL: bool = false;
 
 				iptr_value = o_tuple_read_next_field(&oslot->state,
 													 &iptr_null);
@@ -415,7 +415,7 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 		else if (res_attnum == -2)
 		{
 			// Handle dropped attributes by reading and ignoring the value.
-			bool		dropped_null;
+			pub static mut DROPPED_NULL: bool = false;
 
 			() o_tuple_read_next_field(&oslot->state, &dropped_null);
 		}
@@ -424,7 +424,7 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 	// Process TOASTed attributes if any were found.
 	if (hastoast)
 	{
-		OTuple		pkey;
+		pub static mut PKEY: OTuple = std::mem::zeroed();
 
 		// Allocate memory for TOASTed attributes if not already done.
 		if (!oslot->to_toast)
@@ -439,7 +439,7 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 		// Iterate over attributes to process TOASTed values.
 		for (attnum = 0; attnum < natts; attnum++)
 		{
-			Form_pg_attribute thisatt;
+			pub static mut THISATT: Form_pg_attribute = std::mem::zeroed();
 
 			thisatt = TupleDescAttr(slot->tts_tupleDescriptor, attnum);
 			if (!isnull[attnum] && !thisatt->attbyval && thisatt->attlen < 0)
@@ -450,7 +450,7 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 				{
 					// Replace TOASTed value with a detoasted version.
 					MemoryContext mcxt = MemoryContextSwitchTo(slot->tts_mcxt);
-					OToastValue toastValue;
+					pub static mut TOAST_VALUE: OToastValue = std::mem::zeroed();
 
 					memcpy(&toastValue, p, sizeof(toastValue));
 					values[attnum] = create_o_toast_external(descr, pkey,
@@ -472,7 +472,7 @@ tts_orioledb_getsomeattrs(slot: &mut TupleTableSlot, int __natts)
 	Assert(attnum == natts);
 
 	{
-		int			first_unfilled = slot->tts_nvalid;
+		pub static mut FIRST_UNFILLED: std::os::raw::c_int = slot->tts_nvalid;
 
 		for (attnum = slot->tts_nvalid; attnum < Max(natts, __natts); ++attnum)
 		{
@@ -497,7 +497,7 @@ static Datum
 tts_orioledb_getsysattr(slot: &mut TupleTableSlot, int attnum, isnull: &mut bool)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	const att: &mut FormData_pg_attribute;
+	pub static mut FORM_DATA_PG_ATTRIBUTE: *mut const att = std::ptr::null_mut();
 
 	ASAN_UNPOISON_MEMORY_REGION(isnull, sizeof(*isnull));
 
@@ -505,10 +505,10 @@ tts_orioledb_getsysattr(slot: &mut TupleTableSlot, int attnum, isnull: &mut bool
 	{
 		Datum		values[2 * INDEX_MAX_KEYS];
 		bool		isnulls[2 * INDEX_MAX_KEYS];
-		result: &mut bytea;
-		descr: &mut OTableDescr = oslot->descr;
-		primary: &mut OIndexDescr;
-		int			ctid_off;
+		pub static mut BYTEA: *mut result = std::ptr::null_mut();
+		pub static mut O_TABLE_DESCR: *mut descr = oslot->descr;
+		pub static mut O_INDEX_DESCR: *mut primary = std::ptr::null_mut();
+		pub static mut CTID_OFF: std::os::raw::c_int = 0;
 
 		if (oslot->rowid)
 		{
@@ -556,9 +556,9 @@ fn
 tts_orioledb_materialize(slot: &mut TupleTableSlot)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	TupleDesc	desc = slot->tts_tupleDescriptor;
-	Size		sz = 0;
-	data: &mut char;
+	pub static mut DESC: TupleDesc = slot->tts_tupleDescriptor;
+	pub static mut SZ: Size = 0;
+	pub static mut CHAR: *mut data = std::ptr::null_mut();
 
 	// already materialized
 	if (TTS_SHOULDFREE(slot))
@@ -570,7 +570,7 @@ tts_orioledb_materialize(slot: &mut TupleTableSlot)
 	for (int natt = 0; natt < desc->natts; natt++)
 	{
 		Form_pg_attribute att = TupleDescAttr(desc, natt);
-		Datum		val;
+		pub static mut VAL: Datum = std::mem::zeroed();
 
 		if (att->attbyval || slot->tts_isnull[natt])
 			continue;
@@ -606,7 +606,7 @@ tts_orioledb_materialize(slot: &mut TupleTableSlot)
 	for (int natt = 0; natt < desc->natts; natt++)
 	{
 		Form_pg_attribute att = TupleDescAttr(desc, natt);
-		Datum		val;
+		pub static mut VAL: Datum = std::mem::zeroed();
 
 		if (att->attbyval || slot->tts_isnull[natt])
 			continue;
@@ -616,7 +616,7 @@ tts_orioledb_materialize(slot: &mut TupleTableSlot)
 		if (att->attlen == -1 &&
 			VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val)))
 		{
-			Size		data_length;
+			pub static mut DATA_LENGTH: Size = 0;
 
 			//
 // We want to flatten the expanded value so that the materialized
@@ -634,7 +634,7 @@ tts_orioledb_materialize(slot: &mut TupleTableSlot)
 		}
 		else
 		{
-			Size		data_length = 0;
+			pub static mut DATA_LENGTH: Size = 0;
 
 			data = (char *) att_align_nominal(data, att->attalign);
 			data_length = att_addlength_datum(data_length, att->attlen, val);
@@ -657,21 +657,21 @@ tts_orioledb_materialize(slot: &mut TupleTableSlot)
 tts_orioledb_detoast(slot: &mut TupleTableSlot)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	TupleDesc	tupleDesc = slot->tts_tupleDescriptor;
-	int			natts = tupleDesc->natts;
-	int			i;
+	pub static mut TUPLE_DESC: TupleDesc = slot->tts_tupleDescriptor;
+	pub static mut NATTS: std::os::raw::c_int = tupleDesc->natts;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	slot_getallattrs(slot);
 
 	for (i = 0; i < natts; i++)
 	{
 		Form_pg_attribute att = TupleDescAttr(tupleDesc, i);
-		Datum		tmp;
+		pub static mut TMP: Datum = std::mem::zeroed();
 
 		if (!slot->tts_isnull[i] && att->attlen == -1 &&
 			VARATT_IS_EXTENDED(slot->tts_values[i]))
 		{
-			MemoryContext mctx;
+			pub static mut MCTX: MemoryContext = std::mem::zeroed();
 
 			if (!oslot->vfree)
 				alloc_to_toast_vfree_detoasted(slot);
@@ -691,7 +691,7 @@ tts_orioledb_detoast(slot: &mut TupleTableSlot)
 fn
 tts_orioledb_copyslot(dstslot: &mut TupleTableSlot, srcslot: &mut TupleTableSlot)
 {
-	TupleDesc	srcdesc = srcslot->tts_tupleDescriptor;
+	pub static mut SRCDESC: TupleDesc = srcslot->tts_tupleDescriptor;
 	dstoslot: &mut OTableSlot = (OTableSlot *) dstslot;
 
 	Assert(srcdesc->natts <= dstslot->tts_tupleDescriptor->natts);
@@ -707,7 +707,7 @@ tts_orioledb_copyslot(dstslot: &mut TupleTableSlot, srcslot: &mut TupleTableSlot
 		if (!O_TUPLE_IS_NULL(srcoslot->tuple))
 		{
 			MemoryContext mctx = MemoryContextSwitchTo(dstslot->tts_mcxt);
-			OTuple		tup = srcoslot->tuple;
+			pub static mut TUP: OTuple = srcoslot->tuple;
 			uint32		tupLen = o_tuple_size(tup, &GET_PRIMARY(srcoslot->descr)->leafSpec);
 
 			dstoslot->tuple.data = (Pointer) palloc(tupLen);
@@ -751,7 +751,7 @@ tts_orioledb_copyslot(dstslot: &mut TupleTableSlot, srcslot: &mut TupleTableSlot
 static HeapTuple
 tts_orioledb_copy_heap_tuple(slot: &mut TupleTableSlot)
 {
-	HeapTuple	result;
+	pub static mut RESULT: HeapTuple = std::mem::zeroed();
 
 	Assert(!TTS_EMPTY(slot));
 
@@ -763,7 +763,7 @@ tts_orioledb_copy_heap_tuple(slot: &mut TupleTableSlot)
 
 	ItemPointerCopy(&slot->tts_tid, &result->t_self);
 
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 static MinimalTuple
@@ -790,7 +790,7 @@ fn
 tts_orioledb_init_reader(slot: &mut TupleTableSlot)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	idx: &mut OIndexDescr;
+	pub static mut O_INDEX_DESCR: *mut idx = std::ptr::null_mut();
 
 	if (oslot->ixnum == BridgeIndexNumber)
 		idx = oslot->descr->bridge;
@@ -808,8 +808,8 @@ tts_orioledb_init_reader(slot: &mut TupleTableSlot)
 	{
 		if (oslot->ixnum == PrimaryIndexNumber && oslot->leafTuple)
 		{
-			Datum		value;
-			bool		isnull;
+			pub static mut VALUE: Datum = std::mem::zeroed();
+			pub static mut ISNULL: bool = false;
 
 			value = o_tuple_read_next_field(&oslot->state, &isnull);
 			slot->tts_tid = *((ItemPointer) value);
@@ -817,8 +817,8 @@ tts_orioledb_init_reader(slot: &mut TupleTableSlot)
 		else if (!(idx->bridging && oslot->leafTuple &&
 				   (oslot->ixnum == BridgeIndexNumber || oslot->ixnum == PrimaryIndexNumber)))
 		{
-			ItemPointer iptr;
-			bool		isnull;
+			pub static mut IPTR: ItemPointer = std::mem::zeroed();
+			pub static mut ISNULL: bool = false;
 
 			if (oslot->leafTuple)
 				iptr = o_tuple_get_last_iptr(idx->leafTupdesc, &idx->leafSpec,
@@ -834,8 +834,8 @@ tts_orioledb_init_reader(slot: &mut TupleTableSlot)
 
 	if (idx->bridging && oslot->leafTuple && (oslot->ixnum == BridgeIndexNumber || oslot->ixnum == PrimaryIndexNumber))
 	{
-		Datum		value;
-		bool		isnull;
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
 
 		value = o_tuple_read_next_field(&oslot->state, &isnull);
 		oslot->bridge_ctid = *((ItemPointer) value);
@@ -902,9 +902,9 @@ Datum
 o_get_tbl_att(slot: &mut TupleTableSlot, int attnum, bool primaryIsCtid,
 			  isnull: &mut bool, typid: &mut Oid, bool decompress)
 {
-	int			i;
-	Datum		value;
-	Form_pg_attribute att;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut VALUE: Datum = std::mem::zeroed();
+	pub static mut ATT: Form_pg_attribute = std::mem::zeroed();
 	oSlot: &mut OTableSlot = (OTableSlot *) slot;
 
 	if (primaryIsCtid)
@@ -963,20 +963,20 @@ o_get_tbl_att(slot: &mut TupleTableSlot, int attnum, bool primaryIsCtid,
 		}
 		value = oSlot->detoasted[i];
 	}
-	return value;
+	pub static mut VALUE: return = std::mem::zeroed();
 }
 
 Datum
 o_get_idx_expr_att(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
 				   exp_state: &mut ExprState, isnull: &mut bool)
 {
-	Datum		result;
+	pub static mut RESULT: Datum = std::mem::zeroed();
 
 	idx->econtext->ecxt_scantuple = slot;
 
 	result = ExecEvalExprSwitchContext(exp_state,
 									   idx->econtext, isnull);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -990,16 +990,16 @@ fn
 tts_orioledb_get_index_values(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
 							  values: &mut Datum, isnull: &mut bool, bool leaf)
 {
-	TupleDesc	tupleDesc = leaf ? idx->leafTupdesc : idx->nonLeafTupdesc;
-	int			natts = tupleDesc->natts;
-	int			i;
+	pub static mut TUPLE_DESC: TupleDesc = leaf ? idx->leafTupdesc : idx->nonLeafTupdesc;
+	pub static mut NATTS: std::os::raw::c_int = tupleDesc->natts;
+	pub static mut I: std::os::raw::c_int = 0;
 	indexpr_item: &mut ListCell = list_head(idx->expressions_state);
 
 	Assert(natts <= 2 * INDEX_MAX_KEYS);
 
 	for (i = 0; i < natts; i++)
 	{
-		int			attnum = idx->tableAttnums[i];
+		pub static mut ATTNUM: std::os::raw::c_int = idx->tableAttnums[i];
 
 		if (attnum != EXPR_ATTNUM)
 			values[i] = o_get_tbl_att(slot, attnum, idx->primaryIsCtid,
@@ -1019,12 +1019,12 @@ tts_orioledb_make_secondary_tuple(slot: &mut TupleTableSlot, idx: &mut OIndexDes
 {
 	Datum		values[2 * INDEX_MAX_KEYS];
 	bool		isnull[2 * INDEX_MAX_KEYS];
-	TupleDesc	tupleDesc;
-	spec: &mut OTupleFixedFormatSpec;
-	int			ctid_off = idx->primaryIsCtid ? 1 : 0;
+	pub static mut TUPLE_DESC: TupleDesc = std::mem::zeroed();
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = std::ptr::null_mut();
+	pub static mut CTID_OFF: std::os::raw::c_int = idx->primaryIsCtid ? 1 : 0;
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	BridgeData	bridge_data;
-	bridge_data_arg: &mut BridgeData = NULL;
+	pub static mut BRIDGE_DATA: BridgeData = std::mem::zeroed();
+	pub static mut BRIDGE_DATA: *mut bridge_data_arg = std::ptr::null_mut();
 
 	slot_getsomeattrs(slot, idx->maxTableAttnum - ctid_off);
 
@@ -1057,8 +1057,8 @@ tts_orioledb_make_secondary_tuple(slot: &mut TupleTableSlot, idx: &mut OIndexDes
 tts_orioledb_fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
 							bound: &mut OBTreeKeyBound)
 {
-	int			i;
-	int			ctid_off = idx->primaryIsCtid ? 1 : 0;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = idx->primaryIsCtid ? 1 : 0;
 	indexpr_item: &mut ListCell = list_head(idx->expressions_state);
 
 	slot_getsomeattrs(slot, idx->maxTableAttnum - ctid_off);
@@ -1066,10 +1066,10 @@ tts_orioledb_fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
 	bound->nkeys = idx->nonLeafTupdesc->natts;
 	for (i = 0; i < bound->nkeys; i++)
 	{
-		Datum		value;
-		bool		isnull;
-		int			attnum;
-		Oid			typid;
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
+		pub static mut ATTNUM: std::os::raw::c_int = 0;
+		pub static mut TYPID: Oid = std::mem::zeroed();
 
 		attnum = idx->tableAttnums[i];
 
@@ -1101,7 +1101,7 @@ tts_orioledb_fill_key_bound(slot: &mut TupleTableSlot, idx: &mut OIndexDescr,
 
 appendStringInfoIndexKey(StringInfo str, slot: &mut TupleTableSlot, id: &mut OIndexDescr)
 {
-	int			i;
+	pub static mut I: std::os::raw::c_int = 0;
 	indexpr_item: &mut ListCell = list_head(id->expressions_state);
 
 	slot_getallattrs(slot);
@@ -1109,9 +1109,9 @@ appendStringInfoIndexKey(StringInfo str, slot: &mut TupleTableSlot, id: &mut OIn
 	appendStringInfo(str, "(");
 	for (i = 0; i < id->nUniqueFields; i++)
 	{
-		Datum		value;
-		bool		isnull;
-		int			attnum = id->tableAttnums[i];
+		pub static mut VALUE: Datum = std::mem::zeroed();
+		pub static mut ISNULL: bool = false;
+		pub static mut ATTNUM: std::os::raw::c_int = id->tableAttnums[i];
 
 		if (attnum != EXPR_ATTNUM)
 			value = o_get_tbl_att(slot, attnum, id->primaryIsCtid,
@@ -1130,9 +1130,9 @@ appendStringInfoIndexKey(StringInfo str, slot: &mut TupleTableSlot, id: &mut OIn
 			appendStringInfo(str, "null");
 		else
 		{
-			Oid			typoutput;
-			bool		typisvarlena;
-			res: &mut char;
+			pub static mut TYPOUTPUT: Oid = std::mem::zeroed();
+			pub static mut TYPISVARLENA: bool = false;
+			pub static mut CHAR: *mut res = std::ptr::null_mut();
 
 			getTypeOutputInfo(TupleDescAttr(id->nonLeafTupdesc, i)->atttypid,
 							  &typoutput, &typisvarlena);
@@ -1150,7 +1150,7 @@ appendStringInfoIndexKey(StringInfo str, slot: &mut TupleTableSlot, id: &mut OIn
 char *
 tss_orioledb_print_idx_key(slot: &mut TupleTableSlot, id: &mut OIndexDescr)
 {
-	StringInfoData buf;
+	pub static mut BUF: StringInfoData = std::mem::zeroed();
 
 	initStringInfo(&buf);
 	appendStringInfoIndexKey(&buf, slot, id);
@@ -1167,9 +1167,9 @@ expected_tuple_len(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	idx: &mut OIndexDescr = GET_PRIMARY(descr);
-	int			tup_size;
-	BridgeData	bridge_data;
-	bridge_data_arg: &mut BridgeData = NULL;
+	pub static mut TUP_SIZE: std::os::raw::c_int = 0;
+	pub static mut BRIDGE_DATA: BridgeData = std::mem::zeroed();
+	pub static mut BRIDGE_DATA: *mut bridge_data_arg = std::ptr::null_mut();
 
 	if (idx->bridging)
 	{
@@ -1187,7 +1187,7 @@ expected_tuple_len(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 								slot->tts_isnull,
 								oslot->to_toast);
 
-	return tup_size;
+	pub static mut TUP_SIZE: return = std::mem::zeroed();
 }
 
 //
@@ -1202,8 +1202,8 @@ can_be_stored_in_index(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 	Assert(tup_size > 0);
 
 	if (tup_size <= O_BTREE_MAX_TUPLE_SIZE)
-		return true;
-	return false;
+		pub static mut TRUE: return = std::mem::zeroed();
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 //
@@ -1214,16 +1214,16 @@ can_be_stored_in_index(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 tts_orioledb_toast(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	Form_pg_attribute att;
+	pub static mut ATT: Form_pg_attribute = std::mem::zeroed();
 	int			i,
 				full_size = 0,
 				to_toastn,
 				natts;
-	AttrNumber	toast_attn;
-	bool		has_toasted = false;
-	TupleDesc	tupdesc = slot->tts_tupleDescriptor;
-	bool		primaryIsCtid;
-	int			ctid_off;
+	pub static mut TOAST_ATTN: AttrNumber = std::mem::zeroed();
+	pub static mut HAS_TOASTED: bool = false;
+	pub static mut TUPDESC: TupleDesc = slot->tts_tupleDescriptor;
+	pub static mut PRIMARY_IS_CTID: bool = false;
+	pub static mut CTID_OFF: std::os::raw::c_int = 0;
 
 	primaryIsCtid = GET_PRIMARY(descr)->primaryIsCtid;
 	ctid_off = primaryIsCtid ? 1 : 0;
@@ -1295,11 +1295,11 @@ tts_orioledb_toast(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 	while (to_toastn < descr->ntoastable &&
 		   !can_be_stored_in_index(slot, descr))
 	{
-		Datum		tmp;
+		pub static mut TMP: Datum = std::mem::zeroed();
 		int			max = 0,
 					max_attn = -1,
 					var_size;
-		MemoryContext oldMctx;
+		pub static mut OLD_MCTX: MemoryContext = std::mem::zeroed();
 
 		// search max unprocessed value
 		for (i = 0; i < descr->ntoastable; i++)
@@ -1387,9 +1387,9 @@ tts_orioledb_toast(slot: &mut TupleTableSlot, descr: &mut OTableDescr)
 //
 	while (!can_be_stored_in_index(slot, descr))
 	{
-		int			max = 0;
-		int			max_attn = -1;
-		int			var_size;
+		pub static mut MAX: std::os::raw::c_int = 0;
+		pub static mut MAX_ATTN: std::os::raw::c_int = -1;
+		pub static mut VAR_SIZE: std::os::raw::c_int = 0;
 
 		for (i = 0; i < descr->ntoastable; i++)
 		{
@@ -1441,14 +1441,14 @@ tts_orioledb_form_tuple(slot: &mut TupleTableSlot,
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
 	OTuple		tuple;			// return tuple
-	Size		len;
+	pub static mut LEN: Size = 0;
 	idx: &mut OIndexDescr = GET_PRIMARY(descr);
-	TupleDesc	tupleDescriptor = idx->leafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
-	bool		primaryIsCtid = idx->primaryIsCtid;
-	ItemPointer iptr;
-	BridgeData	bridge_data;
-	bridge_data_arg: &mut BridgeData = NULL;
+	pub static mut TUPLE_DESCRIPTOR: TupleDesc = idx->leafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &idx->leafSpec;
+	pub static mut PRIMARY_IS_CTID: bool = idx->primaryIsCtid;
+	pub static mut IPTR: ItemPointer = std::mem::zeroed();
+	pub static mut BRIDGE_DATA: BridgeData = std::mem::zeroed();
+	pub static mut BRIDGE_DATA: *mut bridge_data_arg = std::ptr::null_mut();
 
 	if (!O_TUPLE_IS_NULL(oslot->tuple) && oslot->descr == descr &&
 		oslot->ixnum == PrimaryIndexNumber && oslot->leafTuple)
@@ -1490,7 +1490,7 @@ tts_orioledb_form_tuple(slot: &mut TupleTableSlot,
 	slot->tts_flags |= TTS_FLAG_SHOULDFREE;
 	tts_orioledb_init_reader(slot);
 
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 OTuple
@@ -1498,15 +1498,15 @@ tts_orioledb_form_orphan_tuple(slot: &mut TupleTableSlot,
 							   descr: &mut OTableDescr)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	OTuple		tuple;
-	Size		len;
+	pub static mut TUPLE: OTuple = std::mem::zeroed();
+	pub static mut LEN: Size = 0;
 	idx: &mut OIndexDescr = GET_PRIMARY(descr);
-	TupleDesc	tupleDescriptor = idx->leafTupdesc;
-	spec: &mut OTupleFixedFormatSpec = &idx->leafSpec;
-	bool		primaryIsCtid = idx->primaryIsCtid;
-	ItemPointer iptr;
-	BridgeData	bridge_data;
-	bridge_data_arg: &mut BridgeData = NULL;
+	pub static mut TUPLE_DESCRIPTOR: TupleDesc = idx->leafTupdesc;
+	pub static mut O_TUPLE_FIXED_FORMAT_SPEC: *mut spec = &idx->leafSpec;
+	pub static mut PRIMARY_IS_CTID: bool = idx->primaryIsCtid;
+	pub static mut IPTR: ItemPointer = std::mem::zeroed();
+	pub static mut BRIDGE_DATA: BridgeData = std::mem::zeroed();
+	pub static mut BRIDGE_DATA: *mut bridge_data_arg = std::ptr::null_mut();
 
 	if (idx->leafTupdesc->natts > MaxTupleAttributeNumber)
 		ereport(ERROR,
@@ -1537,7 +1537,7 @@ tts_orioledb_form_orphan_tuple(slot: &mut TupleTableSlot,
 				 iptr, bridge_data_arg, oslot->version,
 				 slot->tts_values, slot->tts_isnull, oslot->to_toast);
 
-	return tuple;
+	pub static mut TUPLE: return = std::mem::zeroed();
 }
 
 bool
@@ -1546,17 +1546,17 @@ tts_orioledb_insert_toast_values(slot: &mut TupleTableSlot,
 								 OXid oxid, CommitSeqNo csn)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	TupleDesc	tupleDesc = slot->tts_tupleDescriptor;
-	OTuple		idx_tup;
-	int			i;
-	bool		result = true;
+	pub static mut TUPLE_DESC: TupleDesc = slot->tts_tupleDescriptor;
+	pub static mut IDX_TUP: OTuple = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut RESULT: bool = true;
 	int			ctid_off = GET_PRIMARY(descr)->primaryIsCtid ? 1 : 0;
 
 	if (GET_PRIMARY(descr)->bridging)
 		ctid_off++;
 
 	if (oslot->to_toast == NULL)
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 
 	idx_tup = tts_orioledb_make_key(slot, descr);
 
@@ -1570,9 +1570,9 @@ tts_orioledb_insert_toast_values(slot: &mut TupleTableSlot,
 
 		if (oslot->to_toast[i] == ORIOLEDB_TO_TOAST_ON)
 		{
-			Datum		value;
-			Pointer		p;
-			bool		free;
+			pub static mut VALUE: Datum = std::mem::zeroed();
+			pub static mut P: Pointer = std::ptr::null_mut();
+			pub static mut FREE: bool = false;
 
 			value = o_get_src_value(slot->tts_values[i], &free);
 			p = DatumGetPointer(value);
@@ -1587,7 +1587,7 @@ tts_orioledb_insert_toast_values(slot: &mut TupleTableSlot,
 		}
 	}
 	pfree(idx_tup.data);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 
@@ -1596,9 +1596,9 @@ tts_orioledb_toast_sort_add(slot: &mut TupleTableSlot,
 							sortstate: &mut Tuplesortstate)
 {
 	oslot: &mut OTableSlot = (OTableSlot *) slot;
-	TupleDesc	tupleDesc = slot->tts_tupleDescriptor;
-	OTuple		idx_tup;
-	int			i;
+	pub static mut TUPLE_DESC: TupleDesc = slot->tts_tupleDescriptor;
+	pub static mut IDX_TUP: OTuple = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
 	int			ctid_off = GET_PRIMARY(descr)->primaryIsCtid ? 1 : 0;
 
 	if (GET_PRIMARY(descr)->bridging)
@@ -1619,9 +1619,9 @@ tts_orioledb_toast_sort_add(slot: &mut TupleTableSlot,
 
 		if (oslot->to_toast[i] == ORIOLEDB_TO_TOAST_ON)
 		{
-			Datum		value;
-			Pointer		p;
-			bool		free;
+			pub static mut VALUE: Datum = std::mem::zeroed();
+			pub static mut P: Pointer = std::ptr::null_mut();
+			pub static mut FREE: bool = false;
 
 			value = o_get_src_value(slot->tts_values[i], &free);
 			p = DatumGetPointer(value);
@@ -1640,8 +1640,8 @@ tts_orioledb_remove_toast_values(slot: &mut TupleTableSlot,
 								 descr: &mut OTableDescr,
 								 OXid oxid, CommitSeqNo csn)
 {
-	int			i;
-	bool		result = true;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut RESULT: bool = true;
 	int			ctid_off = GET_PRIMARY(descr)->primaryIsCtid ? 1 : 0;
 
 	if (GET_PRIMARY(descr)->bridging)
@@ -1651,8 +1651,8 @@ tts_orioledb_remove_toast_values(slot: &mut TupleTableSlot,
 
 	for (i = 0; i < descr->ntoastable; i++)
 	{
-		int			toast_attn;
-		Datum		value;
+		pub static mut TOAST_ATTN: std::os::raw::c_int = 0;
+		pub static mut VALUE: Datum = std::mem::zeroed();
 
 		toast_attn = descr->toastable[i] - ctid_off;
 
@@ -1662,8 +1662,8 @@ tts_orioledb_remove_toast_values(slot: &mut TupleTableSlot,
 		value = slot->tts_values[toast_attn];
 		if (VARATT_IS_EXTERNAL_ORIOLEDB(value))
 		{
-			OToastExternal ote;
-			OFixedKey	key;
+			pub static mut OTE: OToastExternal = std::mem::zeroed();
+			pub static mut KEY: OFixedKey = std::mem::zeroed();
 
 			memcpy(&ote, VARDATA_EXTERNAL(DatumGetPointer(value)), O_TOAST_EXTERNAL_SZ);
 			key.tuple.formatFlags = ote.formatFlags;
@@ -1681,7 +1681,7 @@ tts_orioledb_remove_toast_values(slot: &mut TupleTableSlot,
 				break;
 		}
 	}
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 bool
@@ -1691,12 +1691,12 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 								 OXid oxid, CommitSeqNo csn)
 {
 	newOSlot: &mut OTableSlot = (OTableSlot *) newSlot;
-	OTuple		idx_tup;
-	OTuple		old_idx_tup PG_USED_FOR_ASSERTS_ONLY;
-	int			i;
-	bool		result = true;
+	pub static mut IDX_TUP: OTuple = std::mem::zeroed();
+	pub static mut PG_USED_FOR_ASSERTS_ONLY: OTuple		old_idx_tup = std::mem::zeroed();
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut RESULT: bool = true;
 	primary: &mut OIndexDescr = GET_PRIMARY(descr);
-	int			ctid_off = primary->primaryIsCtid ? 1 : 0;
+	pub static mut CTID_OFF: std::os::raw::c_int = primary->primaryIsCtid ? 1 : 0;
 
 	if (descr->bridge)
 		ctid_off++;
@@ -1707,7 +1707,7 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 
 #ifdef USE_ASSERT_CHECKING
 	{
-		int			natts;
+		pub static mut NATTS: std::os::raw::c_int = 0;
 
 		old_idx_tup = tts_orioledb_make_key(oldSlot, descr);
 		o_tuple_set_version(&primary->nonLeafSpec, &old_idx_tup,
@@ -1738,11 +1738,11 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 		{
 			if (!OIgnoreColumn(primary, i))
 			{
-				Datum		old_value;
-				Datum		new_value;
-				bool		isnull;
-				pkfield: &mut OIndexField = &primary->fields[i];
-				int			cmp;
+				pub static mut OLD_VALUE: Datum = std::mem::zeroed();
+				pub static mut NEW_VALUE: Datum = std::mem::zeroed();
+				pub static mut ISNULL: bool = false;
+				pub static mut O_INDEX_FIELD: *mut pkfield = &primary->fields[i];
+				pub static mut CMP: std::os::raw::c_int = 0;
 
 				old_value = o_fastgetattr(old_idx_tup, i + 1,
 										  primary->nonLeafTupdesc,
@@ -1764,13 +1764,13 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 
 	for (i = 0; i < descr->ntoastable; i++)
 	{
-		int			toast_attn;
+		pub static mut TOAST_ATTN: std::os::raw::c_int = 0;
 		Datum		oldValue = 0,
 					newValue = 0;
 		bool		newToast = false,
 					oldToast = false;
-		bool		insertNew = false;
-		bool		deleteOld = false;
+		pub static mut INSERT_NEW: bool = false;
+		pub static mut DELETE_OLD: bool = false;
 
 		toast_attn = descr->toastable[i] - ctid_off;
 		if (!oldSlot->tts_isnull[toast_attn])
@@ -1816,19 +1816,19 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 		else
 		{
 			// update value if it does not equal
-			bool		equal;
-			int			rawSize;
+			pub static mut EQUAL: bool = false;
+			pub static mut RAW_SIZE: std::os::raw::c_int = 0;
 
 			rawSize = o_get_raw_size(newValue);
 			equal = (rawSize == o_get_raw_size(oldValue));
 			if (equal)
 			{
-				Datum		newRawValue;
-				Datum		oldRawValue;
-				Pointer		newPtr;
-				Pointer		oldPtr;
-				bool		freeNew;
-				bool		freeOld;
+				pub static mut NEW_RAW_VALUE: Datum = std::mem::zeroed();
+				pub static mut OLD_RAW_VALUE: Datum = std::mem::zeroed();
+				pub static mut NEW_PTR: Pointer = std::ptr::null_mut();
+				pub static mut OLD_PTR: Pointer = std::ptr::null_mut();
+				pub static mut FREE_NEW: bool = false;
+				pub static mut FREE_OLD: bool = false;
 
 				newRawValue = o_get_raw_value(newValue, &freeNew);
 				oldRawValue = o_get_raw_value(oldValue, &freeOld);
@@ -1855,8 +1855,8 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 
 		if (deleteOld)
 		{
-			OToastExternal ote;
-			OFixedKey	key;
+			pub static mut OTE: OToastExternal = std::mem::zeroed();
+			pub static mut KEY: OFixedKey = std::mem::zeroed();
 
 			memcpy(&ote, VARDATA_EXTERNAL(DatumGetPointer(oldValue)), O_TOAST_EXTERNAL_SZ);
 			key.tuple.formatFlags = ote.formatFlags;
@@ -1876,9 +1876,9 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 
 		if (insertNew)
 		{
-			Datum		value;
-			Pointer		p;
-			bool		free;
+			pub static mut VALUE: Datum = std::mem::zeroed();
+			pub static mut P: Pointer = std::ptr::null_mut();
+			pub static mut FREE: bool = false;
 
 			value = o_get_src_value(newValue, &free);
 			p = DatumGetPointer(value);
@@ -1898,7 +1898,7 @@ tts_orioledb_update_toast_values(oldSlot: &mut TupleTableSlot,
 	}
 
 	pfree(idx_tup.data);
-	return result;
+	pub static mut RESULT: return = std::mem::zeroed();
 }
 
 //
@@ -1922,14 +1922,14 @@ tts_orioledb_modified(oldSlot: &mut TupleTableSlot,
 					  newSlot: &mut TupleTableSlot,
 					  attrs: &mut Bitmapset)
 {
-	TupleDesc	tupdesc = oldSlot->tts_tupleDescriptor;
+	pub static mut TUPDESC: TupleDesc = oldSlot->tts_tupleDescriptor;
 	int			attnum,
 				maxAttr;
 
 	maxAttr = bms_prev_member(attrs, -1) + FirstLowInvalidHeapAttributeNumber - 1;
 
 	if (maxAttr < 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	slot_getsomeattrs(oldSlot, maxAttr + 1);
 	slot_getsomeattrs(newSlot, maxAttr + 1);
@@ -1937,7 +1937,7 @@ tts_orioledb_modified(oldSlot: &mut TupleTableSlot,
 	attnum = -1;
 	while ((attnum = bms_next_member(attrs, attnum)) >= 0)
 	{
-		int			i = attnum + FirstLowInvalidHeapAttributeNumber - 1;
+		pub static mut I: std::os::raw::c_int = attnum + FirstLowInvalidHeapAttributeNumber - 1;
 
 		if (unlikely(i < 0))
 			elog(ERROR, "invalid attribute number %d", i);
@@ -1950,16 +1950,16 @@ tts_orioledb_modified(oldSlot: &mut TupleTableSlot,
 						isnull2 = newSlot->tts_isnull[i];
 
 			if (isnull1 != isnull2)
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 
 			if (isnull1)
 				continue;
 
 			if (!datumIsEqual(val1, val2, att->attbyval, att->attlen))
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 		}
 	}
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 

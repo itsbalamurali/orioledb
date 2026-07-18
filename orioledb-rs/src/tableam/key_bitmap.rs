@@ -53,7 +53,7 @@ typedef struct OKeyBitmapChunk
 //
 typedef struct OKbmDummy
 {
-	uint8		unused;
+	pub static mut UNUSED: uint8 = std::mem::zeroed();
 } OKbmDummy;
 
 #define RT_PREFIX okbmf
@@ -72,9 +72,9 @@ struct OKeyBitmap
 	ftree: &mut okbmf_radix_tree;	// fixed-key mode
 
 	// dedicated context owned by the radix tree (reset/freed by _free: &mut okbm)
-	MemoryContext treeCxt;
+	pub static mut TREE_CXT: MemoryContext = std::mem::zeroed();
 	// context holding this struct and the seek arrays
-	MemoryContext cxt;
+	pub static mut CXT: MemoryContext = std::mem::zeroed();
 
 	//
 // Sorted key arrays, built lazily by okbm_finalize() to serve ordered
@@ -82,11 +82,11 @@ struct OKeyBitmap
 // stores chunk keys in chunks[]; fixed mode stores whole keys, each
 // OKBM_FIXED_BYTES bytes, in fkeys[].
 //
-	chunks: &mut uint64;
-	fkeys: &mut uint8;
-	int			nchunks;
-	int			chunksCapacity;
-	bool		finalized;
+	pub static mut UINT64: *mut chunks = std::ptr::null_mut();
+	pub static mut UINT8: *mut fkeys = std::ptr::null_mut();
+	pub static mut NCHUNKS: std::os::raw::c_int = 0;
+	pub static mut CHUNKS_CAPACITY: std::os::raw::c_int = 0;
+	pub static mut FINALIZED: bool = false;
 };
 
 //
@@ -95,8 +95,8 @@ struct OKeyBitmap
 static int
 find_next_offset(const bitmap: &mut uint8, int minOffset)
 {
-	int			i;
-	uint8		mask;
+	pub static mut I: std::os::raw::c_int = 0;
+	pub static mut MASK: uint8 = std::mem::zeroed();
 
 	i = minOffset >> 3;
 	mask = 0xFF << (minOffset & 7);
@@ -105,7 +105,7 @@ find_next_offset(const bitmap: &mut uint8, int minOffset)
 		mask &= bitmap[i];
 		if (mask)
 		{
-			int			result;
+			pub static mut RESULT: std::os::raw::c_int = 0;
 
 			result = i << 3;
 			while (!(mask & 1))
@@ -113,7 +113,7 @@ find_next_offset(const bitmap: &mut uint8, int minOffset)
 				result++;
 				mask >>= 1;
 			}
-			return result;
+			pub static mut RESULT: return = std::mem::zeroed();
 		}
 		mask = 0xFF;
 		i++;
@@ -147,7 +147,7 @@ o_keybitmap_create()
 	bm->nchunks = 0;
 	bm->chunksCapacity = 0;
 	bm->finalized = false;
-	return bm;
+	pub static mut BM: return = std::mem::zeroed();
 }
 
 OKeyBitmap *
@@ -169,7 +169,7 @@ o_keybitmap_create_fixed()
 	bm->nchunks = 0;
 	bm->chunksCapacity = 0;
 	bm->finalized = false;
-	return bm;
+	pub static mut BM: return = std::mem::zeroed();
 }
 
 
@@ -192,10 +192,10 @@ o_keybitmap_free(bm: &mut OKeyBitmap)
 static inline okbmf_key
 okbmf_mkkey(const key: &mut uint8)
 {
-	okbmf_key	k;
+	pub static mut K: okbmf_key = std::mem::zeroed();
 
 	memcpy(k.data, key, OKBM_FIXED_BYTES);
-	return k;
+	pub static mut K: return = std::mem::zeroed();
 }
 
 
@@ -236,22 +236,22 @@ o_keybitmap_emit_key(bm: &mut OKeyBitmap, const key: &mut uint8)
 
 	Assert(bm->fixed);
 	if (okbmf_find(bm->ftree, k) != NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	() okbmf_set(bm->ftree, k, &dummy);
 	bm->finalized = false;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 
 o_keybitmap_insert(bm: &mut OKeyBitmap, uint64 value)
 {
-	uint64		chunk = value >> OKBM_CHUNK_BITS;
-	int			offset = value & OKBM_LOW_MASK;
+	pub static mut CHUNK: uint64 = value >> OKBM_CHUNK_BITS;
+	pub static mut OFFSET: std::os::raw::c_int = value & OKBM_LOW_MASK;
 	entry: &mut OKeyBitmapChunk = okbm_find(bm->tree, chunk);
 
 	if (entry == NULL)
 	{
-		OKeyBitmapChunk newentry;
+		pub static mut NEWENTRY: OKeyBitmapChunk = std::mem::zeroed();
 
 		memset(&newentry, 0, sizeof(newentry));
 		newentry.bitmap[offset >> 3] |= (1 << (offset & 7));
@@ -266,12 +266,12 @@ o_keybitmap_insert(bm: &mut OKeyBitmap, uint64 value)
 bool
 o_keybitmap_test(bm: &mut OKeyBitmap, uint64 value)
 {
-	uint64		chunk = value >> OKBM_CHUNK_BITS;
-	int			offset = value & OKBM_LOW_MASK;
+	pub static mut CHUNK: uint64 = value >> OKBM_CHUNK_BITS;
+	pub static mut OFFSET: std::os::raw::c_int = value & OKBM_LOW_MASK;
 	entry: &mut OKeyBitmapChunk = okbm_find(bm->tree, chunk);
 
 	if (entry == NULL)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	return (entry->bitmap[offset >> 3] & (1 << (offset & 7))) != 0;
 }
@@ -280,38 +280,38 @@ o_keybitmap_test(bm: &mut OKeyBitmap, uint64 value)
 bool
 o_keybitmap_emit(bm: &mut OKeyBitmap, uint64 value)
 {
-	uint64		chunk = value >> OKBM_CHUNK_BITS;
-	int			offset = value & OKBM_LOW_MASK;
-	int			byte = offset >> 3;
+	pub static mut CHUNK: uint64 = value >> OKBM_CHUNK_BITS;
+	pub static mut OFFSET: std::os::raw::c_int = value & OKBM_LOW_MASK;
+	pub static mut BYTE: std::os::raw::c_int = offset >> 3;
 	uint8		mask = 1 << (offset & 7);
 	entry: &mut OKeyBitmapChunk = okbm_find(bm->tree, chunk);
 
 	if (entry == NULL)
 	{
-		OKeyBitmapChunk newentry;
+		pub static mut NEWENTRY: OKeyBitmapChunk = std::mem::zeroed();
 
 		memset(&newentry, 0, sizeof(newentry));
 		newentry.bitmap[byte] |= mask;
 		() okbm_set(bm->tree, chunk, &newentry);
 		bm->finalized = false;
-		return true;
+		pub static mut TRUE: return = std::mem::zeroed();
 	}
 	if (entry->bitmap[byte] & mask)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 	entry->bitmap[byte] |= mask;
 	bm->finalized = false;
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
 
 bool
 o_keybitmap_is_empty(bm: &mut OKeyBitmap)
 {
-	bool		empty;
+	pub static mut EMPTY: bool = false;
 
 	if (bm->fixed)
 	{
 		iter: &mut okbmf_iter = okbmf_begin_iterate(bm->ftree);
-		okbmf_key	k;
+		pub static mut K: okbmf_key = std::mem::zeroed();
 
 		empty = (okbmf_iterate_next(iter, &k) == NULL);
 		okbmf_end_iterate(iter);
@@ -319,27 +319,27 @@ o_keybitmap_is_empty(bm: &mut OKeyBitmap)
 	else
 	{
 		iter: &mut okbm_iter = okbm_begin_iterate(bm->tree);
-		uint64		chunk;
+		pub static mut CHUNK: uint64 = std::mem::zeroed();
 
 		empty = (okbm_iterate_next(iter, &chunk) == NULL);
 		okbm_end_iterate(iter);
 	}
-	return empty;
+	pub static mut EMPTY: return = std::mem::zeroed();
 }
 
 
 o_keybitmap_union(a: &mut OKeyBitmap, b: &mut OKeyBitmap)
 {
-	iter: &mut okbm_iter;
-	bentry: &mut OKeyBitmapChunk;
-	uint64		chunk;
+	pub static mut OKBM_ITER: *mut iter = std::ptr::null_mut();
+	pub static mut O_KEY_BITMAP_CHUNK: *mut bentry = std::ptr::null_mut();
+	pub static mut CHUNK: uint64 = std::mem::zeroed();
 
 	Assert(a->fixed == b->fixed);
 
 	if (a->fixed)
 	{
 		fiter: &mut okbmf_iter = okbmf_begin_iterate(b->ftree);
-		okbmf_key	k;
+		pub static mut K: okbmf_key = std::mem::zeroed();
 
 		while (okbmf_iterate_next(fiter, &k) != NULL)
 		{
@@ -365,7 +365,7 @@ o_keybitmap_union(a: &mut OKeyBitmap, b: &mut OKeyBitmap)
 			() okbm_set(a->tree, chunk, bentry);
 		else
 		{
-			int			i;
+			pub static mut I: std::os::raw::c_int = 0;
 
 			for (i = 0; i < OKBM_BITMAP_BYTES; i++)
 				aentry->bitmap[i] |= bentry->bitmap[i];
@@ -378,23 +378,23 @@ o_keybitmap_union(a: &mut OKeyBitmap, b: &mut OKeyBitmap)
 
 o_keybitmap_intersect(a: &mut OKeyBitmap, b: &mut OKeyBitmap)
 {
-	iter: &mut okbm_iter;
-	aentry: &mut OKeyBitmapChunk;
-	uint64		chunk;
-	toDelete: &mut uint64 = NULL;
-	int			nDelete = 0;
-	int			deleteCap = 0;
-	int			i;
+	pub static mut OKBM_ITER: *mut iter = std::ptr::null_mut();
+	pub static mut O_KEY_BITMAP_CHUNK: *mut aentry = std::ptr::null_mut();
+	pub static mut CHUNK: uint64 = std::mem::zeroed();
+	pub static mut UINT64: *mut toDelete = std::ptr::null_mut();
+	pub static mut N_DELETE: std::os::raw::c_int = 0;
+	pub static mut DELETE_CAP: std::os::raw::c_int = 0;
+	pub static mut I: std::os::raw::c_int = 0;
 
 	Assert(a->fixed == b->fixed);
 
 	if (a->fixed)
 	{
 		fiter: &mut okbmf_iter = okbmf_begin_iterate(a->ftree);
-		okbmf_key	k;
-		fdel: &mut okbmf_key = NULL;
-		int			nfdel = 0;
-		int			fcap = 0;
+		pub static mut K: okbmf_key = std::mem::zeroed();
+		pub static mut OKBMF_KEY: *mut fdel = std::ptr::null_mut();
+		pub static mut NFDEL: std::os::raw::c_int = 0;
+		pub static mut FCAP: std::os::raw::c_int = 0;
 
 		while (okbmf_iterate_next(fiter, &k) != NULL)
 		{
@@ -433,7 +433,7 @@ o_keybitmap_intersect(a: &mut OKeyBitmap, b: &mut OKeyBitmap)
 	while ((aentry = okbm_iterate_next(iter, &chunk)) != NULL)
 	{
 		bentry: &mut OKeyBitmapChunk = okbm_find(b->tree, chunk);
-		bool		empty = true;
+		pub static mut EMPTY: bool = true;
 
 		if (bentry != NULL)
 		{
@@ -476,8 +476,8 @@ o_keybitmap_intersect(a: &mut OKeyBitmap, b: &mut OKeyBitmap)
 fn
 okbm_finalize(bm: &mut OKeyBitmap)
 {
-	iter: &mut okbm_iter;
-	uint64		chunk;
+	pub static mut OKBM_ITER: *mut iter = std::ptr::null_mut();
+	pub static mut CHUNK: uint64 = std::mem::zeroed();
 
 	if (bm->finalized)
 		return;
@@ -487,7 +487,7 @@ okbm_finalize(bm: &mut OKeyBitmap)
 	if (bm->fixed)
 	{
 		fiter: &mut okbmf_iter = okbmf_begin_iterate(bm->ftree);
-		okbmf_key	k;
+		pub static mut K: okbmf_key = std::mem::zeroed();
 
 		while (okbmf_iterate_next(fiter, &k) != NULL)
 		{
@@ -546,18 +546,18 @@ okbm_lower_bound(bm: &mut OKeyBitmap, uint64 target)
 		else
 			hi = mid;
 	}
-	return lo;
+	pub static mut LO: return = std::mem::zeroed();
 }
 
 bool
 o_keybitmap_range_is_valid(bm: &mut OKeyBitmap, uint64 low, uint64 high)
 {
-	uint64		chunkLow;
-	uint64		chunkHigh;
-	int			idx;
+	pub static mut CHUNK_LOW: uint64 = std::mem::zeroed();
+	pub static mut CHUNK_HIGH: uint64 = std::mem::zeroed();
+	pub static mut IDX: std::os::raw::c_int = 0;
 
 	if (high <= low)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	okbm_finalize(bm);
 
@@ -566,8 +566,8 @@ o_keybitmap_range_is_valid(bm: &mut OKeyBitmap, uint64 low, uint64 high)
 
 	for (idx = okbm_lower_bound(bm, chunkLow); idx < bm->nchunks; idx++)
 	{
-		uint64		chunk = bm->chunks[idx];
-		entry: &mut OKeyBitmapChunk;
+		pub static mut CHUNK: uint64 = bm->chunks[idx];
+		pub static mut O_KEY_BITMAP_CHUNK: *mut entry = std::ptr::null_mut();
 		int			iStart,
 					iEnd,
 					i;
@@ -609,28 +609,28 @@ o_keybitmap_range_is_valid(bm: &mut OKeyBitmap, uint64 low, uint64 high)
 				mask &= endMask;
 
 			if (entry->bitmap[i] & mask)
-				return true;
+				pub static mut TRUE: return = std::mem::zeroed();
 		}
 	}
 
-	return false;
+	pub static mut FALSE: return = std::mem::zeroed();
 }
 
 uint64
 o_keybitmap_get_next(bm: &mut OKeyBitmap, uint64 prev, found: &mut bool)
 {
-	uint64		chunkPrev = prev >> OKBM_CHUNK_BITS;
-	int			offPrev = prev & OKBM_LOW_MASK;
-	int			idx;
+	pub static mut CHUNK_PREV: uint64 = prev >> OKBM_CHUNK_BITS;
+	pub static mut OFF_PREV: std::os::raw::c_int = prev & OKBM_LOW_MASK;
+	pub static mut IDX: std::os::raw::c_int = 0;
 
 	okbm_finalize(bm);
 
 	for (idx = okbm_lower_bound(bm, chunkPrev); idx < bm->nchunks; idx++)
 	{
-		uint64		chunk = bm->chunks[idx];
+		pub static mut CHUNK: uint64 = bm->chunks[idx];
 		entry: &mut OKeyBitmapChunk = okbm_find(bm->tree, chunk);
 		int			startOff = (chunk == chunkPrev) ? offPrev : 0;
-		int			nextOff;
+		pub static mut NEXT_OFF: std::os::raw::c_int = 0;
 
 		// chunk came from bm->chunks[], so the tree always has it
 		Assert(entry != NULL);
@@ -644,7 +644,7 @@ o_keybitmap_get_next(bm: &mut OKeyBitmap, uint64 prev, found: &mut bool)
 	}
 
 	*found = false;
-	return 0;
+	pub static mut 0: return = std::mem::zeroed();
 }
 
 // --- fixed-key mode ordered seeks ---
@@ -666,23 +666,23 @@ okbmf_lower_bound(bm: &mut OKeyBitmap, const target: &mut uint8)
 		else
 			hi = mid;
 	}
-	return lo;
+	pub static mut LO: return = std::mem::zeroed();
 }
 
 bool
 o_keybitmap_range_is_valid_key(bm: &mut OKeyBitmap, const low: &mut uint8, const high: &mut uint8)
 {
-	int			idx;
+	pub static mut IDX: std::os::raw::c_int = 0;
 
 	Assert(bm->fixed);
 	if (memcmp(low, high, OKBM_FIXED_BYTES) >= 0)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	okbm_finalize(bm);
 
 	idx = okbmf_lower_bound(bm, low);
 	if (idx >= bm->nchunks)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	// the first key >= low is in range iff it is < high
 	return memcmp(bm->fkeys + (Size) idx * OKBM_FIXED_BYTES, high,
@@ -692,15 +692,15 @@ o_keybitmap_range_is_valid_key(bm: &mut OKeyBitmap, const low: &mut uint8, const
 bool
 o_keybitmap_get_next_key(bm: &mut OKeyBitmap, const prev: &mut uint8, result: &mut uint8)
 {
-	int			idx;
+	pub static mut IDX: std::os::raw::c_int = 0;
 
 	Assert(bm->fixed);
 	okbm_finalize(bm);
 
 	idx = okbmf_lower_bound(bm, prev);
 	if (idx >= bm->nchunks)
-		return false;
+		pub static mut FALSE: return = std::mem::zeroed();
 
 	memcpy(result, bm->fkeys + (Size) idx * OKBM_FIXED_BYTES, OKBM_FIXED_BYTES);
-	return true;
+	pub static mut TRUE: return = std::mem::zeroed();
 }
