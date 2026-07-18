@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * interrupt.c
- *		Routines for background workers interrupt handling.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/workers/interrupt.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// interrupt.c
+// Routines for background workers interrupt handling.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/workers/interrupt.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -22,9 +22,9 @@
 
 static void o_worker_shutdown(int elevel);
 
-/*
- * Exit from an orioledb worker
- */
+//
+// Exit from an orioledb worker
+//
 static void
 o_worker_shutdown(int elevel)
 {
@@ -37,10 +37,10 @@ o_worker_shutdown(int elevel)
 void
 o_worker_handle_interrupts(void)
 {
-	/*
-	 * In case of a pending shutdown request we just raise an ERROR message
-	 * currently.
-	 */
+	//
+// In case of a pending shutdown request we just raise an ERROR message
+// currently.
+//
 	if (ShutdownRequestPending)
 		o_worker_shutdown(ERROR);
 }

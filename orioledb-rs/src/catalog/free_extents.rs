@@ -1,27 +1,27 @@
-/*-------------------------------------------------------------------------
- *
- * free_extents.c
- * 		Implementation of an orioledb free file extents list.
- *
- * We use two B-trees for holding list of free file extents for indices:
- *
- *	1. Sorted by (datoid, relnode, ixType, extent.offset, extent.length)
- *	- (off, len) as short version in the code.
- *	2. Sorted by (datoid, relnode, ixType, extent.length, extent.offset)
- *	- (len, off) as short version.
- *
- * Pages of this B-trees can be evicted to a disk but a B-tree's state
- * is reset after reboot of the database engine and the state must
- * be restored after it.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/free_extents.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// free_extents.c
+// Implementation of an orioledb free file extents list.
+//
+// We use two B-trees for holding list of free file extents for indices:
+//
+// 1. Sorted by (datoid, relnode, ixType, extent.offset, extent.length)
+// - (off, len) as short version in the code.
+// 2. Sorted by (datoid, relnode, ixType, extent.length, extent.offset)
+// - (len, off) as short version.
+//
+// Pages of this B-trees can be evicted to a disk but a B-tree's state
+// is reset after reboot of the database engine and the state must
+// be restored after it.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/free_extents.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -46,28 +46,28 @@
 								 (ex1).datoid == (ex2).datoid && \
 								 (ex1).relnode == (ex2).relnode)
 
-/*
- * Returns free file extent with length = len.
- *
- * get_extend()/free_extend() operations optimized for more fast get_extend()
- * execution because as more critical for performance part.
- *
- * The main idea of get_extend()/free_extend() B-tree modification:
- * We guarantee successful atomic modification after we fetch a free extent from
- * the (len, off) B-tree.
- *
- * So for successful delete an extent in order (len, off) -> (off, len) we need
- * to insert an extent in (off, len) -> (len, off) order.
- *
- * get_extent() algorithm:
- * 1. Iterate through (len, off) B-tree and delete found extent in-place. For
- * that reason we iterate through the B-tree leafs under lock_page().
- * 2. If found extent is more than needed than return a remaining part into
- * the (off, len) B-tree. It helps do not lost extent on iteration.
- * 3. Delete founded extent from the (off, len) B-tree.
- * 4. If found extent is more than needed than return the remaining part into
- * the (len, off) B-tree.
- */
+//
+// Returns free file extent with length = len.
+//
+// get_extend()/free_extend() operations optimized for more fast get_extend()
+// execution because as more critical for performance part.
+//
+// The main idea of get_extend()/free_extend() B-tree modification:
+// We guarantee successful atomic modification after we fetch a free extent from
+// the (len, off) B-tree.
+//
+// So for successful delete an extent in order (len, off) -> (off, len) we need
+// to insert an extent in (off, len) -> (len, off) order.
+//
+// get_extent() algorithm:
+// 1. Iterate through (len, off) B-tree and delete found extent in-place. For
+// that reason we iterate through the B-tree leafs under lock_page().
+// 2. If found extent is more than needed than return a remaining part into
+// the (off, len) B-tree. It helps do not lost extent on iteration.
+// 3. Delete founded extent from the (off, len) B-tree.
+// 4. If found extent is more than needed than return the remaining part into
+// the (len, off) B-tree.
+//
 FileExtent
 get_extent(BTreeDescr *desc, uint16 len)
 {
@@ -90,10 +90,10 @@ get_extent(BTreeDescr *desc, uint16 len)
 
 	Assert(!orioledb_s3_mode);
 
-	/* a fast check */
+	// a fast check
 	if (pg_atomic_read_u64(&metaPage->numFreeBlocks) < len)
 	{
-		/* free extent can not be founded, increase file length */
+		// free extent can not be founded, increase file length
 		result.len = len;
 		if (use_device)
 			result.off = orioledb_device_alloc(desc, len * ORIOLEDB_COMP_BLCKSZ) / ORIOLEDB_COMP_BLCKSZ;
@@ -114,7 +114,7 @@ get_extent(BTreeDescr *desc, uint16 len)
 	init_page_find_context(&context, len_off_tree, COMMITSEQNO_INPROGRESS,
 						   BTREE_PAGE_FIND_MODIFY | BTREE_PAGE_FIND_FIX_LEAF_SPLIT);
 
-	/* try to find a free extent */
+	// try to find a free extent
 	while (!found && !end)
 	{
 		OFindPageResult findResult PG_USED_FOR_ASSERTS_ONLY;
@@ -177,7 +177,7 @@ get_extent(BTreeDescr *desc, uint16 len)
 
 	if (!found)
 	{
-		/* free extent not founded, increase file length */
+		// free extent not founded, increase file length
 		result.len = len;
 		if (use_device)
 			result.off = orioledb_device_alloc(desc, len * ORIOLEDB_COMP_BLCKSZ) / ORIOLEDB_COMP_BLCKSZ;
@@ -192,7 +192,7 @@ get_extent(BTreeDescr *desc, uint16 len)
 	Assert(cur_tup != NULL);
 	pg_atomic_fetch_sub_u64(&metaPage->numFreeBlocks, (uint64) len);
 
-	/* delete the extent from the (len, off) B-tree in-place */
+	// delete the extent from the (len, off) B-tree in-place
 	page_block_reads(context.items[context.index].blkno);
 
 	START_CRIT_SECTION();
@@ -220,7 +220,7 @@ get_extent(BTreeDescr *desc, uint16 len)
 
 	if (tup.extent.length > 0)
 	{
-		/* we have a remaining part, insert it into (off, len) B-tree */
+		// we have a remaining part, insert it into (off, len) B-tree
 		tup.extent.offset += len;
 		tmpTup.formatFlags = 0;
 		tmpTup.data = (Pointer) &tup;
@@ -232,7 +232,7 @@ get_extent(BTreeDescr *desc, uint16 len)
 		}
 	}
 
-	/* delete the extent from the (off, len) B-tree */
+	// delete the extent from the (off, len) B-tree
 	tmpTup.formatFlags = 0;
 	tmpTup.data = (Pointer) &deleted_tup;
 	modify_result = o_btree_autonomous_delete(off_len_tree, tmpTup, BTreeKeyLeafTuple, NULL);
@@ -244,10 +244,10 @@ get_extent(BTreeDescr *desc, uint16 len)
 
 	if (tup.extent.length > 0)
 	{
-		/*
-		 * we have a remaining part, insert it into (len, off) B-tree after
-		 * this remaining part may be gotten
-		 */
+		//
+// we have a remaining part, insert it into (len, off) B-tree after
+// this remaining part may be gotten
+//
 		tmpTup.formatFlags = 0;
 		tmpTup.data = (Pointer) &tup;
 		modify_result = o_btree_autonomous_insert(len_off_tree, tmpTup);
@@ -265,20 +265,20 @@ get_extent(BTreeDescr *desc, uint16 len)
 	return result;
 }
 
-/*
- * Adds the extent to a free extents list.
- *
- * See description of the get_extent() function.
- *
- * free_extent() algorithm:
- *
- * 1. Find neighbors tuples of the extent in the (off, len) B-tree.
- * 2. Remove neighbors from (len, off) and (off, len) B-trees. If remove from
- * the (len, off) B-tree fails than goto 1.
- * 3. Add merged extent to (off, len) and (len, off) B-trees.
- *
- * TODO: add hints support
- */
+//
+// Adds the extent to a free extents list.
+//
+// See description of the get_extent() function.
+//
+// free_extent() algorithm:
+//
+// 1. Find neighbors tuples of the extent in the (off, len) B-tree.
+// 2. Remove neighbors from (len, off) and (off, len) B-trees. If remove from
+// the (len, off) B-tree fails than goto 1.
+// 3. Add merged extent to (off, len) and (len, off) B-trees.
+//
+// TODO: add hints support
+//
 void
 free_extent(BTreeDescr *desc, FileExtent extent)
 {
@@ -310,7 +310,7 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 
 	while (!inserted)
 	{
-		/* reset status */
+		// reset status
 		tup.extent.length = 0;
 		tup.extent.offset = (uint64) extent.off + extent.len;
 		merge_right = false;
@@ -318,7 +318,7 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 		if (it != NULL)
 			btree_iterator_free(it);
 
-		/* finds neighbors tuples in the (off, len) B-tree */
+		// finds neighbors tuples in the (off, len) B-tree
 		tmpTup.data = (Pointer) &tup;
 		tmpTup.formatFlags = 0;
 		it = o_btree_iterator_create(off_len_tree, (Pointer) &tmpTup,
@@ -364,7 +364,7 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 				pfree(cur);
 		}
 
-		/* delete neighbors from the (len, off) B-tree */
+		// delete neighbors from the (len, off) B-tree
 		if (merge_right)
 		{
 			tmpTup.data = (Pointer) &right;
@@ -399,9 +399,9 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 			}
 		}
 
-		/*
-		 * Ok, now delete neighbors from the (off, len) B-tree
-		 */
+		//
+// Ok, now delete neighbors from the (off, len) B-tree
+//
 		if (merge_right)
 		{
 			tmpTup.data = (Pointer) &right;
@@ -428,9 +428,9 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 			}
 		}
 
-		/*
-		 * Ok, now insert the merged extent into B-trees.
-		 */
+		//
+// Ok, now insert the merged extent into B-trees.
+//
 		if (merge_left)
 		{
 			tup.extent.offset = left.extent.offset;
@@ -473,11 +473,11 @@ free_extent(BTreeDescr *desc, FileExtent extent)
 	enable_stopevents = old_enable_stopevents;
 }
 
-/*
- * Calls the callback for each free file extent for a BTree on given csn.
- *
- * Be careful, there are can be some intersections, see get_extent() algorithm.
- */
+//
+// Calls the callback for each free file extent for a BTree on given csn.
+//
+// Be careful, there are can be some intersections, see get_extent() algorithm.
+//
 void
 foreach_free_extent(BTreeDescr *desc, ForEachExtentCallback callback, void *arg)
 {
@@ -502,7 +502,7 @@ foreach_free_extent(BTreeDescr *desc, ForEachExtentCallback callback, void *arg)
 	fromTup.data = (Pointer) &from;
 	fromTup.formatFlags = 0;
 
-	/* iterate from begin and to the end of the index */
+	// iterate from begin and to the end of the index
 	to.relnode += 1;
 	toTup.data = (Pointer) &to;
 	toTup.formatFlags = 0;
@@ -525,7 +525,7 @@ foreach_free_extent(BTreeDescr *desc, ForEachExtentCallback callback, void *arg)
 		Assert(cur->datoid == desc->oids.datoid);
 		Assert(cur->relnode == desc->oids.relnode);
 
-		/* FreeTreeFileExtent.length may be more than FileExtent.len */
+		// FreeTreeFileExtent.length may be more than FileExtent.len
 		while (cur->extent.length > UINT16_MAX)
 		{
 			cur_extent.off = cur->extent.offset;
@@ -544,10 +544,10 @@ foreach_free_extent(BTreeDescr *desc, ForEachExtentCallback callback, void *arg)
 	enable_stopevents = old_enable_stopevents;
 }
 
-/*
- * Adds free extents from .tmp file to the trees.  Optionally removes the .tmp
- * file.
- */
+//
+// Adds free extents from .tmp file to the trees.  Optionally removes the .tmp
+// file.
+//
 void
 add_free_extents_from_tmp(BTreeDescr *desc, bool remove)
 {
@@ -579,12 +579,12 @@ add_free_extents_from_tmp(BTreeDescr *desc, bool remove)
 		metaPage->freeBuf.tag.type = 't';
 		if (!seq_buf_file_exist(&metaPage->freeBuf.tag))
 		{
-			/* table may be deleted or *.tmp file not created */
+			// table may be deleted or *.tmp file not created
 			chkp_num++;
 			continue;
 		}
 
-		/* free extents from *.tmp file */
+		// free extents from *.tmp file
 		filename = get_seq_buf_filename(&metaPage->freeBuf.tag);
 		file = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
 		if (file < 0)
@@ -607,7 +607,7 @@ add_free_extents_from_tmp(BTreeDescr *desc, bool remove)
 				pg_atomic_fetch_add_u64(&metaPage->numFreeBlocks,
 										(uint64) cur_off->len);
 
-				/* Punch holes if needed */
+				// Punch holes if needed
 				if (orioledb_use_sparse_files)
 				{
 					btree_smgr_punch_hole(desc, chkp_num,
@@ -633,23 +633,23 @@ add_free_extents_from_tmp(BTreeDescr *desc, bool remove)
 	LWLockRelease(metaLock);
 }
 
-/*
- * Returns true if `desc` is a user temporary tree that uses the backend-local
- * page pool.  Such trees keep all of their state (root, meta page, data file
- * and free space map) private to the owning process.
- */
+//
+// Returns true if `desc` is a user temporary tree that uses the backend-local
+// page pool.  Such trees keep all of their state (root, meta page, data file
+// and free space map) private to the owning process.
+//
 bool
 btree_desc_is_local_temp(BTreeDescr *desc)
 {
 	return desc->ppool == (PagePool *) &local_ppool;
 }
 
-/*
- * Appends a freed extent to the backend-local list of a user temporary tree.
- *
- * The list is lazily allocated in TopMemoryContext so that it survives
- * across transaction boundaries for the lifetime of the descriptor.
- */
+//
+// Appends a freed extent to the backend-local list of a user temporary tree.
+//
+// The list is lazily allocated in TopMemoryContext so that it survives
+// across transaction boundaries for the lifetime of the descriptor.
+//
 void
 local_free_extents_push(BTreeDescr *desc, FileExtent extent)
 {
@@ -681,11 +681,11 @@ local_free_extents_push(BTreeDescr *desc, FileExtent extent)
 	list->items[list->size++] = extent;
 }
 
-/*
- * Tries to take an extent of exactly `len` blocks from the backend-local
- * list.  Uses first-fit; if the matching item is longer than requested the
- * remainder is kept in place.  Returns true and fills *extent on success.
- */
+//
+// Tries to take an extent of exactly `len` blocks from the backend-local
+// list.  Uses first-fit; if the matching item is longer than requested the
+// remainder is kept in place.  Returns true and fills *extent on success.
+//
 bool
 local_free_extents_pop(BTreeDescr *desc, uint16 len, FileExtent *extent)
 {
@@ -709,7 +709,7 @@ local_free_extents_pop(BTreeDescr *desc, uint16 len, FileExtent *extent)
 
 		if (item->len == len)
 		{
-			/* remove item by swapping with the last */
+			// remove item by swapping with the last
 			list->items[i] = list->items[list->size - 1];
 			list->size--;
 		}
@@ -724,9 +724,9 @@ local_free_extents_pop(BTreeDescr *desc, uint16 len, FileExtent *extent)
 	return false;
 }
 
-/*
- * Releases memory held by the backend-local free extent list.
- */
+//
+// Releases memory held by the backend-local free extent list.
+//
 void
 local_free_extents_cleanup(BTreeDescr *desc)
 {

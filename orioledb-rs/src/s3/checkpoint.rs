@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * checkpoint.c
- *		Implementation for checkpointing to S3.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/checkpoint.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// checkpoint.c
+// Implementation for checkpointing to S3.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/checkpoint.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -62,138 +62,138 @@
 #include "utils/resowner.h"
 #include "utils/timestamp.h"
 
-/*
- * How much data do we want to send in one CopyData message? Note that
- * this may also result in reading the underlying files in chunks of this
- * size.
- *
- * NB: The buffer size is required to be a multiple of the system block
- * size, so use that value instead if it's bigger than our preference.
- */
+//
+// How much data do we want to send in one CopyData message? Note that
+// this may also result in reading the underlying files in chunks of this
+// size.
+//
+// NB: The buffer size is required to be a multiple of the system block
+// size, so use that value instead if it's bigger than our preference.
+//
 #define SINK_BUFFER_LENGTH			Max(32768, BLCKSZ)
 
-/* Was the backup currently in-progress initiated in recovery mode? */
+// Was the backup currently in-progress initiated in recovery mode?
 static bool backup_started_in_recovery = false;
 
-/* Total number of checksum failures during base backup. */
+// Total number of checksum failures during base backup.
 static long long int total_checksum_failures;
 
 static S3TaskLocation maxLocation;
 
-/*
- * Definition of one element part of an exclusion list, used for paths part
- * of checksum validation or base backups.  "name" is the name of the file
- * or path to check for exclusion.  If "match_prefix" is true, any items
- * matching the name as prefix are excluded.
- */
+//
+// Definition of one element part of an exclusion list, used for paths part
+// of checksum validation or base backups.  "name" is the name of the file
+// or path to check for exclusion.  If "match_prefix" is true, any items
+// matching the name as prefix are excluded.
+//
 struct exclude_list_item
 {
 	const char *name;
 	bool		match_prefix;
 };
 
-/*
- * The contents of these directories are removed or recreated during server
- * start so they are not included in backups.  The directories themselves are
- * kept and included as empty to preserve access permissions.
- *
- * Note: this list should be kept in sync with the filter lists in pg_rewind's
- * filemap.c.
- */
+//
+// The contents of these directories are removed or recreated during server
+// start so they are not included in backups.  The directories themselves are
+// kept and included as empty to preserve access permissions.
+//
+// Note: this list should be kept in sync with the filter lists in pg_rewind's
+// filemap.c.
+//
 static const char *const excludeDirContents[] =
 {
-	/*
-	 * Skip temporary statistics files. PG_STAT_TMP_DIR must be skipped
-	 * because extensions like pg_stat_statements store data there.
-	 */
+	//
+// Skip temporary statistics files. PG_STAT_TMP_DIR must be skipped
+// because extensions like pg_stat_statements store data there.
+//
 	PG_STAT_TMP_DIR,
 
-	/*
-	 * It is generally not useful to backup the contents of this directory
-	 * even if the intention is to restore to another primary. See backup.sgml
-	 * for a more detailed description.
-	 */
+	//
+// It is generally not useful to backup the contents of this directory
+// even if the intention is to restore to another primary. See backup.sgml
+// for a more detailed description.
+//
 	"pg_replslot",
 
-	/* Contents removed on startup, see dsm_cleanup_for_mmap(). */
+	// Contents removed on startup, see dsm_cleanup_for_mmap().
 	PG_DYNSHMEM_DIR,
 
-	/* Contents removed on startup, see AsyncShmemInit(). */
+	// Contents removed on startup, see AsyncShmemInit().
 	"pg_notify",
 
-	/*
-	 * Old contents are loaded for possible debugging but are not required for
-	 * normal operation, see SerialInit().
-	 */
+	//
+// Old contents are loaded for possible debugging but are not required for
+// normal operation, see SerialInit().
+//
 	"pg_serial",
 
-	/* Contents removed on startup, see DeleteAllExportedSnapshotFiles(). */
+	// Contents removed on startup, see DeleteAllExportedSnapshotFiles().
 	"pg_snapshots",
 
-	/* Contents zeroed on startup, see StartupSUBTRANS(). */
+	// Contents zeroed on startup, see StartupSUBTRANS().
 	"pg_subtrans",
 
-	/* Contents of OrioleDB data is handled in a different way */
+	// Contents of OrioleDB data is handled in a different way
 	"orioledb_data",
 
-	/* Contents of OrioleDB undo is also handled separately */
+	// Contents of OrioleDB undo is also handled separately
 	"orioledb_undo",
 
-	/* end of list */
+	// end of list
 	NULL
 };
 
-/*
- * List of files excluded from backups.
- */
+//
+// List of files excluded from backups.
+//
 static const struct exclude_list_item excludeFiles[] =
 {
-	/* Skip auto conf temporary file. */
+	// Skip auto conf temporary file.
 	{PG_AUTOCONF_FILENAME ".tmp", false},
 
-	/* Skip current log file temporary file */
+	// Skip current log file temporary file
 	{LOG_METAINFO_DATAFILE_TMP, false},
 
-	/*
-	 * Skip relation cache because it is rebuilt on startup.  This includes
-	 * temporary files.
-	 */
+	//
+// Skip relation cache because it is rebuilt on startup.  This includes
+// temporary files.
+//
 	{RELCACHE_INIT_FILENAME, true},
 
-	/*
-	 * backup_label and tablespace_map should not exist in a running cluster
-	 * capable of doing an online backup, but exclude them just in case.
-	 */
+	//
+// backup_label and tablespace_map should not exist in a running cluster
+// capable of doing an online backup, but exclude them just in case.
+//
 	{BACKUP_LABEL_FILE, false},
 	{TABLESPACE_MAP, false},
 
-	/*
-	 * If there's a backup_manifest, it belongs to a backup that was used to
-	 * start this server. It is *not* correct for this backup. Our
-	 * backup_manifest is injected into the backup separately if users want
-	 * it.
-	 */
+	//
+// If there's a backup_manifest, it belongs to a backup that was used to
+// start this server. It is *not* correct for this backup. Our
+// backup_manifest is injected into the backup separately if users want
+// it.
+//
 	{"backup_manifest", false},
 
 	{"postmaster.pid", false},
 	{"postmaster.opts", false},
 
-	/* end of list */
+	// end of list
 	{NULL, false}
 };
 
-/*
- * Information about a tablespace
- *
- * In some usages, "path" can be NULL to denote the PGDATA directory itself.
- */
+//
+// Information about a tablespace
+//
+// In some usages, "path" can be NULL to denote the PGDATA directory itself.
+//
 typedef struct
 {
-	char	   *oid;			/* tablespace's OID, as a decimal string */
-	char	   *path;			/* full path to tablespace's directory */
-	char	   *rpath;			/* relative path if it's within PGDATA, else
-								 * NULL */
-	int64		size;			/* total size as sent; -1 if not known */
+	char	   *oid;			// tablespace's OID, as a decimal string
+	char	   *path;			// full path to tablespace's directory
+	char	   *rpath;			// relative path if it's within PGDATA, else
+// NULL
+	int64		size;			// total size as sent; -1 if not known
 } tablespaceinfo;
 
 typedef struct
@@ -223,12 +223,12 @@ static int64 s3_backup_scan_dir(S3BackupState *state,
 								const char *spcoid);
 static List *get_tablespaces(StringInfo tblspcmapfile);
 
-/*
- * Actually do a base backup for the specified tablespaces.
- *
- * This is split out mainly to avoid complaints about "variable might be
- * clobbered by longjmp" from stupider versions of gcc.
- */
+//
+// Actually do a base backup for the specified tablespaces.
+//
+// This is split out mainly to avoid complaints about "variable might be
+// clobbered by longjmp" from stupider versions of gcc.
+//
 void
 s3_perform_backup(int flags, S3TaskLocation maxLocation)
 {
@@ -248,13 +248,13 @@ s3_perform_backup(int flags, S3TaskLocation maxLocation)
 
 	s3_workers_checkpoint_init();
 
-	/* Just in case delete a leftover file */
+	// Just in case delete a leftover file
 	unlink(SMALL_FILE_CHECKSUMS_TMP_FILENAME);
 
 	initStringInfo(&tablespaceMapData);
 	state.tablespaces = get_tablespaces(&tablespaceMapData);
 
-	/* Add a node for the base directory at the end */
+	// Add a node for the base directory at the end
 	newti = palloc0(sizeof(tablespaceinfo));
 	newti->size = -1;
 
@@ -270,7 +270,7 @@ s3_perform_backup(int flags, S3TaskLocation maxLocation)
 											  FILE_CHECKSUMS_MAX_LEN,
 											  SMALL_FILE_CHECKSUMS_FILENAME);
 
-	/* Send off our tablespaces one by one */
+	// Send off our tablespaces one by one
 	foreach(lc, state.tablespaces)
 	{
 		tablespaceinfo *ti = (tablespaceinfo *) lfirst(lc);
@@ -279,7 +279,7 @@ s3_perform_backup(int flags, S3TaskLocation maxLocation)
 		{
 			char	   *xidFilename;
 
-			/* Then the bulk of the files... */
+			// Then the bulk of the files...
 			s3_backup_scan_dir(&state, ".", 1, NULL);
 
 			xidFilename = psprintf(XID_FILENAME_FORMAT,
@@ -306,7 +306,7 @@ s3_perform_backup(int flags, S3TaskLocation maxLocation)
 	pfree(tablespaceMapData.data);
 	s3_queue_wait_for_location(maxLocation);
 
-	/* Wait until all S3 workers finish flushing and compact checksum files */
+	// Wait until all S3 workers finish flushing and compact checksum files
 	s3_workers_checkpoint_finish();
 
 	location = s3_schedule_file_write(chkpNum, FILE_CHECKSUMS_FILENAME, false);
@@ -328,31 +328,31 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 	char		pathbuf[MAXPGPATH * 2];
 	struct stat statbuf;
 	int64		size = 0;
-	const char *lastDir = NULL; /* Split last dir from parent path. */
-	bool		isDbDir = false;	/* Does this directory contain relations? */
+	const char *lastDir = NULL; // Split last dir from parent path.
+	bool		isDbDir = false;	// Does this directory contain relations?
 
 	Assert(path != NULL);
 
-	/*
-	 * Determine if the current path is a database directory that can contain
-	 * relations.
-	 *
-	 * Start by finding the location of the delimiter between the parent path
-	 * and the current path.
-	 */
+	//
+// Determine if the current path is a database directory that can contain
+// relations.
+//
+// Start by finding the location of the delimiter between the parent path
+// and the current path.
+//
 	lastDir = last_dir_separator(path);
 
-	/* Does this path look like a database path (i.e. all digits)? */
+	// Does this path look like a database path (i.e. all digits)?
 	if (lastDir != NULL &&
 		strspn(lastDir + 1, "0123456789") == strlen(lastDir + 1))
 	{
-		/* Part of path that contains the parent directory. */
+		// Part of path that contains the parent directory.
 		int			parentPathLen = lastDir - path;
 
-		/*
-		 * Mark path as a database directory if the parent path is either
-		 * $PGDATA/base or a tablespace version path.
-		 */
+		//
+// Mark path as a database directory if the parent path is either
+// $PGDATA/base or a tablespace version path.
+//
 		if (strncmp(path, "./base", parentPathLen) == 0 ||
 			(parentPathLen >= (sizeof(TABLESPACE_VERSION_DIRECTORY) - 1) &&
 			 strncmp(lastDir - (sizeof(TABLESPACE_VERSION_DIRECTORY) - 1),
@@ -366,32 +366,32 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 	{
 		int			excludeIdx;
 		bool		excludeFound;
-		ForkNumber	relForkNum; /* Type of fork if file is a relation */
+		ForkNumber	relForkNum; // Type of fork if file is a relation
 #if PG_VERSION_NUM >= 170000
 		unsigned	segno;
 		RelFileNumber relNumber;
 #else
-		int			relnumchars;	/* Chars in filename that are the
-									 * relnumber */
+		int			relnumchars;	// Chars in filename that are the
+// relnumber
 #endif
-		/* Skip special stuff */
+		// Skip special stuff
 		if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
 			continue;
 
-		/* Skip temporary files */
+		// Skip temporary files
 		if (strncmp(de->d_name,
 					PG_TEMP_FILE_PREFIX,
 					strlen(PG_TEMP_FILE_PREFIX)) == 0)
 			continue;
 
-		/*
-		 * Check if the postmaster has signaled us to exit, and abort with an
-		 * error in that case. The error handler further up will call
-		 * do_pg_abort_backup() for us. Also check that if the backup was
-		 * started while still in recovery, the server wasn't promoted.
-		 * do_pg_backup_stop() will check that too, but it's better to stop
-		 * the backup early than continue to the end and fail there.
-		 */
+		//
+// Check if the postmaster has signaled us to exit, and abort with an
+// error in that case. The error handler further up will call
+// do_pg_abort_backup() for us. Also check that if the backup was
+// started while still in recovery, the server wasn't promoted.
+// do_pg_backup_stop() will check that too, but it's better to stop
+// the backup early than continue to the end and fail there.
+//
 		CHECK_FOR_INTERRUPTS();
 		if (RecoveryInProgress() != backup_started_in_recovery)
 			ereport(ERROR,
@@ -401,7 +401,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 							 "and should not be used. "
 							 "Try taking another online backup.")));
 
-		/* Scan for files that should be excluded */
+		// Scan for files that should be excluded
 		excludeFound = false;
 		for (excludeIdx = 0; excludeFiles[excludeIdx].name != NULL; excludeIdx++)
 		{
@@ -420,7 +420,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 		if (excludeFound)
 			continue;
 
-		/* Exclude all forks for unlogged tables except the init fork */
+		// Exclude all forks for unlogged tables except the init fork
 #if PG_VERSION_NUM >= 170000
 		if (isDbDir &&
 			parse_filename_for_nontemp_relation(de->d_name, &relNumber,
@@ -431,7 +431,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 												&relForkNum))
 #endif
 		{
-			/* Never exclude init forks */
+			// Never exclude init forks
 			if (relForkNum != INIT_FORKNUM)
 			{
 				char		initForkFile[MAXPGPATH];
@@ -446,11 +446,11 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 #else
 				char		relNumber[OIDCHARS + 1];
 
-				/*
-				 * If any other type of fork, check if there is an init fork
-				 * with the same RelFileNumber. If so, the file can be
-				 * excluded.
-				 */
+				//
+// If any other type of fork, check if there is an init fork
+// with the same RelFileNumber. If so, the file can be
+// excluded.
+//
 				memcpy(relNumber, de->d_name, relnumchars);
 				relNumber[relnumchars] = '\0';
 				snprintf(initForkFile, sizeof(initForkFile), "%s/%s_init",
@@ -468,7 +468,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 			}
 		}
 
-		/* Exclude temporary relations */
+		// Exclude temporary relations
 		if (isDbDir && looks_like_temp_rel_name(de->d_name))
 		{
 			elog(DEBUG2,
@@ -481,7 +481,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 		snprintf(pathbuf, sizeof(pathbuf), "%s/%s", path, de->d_name);
 		VALGRIND_MAKE_MEM_DEFINED(pathbuf, sizeof(pathbuf));
 
-		/* Skip pg_control here to back up it last */
+		// Skip pg_control here to back up it last
 		if (strcmp(pathbuf, "./global/pg_control") == 0)
 			continue;
 
@@ -493,11 +493,11 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 						 errmsg("could not stat file or directory \"%s\": %m",
 								pathbuf)));
 
-			/* If the file went away while scanning, it's not an error. */
+			// If the file went away while scanning, it's not an error.
 			continue;
 		}
 
-		/* Scan for directories whose contents should be excluded */
+		// Scan for directories whose contents should be excluded
 		excludeFound = false;
 		for (excludeIdx = 0; excludeDirContents[excludeIdx] != NULL; excludeIdx++)
 		{
@@ -518,11 +518,11 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 			continue;
 		}
 
-		/*
-		 * We can skip pg_wal, the WAL segments need to be fetched from the
-		 * WAL archive anyway. But include it as an empty directory anyway, so
-		 * we get permissions right.
-		 */
+		//
+// We can skip pg_wal, the WAL segments need to be fetched from the
+// WAL archive anyway. But include it as an empty directory anyway, so
+// we get permissions right.
+//
 		if (strcmp(pathbuf, "./pg_wal") == 0)
 		{
 			S3TaskLocation location;
@@ -534,10 +534,10 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 												   "./pg_wal/archive_status");
 			maxLocation = Max(maxLocation, location);
 
-			continue;			/* don't recurse into pg_wal */
+			continue;			// don't recurse into pg_wal
 		}
 
-		/* Allow symbolic links in pg_tblspc only */
+		// Allow symbolic links in pg_tblspc only
 		if (strcmp(path, "./pg_tblspc") == 0 && S_ISLNK(statbuf.st_mode))
 		{
 			char		linkpath[MAXPGPATH];
@@ -550,7 +550,7 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 						(errcode_for_file_access(),
 						 errmsg("could not read symbolic link \"%s\": %m",
 								pathbuf)));
-				return 0;		/* keep cppcheck quiet */
+				return 0;		// keep cppcheck quiet
 			}
 			if (rllen >= sizeof(linkpath))
 				ereport(ERROR,
@@ -568,21 +568,21 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 			location = s3_schedule_empty_dir_write(state->chkpNum, pathbuf);
 			maxLocation = Max(maxLocation, location);
 
-			/*
-			 * Call ourselves recursively for a directory, unless it happens
-			 * to be a separate tablespace located within PGDATA.
-			 */
+			//
+// Call ourselves recursively for a directory, unless it happens
+// to be a separate tablespace located within PGDATA.
+//
 			foreach(lc, state->tablespaces)
 			{
 				tablespaceinfo *ti = (tablespaceinfo *) lfirst(lc);
 
-				/*
-				 * ti->rpath is the tablespace relative path within PGDATA, or
-				 * NULL if the tablespace has been properly located somewhere
-				 * else.
-				 *
-				 * Skip past the leading "./" in pathbuf when comparing.
-				 */
+				//
+// ti->rpath is the tablespace relative path within PGDATA, or
+// NULL if the tablespace has been properly located somewhere
+// else.
+//
+// Skip past the leading "./" in pathbuf when comparing.
+//
 				if (ti->rpath && strcmp(ti->rpath, pathbuf + 2) == 0)
 				{
 					skip_this_dir = true;
@@ -590,9 +590,9 @@ s3_backup_scan_dir(S3BackupState *state, const char *path,
 				}
 			}
 
-			/*
-			 * skip sending directories inside pg_tblspc, if not required.
-			 */
+			//
+// skip sending directories inside pg_tblspc, if not required.
+//
 			if (strcmp(pathbuf, "./pg_tblspc") == 0)
 				skip_this_dir = true;
 
@@ -632,12 +632,12 @@ get_tablespaces(StringInfo tblspcmapfile)
 	int			datadirpathlen;
 	List	   *tablespaces = NIL;
 
-	/*
-	 * Construct tablespace_map file.
-	 */
+	//
+// Construct tablespace_map file.
+//
 	datadirpathlen = strlen(DataDir);
 
-	/* Collect information about all tablespaces */
+	// Collect information about all tablespaces
 	tblspcdir = AllocateDir("pg_tblspc");
 	while ((de = ReadDir(tblspcdir, "pg_tblspc")) != NULL)
 	{
@@ -647,7 +647,7 @@ get_tablespaces(StringInfo tblspcmapfile)
 		char	   *s;
 		PGFileType	de_type;
 
-		/* Skip anything that doesn't look like a tablespace */
+		// Skip anything that doesn't look like a tablespace
 		if (strspn(de->d_name, "0123456789") != strlen(de->d_name))
 			continue;
 
@@ -677,20 +677,20 @@ get_tablespaces(StringInfo tblspcmapfile)
 			}
 			linkpath[rllen] = '\0';
 
-			/*
-			 * Relpath holds the relative path of the tablespace directory
-			 * when it's located within PGDATA, or NULL if it's located
-			 * elsewhere.
-			 */
+			//
+// Relpath holds the relative path of the tablespace directory
+// when it's located within PGDATA, or NULL if it's located
+// elsewhere.
+//
 			if (rllen > datadirpathlen &&
 				strncmp(linkpath, DataDir, datadirpathlen) == 0 &&
 				IS_DIR_SEP(linkpath[datadirpathlen]))
 				relpath = pstrdup(linkpath + datadirpathlen + 1);
 
-			/*
-			 * Add a backslash-escaped version of the link path to the
-			 * tablespace map file.
-			 */
+			//
+// Add a backslash-escaped version of the link path to the
+// tablespace map file.
+//
 			initStringInfo(&escapedpath);
 			for (s = linkpath; *s; s++)
 			{
@@ -704,21 +704,21 @@ get_tablespaces(StringInfo tblspcmapfile)
 		}
 		else if (de_type == PGFILETYPE_DIR)
 		{
-			/*
-			 * It's possible to use allow_in_place_tablespaces to create
-			 * directories directly under pg_tblspc, for testing purposes
-			 * only.
-			 *
-			 * In this case, we store a relative path rather than an absolute
-			 * path into the tablespaceinfo.
-			 */
+			//
+// It's possible to use allow_in_place_tablespaces to create
+// directories directly under pg_tblspc, for testing purposes
+// only.
+//
+// In this case, we store a relative path rather than an absolute
+// path into the tablespaceinfo.
+//
 			snprintf(linkpath, sizeof(linkpath), "pg_tblspc/%s",
 					 de->d_name);
 			relpath = pstrdup(linkpath);
 		}
 		else
 		{
-			/* Skip any other file type that appears here. */
+			// Skip any other file type that appears here.
 			continue;
 		}
 
@@ -866,7 +866,7 @@ accumulate_small_file(S3BackupState *state, const char *path, int size)
 	Pointer		data;
 	uint64		dataSize;
 
-	/* First check if the file changed */
+	// First check if the file changed
 	data = read_file(path, &dataSize);
 
 	if (data != NULL)
@@ -879,11 +879,11 @@ accumulate_small_file(S3BackupState *state, const char *path, int size)
 
 		entry = getS3FileChecksum(state->checksumState, path, data, dataSize);
 
-		/*
-		 * If the file didn't change just exit the function and return 0.  We
-		 * could return maxLocation here, but it might be better to a caller
-		 * to decide.
-		 */
+		//
+// If the file didn't change just exit the function and return 0.  We
+// could return maxLocation here, but it might be better to a caller
+// to decide.
+//
 		if (!entry->changed)
 		{
 			pfree(data);
@@ -893,7 +893,7 @@ accumulate_small_file(S3BackupState *state, const char *path, int size)
 		pfree(data);
 	}
 
-	/* The file changed, put it into the smallFileNames list */
+	// The file changed, put it into the smallFileNames list
 
 	if (state->smallFilesTotalSize + sizeRequired > SMALL_FILES_TOTAL_THRESHOLD)
 		location = flush_small_files(state);

@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_amop_cache.c
- *		Routines for orioledb amop cache.
- *
- * amop_cache is tree that contains cached metadata from pg_amop.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_amop_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_amop_cache.c
+// Routines for orioledb amop cache.
+//
+// amop_cache is tree that contains cached metadata from pg_amop.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_amop_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -55,9 +55,9 @@ static OSysCacheFuncs amop_strat_cache_funcs =
 	.fill_entry = o_amop_strat_cache_fill_entry
 };
 
-/*
- * Initializes the type sys cache memory.
- */
+//
+// Initializes the type sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(amop_cache)
 {
 	Oid			keytypes[] = {OIDOID, CHAROID, OIDOID};
@@ -68,9 +68,9 @@ O_SYS_CACHE_INIT_FUNC(amop_cache)
 									&amop_cache_funcs);
 }
 
-/*
- * Initializes the type sys cache memory.
- */
+//
+// Initializes the type sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(amop_strat_cache)
 {
 	Oid			keytypes[] = {OIDOID, OIDOID, OIDOID, INT2OID};
@@ -106,7 +106,7 @@ o_amop_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	amopform = (Form_pg_amop) GETSTRUCT(amoptup);
 
 	prev_context = MemoryContextSwitchTo(amop_cache->mcxt);
-	if (o_amop != NULL)			/* Existed o_amop updated */
+	if (o_amop != NULL)			// Existed o_amop updated
 	{
 		Assert(false);
 	}
@@ -158,7 +158,7 @@ o_amop_strat_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	amopform = (Form_pg_amop) GETSTRUCT(amoptup);
 
 	prev_context = MemoryContextSwitchTo(amop_cache->mcxt);
-	if (o_amop_strat != NULL)	/* Existed o_amop_strat updated */
+	if (o_amop_strat != NULL)	// Existed o_amop_strat updated
 	{
 		Assert(false);
 	}
@@ -293,9 +293,9 @@ o_amop_strat_cache_search_htup(TupleDesc tupdesc, Oid amopfamily,
 	return o_amop_strat_to_htup(o_amop_strat, tupdesc);
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_amop_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 					   OTuple tup, Pointer arg)
@@ -313,9 +313,9 @@ o_amop_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 					 o_amop->amoprighttype);
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_amop_strat_cache_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup,
 							 Pointer arg)

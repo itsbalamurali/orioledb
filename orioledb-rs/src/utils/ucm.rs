@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * ucm.c
- *		OrioleDB usage count map (UCM) implementation.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/utils/ucm.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// ucm.c
+// OrioleDB usage count map (UCM) implementation.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/utils/ucm.c
+//
+// -------------------------------------------------------------------------
+//
 #include "c.h"
 #include "postgres.h"
 
@@ -30,9 +30,9 @@ static int	init_ucm_non_leaf_recursive(UsageCountMap *map, int i);
 static void ucm_inc_recursive(UsageCountMap *map, int i, int prev, int next);
 static bool ucm_check_recursive(UsageCountMap *map, int i);
 
-/*
- * Estimate shaed memory space for UCM data structure.
- */
+//
+// Estimate shaed memory space for UCM data structure.
+//
 Size
 estimate_ucm_space(UsageCountMap *map, OInMemoryBlkno offset, OInMemoryBlkno size)
 {
@@ -109,9 +109,9 @@ init_ucm_non_leaf_recursive(UsageCountMap *map, int i)
 	}
 }
 
-/*
- * Initialize UCM shared memory.
- */
+//
+// Initialize UCM shared memory.
+//
 void
 init_ucm(UsageCountMap *map, Pointer ptr, bool found)
 {
@@ -128,7 +128,7 @@ init_ucm(UsageCountMap *map, Pointer ptr, bool found)
 
 	pg_atomic_init_u32(map->epoch, 0);
 
-	/* Init leaf variables */
+	// Init leaf variables
 	blkno = 0;
 	for (i = map->nonLeaf; i < map->total; i++)
 	{
@@ -139,14 +139,14 @@ init_ucm(UsageCountMap *map, Pointer ptr, bool found)
 		blkno += UCM_BRANCH_FACTOR;
 	}
 
-	/* Recursively inin non-leaf variables */
+	// Recursively inin non-leaf variables
 	for (i = 0; i < UCM_BRANCH_FACTOR; i++)
 		init_ucm_non_leaf_recursive(map, i);
 }
 
-/*
- * Worker function, which recursively increments value of ucm map.
- */
+//
+// Worker function, which recursively increments value of ucm map.
+//
 static void
 ucm_inc_recursive(UsageCountMap *map, int i, int32 prev, int32 next)
 {
@@ -303,7 +303,7 @@ ucm_check_recursive(UsageCountMap *map, int i)
 {
 	if (i < map->nonLeaf)
 	{
-		/* Non-leaf */
+		// Non-leaf
 		int			j,
 					j_max;
 		uint32		expected = 0,
@@ -458,7 +458,7 @@ retry:
 
 		if (factor == 1 && location < map->size)
 		{
-			/* Work with pages themselves */
+			// Work with pages themselves
 			OrioleDBPageHeader *header = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(location + map->offset);
 			uint64		state;
 			uint32		usageCount;
@@ -480,22 +480,22 @@ retry:
 
 		if (i < map->total && (pg_atomic_read_u32(&map->ucm[i]) & mask))
 		{
-			/* Required usage counts should be here, so step into */
+			// Required usage counts should be here, so step into
 			base = (i + 1) * UCM_BRANCH_FACTOR;
 			factor /= UCM_BRANCH_FACTOR;
 			num_iterations = 0;
 		}
 		else
 		{
-			/* Not found, so step over */
+			// Not found, so step over
 			int64		j;
 
 			if (num_iterations > 2 * UCM_BRANCH_FACTOR)
 			{
-				/*
-				 * Made two rounds and didn't found required usage counts.  So
-				 * give up and retry at upper level.
-				 */
+				//
+// Made two rounds and didn't found required usage counts.  So
+// give up and retry at upper level.
+//
 				if (base == 0)
 				{
 					uint32		next_epoch;
@@ -547,7 +547,7 @@ ucm_occupy_free_page(UsageCountMap *map)
 
 		if (factor == 1 && location < map->size)
 		{
-			/* Work with pages themselves */
+			// Work with pages themselves
 			OInMemoryBlkno blkno = location + map->offset;
 			OrioleDBPageHeader *header = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
 			uint64		state;
@@ -563,22 +563,22 @@ ucm_occupy_free_page(UsageCountMap *map)
 
 		if (i < map->total && (pg_atomic_read_u32(&map->ucm[i]) & mask))
 		{
-			/* Required usage counts should be here, so step into */
+			// Required usage counts should be here, so step into
 			base = (i + 1) * UCM_BRANCH_FACTOR;
 			factor /= UCM_BRANCH_FACTOR;
 			num_iterations = 0;
 		}
 		else
 		{
-			/* Not found, so step over */
+			// Not found, so step over
 			int64		j;
 
 			if (num_iterations > 2 * UCM_BRANCH_FACTOR && base != 0)
 			{
-				/*
-				 * Made two rounds and didn't found required usage counts.  So
-				 * give up and retry at upper level.
-				 */
+				//
+// Made two rounds and didn't found required usage counts.  So
+// give up and retry at upper level.
+//
 				factor *= UCM_BRANCH_FACTOR;
 				i = (i / UCM_BRANCH_FACTOR) - 1;
 				base = (i / UCM_BRANCH_FACTOR) * UCM_BRANCH_FACTOR;

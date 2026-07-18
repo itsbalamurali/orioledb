@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_collation_cache.c
- *		Routines for orioledb collate cache.
- *
- * collate_cache is tree that contains cached metadata from pg_collate.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_collation_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_collation_cache.c
+// Routines for orioledb collate cache.
+//
+// collate_cache is tree that contains cached metadata from pg_collate.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_collation_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -55,9 +55,9 @@ static OSysCacheFuncs collation_cache_funcs =
 	.toast_deserialize_entry = o_collation_cache_deserialize_entry,
 };
 
-/*
- * Initializes the collation sys cache memory.
- */
+//
+// Initializes the collation sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(collation_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -104,7 +104,7 @@ o_collation_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 			 "Only C, POSIX and ICU collations supported for orioledb tables");
 
 	prev_context = MemoryContextSwitchTo(collation_cache->mcxt);
-	if (o_collation != NULL)	/* Existed o_collation updated */
+	if (o_collation != NULL)	// Existed o_collation updated
 	{
 		Assert(false);
 	}

@@ -1,23 +1,23 @@
-/*-------------------------------------------------------------------------
- *
- * fastpath.c
- *		Routines for fastpath intra-page navigation in B-tree.
- *
- *	The "fast path" navigation enables us to find a downlink (child pointer)
- *	without copying page chunks into local memory and performing a full
- *	binary search on the tuple array.  In certain cases, we can walk a
- *	cache-friendly, fixed-stride array of values that mirrors the page layout,
- *	thereby reducing memory copying, branch mispredictions, and memory
- *	dereferences when descending the tree.
- *
- * Copyright (c) 2025-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/fastpath.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// fastpath.c
+// Routines for fastpath intra-page navigation in B-tree.
+//
+// The "fast path" navigation enables us to find a downlink (child pointer)
+// without copying page chunks into local memory and performing a full
+// binary search on the tuple array.  In certain cases, we can walk a
+// cache-friendly, fixed-stride array of values that mirrors the page layout,
+// thereby reducing memory copying, branch mispredictions, and memory
+// dereferences when descending the tree.
+//
+// Copyright (c) 2025-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/fastpath.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -70,10 +70,10 @@ static ArraySearchDesc arraySearchDescs[] = {
 	{TIDOID, InvalidOid, sizeof(ItemPointerData), ALIGNOF_SHORT, tid_array_search}
 };
 
-/*
- * Checks if the "fast path" the navigation can be applied to the given search
- * and fills *meta structure if so.
- */
+//
+// Checks if the "fast path" the navigation can be applied to the given search
+// and fills *meta structure if so.
+//
 void
 can_fastpath_find_downlink(OBTreeFindPageContext *context,
 						   void *key,
@@ -109,13 +109,13 @@ can_fastpath_find_downlink(OBTreeFindPageContext *context,
 		meta->numKeys = id->nUniqueFields;
 	else if (id->desc.type != oIndexToast && id->desc.type != oIndexBridge)
 
-		/*
-		 * Compare the whole tuple-identifying key, not just the user key
-		 * fields.  A non-unique index appends the primary key to make every
-		 * downlink/leaf key unique; comparing only the leading nKeyFields
-		 * would treat duplicate user-key values as an ambiguous prefix and
-		 * could descend into the wrong child (skipping earlier duplicates).
-		 */
+		//
+// Compare the whole tuple-identifying key, not just the user key
+// fields.  A non-unique index appends the primary key to make every
+// downlink/leaf key unique; comparing only the leading nKeyFields
+// would treat duplicate user-key values as an ambiguous prefix and
+// could descend into the wrong child (skipping earlier duplicates).
+//
 		meta->numKeys = id->nUniqueFields;
 	else
 		meta->numKeys = id->nonLeafSpec.natts;
@@ -127,14 +127,14 @@ can_fastpath_find_downlink(OBTreeFindPageContext *context,
 																	   TupleDescAttr(id->nonLeafTupdesc, i)->atttypid);
 		OIndexField *field = &id->fields[i];
 
-		/*
-		 * The array-search routines compare raw datums, so they require the
-		 * field's btree opclass to match the default one they implement. DESC
-		 * ordering is supported: the routine gets an "ascending" flag and
-		 * find_downlink_get_keys() expresses bounds as storage directions, so
-		 * a DESC field is handled by mirroring the comparison rather than
-		 * bailing.
-		 */
+		//
+// The array-search routines compare raw datums, so they require the
+// field's btree opclass to match the default one they implement. DESC
+// ordering is supported: the routine gets an "ascending" flag and
+// find_downlink_get_keys() expresses bounds as storage directions, so
+// a DESC field is handled by mirroring the comparison rather than
+// bailing.
+//
 		if (!searchDesc || searchDesc->opcid != field->opclass)
 		{
 			meta->enabled = false;
@@ -185,9 +185,9 @@ find_array_search_desc_by_typeid(Oid typeid)
 	return NULL;
 }
 
-/*
- * Decompose search key into values for the "fast path" tree navigation.
- */
+//
+// Decompose search key into values for the "fast path" tree navigation.
+//
 static bool
 find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
 					   bool *inclusive, int numValues, Oid *types,
@@ -209,11 +209,11 @@ find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
 	{
 		for (i = 0; i < numValues; i++)
 		{
-			/*
-			 * "None" is the leftmost (first storage slot), "Rightmost" the
-			 * last one -- these are storage positions, independent of
-			 * ASC/DESC.
-			 */
+			//
+// "None" is the leftmost (first storage slot), "Rightmost" the
+// last one -- these are storage positions, independent of
+// ASC/DESC.
+//
 			flags[i] = (keyType == BTreeKeyNone) ? FASTPATH_FIND_DOWNLINK_FLAG_FIRST : FASTPATH_FIND_DOWNLINK_FLAG_LAST;
 			values[i] = (Datum) 0;
 		}
@@ -236,13 +236,13 @@ find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
 
 			if (f & O_VALUE_BOUND_UNBOUNDED)
 			{
-				/*
-				 * An unbounded-below column is a -infinity value, unbounded-
-				 * above a +infinity value.  Map the value extreme to a
-				 * storage slot through the column's ASC/DESC ordering: -inf
-				 * sits at the first slot for ASC and the last for DESC, +inf
-				 * vice versa.
-				 */
+				//
+// An unbounded-below column is a -infinity value, unbounded-
+// above a +infinity value.  Map the value extreme to a
+// storage slot through the column's ASC/DESC ordering: -inf
+// sits at the first slot for ASC and the last for DESC, +inf
+// vice versa.
+//
 				bool		valueMinusInf = (f & O_VALUE_BOUND_LOWER) != 0;
 
 				flags[i] = (valueMinusInf == id->fields[i].ascending) ?
@@ -251,15 +251,15 @@ find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
 			}
 			else if (f & O_VALUE_BOUND_NULL)
 			{
-				/*
-				 * A NULL bound sorts to one storage extreme according to the
-				 * field's NULLS FIRST/LAST ordering, exactly as
-				 * o_idx_cmp_range_key_to_value() resolves it.  NULLS FIRST
-				 * puts NULLs in the first storage slot, NULLS LAST in the
-				 * last -- independent of ASC/DESC.  Without this the bound
-				 * would be searched as its (meaningless) raw value, sending
-				 * the descent to the wrong end of the tree.
-				 */
+				//
+// A NULL bound sorts to one storage extreme according to the
+// field's NULLS FIRST/LAST ordering, exactly as
+// o_idx_cmp_range_key_to_value() resolves it.  NULLS FIRST
+// puts NULLs in the first storage slot, NULLS LAST in the
+// last -- independent of ASC/DESC.  Without this the bound
+// would be searched as its (meaningless) raw value, sending
+// the descent to the wrong end of the tree.
+//
 				flags[i] = id->fields[i].nullfirst ? FASTPATH_FIND_DOWNLINK_FLAG_FIRST : FASTPATH_FIND_DOWNLINK_FLAG_LAST;
 				values[i] = (Datum) 0;
 			}
@@ -270,19 +270,19 @@ find_downlink_get_keys(BTreeDescr *desc, void *key, BTreeKeyType keyType,
 			}
 		}
 
-		/*
-		 * The bound may specify fewer columns than the key (e.g. "i = v" on a
-		 * (i, pk) key).  Such a bound fences either just before or just after
-		 * the whole run of entries sharing its specified prefix; represent
-		 * that fence by pinning every unspecified trailing column to the
-		 * run's first or last storage slot.  A lower-inclusive or
-		 * upper-exclusive bound fences before the run (first slot), a
-		 * lower-exclusive or upper-inclusive bound fences after it (last
-		 * slot).  These are storage positions of the prefix run as a whole,
-		 * so they do not depend on the trailing columns' ASC/DESC.  Leaving
-		 * these columns unset would compare against garbage and could
-		 * position the descent in the wrong child.
-		 */
+		//
+// The bound may specify fewer columns than the key (e.g. "i = v" on a
+// (i, pk) key).  Such a bound fences either just before or just after
+// the whole run of entries sharing its specified prefix; represent
+// that fence by pinning every unspecified trailing column to the
+// run's first or last storage slot.  A lower-inclusive or
+// upper-exclusive bound fences before the run (first slot), a
+// lower-exclusive or upper-inclusive bound fences after it (last
+// slot).  These are storage positions of the prefix run as a whole,
+// so they do not depend on the trailing columns' ASC/DESC.  Leaving
+// these columns unset would compare against garbage and could
+// position the descent in the wrong child.
+//
 		if (num > 0 && num < numValues)
 		{
 			uint8		f = bound->keys[num - 1].flags;
@@ -562,7 +562,7 @@ fastpath_find_chunk(Pointer pagePtr,
 
 	pg_read_barrier();
 
-	/* Possible we need to visit the rightlink */
+	// Possible we need to visit the rightlink
 	if (*chunkIndex >= count)
 		return OBTreeFastPathFindSlowpath;
 
@@ -575,10 +575,10 @@ fastpath_find_chunk(Pointer pagePtr,
 	return OBTreeFastPathFindOK;
 }
 
-/*
- * Find the given value in the fixed-stride array of integers.  The functions
- * below do the same for other datatypes.
- */
+//
+// Find the given value in the fixed-stride array of integers.  The functions
+// below do the same for other datatypes.
+//
 static void
 int4_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatum,
 				  bool ascending)
@@ -690,7 +690,7 @@ float4_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatu
 
 	for (i = *lower; i < *upper; i++)
 	{
-		/* cppcheck-suppress invalidPointerCast */
+		// cppcheck-suppress invalidPointerCast
 		float4		value = *((float4 *) p);
 
 		if (value == key && !lowerSet)
@@ -724,7 +724,7 @@ float8_array_search(Pointer p, int stride, int *lower, int *upper, Datum keyDatu
 
 	for (i = *lower; i < *upper; i++)
 	{
-		/* cppcheck-suppress invalidPointerCast */
+		// cppcheck-suppress invalidPointerCast
 		float8		value = *((float8 *) p);
 
 		if (value == key && !lowerSet)

@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * page_pool.c
- *		OrioleDB logical page pool implementation.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/utils/page_pool.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// page_pool.c
+// OrioleDB logical page pool implementation.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/utils/page_pool.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -29,7 +29,7 @@
 
 #include "utils/memdebug.h"
 
-/* Shared memory based page pool operations */
+// Shared memory based page pool operations
 
 static OInMemoryBlkno o_ppool_alloc_page(PagePool *pool, int kind);
 static OInMemoryBlkno o_ppool_alloc_metapage(PagePool *pool);
@@ -46,7 +46,7 @@ static OInMemoryBlkno o_ppool_size(PagePool *pool);
 static void o_ucm_inc_usage(PagePool *pool, OInMemoryBlkno blkno);
 static void o_ucm_init(PagePool *pool, OInMemoryBlkno blkno);
 
-/* PagePoolOps for a shared memory based page pool */
+// PagePoolOps for a shared memory based page pool
 static const PagePoolOps o_page_pool_ops = {
 	.alloc_page = o_ppool_alloc_page,
 	.alloc_metapage = o_ppool_alloc_metapage,
@@ -64,7 +64,7 @@ static const PagePoolOps o_page_pool_ops = {
 	.ucm_init = o_ucm_init,
 };
 
-/* Shared local memory based page pool operations */
+// Shared local memory based page pool operations
 
 static OInMemoryBlkno local_ppool_alloc_page(PagePool *pool, int kind);
 static void local_ppool_free_page(PagePool *pool, OInMemoryBlkno blkno, bool haveLock);
@@ -80,10 +80,10 @@ static OInMemoryBlkno local_ppool_size(PagePool *pool);
 static void local_ucm_inc_usage(PagePool *pool, OInMemoryBlkno blkno);
 static void local_ucm_init(PagePool *pool, OInMemoryBlkno blkno);
 
-/* PagePoolOps for a local memory based page pool */
+// PagePoolOps for a local memory based page pool
 static const PagePoolOps local_ppool_ops = {
 	.alloc_page = local_ppool_alloc_page,
-	/* This is intentional as implementation is the same for both pools */
+	// This is intentional as implementation is the same for both pools
 	.alloc_metapage = o_ppool_alloc_metapage,
 	.free_page = local_ppool_free_page,
 
@@ -102,10 +102,10 @@ static const PagePoolOps local_ppool_ops = {
 int			ppool_run_clock_depth PG_USED_FOR_ASSERTS_ONLY = 0;
 static PagePool *outer_pool PG_USED_FOR_ASSERTS_ONLY = NULL;
 
-/*
- * Calculates shared memory space needed for a page pool. Be careful,
- * it prepares local memory structures to initialize.
- */
+//
+// Calculates shared memory space needed for a page pool. Be careful,
+// it prepares local memory structures to initialize.
+//
 Size
 o_ppool_estimate_space(OPagePool *pool, OInMemoryBlkno offset, OInMemoryBlkno size, bool debug)
 {
@@ -113,7 +113,7 @@ o_ppool_estimate_space(OPagePool *pool, OInMemoryBlkno offset, OInMemoryBlkno si
 
 	if (!debug)
 		Assert(size >= PPOOL_MIN_SIZE);
-	/* TODO: check for ppool max size */
+	// TODO: check for ppool max size
 
 	pool->offset = offset;
 	pool->size = size;
@@ -128,10 +128,10 @@ o_ppool_estimate_space(OPagePool *pool, OInMemoryBlkno offset, OInMemoryBlkno si
 	return result;
 }
 
-/*
- * Initializes data in shared memory for the page pool. ppool_estimate_space()
- * must be already called for the pool.
- */
+//
+// Initializes data in shared memory for the page pool. ppool_estimate_space()
+// must be already called for the pool.
+//
 void
 o_ppool_shmem_init(OPagePool *pool, Pointer ptr, bool found)
 {
@@ -160,19 +160,19 @@ o_ppool_shmem_init(OPagePool *pool, Pointer ptr, bool found)
 	pool->base.ops = &o_page_pool_ops;
 }
 
-/*
- * Reserve pages for further allocation.  Reserving pages might require running
- * clock algorithm with page eviction.  It shouldn't be called while holding
- * a page lock for two reasons.
- *
- * 1) Searching and eviction of page might take too long time for holding a
- *    page lock.
- * 2) Eviction of page places page locks itself.  And it's hard to guarantee
- *    there is no deadlocks assuming that we might evict almost any page.
- *
- * This is why one should reserve enough amount of pages _before_ taking a page
- * lock, and then allocate them using ucm_occupy_free_page().
- */
+//
+// Reserve pages for further allocation.  Reserving pages might require running
+// clock algorithm with page eviction.  It shouldn't be called while holding
+// a page lock for two reasons.
+//
+// 1) Searching and eviction of page might take too long time for holding a
+// page lock.
+// 2) Eviction of page places page locks itself.  And it's hard to guarantee
+// there is no deadlocks assuming that we might evict almost any page.
+//
+// This is why one should reserve enough amount of pages _before_ taking a page
+// lock, and then allocate them using ucm_occupy_free_page().
+//
 static void
 o_ppool_reserve_pages(PagePool *pool, int kind, int count)
 {
@@ -191,13 +191,13 @@ o_ppool_reserve_pages(PagePool *pool, int kind, int count)
 	{
 		pg_atomic_add_fetch_u64(o_pool->availablePagesCount, count);
 
-		/*
-		 * The clock algorithm can be called nested (walk_page() →
-		 * walk_page_prelock_check() → index_oids_get_btree_descr(), which
-		 * may need to fetch a table descriptor from a TOAST system tree:
-		 * o_btree_load_shmem() → ppool_reserve_pages() →
-		 * ppool_run_clock()).
-		 */
+		//
+// The clock algorithm can be called nested (walk_page() →
+// walk_page_prelock_check() → index_oids_get_btree_descr(), which
+// may need to fetch a table descriptor from a TOAST system tree:
+// o_btree_load_shmem() → ppool_reserve_pages() →
+// ppool_run_clock()).
+//
 		if (!ppool_run_maintenance(pool, true, NULL))
 
 		{
@@ -216,10 +216,10 @@ o_ppool_reserve_pages(PagePool *pool, int kind, int count)
 	o_stop_saving_inval_messages(was_saving);
 }
 
-/*
- * Release previously reserved pages according to mask (multiple kinds can be
- * released in one call).
- */
+//
+// Release previously reserved pages according to mask (multiple kinds can be
+// released in one call).
+//
 static void
 o_ppool_release_reserved(PagePool *pool, uint32 mask)
 {
@@ -239,9 +239,9 @@ o_ppool_release_reserved(PagePool *pool, uint32 mask)
 		pg_atomic_add_fetch_u64(o_pool->availablePagesCount, sum);
 }
 
-/*
- * Release all reserved pages in all the shared memory pools.
- */
+//
+// Release all reserved pages in all the shared memory pools.
+//
 void
 ppool_release_all_pages(void)
 {
@@ -255,13 +255,13 @@ ppool_release_all_pages(void)
 	}
 }
 
-/*
- * Reserves and allocate page for metadata. Metadata pages are typically
- * allocated without holding any page locks.
- *
- * Shared between OPagePool and LocalPagePool via ppool_reserve_pages /
- * ppool_alloc_page dispatch.
- */
+//
+// Reserves and allocate page for metadata. Metadata pages are typically
+// allocated without holding any page locks.
+//
+// Shared between OPagePool and LocalPagePool via ppool_reserve_pages /
+// ppool_alloc_page dispatch.
+//
 static OInMemoryBlkno
 o_ppool_alloc_metapage(PagePool *pool)
 {
@@ -269,11 +269,11 @@ o_ppool_alloc_metapage(PagePool *pool)
 	return ppool_alloc_page(pool, PPOOL_RESERVE_META);
 }
 
-/*
- * Get next free page from the pool.
- *
- * Free page should be previously reserved by o_ppool_reserve_pages().
- */
+//
+// Get next free page from the pool.
+//
+// Free page should be previously reserved by o_ppool_reserve_pages().
+//
 static OInMemoryBlkno
 o_ppool_alloc_page(PagePool *pool, int kind)
 {
@@ -291,9 +291,9 @@ o_ppool_alloc_page(PagePool *pool, int kind)
 	return result;
 }
 
-/*
- * Return free page to the pool.
- */
+//
+// Return free page to the pool.
+//
 static void
 o_ppool_free_page(PagePool *pool, OInMemoryBlkno blkno, bool haveLock)
 {
@@ -306,16 +306,16 @@ o_ppool_free_page(PagePool *pool, OInMemoryBlkno blkno, bool haveLock)
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 	Assert(!IS_DIRTY(blkno));
 
-	/*
-	 * Reset page header and descriptor.  Do this while holding a page lock in
-	 * order to prevent race condition with walk_page().
-	 *
-	 * Block reads before changing the identity: bumping pageChangeCount alone
-	 * lets a lockless reader observe the invalidated oids without the count
-	 * bump and slip past the change-count check.  page_block_reads() makes
-	 * unlock_page() bump the state change count, forcing such a reader to
-	 * retry (idempotent if the caller already blocked reads).
-	 */
+	//
+// Reset page header and descriptor.  Do this while holding a page lock in
+// order to prevent race condition with walk_page().
+//
+// Block reads before changing the identity: bumping pageChangeCount alone
+// lets a lockless reader observe the invalidated oids without the count
+// bump and slip past the change-count check.  page_block_reads() makes
+// unlock_page() bump the state change count, forcing such a reader to
+// retry (idempotent if the caller already blocked reads).
+//
 	if (!haveLock)
 		lock_page(blkno);
 	page_block_reads(blkno);
@@ -331,9 +331,9 @@ o_ppool_free_page(PagePool *pool, OInMemoryBlkno blkno, bool haveLock)
 	pg_atomic_add_fetch_u64(o_pool->availablePagesCount, 1);
 }
 
-/*
- * Return count of free pages in the pool.
- */
+//
+// Return count of free pages in the pool.
+//
 static OInMemoryBlkno
 o_ppool_free_pages_count(PagePool *pool)
 {
@@ -346,9 +346,9 @@ o_ppool_free_pages_count(PagePool *pool)
 		return (OInMemoryBlkno) count;
 }
 
-/*
- * Return count of dirty pages in the pool.
- */
+//
+// Return count of dirty pages in the pool.
+//
 static OInMemoryBlkno
 o_ppool_dirty_pages_count(PagePool *pool)
 {
@@ -357,25 +357,25 @@ o_ppool_dirty_pages_count(PagePool *pool)
 	return pg_atomic_read_u32(o_pool->dirtyPagesCount);
 }
 
-/*
- * Run clock replacement algorithm until we evict at least one page.
- *
- * This can be called from any backend that needs pages (via
- * ppool_reserve_pages) or from the bgwriter.  Because the caller may
- * already have undo space reserved for its own operation, we save and
- * restore the undo reservation state around the eviction work.
- *
- * We save both the reserved undo sizes and whether
- * transactionUndoRetainLocation was set for UndoLogRegularPageLevel and
- * UndoLogSystem.  Page merges during walk_page() may set these via
- * get_undo_record() → set_my_reserved_location().  After we're done, we
- * restore the caller's original reservation and free any retain locations
- * that we introduced (i.e., that weren't set before we entered).
- *
- * Note: we only manage UndoLogRegularPageLevel and UndoLogSystem here
- * because page-level merges only write undo to these types (via
- * GET_PAGE_LEVEL_UNDO_TYPE).  UndoLogRegular is not touched by merges.
- */
+//
+// Run clock replacement algorithm until we evict at least one page.
+//
+// This can be called from any backend that needs pages (via
+// ppool_reserve_pages) or from the bgwriter.  Because the caller may
+// already have undo space reserved for its own operation, we save and
+// restore the undo reservation state around the eviction work.
+//
+// We save both the reserved undo sizes and whether
+// transactionUndoRetainLocation was set for UndoLogRegularPageLevel and
+// UndoLogSystem.  Page merges during walk_page() may set these via
+// get_undo_record() → set_my_reserved_location().  After we're done, we
+// restore the caller's original reservation and free any retain locations
+// that we introduced (i.e., that weren't set before we entered).
+//
+// Note: we only manage UndoLogRegularPageLevel and UndoLogSystem here
+// because page-level merges only write undo to these types (via
+// GET_PAGE_LEVEL_UNDO_TYPE).  UndoLogRegular is not touched by merges.
+//
 static bool
 o_ppool_run_maintenance(PagePool *pool, bool evict,
 						volatile sig_atomic_t *shutdown_requested)
@@ -395,19 +395,19 @@ o_ppool_run_maintenance(PagePool *pool, bool evict,
 								 o_pool->offset,
 								 o_pool->offset + o_pool->size - 1);
 
-	/*
-	 * Shouldn't be called while holding a page lock: one should reserve the
-	 * pages in advance.
-	 */
+	//
+// Shouldn't be called while holding a page lock: one should reserve the
+// pages in advance.
+//
 	Assert(!have_locked_pages());
 
-	/* We might need to merge pages */
+	// We might need to merge pages
 	reserve_undo_size(UndoLogRegularPageLevel, 2 * O_MERGE_UNDO_IMAGE_SIZE);
 	reserve_undo_size(UndoLogSystem, 2 * O_MERGE_UNDO_IMAGE_SIZE);
 
 	Assert(blkno >= o_pool->offset && blkno < o_pool->offset + o_pool->size);
 
-	/* Check recursion depth, possible outer and inner pool types. */
+	// Check recursion depth, possible outer and inner pool types.
 	Assert(ppool_run_clock_depth <= 1);
 #ifdef USE_ASSERT_CHECKING
 	if (ppool_run_clock_depth > 0)
@@ -420,10 +420,10 @@ o_ppool_run_maintenance(PagePool *pool, bool evict,
 		outer_pool = pool;
 #endif
 
-	/*
-	 * Only the outermost call manages the UCM. A nested clock invocation
-	 * inherits the outer's setting and must not flip skip_ucm.
-	 */
+	//
+// Only the outermost call manages the UCM. A nested clock invocation
+// inherits the outer's setting and must not flip skip_ucm.
+//
 	if (ppool_run_clock_depth == 0)
 		skip_ucm = true;
 	ppool_run_clock_depth++;
@@ -459,16 +459,16 @@ o_ppool_run_maintenance(PagePool *pool, bool evict,
 
 			if (currentPageEvictSharedCount != lastPageEvictSharedCount)
 			{
-				/*
-				 * Pages in the pool were evicted by someone else, continue
-				 * trying
-				 */
+				//
+// Pages in the pool were evicted by someone else, continue
+// trying
+//
 				lastPageEvictSharedCount = currentPageEvictSharedCount;
 				skippedLocalEvictions = 0;
 			}
 			else
 			{
-				/* No concurrent evictions during full local cycle, error out */
+				// No concurrent evictions during full local cycle, error out
 				exhausted = true;
 				break;
 			}
@@ -484,10 +484,10 @@ o_ppool_run_maintenance(PagePool *pool, bool evict,
 #endif
 	}
 
-	/*
-	 * The caller might have the undo location reserved.  We need to carefully
-	 * put the undo location back.
-	 */
+	//
+// The caller might have the undo location reserved.  We need to carefully
+// put the undo location back.
+//
 	if (undoRegularSize > 0)
 		reserve_undo_size(UndoLogRegularPageLevel, undoRegularSize);
 	else
@@ -511,9 +511,9 @@ o_ppool_run_maintenance(PagePool *pool, bool evict,
 	return !exhausted;
 }
 
-/*
- * Return the size of the page pool.
- */
+//
+// Return the size of the page pool.
+//
 static OInMemoryBlkno
 o_ppool_size(PagePool *pool)
 {
@@ -558,7 +558,7 @@ local_ppool_init(LocalPagePool *pool)
 	for (int i = 0; i < PPOOL_RESERVE_COUNT; i++)
 		pool->base.numPagesReserved[i] = 0;
 	pool->slab_context = SlabContextCreate(TopMemoryContext, "oriole local page pool", ORIOLEDB_BLCKSZ * 16, ORIOLEDB_BLCKSZ);
-	/* This might lead to PANIC on allocation failure in critical section */
+	// This might lead to PANIC on allocation failure in critical section
 	MemoryContextAllowInCriticalSection(pool->slab_context, true);
 	pool->base.ops = &local_ppool_ops;
 }
@@ -574,7 +574,7 @@ local_ppool_alloc_page(PagePool *pool, int kind)
 	Assert(pool->numPagesReserved[kind] > 0);
 	pool->numPagesReserved[kind]--;
 
-	/* Iterate through local_pool_pages to find a free slot */
+	// Iterate through local_pool_pages to find a free slot
 	do
 	{
 		i++;
@@ -584,7 +584,7 @@ local_ppool_alloc_page(PagePool *pool, int kind)
 		{
 			local_ppool_pages[i] = (Page) MemoryContextAllocZero(local_pool->slab_context, ORIOLEDB_BLCKSZ);
 			local_pool->alloc_current_slot = i;
-			/* Set the local page bit */
+			// Set the local page bit
 			return i | BLKNO_LOCAL_BIT;
 		}
 	} while (i != start);
@@ -663,25 +663,25 @@ local_ppool_dirty_pages_count(PagePool *pool)
 	return local_pool->dirtyPagesCount;
 }
 
-/*
- * Run clock replacement algorithm until we evict at least one page.
- *
- * This can be called from any backend that needs pages (via
- * ppool_reserve_pages).  Because the caller may
- * already have undo space reserved for its own operation, we save and
- * restore the undo reservation state around the eviction work.
- *
- * We save both the reserved undo sizes and whether
- * transactionUndoRetainLocation was set for UndoLogRegularPageLevel and
- * UndoLogSystem.  Page merges during walk_page() may set these via
- * get_undo_record() → set_my_reserved_location().  After we're done, we
- * restore the caller's original reservation and free any retain locations
- * that we introduced (i.e., that weren't set before we entered).
- *
- * Note: we only manage UndoLogRegularPageLevel and UndoLogSystem here
- * because page-level merges only write undo to these types (via
- * GET_PAGE_LEVEL_UNDO_TYPE).  UndoLogRegular is not touched by merges.
- */
+//
+// Run clock replacement algorithm until we evict at least one page.
+//
+// This can be called from any backend that needs pages (via
+// ppool_reserve_pages).  Because the caller may
+// already have undo space reserved for its own operation, we save and
+// restore the undo reservation state around the eviction work.
+//
+// We save both the reserved undo sizes and whether
+// transactionUndoRetainLocation was set for UndoLogRegularPageLevel and
+// UndoLogSystem.  Page merges during walk_page() may set these via
+// get_undo_record() → set_my_reserved_location().  After we're done, we
+// restore the caller's original reservation and free any retain locations
+// that we introduced (i.e., that weren't set before we entered).
+//
+// Note: we only manage UndoLogRegularPageLevel and UndoLogSystem here
+// because page-level merges only write undo to these types (via
+// GET_PAGE_LEVEL_UNDO_TYPE).  UndoLogRegular is not touched by merges.
+//
 static bool
 local_ppool_run_maintenance(PagePool *pool, bool evict, volatile sig_atomic_t *shutdown_requested)
 {
@@ -695,15 +695,15 @@ local_ppool_run_maintenance(PagePool *pool, bool evict, volatile sig_atomic_t *s
 	uint64		skippedLocalEvictionsLimit;
 	bool		exhausted = false;
 
-	/*
-	 * Shutdown can be requested only from the bgwriter. And bgwriter should
-	 * not be running maintenance on local page pool.
-	 */
+	//
+// Shutdown can be requested only from the bgwriter. And bgwriter should
+// not be running maintenance on local page pool.
+//
 	Assert(shutdown_requested == NULL);
-	/* Only bgwriter sets evict to false */
+	// Only bgwriter sets evict to false
 	Assert(evict);
 
-	/* We might need to merge pages */
+	// We might need to merge pages
 	reserve_undo_size(UndoLogRegularPageLevel, 2 * O_MERGE_UNDO_IMAGE_SIZE);
 	reserve_undo_size(UndoLogSystem, 2 * O_MERGE_UNDO_IMAGE_SIZE);
 
@@ -734,7 +734,7 @@ local_ppool_run_maintenance(PagePool *pool, bool evict, volatile sig_atomic_t *s
 		{
 			case OWalkPageEvicted:
 			case OWalkPageMerged:
-				/* walk_page() should have freed the page */
+				// walk_page() should have freed the page
 				merged_or_evicted = true;
 				break;
 			case OWalkPageWritten:
@@ -745,7 +745,7 @@ local_ppool_run_maintenance(PagePool *pool, bool evict, volatile sig_atomic_t *s
 		}
 		local_pool->evict_current_slot++;
 
-		/* For local pool we skip concurrent eviction checks */
+		// For local pool we skip concurrent eviction checks
 		if (++skippedLocalEvictions >= skippedLocalEvictionsLimit)
 		{
 			exhausted = true;
@@ -754,10 +754,10 @@ local_ppool_run_maintenance(PagePool *pool, bool evict, volatile sig_atomic_t *s
 	}
 
 
-	/*
-	 * The caller might have the undo location reserved.  We need to carefully
-	 * put the undo location back.
-	 */
+	//
+// The caller might have the undo location reserved.  We need to carefully
+// put the undo location back.
+//
 	if (undoRegularSize > 0)
 		reserve_undo_size(UndoLogRegularPageLevel, undoRegularSize);
 	else

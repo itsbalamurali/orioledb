@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * sort.c
- * 		Implementation of orioledb tuple sorting
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tuple/sort.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// sort.c
+// Implementation of orioledb tuple sorting
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tuple/sort.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -74,14 +74,14 @@ comparetup_orioledb_index(const SortTuple *a, const SortTuple *b, Tuplesortstate
 	OIndexBuildSortArg *arg = (OIndexBuildSortArg *) base->arg;
 	OTupleFixedFormatSpec *spec = &arg->id->leafSpec;
 
-	/* Compare the leading sort key */
+	// Compare the leading sort key
 	compare = ApplySortComparator(a->datum1, a->isnull1,
 								  b->datum1, b->isnull1,
 								  sortKey);
 	if (compare != 0)
 		return compare;
 
-	/* Compare additional sort keys */
+	// Compare additional sort keys
 	ltup = read_o_tuple(a->tuple);
 	rtup = read_o_tuple(b->tuple);
 	tupDesc = arg->tupDesc;
@@ -100,7 +100,7 @@ comparetup_orioledb_index(const SortTuple *a, const SortTuple *b, Tuplesortstate
 			return compare;
 	}
 
-	/* they are equal, so we only need to examine one null flag */
+	// they are equal, so we only need to examine one null flag
 	if (a->isnull1)
 		equal_hasnull = true;
 
@@ -118,25 +118,25 @@ comparetup_orioledb_index(const SortTuple *a, const SortTuple *b, Tuplesortstate
 										  datum2, isnull2,
 										  sortKey);
 			if (compare != 0)
-				return compare; /* done when we find unequal attributes */
+				return compare; // done when we find unequal attributes
 
-			/* they are equal, so we only need to examine one null flag */
+			// they are equal, so we only need to examine one null flag
 			if (isnull1)
 				equal_hasnull = true;
 		}
 	}
 
-	/* FIXME: all orioledb indexes should be unique */
+	// FIXME: all orioledb indexes should be unique
 
-	/*
-	 * If btree has asked us to enforce uniqueness, complain if two equal
-	 * tuples are detected (unless there was at least one NULL field).
-	 *
-	 * It is sufficient to make the test here, because if two tuples are equal
-	 * they *must* get compared at some stage of the sort --- otherwise the
-	 * sort algorithm wouldn't have checked whether one must appear before the
-	 * other.
-	 */
+	//
+// If btree has asked us to enforce uniqueness, complain if two equal
+// tuples are detected (unless there was at least one NULL field).
+//
+// It is sufficient to make the test here, because if two tuples are equal
+// they *must* get compared at some stage of the sort --- otherwise the
+// sort algorithm wouldn't have checked whether one must appear before the
+// other.
+//
 	if (arg->enforceUnique && !(!arg->id->nulls_not_distinct && equal_hasnull))
 	{
 		ereport(ERROR,
@@ -164,7 +164,7 @@ writetup_orioledb_index(Tuplesortstate *state, LogicalTape *tape, SortTuple *stu
 	LogicalTapeWrite(tape, (void *) &tuplen, sizeof(tuplen));
 	LogicalTapeWrite(tape, (void *) tuple.data, o_tuple_size(tuple, spec));
 	LogicalTapeWrite(tape, (void *) &tuple.formatFlags, 1);
-	if (base->sortopt & TUPLESORT_RANDOMACCESS) /* need trailing length word? */
+	if (base->sortopt & TUPLESORT_RANDOMACCESS) // need trailing length word?
 		LogicalTapeWrite(tape, (void *) &tuplen, sizeof(tuplen));
 }
 
@@ -179,14 +179,14 @@ readtup_orioledb_index(Tuplesortstate *state, SortTuple *stup,
 	Pointer		tup = (Pointer) tuplesort_readtup_alloc(state, MAXIMUM_ALIGNOF + tuplen);
 	OTuple		tuple;
 
-	/* read in the tuple proper */
+	// read in the tuple proper
 	LogicalTapeReadExact(tape, tup + MAXIMUM_ALIGNOF, tuplen);
 	LogicalTapeReadExact(tape, tup, 1);
-	if (base->sortopt & TUPLESORT_RANDOMACCESS) /* need trailing length word? */
+	if (base->sortopt & TUPLESORT_RANDOMACCESS) // need trailing length word?
 		LogicalTapeReadExact(tape, &tuplen, sizeof(tuplen));
 	stup->tuple = (void *) tup;
 	tuple = read_o_tuple(tup);
-	/* set up first-column key value */
+	// set up first-column key value
 	stup->datum1 = o_fastgetattr(tuple,
 								 base->sortKeys[0].ssup_attno,
 								 arg->tupDesc,
@@ -266,7 +266,7 @@ tuplesort_begin_orioledb_index(OIndexDescr *idx,
 				OIndexKeyAttnumToTupleAttnum(BTreeKeyLeafTuple, idx, i + 1);
 			sortKey->abbreviate = (i == 0);
 			sortKey->ssup_reverse = !idx->fields[i].ascending;
-			/* FIXME: no abbrev converter yet */
+			// FIXME: no abbrev converter yet
 			o_finish_sort_support_function(idx->fields[i].comparator, sortKey);
 		}
 	}
@@ -322,13 +322,13 @@ tuplesort_begin_orioledb_toast(OIndexDescr *toast,
 		sortKey->ssup_attno = i + 1;
 		sortKey->abbreviate = (i == 0);
 		sortKey->ssup_reverse = !primary->fields[i].ascending;
-		/* FIXME: no abbrev converter yet */
+		// FIXME: no abbrev converter yet
 		o_finish_sort_support_function(primary->fields[i].comparator, sortKey);
 	}
 
 	field.collation = DEFAULT_COLLATION_OID;
 
-	/* ATTN_POS */
+	// ATTN_POS
 	sortKey = &base->sortKeys[key_fields];
 	sortKey->ssup_cxt = CurrentMemoryContext;
 	sortKey->ssup_collation = DEFAULT_COLLATION_OID;
@@ -343,7 +343,7 @@ tuplesort_begin_orioledb_toast(OIndexDescr *toast,
 								   F_HASHINT2);
 	o_finish_sort_support_function(field.comparator, sortKey);
 
-	/* CHUNKN_POS */
+	// CHUNKN_POS
 	sortKey = &base->sortKeys[key_fields + 1];
 	sortKey->ssup_cxt = CurrentMemoryContext;
 	sortKey->ssup_collation = DEFAULT_COLLATION_OID;
@@ -402,10 +402,10 @@ tuplesort_putotuple(Tuplesortstate *state, OTuple tup)
 	Size		tuplen;
 #endif
 
-	/*
-	 * Copy the given tuple into memory we control, and decrease availMem.
-	 * Then call the common code.
-	 */
+	//
+// Copy the given tuple into memory we control, and decrease availMem.
+// Then call the common code.
+//
 	tupsize = o_tuple_size(tup, spec);
 	stup.tuple = MemoryContextAlloc(base->tuplecontext, MAXIMUM_ALIGNOF + tupsize);
 	write_o_tuple(stup.tuple, tup, tupsize);
@@ -417,7 +417,7 @@ tuplesort_putotuple(Tuplesortstate *state, OTuple tup)
 								spec,
 								&stup.isnull1);
 #if PG_VERSION_NUM >= 170000
-	/* GetMemoryChunkSpace is not supported for bump contexts */
+	// GetMemoryChunkSpace is not supported for bump contexts
 	if (TupleSortUseBumpTupleCxt(base->sortopt))
 		tuplen = MAXALIGN(tupsize);
 	else

@@ -1,17 +1,17 @@
-/*-------------------------------------------------------------------------
- *
- * page_chunks.c
- *		Internals of OrioleDB page chunks: routines for working with chunks
- *		and their items.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/page_chunks.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// page_chunks.c
+// Internals of OrioleDB page chunks: routines for working with chunks
+// and their items.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/page_chunks.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -30,9 +30,9 @@
 #include "miscadmin.h"
 #include "utils/memdebug.h"
 
-/*
- * Load chunk to the partial page.
- */
+//
+// Load chunk to the partial page.
+//
 bool
 partial_load_hikeys_chunk(PartialPageState *partial, Page img)
 {
@@ -71,9 +71,9 @@ partial_load_hikeys_chunk(PartialPageState *partial, Page img)
 	return true;
 }
 
-/*
- * Load chunk to the partial page.
- */
+//
+// Load chunk to the partial page.
+//
 bool
 partial_load_chunk(PartialPageState *partial, Page img,
 				   OffsetNumber chunkOffset, BTreePageItemLocator *loc)
@@ -165,16 +165,16 @@ partial_load_chunk(PartialPageState *partial, Page img,
 	return true;
 }
 
-/*
- * Fully materialize a partially-loaded page image: load the hikeys chunk and
- * every data chunk from the source page, leaving `img` a complete copy.
- *
- * Differential page-level undo images (UndoPageImage*Diff) reconstruct the
- * historical page in place from the live page carried in `img`, so they require
- * every chunk present; the partial-read fast path (BTREE_PAGE_FIND_FETCH) only
- * loads the chunks touched so far.  Returns false if the source page changed
- * mid-load (consistency lost) -- the caller must retry the read.
- */
+//
+// Fully materialize a partially-loaded page image: load the hikeys chunk and
+// every data chunk from the source page, leaving `img` a complete copy.
+//
+// Differential page-level undo images (UndoPageImage*Diff) reconstruct the
+// historical page in place from the live page carried in `img`, so they require
+// every chunk present; the partial-read fast path (BTREE_PAGE_FIND_FETCH) only
+// loads the chunks touched so far.  Returns false if the source page changed
+// mid-load (consistency lost) -- the caller must retry the read.
+//
 bool
 partial_load_full_page(PartialPageState *partial, Page img)
 {
@@ -193,7 +193,7 @@ partial_load_full_page(PartialPageState *partial, Page img)
 			return false;
 	}
 
-	/* btree_page_reorg() checks the whole page is defined under Valgrind. */
+	// btree_page_reorg() checks the whole page is defined under Valgrind.
 	VALGRIND_MAKE_MEM_DEFINED(img, ORIOLEDB_BLCKSZ);
 
 	partial->isPartial = false;
@@ -213,20 +213,20 @@ page_locator_fits_item(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 
 	if (!replace)
 	{
-		/*
-		 * During insert of new item, take into account extension of chunk
-		 * items array.
-		 */
+		//
+// During insert of new item, take into account extension of chunk
+// items array.
+//
 		spaceNeeded +=
 			MAXALIGN((locator->chunkItemsCount + 1) * sizeof(LocationIndex)) -
 			MAXALIGN(locator->chunkItemsCount * sizeof(LocationIndex));
 	}
 	else
 	{
-		/*
-		 * During tuple replacement, take into account change in the item
-		 * size. We can replace tuples only on leafs.
-		 */
+		//
+// During tuple replacement, take into account change in the item
+// size. We can replace tuples only on leafs.
+//
 		Assert(O_PAGE_IS(p, LEAF));
 
 		oldItemSize = BTREE_PAGE_GET_ITEM_SIZE(p, locator);
@@ -237,40 +237,40 @@ page_locator_fits_item(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 
 	if (freeSpace >= spaceNeeded)
 	{
-		/* Already have enough of free space on the page */
+		// Already have enough of free space on the page
 		return BTreeItemPageFitAsIs;
 	}
 
-	/*
-	 * Tuple didn't fit "as is".  Page needs compaction or split.
-	 */
+	//
+// Tuple didn't fit "as is".  Page needs compaction or split.
+//
 	Assert(spaceNeeded >= 0);
 
-	/*
-	 * Compaction is only possible on leafs, and not possible for bridge
-	 * indexes.
-	 */
+	//
+// Compaction is only possible on leafs, and not possible for bridge
+// indexes.
+//
 	if (!O_PAGE_IS(p, LEAF) || desc->type == oIndexBridge)
 		return BTreeItemPageFitSplitRequired;
 
-	/* Start with optimistic estimate of free space after compaction */
+	// Start with optimistic estimate of free space after compaction
 	compactedFreeSpace = freeSpace + PAGE_GET_N_VACATED(p);
 
 	if (replace)
 	{
-		/* Correct the estimation according to our tuple replacement */
+		// Correct the estimation according to our tuple replacement
 		BTreeLeafTuphdr *tupHdr;
 
 		tupHdr = (BTreeLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, locator);
 
 		if (tupHdr->deleted)
 		{
-			/*
-			 * If the current tuple is deleted, then the item size is already
-			 * in out estimation.  However, we also took into account for
-			 * spaceNeeded.  Correct our calculation of free space after
-			 * compaction.
-			 */
+			//
+// If the current tuple is deleted, then the item size is already
+// in out estimation.  However, we also took into account for
+// spaceNeeded.  Correct our calculation of free space after
+// compaction.
+//
 			compactedFreeSpace -= BTREE_PAGE_GET_ITEM_SIZE(p, locator);
 		}
 		else
@@ -278,11 +278,11 @@ page_locator_fits_item(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 			OTuple		tuple;
 			int			oldItemCompactedSize;
 
-			/*
-			 * Similarly to the previous case, the possible tuple shrinking is
-			 * both in our estimation of free space after compaction and in
-			 * the spaceNeeded.
-			 */
+			//
+// Similarly to the previous case, the possible tuple shrinking is
+// both in our estimation of free space after compaction and in
+// the spaceNeeded.
+//
 			BTREE_PAGE_READ_LEAF_TUPLE(tuple, p, locator);
 			oldItemCompactedSize = (BTreeLeafTuphdrSize + MAXALIGN(o_btree_len(desc, tuple, OTupleLength)));
 
@@ -291,19 +291,19 @@ page_locator_fits_item(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 		}
 	}
 
-	/*
-	 * We have a chance to do a compation on leaf.  Check if at least
-	 * optimistic esimate will work.
-	 */
+	//
+// We have a chance to do a compation on leaf.  Check if at least
+// optimistic esimate will work.
+//
 	if (compactedFreeSpace < spaceNeeded)
 		return BTreeItemPageFitSplitRequired;
 
-	/*
-	 * Switch to real estimate.  Real estimate is much slower, but there is a
-	 * good chance to avoid a page split.  For the tuple replacement case,
-	 * skip item to be replaced from the calculation, as it's already taken
-	 * into account for spaceNeeded.
-	 */
+	//
+// Switch to real estimate.  Real estimate is much slower, but there is a
+// good chance to avoid a page split.  For the tuple replacement case,
+// skip item to be replaced from the calculation, as it's already taken
+// into account for spaceNeeded.
+//
 	if (!replace)
 		compactedFreeSpace = freeSpace + page_get_vacated_space(desc, p, csn);
 	else
@@ -400,9 +400,9 @@ page_item_fill_locator_backwards(Page p, OffsetNumber itemOffset,
 	locator->itemOffset = itemOffset - header->chunkDesc[chunkOffset].offset;
 }
 
-/*
- * Locate the next page item.
- */
+//
+// Locate the next page item.
+//
 bool
 page_locator_next_chunk(Page p, BTreePageItemLocator *locator)
 {
@@ -422,9 +422,9 @@ page_locator_next_chunk(Page p, BTreePageItemLocator *locator)
 	return true;
 }
 
-/*
- * Locate the next page item.
- */
+//
+// Locate the next page item.
+//
 bool
 page_locator_prev_chunk(Page p, BTreePageItemLocator *locator)
 {
@@ -445,9 +445,9 @@ page_locator_prev_chunk(Page p, BTreePageItemLocator *locator)
 	return true;
 }
 
-/*
- * Insert a new item of given size at the given location.
- */
+//
+// Insert a new item of given size at the given location.
+//
 void
 page_locator_insert_item(Page p, BTreePageItemLocator *locator,
 						 LocationIndex itemsize)
@@ -462,11 +462,11 @@ page_locator_insert_item(Page p, BTreePageItemLocator *locator,
 
 	Assert(itemsize == MAXALIGN(itemsize));
 
-	/* Calculate the change of (maxaligned) item array size */
+	// Calculate the change of (maxaligned) item array size
 	itemsShift = MAXALIGN(sizeof(LocationIndex) * (locator->chunkItemsCount + 1)) -
 		MAXALIGN(sizeof(LocationIndex) * locator->chunkItemsCount);
 
-	/* Calculate the shift of the data after new item inserted */
+	// Calculate the shift of the data after new item inserted
 	dataShift = itemsShift + itemsize;
 
 	firstItemPtr = (Pointer) locator->chunk +
@@ -484,14 +484,14 @@ page_locator_insert_item(Page p, BTreePageItemLocator *locator,
 	}
 	endPtr = (Pointer) p + header->dataSize;
 
-	/* Data should still fit to the page */
+	// Data should still fit to the page
 	Assert(endPtr + dataShift <= (Pointer) p + ORIOLEDB_BLCKSZ);
 
-	/* Shift the data after insert location */
+	// Shift the data after insert location
 	Assert(itemPtr <= endPtr);
 	memmove(itemPtr + dataShift, itemPtr, endPtr - itemPtr);
 
-	/* Adjust chunks parameters */
+	// Adjust chunks parameters
 	for (i = locator->chunkOffset + 1; i < header->chunksCount; i++)
 	{
 		header->chunkDesc[i].shortLocation += LOCATION_GET_SHORT(dataShift);
@@ -502,22 +502,22 @@ page_locator_insert_item(Page p, BTreePageItemLocator *locator,
 
 	if (itemsShift != 0)
 	{
-		/*
-		 * If items array size is changed, then we have to also move the items
-		 * before insert location and adjust those locations in the items
-		 * array.
-		 */
+		//
+// If items array size is changed, then we have to also move the items
+// before insert location and adjust those locations in the items
+// array.
+//
 		memmove(firstItemPtr + itemsShift, firstItemPtr, itemPtr - firstItemPtr);
 		for (i = 0; i < locator->itemOffset; i++)
 			locator->chunk->items[i] += itemsShift;
 	}
 
-	/* Add new element to the items array  */
+	// Add new element to the items array
 	for (i = locator->chunkItemsCount; i > locator->itemOffset; i--)
 		locator->chunk->items[i] = locator->chunk->items[i - 1] + dataShift;
 	locator->chunk->items[locator->itemOffset] = (Pointer) itemPtr - (Pointer) locator->chunk + itemsShift;
 
-	/* Adjust the locator */
+	// Adjust the locator
 	locator->chunkItemsCount++;
 	locator->chunkSize += dataShift;
 }
@@ -536,9 +536,9 @@ page_locator_fits_new_item(Page p, BTreePageItemLocator *locator,
 	return BTREE_PAGE_FREE_SPACE(p) >= sizeDiff;
 }
 
-/*
- * Get size of the item at given location.
- */
+//
+// Get size of the item at given location.
+//
 LocationIndex
 page_locator_get_item_size(Page p, BTreePageItemLocator *locator)
 {
@@ -546,19 +546,19 @@ page_locator_get_item_size(Page p, BTreePageItemLocator *locator)
 				nextItemOffset;
 	BTreePageHeader *header = (BTreePageHeader *) p;
 
-	/* Calculate offset form the beginning of the chunk */
+	// Calculate offset form the beginning of the chunk
 	itemOffset = ITEM_GET_OFFSET(locator->chunk->items[locator->itemOffset]);
 	if (locator->itemOffset + 1 < locator->chunkItemsCount)
 	{
-		/* Next item is in the same chunk */
+		// Next item is in the same chunk
 		nextItemOffset = ITEM_GET_OFFSET(locator->chunk->items[locator->itemOffset + 1]);
 	}
 	else
 	{
-		/*
-		 * Next item is in the next chunk. Recalculate offsets from the
-		 * beginning of the page.
-		 */
+		//
+// Next item is in the next chunk. Recalculate offsets from the
+// beginning of the page.
+//
 		itemOffset += (Pointer) locator->chunk - (Pointer) p;
 		if (locator->chunkOffset + 1 < header->chunksCount)
 			nextItemOffset = SHORT_GET_LOCATION(header->chunkDesc[locator->chunkOffset + 1].shortLocation);
@@ -568,9 +568,9 @@ page_locator_get_item_size(Page p, BTreePageItemLocator *locator)
 	return (nextItemOffset - itemOffset);
 }
 
-/*
- * Resizes page item under given locator.
- */
+//
+// Resizes page item under given locator.
+//
 void
 page_locator_resize_item(Page p, BTreePageItemLocator *locator,
 						 LocationIndex newsize)
@@ -581,7 +581,7 @@ page_locator_resize_item(Page p, BTreePageItemLocator *locator,
 	BTreePageHeader *header = (BTreePageHeader *) p;
 	OffsetNumber i;
 
-	/* Calculate data shift */
+	// Calculate data shift
 	Assert(newsize == MAXALIGN(newsize));
 	dataShift = newsize - page_locator_get_item_size(p, locator);
 	Assert(dataShift == MAXALIGN(dataShift));
@@ -599,25 +599,25 @@ page_locator_resize_item(Page p, BTreePageItemLocator *locator,
 
 	Assert(endPtr + dataShift <= (Pointer) p + ORIOLEDB_BLCKSZ);
 
-	/* Shift the data after the item */
+	// Shift the data after the item
 	memmove(nextItemPtr + dataShift, nextItemPtr, endPtr - nextItemPtr);
 
-	/* Adjust chunk positions */
+	// Adjust chunk positions
 	for (i = locator->chunkOffset + 1; i < header->chunksCount; i++)
 		header->chunkDesc[i].shortLocation += LOCATION_GET_SHORT(dataShift);
 	header->dataSize += dataShift;
 
-	/* Adjust the items array */
+	// Adjust the items array
 	for (i = locator->itemOffset + 1; i < locator->chunkItemsCount; i++)
 		locator->chunk->items[i] += dataShift;
 
-	/* Adjust the locator */
+	// Adjust the locator
 	locator->chunkSize += dataShift;
 }
 
-/*
- * Merge two chunks into one.
- */
+//
+// Merge two chunks into one.
+//
 static void
 page_merge_chunks(Page p, OffsetNumber index)
 {
@@ -745,9 +745,9 @@ page_merge_chunks(Page p, OffsetNumber index)
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 }
 
-/*
- * Deletes page item under given locator.
- */
+//
+// Deletes page item under given locator.
+//
 void
 page_locator_delete_item(Page p, BTreePageItemLocator *locator)
 {
@@ -760,7 +760,7 @@ page_locator_delete_item(Page p, BTreePageItemLocator *locator)
 	BTreePageHeader *header = (BTreePageHeader *) p;
 	OffsetNumber i;
 
-	/* Get item size */
+	// Get item size
 	itemsize = page_locator_get_item_size(p, locator);
 	Assert(itemsize == MAXALIGN(itemsize));
 
@@ -777,27 +777,27 @@ page_locator_delete_item(Page p, BTreePageItemLocator *locator)
 
 	Assert(endPtr - dataShift >= itemPtr - itemsShift);
 
-	/*
-	 * Adjust the items array.  We should do this first to prevent it been
-	 * overridden by the data when it's shorten.
-	 */
+	//
+// Adjust the items array.  We should do this first to prevent it been
+// overridden by the data when it's shorten.
+//
 	for (i = locator->itemOffset; i < locator->chunkItemsCount - 1; i++)
 		locator->chunk->items[i] = locator->chunk->items[i + 1] - dataShift;
 
 	if (itemsShift != 0)
 	{
-		/* Shift the data before deleted item when items arrays is shorten. */
+		// Shift the data before deleted item when items arrays is shorten.
 		memmove(firstItemPtr - itemsShift, firstItemPtr, itemPtr - firstItemPtr);
 
-		/* Shift item pointers of those items */
+		// Shift item pointers of those items
 		for (i = 0; i < locator->itemOffset; i++)
 			locator->chunk->items[i] -= itemsShift;
 	}
 
-	/* Move the data after deleted item */
+	// Move the data after deleted item
 	memmove(itemPtr - itemsShift, itemPtr + itemsize, endPtr - itemPtr - itemsize);
 
-	/* Adjust position of following chunks */
+	// Adjust position of following chunks
 	for (i = locator->chunkOffset + 1; i < header->chunksCount; i++)
 	{
 		header->chunkDesc[i].shortLocation -= LOCATION_GET_SHORT(dataShift);
@@ -806,7 +806,7 @@ page_locator_delete_item(Page p, BTreePageItemLocator *locator)
 	header->itemsCount--;
 	header->dataSize -= dataShift;
 
-	/* Adjust the locator */
+	// Adjust the locator
 	locator->chunkItemsCount--;
 	locator->chunkSize -= dataShift;
 
@@ -826,9 +826,9 @@ page_locator_delete_item(Page p, BTreePageItemLocator *locator)
 	}
 }
 
-/*
- * Split the given page chunk into two.
- */
+//
+// Split the given page chunk into two.
+//
 static void
 page_split_chunk(Page p, BTreePageItemLocator *locator,
 				 LocationIndex hikeysEnd, LocationIndex hikeySize)
@@ -866,11 +866,11 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 	Assert(firstItemPtr >= p && itemPtr >= firstItemPtr && endPtr >= itemPtr);
 	Assert(endPtr <= (Pointer) p + ORIOLEDB_BLCKSZ);
 
-	/*
-	 * Save positions of the items, which go to the right chunk.  We have to
-	 * do this in order to make these items not overridden while data is
-	 * moved. Position are counted from the beginning of the new chunk.
-	 */
+	//
+// Save positions of the items, which go to the right chunk.  We have to
+// do this in order to make these items not overridden while data is
+// moved. Position are counted from the beginning of the new chunk.
+//
 	leftItemsShift = MAXALIGN(sizeof(LocationIndex) * locator->chunkItemsCount) -
 		MAXALIGN(sizeof(LocationIndex) * leftItemsCount);
 	rightItemsShift = ITEM_GET_OFFSET(locator->chunk->items[locator->itemOffset]) -
@@ -884,10 +884,10 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(tmpItems, sizeof(tmpItems[0]) * rightItemsCount);
 
-	/*
-	 * Move the data items belong to the left chunk accordingly to new size of
-	 * items array.
-	 */
+	//
+// Move the data items belong to the left chunk accordingly to new size of
+// items array.
+//
 	for (i = 0; i < locator->itemOffset; i++)
 	{
 		if (!(ITEM_GET_FLAGS(locator->chunk->items[i]) & O_TUPLE_FLAGS_FIXED_FORMAT))
@@ -900,7 +900,7 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 
-	/* Shift the data items belong to the right chunk */
+	// Shift the data items belong to the right chunk
 	dataShift = MAXALIGN(sizeof(LocationIndex) * rightItemsCount) +
 		MAXALIGN(sizeof(LocationIndex) * leftItemsCount) -
 		MAXALIGN(sizeof(LocationIndex) * locator->chunkItemsCount);
@@ -909,7 +909,7 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 
-	/* Place the right chunk items array */
+	// Place the right chunk items array
 	rightChunkPtr = itemPtr -
 		MAXALIGN(sizeof(LocationIndex) * locator->chunkItemsCount) +
 		MAXALIGN(sizeof(LocationIndex) * leftItemsCount);
@@ -917,10 +917,10 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 
-	/* Calculate shift of hikeys before the new hikey */
+	// Calculate shift of hikeys before the new hikey
 	chunkDescShift = MAXALIGN(offsetof(BTreePageHeader, chunkDesc) + sizeof(BTreePageChunkDesc) * (header->chunksCount + 1)) -
 		MAXALIGN(offsetof(BTreePageHeader, chunkDesc) + sizeof(BTreePageChunkDesc) * header->chunksCount);
-	/* Calculate shift of hikeys after the new hikey */
+	// Calculate shift of hikeys after the new hikey
 	hikeyShift = chunkDescShift + hikeySize;
 
 	firstHikeyPtr = (Pointer) p + SHORT_GET_LOCATION(header->chunkDesc[0].hikeyShortLocation);
@@ -928,14 +928,14 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 	hikeyEndPtr = (Pointer) p + header->hikeysEnd;
 	Assert(firstHikeyPtr >= p && hikeyPtr >= firstHikeyPtr && hikeyEndPtr >= hikeyPtr);
 
-	/* Move hikeys */
+	// Move hikeys
 	Assert(hikeyEndPtr + hikeyShift <= (Pointer) p + hikeysEnd);
 	memmove(hikeyPtr + hikeyShift, hikeyPtr, hikeyEndPtr - hikeyPtr);
 	memmove(firstHikeyPtr + chunkDescShift, firstHikeyPtr, hikeyPtr - firstHikeyPtr);
 
 	VALGRIND_CHECK_MEM_IS_DEFINED(p, ORIOLEDB_BLCKSZ);
 
-	/* Adjust chunk descs */
+	// Adjust chunk descs
 	for (i = 0; i <= locator->chunkOffset; i++)
 		header->chunkDesc[i].hikeyShortLocation += LOCATION_GET_SHORT(chunkDescShift);
 
@@ -998,10 +998,10 @@ page_split_chunk_if_needed(BTreeDescr *desc, Page p, BTreePageItemLocator *locat
 
 	hikeysFreeSpace = hikeysEnd - header->hikeysEnd;
 
-	/*
-	 * Reserve some hikeys space on rightmost page to protect from the
-	 * overflow of hikeyLocation.
-	 */
+	//
+// Reserve some hikeys space on rightmost page to protect from the
+// overflow of hikeyLocation.
+//
 	if (O_PAGE_IS(p, RIGHTMOST) &&
 		hikeysEnd == HIKEY_SHORT_LOCATION_LIMIT &&
 		hikeysFreeSpace >= SHORT_LOCATION_MULTIPLIER)
@@ -1013,12 +1013,12 @@ page_split_chunk_if_needed(BTreeDescr *desc, Page p, BTreePageItemLocator *locat
 		MAXALIGN(offsetof(BTreePageHeader, chunkDesc) +
 				 sizeof(BTreePageChunkDesc) *
 				 header->chunksCount);
-	/* Also don't split if there is no space for new chunkDesc */
+	// Also don't split if there is no space for new chunkDesc
 	if (hikeysFreeSpace > newChunkDescSize)
 		hikeysFreeSpace -= newChunkDescSize;
 	else
-		hikeysFreeSpace = 0;	/* Just to be more explicit about not having
-								 * enough space */
+		hikeysFreeSpace = 0;	// Just to be more explicit about not having
+// enough space
 	dataFreeSpace = ORIOLEDB_BLCKSZ - header->dataSize;
 
 	for (i = 1; i < locator->chunkItemsCount; i++)
@@ -1178,9 +1178,9 @@ item_get_key_size(BTreeDescr *desc, bool leaf, BTreePageItem *item)
 	}
 }
 
-/*
- * Split the page containing the single chunk into multiple chunks.
- */
+//
+// Split the page containing the single chunk into multiple chunks.
+//
 void
 btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 				 OffsetNumber count, LocationIndex hikeySize, OTuple hikey)
@@ -1218,10 +1218,10 @@ btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 
 	hikeysFreeSpaceLeft = hikeysFreeSpace = hikeysEnd - (MAXALIGN(sizeof(BTreePageHeader)) + MAXALIGN(hikeySize));
 
-	/*
-	 * Reserve some hikeys space on rightmost page to protect from the
-	 * overflow of hikeyLocation.
-	 */
+	//
+// Reserve some hikeys space on rightmost page to protect from the
+// overflow of hikeyLocation.
+//
 	if (isRightmost &&
 		hikeysEnd == HIKEY_SHORT_LOCATION_LIMIT &&
 		hikeysFreeSpace >= SHORT_LOCATION_MULTIPLIER)
@@ -1229,12 +1229,12 @@ btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 
 	dataFreeSpaceLeft = dataFreeSpace = (ORIOLEDB_BLCKSZ - hikeysEnd) - totalDataSize - MAXALIGN(sizeof(LocationIndex) * count);
 
-	/*
-	 * Calculate the chunks count to fit both chunks area and data area.
-	 */
+	//
+// Calculate the chunks count to fit both chunks area and data area.
+//
 	maxKeyLen = MAXALIGN(hikeySize);
 
-	/* Calculate chunks boundaries */
+	// Calculate chunks boundaries
 	chunkOffsets[0] = 0;
 	j = 1;
 	chunkDataSize = 0;
@@ -1292,7 +1292,7 @@ btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 	chunkFixedKeys[j - 1] = fixedKeys;
 	chunksCount = j;
 
-	/* Calculate chunk items */
+	// Calculate chunk items
 	ptr = (Pointer) p + hikeysEnd;
 	for (j = 0; j < chunksCount; j++)
 	{
@@ -1315,10 +1315,10 @@ btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 	header->dataSize = ptr - (Pointer) p;
 	header->chunksCount = chunksCount;
 
-	/*
-	 * Place the chunks data.  We need to do this backwards to be sure we only
-	 * move the data forwards and not override.
-	 */
+	//
+// Place the chunks data.  We need to do this backwards to be sure we only
+// move the data forwards and not override.
+//
 	for (j = chunksCount - 1; j >= 0; j--)
 	{
 		OffsetNumber chunkItemsCount;
@@ -1337,7 +1337,7 @@ btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 		ptr -= MAXALIGN(sizeof(LocationIndex) * chunkItemsCount);
 	}
 
-	/* Place chunks item arrays and fill chunk descs */
+	// Place chunks item arrays and fill chunk descs
 	Assert(ptr == (Pointer) p + hikeysEnd);
 	hikeysPtr = (Pointer) p + MAXALIGN(offsetof(BTreePageHeader, chunkDesc) + sizeof(BTreePageChunkDesc) * chunksCount);
 	fixedKeys = true;
@@ -1390,7 +1390,7 @@ btree_page_reorg(BTreeDescr *desc, Page p, BTreePageItem *items,
 		}
 	}
 
-	/* Place page hikey */
+	// Place page hikey
 	if (!isRightmost)
 	{
 		if (!(hikey.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT))
@@ -1461,17 +1461,17 @@ page_locator_find_real_item(Page p, PartialPageState *partial,
 
 		offset = locator->itemOffset - locator->chunkItemsCount;
 
-		/*
-		 * Advance the locator into the next chunk.  partial_load_chunk() only
-		 * fills the locator (chunkItemsCount, chunk pointer) when the page is
-		 * actually read partially; for a whole-page image it returns early
-		 * without touching the locator, so we must use the plain fill there.
-		 * Check partial->isPartial, not just the pointer: the iterator passes
-		 * a non-NULL PartialPageState even for IMAGE reads (isPartial ==
-		 * false), and trusting the pointer would leave the locator stuck in
-		 * the current chunk -- collapsing a cross-chunk position to chunk 0,
-		 * offset 0.
-		 */
+		//
+// Advance the locator into the next chunk.  partial_load_chunk() only
+// fills the locator (chunkItemsCount, chunk pointer) when the page is
+// actually read partially; for a whole-page image it returns early
+// without touching the locator, so we must use the plain fill there.
+// Check partial->isPartial, not just the pointer: the iterator passes
+// a non-NULL PartialPageState even for IMAGE reads (isPartial ==
+// false), and trusting the pointer would leave the locator stuck in
+// the current chunk -- collapsing a cross-chunk position to chunk 0,
+// offset 0.
+//
 		if (partial && partial->isPartial)
 		{
 			if (!partial_load_chunk(partial, p, locator->chunkOffset + 1, locator))
@@ -1486,7 +1486,7 @@ page_locator_find_real_item(Page p, PartialPageState *partial,
 	return true;
 }
 
-/* No existing callers */
+// No existing callers
 OffsetNumber
 page_locator_get_offset(Page p, BTreePageItemLocator *locator)
 {

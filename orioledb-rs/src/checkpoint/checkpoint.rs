@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * checkpoint.c
- *		Routines for making checkpoints.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/checkpoint/checkpoint.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// checkpoint.c
+// Routines for making checkpoints.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/checkpoint/checkpoint.c
+//
+// -------------------------------------------------------------------------
+//
 #include "c.h"
 #include "postgres.h"
 
@@ -64,9 +64,9 @@
 
 static void before_writing_xids_file(int chkpnum);
 
-/*
- * Single action in B-tree checkpoint loop.
- */
+//
+// Single action in B-tree checkpoint loop.
+//
 typedef enum WalkAction
 {
 	WalkUpwards,
@@ -76,32 +76,32 @@ typedef enum WalkAction
 
 typedef struct WalkMessage
 {
-	/* current action */
+	// current action
 	WalkAction	action;
 	union
 	{
 		struct
 		{
-			/* is we must mark upward page as dirty */
+			// is we must mark upward page as dirty
 			bool		parentDirty;
 
-			/*
-			 * disk downlink to a written page, InvalidODiskDownlink if page
-			 * was not written to disk
-			 */
+			//
+// disk downlink to a written page, InvalidODiskDownlink if page
+// was not written to disk
+//
 			uint64		diskDownlink;
-			/* will be copied to upward level if needed */
+			// will be copied to upward level if needed
 			NextKeyType nextkeyType;
 			OFixedKey	nextkey;
-			/* is current internal tuple must be saved on image */
+			// is current internal tuple must be saved on image
 			bool		saveTuple;
 		}			upwards;
 		struct
 		{
-			/* page to process */
+			// page to process
 			OInMemoryBlkno blkno;
 			uint32		pageChangeCount;
-			/* lokey of downwards page */
+			// lokey of downwards page
 			OFixedKey	lokey;
 		}			downwards;
 	}			content;
@@ -141,10 +141,10 @@ typedef struct
 	int			allocated;
 } FileExtentsArray;
 
-/*
- * For a checkpoint image we can add only hikey
- * or downlink to the end of the image.
- */
+//
+// For a checkpoint image we can add only hikey
+// or downlink to the end of the image.
+//
 typedef enum
 {
 	StackImageAddHikey,
@@ -154,7 +154,7 @@ typedef enum
 typedef struct
 {
 	UndoStackItem header;
-	bool		lock;			/* true for lock, false for unlock */
+	bool		lock;			// true for lock, false for unlock
 } SysTreesLockUndoStackItem;
 
 CheckpointState *checkpoint_state = NULL;
@@ -355,31 +355,31 @@ checkpoint_shmem_init(Pointer ptr, bool found)
 			pg_atomic_write_u64(&undo_meta->cleanedCheckpointEndLocation, undo_info->checkpointRetainEndLocation);
 		}
 
-		/*
-		 * Seed xid horizons from the checkpoint's retain range:
-		 *
-		 * - nextXid / writtenXmin / writeInProgressXmin =
-		 * checkpointRetainXmax (master's nextXid at checkpoint time).
-		 * writtenXmin stays at the high mark so the on-disk xidmap range --
-		 * which may contain FROZEN slots that master's advance_global_xmin
-		 * stamped for oxids < master.runXmin -- is still served via
-		 * o_buffers_read.
-		 *
-		 * - runXmin / globalXmin / cleanedXmin / lastXidWhenUpdatedGlobalXmin
-		 * = checkpointRetainXmin (master's runXmin at checkpoint time, the
-		 * actual floor of in-flight oxids).  This is the conservative
-		 * starting horizon that matches what subsequent WAL records will
-		 * reference.
-		 *
-		 * On a clean shutdown master writes checkpointRetainXmin ==
-		 * checkpointRetainXmax == nextXid, so all horizons collapse to a
-		 * single value -- behaviour identical to the previous lastXid-based
-		 * init.
-		 *
-		 * control.lastXid is now redundant with checkpointRetainXmax; it's
-		 * retained in the control file for backward compatibility with
-		 * existing data directories.
-		 */
+		//
+// Seed xid horizons from the checkpoint's retain range:
+//
+// - nextXid / writtenXmin / writeInProgressXmin =
+// checkpointRetainXmax (master's nextXid at checkpoint time).
+// writtenXmin stays at the high mark so the on-disk xidmap range --
+// which may contain FROZEN slots that master's advance_global_xmin
+// stamped for oxids < master.runXmin -- is still served via
+// o_buffers_read.
+//
+// - runXmin / globalXmin / cleanedXmin / lastXidWhenUpdatedGlobalXmin
+// = checkpointRetainXmin (master's runXmin at checkpoint time, the
+// actual floor of in-flight oxids).  This is the conservative
+// starting horizon that matches what subsequent WAL records will
+// reference.
+//
+// On a clean shutdown master writes checkpointRetainXmin ==
+// checkpointRetainXmax == nextXid, so all horizons collapse to a
+// single value -- behaviour identical to the previous lastXid-based
+// init.
+//
+// control.lastXid is now redundant with checkpointRetainXmax; it's
+// retained in the control file for backward compatibility with
+// existing data directories.
+//
 		pg_atomic_init_u64(&xid_meta->nextXid, control.checkpointRetainXmax);
 		pg_atomic_init_u64(&xid_meta->runXmin, control.checkpointRetainXmin);
 		pg_atomic_init_u64(&xid_meta->globalXmin, control.checkpointRetainXmin);
@@ -466,7 +466,7 @@ perform_writeback(BTreeDescr *desc, CheckpointWriteBack *writeback)
 	{
 		if (i > 0 && writeback->extents[i].off == writeback->extents[i - 1].off)
 		{
-			/* duplicate offset */
+			// duplicate offset
 			continue;
 		}
 
@@ -504,33 +504,33 @@ perform_writeback(BTreeDescr *desc, CheckpointWriteBack *writeback)
 	writeback->extentsNumber = 0;
 }
 
-/*
- * Acquire a checkpointer-side LWLock exclusively while keeping the sync
- * request queue draining.
- *
- * On a hot standby the startup process can hold one of OrioleDB's
- * checkpoint-coordination LWLocks (oTablesMetaLock, oSysTreesLock, ...)
- * SHARED while replaying a WAL window — e.g. between
- * WAL_REC_O_TABLES_META_LOCK and WAL_REC_O_TABLES_META_UNLOCK for the meta
- * lock.  Concurrent (i.e. unrelated) transactions on the primary can sneak
- * XACT_COMMIT records into that window; during their replay startup may
- * call DropRelationFiles -> register_forget_request -> RegisterSyncRequest,
- * which blocks on the checkpointer-served sync queue when the queue is
- * full.  If the checkpointer is at the same time waiting for the same
- * LWLock EXCLUSIVE, we deadlock: startup holds the lock and waits for us
- * to drain the queue, we wait for the lock.
- *
- * Break the cycle by trying ConditionalAcquire and, on failure, draining
- * the sync queue (so any RegisterSyncRequest waiter — including the startup
- * process — can make progress and eventually release the lock) before
- * retrying.  Robust against new requests arriving: every iteration drains
- * everything currently queued, so the worst case is a few extra iterations
- * while startup keeps producing requests, after which it hits the matching
- * unlock record and releases the lock.
- *
- * Must only be used by the checkpointer; AbsorbSyncRequests() is a no-op
- * elsewhere, so the loop would spin without making progress.
- */
+//
+// Acquire a checkpointer-side LWLock exclusively while keeping the sync
+// request queue draining.
+//
+// On a hot standby the startup process can hold one of OrioleDB's
+// checkpoint-coordination LWLocks (oTablesMetaLock, oSysTreesLock, ...)
+// SHARED while replaying a WAL window — e.g. between
+// WAL_REC_O_TABLES_META_LOCK and WAL_REC_O_TABLES_META_UNLOCK for the meta
+// lock.  Concurrent (i.e. unrelated) transactions on the primary can sneak
+// XACT_COMMIT records into that window; during their replay startup may
+// call DropRelationFiles -> register_forget_request -> RegisterSyncRequest,
+// which blocks on the checkpointer-served sync queue when the queue is
+// full.  If the checkpointer is at the same time waiting for the same
+// LWLock EXCLUSIVE, we deadlock: startup holds the lock and waits for us
+// to drain the queue, we wait for the lock.
+//
+// Break the cycle by trying ConditionalAcquire and, on failure, draining
+// the sync queue (so any RegisterSyncRequest waiter — including the startup
+// process — can make progress and eventually release the lock) before
+// retrying.  Robust against new requests arriving: every iteration drains
+// everything currently queued, so the worst case is a few extra iterations
+// while startup keeps producing requests, after which it hits the matching
+// unlock record and releases the lock.
+//
+// Must only be used by the checkpointer; AbsorbSyncRequests() is a no-op
+// elsewhere, so the loop would spin without making progress.
+//
 static void
 acquire_chkp_lock_drain(LWLock *lock)
 {
@@ -539,28 +539,28 @@ acquire_chkp_lock_drain(LWLock *lock)
 	while (!LWLockConditionalAcquire(lock, LW_EXCLUSIVE))
 	{
 		AbsorbSyncRequests();
-		/* Brief backoff so we don't pin a CPU while startup makes progress. */
+		// Brief backoff so we don't pin a CPU while startup makes progress.
 		pg_usleep(1000L);
 		CHECK_FOR_INTERRUPTS();
 	}
 }
 
-/*
- * Perform writeback and re-acquire the tree lock for non-system trees.
- *
- * The caller must hold the OrioleDB checkpointer table lock (the special
- * LOCKTAG_USERLOCK variant of AccessShareLock used by the checkpointer).
- * For non-system trees, this function releases the lock to allow concurrent
- * deletions during writeback, then re-acquires it via o_fetch_index_descr().
- *
- * On success, the checkpointer lock is held and the returned descriptor is
- * valid.  On failure (NULL return), the lock has been released: either
- * because the tree was concurrently deleted (o_fetch_index_descr returned
- * NULL) or because o_btree_load_shmem_checkpoint failed (lock explicitly
- * released before returning).
- *
- * For system trees, no lock management is done — only writeback is performed.
- */
+//
+// Perform writeback and re-acquire the tree lock for non-system trees.
+//
+// The caller must hold the OrioleDB checkpointer table lock (the special
+// LOCKTAG_USERLOCK variant of AccessShareLock used by the checkpointer).
+// For non-system trees, this function releases the lock to allow concurrent
+// deletions during writeback, then re-acquires it via o_fetch_index_descr().
+//
+// On success, the checkpointer lock is held and the returned descriptor is
+// valid.  On failure (NULL return), the lock has been released: either
+// because the tree was concurrently deleted (o_fetch_index_descr returned
+// NULL) or because o_btree_load_shmem_checkpoint failed (lock explicitly
+// released before returning).
+//
+// For system trees, no lock management is done — only writeback is performed.
+//
 static BTreeDescr *
 perform_writeback_and_relock(BTreeDescr *desc,
 							 CheckpointWriteBack *writeback,
@@ -574,7 +574,7 @@ perform_writeback_and_relock(BTreeDescr *desc,
 
 	if (!IS_SYS_TREE_OIDS(treeOids))
 	{
-		/* Unlock tree: give a chance for concurrent deletion */
+		// Unlock tree: give a chance for concurrent deletion
 		o_tables_rel_unlock_extended(&treeOids, AccessShareLock, true);
 
 		if (STOPEVENTS_ENABLED())
@@ -662,14 +662,14 @@ add_index_id_item(List *list, BTreeDescr *desc)
 	return list;
 }
 
-/*
- * Wait all the committing transactions to finish completely.  Ensures all the
- * transactions finished afterwards will have greater WAL position than given
- * `redo_pos`.
- *
- * Ensures every transaction, which WAL record is written before redo_pos,
- * passed to write_to_xids_queue(),
- */
+//
+// Wait all the committing transactions to finish completely.  Ensures all the
+// transactions finished afterwards will have greater WAL position than given
+// `redo_pos`.
+//
+// Ensures every transaction, which WAL record is written before redo_pos,
+// passed to write_to_xids_queue(),
+//
 static inline void
 wait_finish_active_commits(XLogRecPtr redo_pos)
 {
@@ -691,9 +691,9 @@ unlink_xids_file(uint32 checkpointnum)
 	pfree(xip_filename);
 }
 
-/*
- * Open xids file corresponding to the current checkpoint.
- */
+//
+// Open xids file corresponding to the current checkpoint.
+//
 static void
 open_xids_file(void)
 {
@@ -736,7 +736,7 @@ flush_xids_queue(void)
 
 	if (endPos <= startPos)
 	{
-		/* Do nothing */
+		// Do nothing
 	}
 	else if (startPos % XID_RECS_QUEUE_SIZE <= (endPos - 1) % XID_RECS_QUEUE_SIZE)
 	{
@@ -792,9 +792,9 @@ try_flush_xids_queue(void)
 	}
 }
 
-/*
- * Write single xid record to queue.
- */
+//
+// Write single xid record to queue.
+//
 void
 write_to_xids_queue(XidFileRec *rec)
 {
@@ -803,9 +803,9 @@ write_to_xids_queue(XidFileRec *rec)
 
 	Assert(OXidIsValid(rec->oxid));
 
-	/*
-	 * Flush queue to the file till our position is available for write.
-	 */
+	//
+// Flush queue to the file till our position is available for write.
+//
 	while (location >= pg_atomic_read_u64(&checkpoint_state->xidRecFlushPos) + XID_RECS_QUEUE_SIZE)
 		try_flush_xids_queue();
 
@@ -820,9 +820,9 @@ write_to_xids_queue(XidFileRec *rec)
 	VALGRIND_CHECK_MEM_IS_DEFINED(target, sizeof(*target));
 }
 
-/*
- * Prepare xids queue for writes.
- */
+//
+// Prepare xids queue for writes.
+//
 static void
 before_writing_xids_file(int chkpnum)
 {
@@ -841,9 +841,9 @@ before_writing_xids_file(int chkpnum)
 	}
 }
 
-/*
- * Flush xids queue, fsync and close xids file.
- */
+//
+// Flush xids queue, fsync and close xids file.
+//
 static void
 close_xids_file(void)
 {
@@ -874,11 +874,11 @@ close_xids_file(void)
 	xidFile = -1;
 }
 
-/*
- * Start writing xid records to the xid file.  After this, information about
- * committed/aborted transactions will be written by backends to the xids
- * queue.
- */
+//
+// Start writing xid records to the xid file.  After this, information about
+// committed/aborted transactions will be written by backends to the xids
+// queue.
+//
 static void
 start_write_xids(uint32 chkpnum)
 {
@@ -893,9 +893,9 @@ start_write_xids(uint32 chkpnum)
 	recovery_undo_loc_flush->finishRequestCheckpointNumber = chkpnum;
 }
 
-/*
- * Write information about undo locations of in-progress transactions.
- */
+//
+// Write information about undo locations of in-progress transactions.
+//
 static void
 finish_write_xids(uint32 chkpnum, bool shutdown)
 {
@@ -950,10 +950,10 @@ finish_write_xids(uint32 chkpnum, bool shutdown)
 
 	recovery_undo_loc_flush->immediateRequestCheckpointNumber = chkpnum;
 
-	/*
-	 * Wait till recovery undo position will be flushed. But don't wait for
-	 * exited workers.
-	 */
+	//
+// Wait till recovery undo position will be flushed. But don't wait for
+// exited workers.
+//
 	temp_file_loaded = (bool *) palloc0(sizeof(bool) * total_recovery_workers);
 	while (recovery_undo_loc_flush->completedCheckpointNumber <
 		   recovery_undo_loc_flush->immediateRequestCheckpointNumber)
@@ -962,7 +962,7 @@ finish_write_xids(uint32 chkpnum, bool shutdown)
 
 		for (i = 0; i < total_recovery_workers; i++)
 		{
-			/* Check for exited recovery workers with temp files */
+			// Check for exited recovery workers with temp files
 			if (!pg_atomic_unlocked_test_flag(&worker_ptrs[i].hasTempFile))
 			{
 				if (!temp_file_loaded[i])
@@ -990,15 +990,15 @@ finish_write_xids(uint32 chkpnum, bool shutdown)
 	pfree(temp_file_loaded);
 }
 
-/*
- * Walk every backend's ODBProcData and emit a PendingSkFixup record for
- * any backend that is in the PK-applied / SK-pending window at the
- * moment we cross over from primary indices to secondary indices.
- *
- * Called from checkpoint_tables_callback() just before
- * checkpoint_state->toastConsistentPtr is set so that the snapshot
- * captured here reflects the WAL state up to that boundary.
- */
+//
+// Walk every backend's ODBProcData and emit a PendingSkFixup record for
+// any backend that is in the PK-applied / SK-pending window at the
+// moment we cross over from primary indices to secondary indices.
+//
+// Called from checkpoint_tables_callback() just before
+// checkpoint_state->toastConsistentPtr is set so that the snapshot
+// captured here reflects the WAL state up to that boundary.
+//
 static void
 checkpoint_write_pending_sk_fixups(void)
 {
@@ -1018,18 +1018,18 @@ checkpoint_write_pending_sk_fixups(void)
 		OXid		oxid;
 		int			level;
 
-		/*
-		 * If the backend is in the PK-applied/SK-pending window on a
-		 * self-created table (signalled by WaitingSkUndoLoc), there is no
-		 * undo record to point a fix-up entry at -- but the table is private
-		 * to that in-progress txn, so the SK btree_modify cannot be blocked
-		 * by anyone.  Spin until the sentinel clears.
-		 *
-		 * Spin OUTSIDE the proc's flushLock: the backend's own commit/abort
-		 * path also acquires that lock (walk_undo_stack); holding it across
-		 * the sleep would deadlock against any backend that would clear the
-		 * sentinel at commit time.
-		 */
+		//
+// If the backend is in the PK-applied/SK-pending window on a
+// self-created table (signalled by WaitingSkUndoLoc), there is no
+// undo record to point a fix-up entry at -- but the table is private
+// to that in-progress txn, so the SK btree_modify cannot be blocked
+// by anyone.  Spin until the sentinel clears.
+//
+// Spin OUTSIDE the proc's flushLock: the backend's own commit/abort
+// path also acquires that lock (walk_undo_stack); holding it across
+// the sleep would deadlock against any backend that would clear the
+// sentinel at commit time.
+//
 		for (;;)
 		{
 			pendingLoc = pg_atomic_read_u64(&oProcData[i].pendingSkUndoLoc);
@@ -1040,7 +1040,7 @@ checkpoint_write_pending_sk_fixups(void)
 
 		LWLockAcquire(&oProcData[i].undoStackLocationsFlushLock, LW_EXCLUSIVE);
 
-		/* Re-read under the lock; could have changed while we were spinning. */
+		// Re-read under the lock; could have changed while we were spinning.
 		pendingLoc = pg_atomic_read_u64(&oProcData[i].pendingSkUndoLoc);
 		if (!UndoLocationIsValid(pendingLoc) || pendingLoc == WaitingSkUndoLoc)
 		{
@@ -1048,11 +1048,11 @@ checkpoint_write_pending_sk_fixups(void)
 			continue;
 		}
 
-		/*
-		 * The marker is set strictly inside a single PK->SK window; the
-		 * caller cannot have nested into an autonomous transaction in the
-		 * meantime.  Pick the currently-active oxid for this proc.
-		 */
+		//
+// The marker is set strictly inside a single PK->SK window; the
+// caller cannot have nested into an autonomous transaction in the
+// meantime.  Pick the currently-active oxid for this proc.
+//
 		level = oProcData[i].autonomousNestingLevel;
 		if (level < 0 || level >= PROC_XID_ARRAY_SIZE)
 		{
@@ -1077,14 +1077,14 @@ checkpoint_write_rewind_item(RewindItem *rewindItem)
 	XidFileRec	xidRec;
 	int			i;
 
-	/* Don't write subxids item */
+	// Don't write subxids item
 	if (rewindItem->tag != REWIND_ITEM_TAG)
 		return;
 
-	/*
-	 * Don't write rewind item for heap-only xact that doesn't contain undo
-	 * locations
-	 */
+	//
+// Don't write rewind item for heap-only xact that doesn't contain undo
+// locations
+//
 	if (!OXidIsValid(rewindItem->oxid))
 		return;
 
@@ -1126,7 +1126,7 @@ checkpoint_sys_trees(int flags, uint32 cur_chkp_num,
 			desc->storageType == BTreeStorageUnlogged)
 		{
 			success = checkpoint_ix(flags, desc);
-			/* System trees can't be concurrently deleted */
+			// System trees can't be concurrently deleted
 			Assert(success);
 			if (!orioledb_s3_mode)
 			{
@@ -1160,7 +1160,7 @@ checkpoint_chkp_nums(int flags, uint32 cur_chkp_num,
 
 	success = checkpoint_ix(flags, desc);
 
-	/* System trees can't be concurrently deleted */
+	// System trees can't be concurrently deleted
 	Assert(success);
 	if (!orioledb_s3_mode)
 	{
@@ -1314,15 +1314,15 @@ o_delete_chkp_num(Oid datoid, Oid relnode)
 						  &nullCallbackInfo);
 }
 
-/*
- * Get appropriate xlog position to use in checkpoint control file.
- */
+//
+// Get appropriate xlog position to use in checkpoint control file.
+//
 static XLogRecPtr
 get_checkpoint_xlog_ptr(void)
 {
 	if (is_recovery_in_progress())
 	{
-		/* FIXME: synchronize recovery workers */
+		// FIXME: synchronize recovery workers
 		return GetCurrentReplayRecPtr(NULL);
 	}
 	else
@@ -1394,9 +1394,9 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 	old_enable_stopevents = enable_stopevents;
 
-	/*
-	 * does not count debug events from o_tables and o_opclass checkpoint
-	 */
+	//
+// does not count debug events from o_tables and o_opclass checkpoint
+//
 	enable_stopevents = false;
 
 	checkpoint_xmin = pg_atomic_read_u64(&xid_meta->runXmin);
@@ -1425,12 +1425,12 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 	checkpoint_sys_trees(flags, cur_chkp_num, &chkp_tbl_arg);
 
-	/*
-	 * We get start position for replay changes to system trees while holding
-	 * the oTablesMetaLock.  That guarantees that we will start recovery from
-	 * the state there is no partial changes to tables and indices system
-	 * trees.
-	 */
+	//
+// We get start position for replay changes to system trees while holding
+// the oTablesMetaLock.  That guarantees that we will start recovery from
+// the state there is no partial changes to tables and indices system
+// trees.
+//
 	checkpoint_state->sysTreesStartPtr = get_checkpoint_xlog_ptr();
 	LWLockRelease(&checkpoint_state->oSysTreesLock);
 	LWLockRelease(&checkpoint_state->oTablesMetaLock);
@@ -1444,12 +1444,12 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 	checkpoint_chkp_nums(flags, cur_chkp_num, &chkp_tbl_arg);
 
-	/*
-	 * It might happen there is no oIndexRegular secondary indices in the
-	 * snapshot (e.g. all secondaries are oIndexUnique / oIndexExclusion), but
-	 * we still need to set toastConsistentPtr -- and emit the PendingSkFixup
-	 * snapshot before publishing the boundary.
-	 */
+	//
+// It might happen there is no oIndexRegular secondary indices in the
+// snapshot (e.g. all secondaries are oIndexUnique / oIndexExclusion), but
+// we still need to set toastConsistentPtr -- and emit the PendingSkFixup
+// snapshot before publishing the boundary.
+//
 	if (XLogRecPtrIsInvalid(checkpoint_state->toastConsistentPtr))
 	{
 		checkpoint_state->toastConsistentPtr = get_checkpoint_xlog_ptr();
@@ -1543,17 +1543,17 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 	write_checkpoint_control(&control);
 
-	/*
-	 * Once we've written a new control file, we know that we will start
-	 * recovery from a new checkpoint.  Then we can start releasing the
-	 * resources.
-	 */
+	//
+// Once we've written a new control file, we know that we will start
+// recovery from a new checkpoint.  Then we can start releasing the
+// resources.
+//
 
 	acquire_chkp_lock_drain(&checkpoint_state->oTablesMetaLock);
 
-	/*
-	 * This will let processes reuse data pages of previous checkpoint.
-	 */
+	//
+// This will let processes reuse data pages of previous checkpoint.
+//
 	chkp_inc_changecount_before(checkpoint_state);
 	checkpoint_state->lastCheckpointNumber++;
 	checkpoint_state->treeType = oIndexInvalid;
@@ -1566,9 +1566,9 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 
 	LWLockRelease(&checkpoint_state->oTablesMetaLock);
 
-	/*
-	 * Also release xidmap and undo ranges retained for previous checkpoint.
-	 */
+	//
+// Also release xidmap and undo ranges retained for previous checkpoint.
+//
 	for (i = 0; i < NUM_CHECKPOINTABLE_UNDO_LOGS; i++)
 	{
 		UndoLogType undoType = GetCheckpointableUndoLog(i);
@@ -1601,9 +1601,9 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 	if (STOPEVENTS_ENABLED())
 		STOPEVENT(STOPEVENT_CHECKPOINT_BEFORE_POST_PROCESS, NULL);
 
-	/*
-	 * Now we can free extents for compressed indices
-	 */
+	//
+// Now we can free extents for compressed indices
+//
 	if ((!(flags & CHECKPOINT_IS_SHUTDOWN) || remove_old_checkpoint_files) &&
 		chkp_tbl_arg.postProcessList != NIL)
 	{
@@ -1621,7 +1621,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 											true, NULL);
 				if (descr == NULL)
 				{
-					/* table might be deleted */
+					// table might be deleted
 					continue;
 				}
 
@@ -1657,7 +1657,7 @@ o_perform_checkpoint(XLogRecPtr redo_pos, int flags)
 											 true, NULL);
 					if (id == NULL)
 					{
-						/* table might be deleted */
+						// table might be deleted
 						continue;
 					}
 					desc = &id->desc;
@@ -1747,14 +1747,14 @@ checkpoint_init_new_seq_bufs(BTreeDescr *descr, int chkpNum)
 						get_seq_buf_filename(&next_chkp_tag))));
 }
 
-/*
- * Make checkpoint of a temporary index.
- *
- * The caller must hold the OrioleDB checkpointer table lock.  On success
- * (true), the lock is still held and the caller must release it.  On
- * failure (false), the lock has already been released by
- * perform_writeback_and_relock() inside checkpoint_btree().
- */
+//
+// Make checkpoint of a temporary index.
+//
+// The caller must hold the OrioleDB checkpointer table lock.  On success
+// (true), the lock is still held and the caller must release it.  On
+// failure (false), the lock has already been released by
+// perform_writeback_and_relock() inside checkpoint_btree().
+//
 static bool
 checkpoint_temporary_tree(int flags, BTreeDescr *descr)
 {
@@ -1771,12 +1771,12 @@ checkpoint_temporary_tree(int flags, BTreeDescr *descr)
 
 	Assert(ORootPageIsValid(descr) && OMetaPageIsValid(descr));
 
-	/* Make checkpoint of the tree itself */
+	// Make checkpoint of the tree itself
 	init_writeback(&writeback, flags, false);
 	root_downlink = checkpoint_btree(&descr, checkpoint_state, &writeback);
 	if (!DiskDownlinkIsValid(root_downlink))
 	{
-		/* Lock already released by perform_writeback_and_relock() */
+		// Lock already released by perform_writeback_and_relock()
 		free_writeback(&writeback);
 		return false;
 	}
@@ -1786,7 +1786,7 @@ checkpoint_temporary_tree(int flags, BTreeDescr *descr)
 	free_writeback(&writeback);
 	if (!descr)
 	{
-		/* Lock already released by perform_writeback_and_relock() */
+		// Lock already released by perform_writeback_and_relock()
 		return false;
 	}
 
@@ -1794,11 +1794,11 @@ checkpoint_temporary_tree(int flags, BTreeDescr *descr)
 
 	STOPEVENT(STOPEVENT_BEFORE_BLKNO_LOCK, NULL);
 
-	/*
-	 * Need a lock to be sure, that nobody is concurrently copying block
-	 * number from previous checkpoint to current.  See write_page() for
-	 * details.
-	 */
+	//
+// Need a lock to be sure, that nobody is concurrently copying block
+// number from previous checkpoint to current.  See write_page() for
+// details.
+//
 	LWLockAcquire(&meta_page->copyBlknoLock, LW_EXCLUSIVE);
 	chkp_inc_changecount_before(checkpoint_state);
 	checkpoint_state->curKeyType = CurKeyFinished;
@@ -1807,7 +1807,7 @@ checkpoint_temporary_tree(int flags, BTreeDescr *descr)
 
 	if (!orioledb_s3_mode)
 	{
-		/* finalizes *.tmp file */
+		// finalizes *.tmp file
 		seq_buf_finalize(&descr->tmpBuf[cur_chkp_index]);
 		free_seq_buf_pages(descr, descr->tmpBuf[cur_chkp_index].shared);
 	}
@@ -1819,34 +1819,34 @@ checkpoint_temporary_tree(int flags, BTreeDescr *descr)
 	return true;
 }
 
-/*
- * Same as XLogArchiveCheckDone(), but without notifying archiver.
- */
+//
+// Same as XLogArchiveCheckDone(), but without notifying archiver.
+//
 static bool
 check_archive_done(const char *xlog)
 {
 	char		archiveStatusPath[MAXPGPATH];
 	struct stat stat_buf;
 
-	/* The file is always deletable if archive_mode is "off". */
+	// The file is always deletable if archive_mode is "off".
 	if (!XLogArchivingActive())
 		return true;
 
-	/*
-	 * During archive recovery, the file is deletable if archive_mode is not
-	 * "always".
-	 */
+	//
+// During archive recovery, the file is deletable if archive_mode is not
+// "always".
+//
 	if (!XLogArchivingAlways() &&
 		GetRecoveryState() == RECOVERY_STATE_ARCHIVE)
 		return true;
 
-	/*
-	 * At this point of the logic, note that we are either a primary with
-	 * archive_mode set to "on" or "always", or a standby with archive_mode
-	 * set to "always".
-	 */
+	//
+// At this point of the logic, note that we are either a primary with
+// archive_mode set to "on" or "always", or a standby with archive_mode
+// set to "always".
+//
 
-	/* First check for .done --- this means archiver is done with it */
+	// First check for .done --- this means archiver is done with it
 	StatusFilePath(archiveStatusPath, xlog, ".done");
 	if (stat(archiveStatusPath, &stat_buf) == 0)
 		return true;
@@ -1866,11 +1866,11 @@ after_checkpoint_sync_wal(void)
 
 	while ((xlde = ReadDir(xldir, XLOGDIR)) != NULL)
 	{
-		/* Ignore files that are not XLOG segments */
+		// Ignore files that are not XLOG segments
 		if (!IsXLogFileName(xlde->d_name))
 			continue;
 
-		/* Ignore already arhieved files */
+		// Ignore already arhieved files
 		if (check_archive_done(xlde->d_name))
 			continue;
 
@@ -1889,15 +1889,15 @@ o_after_checkpoint_cleanup_hook(XLogRecPtr checkPointRedo, int flags)
 	S3TaskLocation location;
 	uint32		chkpNum = checkpoint_state->lastCheckpointNumber;
 
-	/* called at the end of StartupXLOG */
+	// called at the end of StartupXLOG
 	*was_in_recovery = flags == 0;
 
-	/*
-	 * Right after end-of-recovery, XLog inserts have just been enabled. Flush
-	 * WAL_REC_ROLLBACK markers for in-flight oxids that recovery_finish()
-	 * aborted in memory, so streaming standbys can resolve them too (issue
-	 * #876).
-	 */
+	//
+// Right after end-of-recovery, XLog inserts have just been enabled. Flush
+// WAL_REC_ROLLBACK markers for in-flight oxids that recovery_finish()
+// aborted in memory, so streaming standbys can resolve them too (issue
+// #876).
+//
 	if (flags == 0)
 		o_emit_recovery_finish_rollbacks();
 
@@ -1918,9 +1918,9 @@ o_after_checkpoint_cleanup_hook(XLogRecPtr checkPointRedo, int flags)
 		XLogSegNo	xlogsegno;
 		char		xlogfilename[MAXFNAMELEN];
 
-		/*
-		 * Wait till archiver finishes with the checkpoint record.
-		 */
+		//
+// Wait till archiver finishes with the checkpoint record.
+//
 		switchpoint = RequestXLogSwitch(false);
 		XLByteToPrevSeg(switchpoint, xlogsegno, wal_segment_size);
 		XLogFileName(xlogfilename, 1,
@@ -2014,9 +2014,9 @@ finalize_chkp_map(File chkp_file, uint64 len, char *input_filename,
 	return len;
 }
 
-/*
- * Comparator for sort ascending.
- */
+//
+// Comparator for sort ascending.
+//
 static int
 uint32_offsets_cmp(const void *a, const void *b)
 {
@@ -2028,9 +2028,9 @@ uint32_offsets_cmp(const void *a, const void *b)
 	return 0;
 }
 
-/*
- * Comparator for FileExtent.len sort descending.
- */
+//
+// Comparator for FileExtent.len sort descending.
+//
 static int
 file_extents_len_off_cmp(const void *a, const void *b)
 {
@@ -2045,9 +2045,9 @@ file_extents_len_off_cmp(const void *a, const void *b)
 	return 0;
 }
 
-/*
- * Comparator for FileExtent.off sort ascending.
- */
+//
+// Comparator for FileExtent.off sort ascending.
+//
 static int
 file_extents_off_len_cmp(const void *a, const void *b)
 {
@@ -2062,9 +2062,9 @@ file_extents_off_len_cmp(const void *a, const void *b)
 	return 0;
 }
 
-/*
- * Comparator for FileExtent.off sort ascending.
- */
+//
+// Comparator for FileExtent.off sort ascending.
+//
 static int
 file_extents_writeback_cmp(const void *a, const void *b)
 {
@@ -2076,17 +2076,17 @@ file_extents_writeback_cmp(const void *a, const void *b)
 
 	if (val1->len != val2->len)
 	{
-		/*
-		 * The sort order helps in perform_writeback().
-		 */
+		//
+// The sort order helps in perform_writeback().
+//
 		return val1->len > val2->len ? -1 : 1;
 	}
 	return 0;
 }
 
-/*
- * Sort lists of free blocks in .map file to optimize disk access.
- */
+//
+// Sort lists of free blocks in .map file to optimize disk access.
+//
 static void
 sort_checkpoint_map_file(BTreeDescr *descr, int cur_chkp_index)
 {
@@ -2108,7 +2108,7 @@ sort_checkpoint_map_file(BTreeDescr *descr, int cur_chkp_index)
 							   filename)));
 	}
 
-	/* reads header and blocks from map file */
+	// reads header and blocks from map file
 	ferror = OFileRead(file, (Pointer) &header,
 					   sizeof(header), 0, WAIT_EVENT_DATA_FILE_READ) != sizeof(header);
 	if (ferror)
@@ -2141,13 +2141,13 @@ sort_checkpoint_map_file(BTreeDescr *descr, int cur_chkp_index)
 		}
 	}
 
-	/* sorts blocks */
+	// sorts blocks
 	if (is_compressed || use_device)
 		pg_qsort(free_blocks, header.numFreeBlocks, sizeof(FileExtent), file_extents_len_off_cmp);
 	else
 		pg_qsort(free_blocks, header.numFreeBlocks, sizeof(uint32), uint32_offsets_cmp);
 
-	/* writes sorted blocks to map file. */
+	// writes sorted blocks to map file.
 	if (OFileWrite(file, (Pointer) free_blocks, free_blocks_size,
 				   sizeof(header), WAIT_EVENT_DATA_FILE_WRITE) != free_blocks_size ||
 		FileSync(file, WAIT_EVENT_SLRU_SYNC) != 0)
@@ -2161,9 +2161,9 @@ sort_checkpoint_map_file(BTreeDescr *descr, int cur_chkp_index)
 	pfree(free_blocks);
 }
 
-/*
- * Sort lists of free blocks in .map file to optimize disk access.
- */
+//
+// Sort lists of free blocks in .map file to optimize disk access.
+//
 static void
 sort_checkpoint_tmp_file(BTreeDescr *descr, int cur_chkp_index)
 {
@@ -2178,9 +2178,9 @@ sort_checkpoint_tmp_file(BTreeDescr *descr, int cur_chkp_index)
 	file = PathNameOpenFile(filename, O_RDWR | PG_BINARY);
 	if (file < 0)
 	{
-		/*
-		 * *.tmp file does not exist, nothing to sort
-		 */
+		//
+// *.tmp file does not exist, nothing to sort
+//
 		return;
 	}
 
@@ -2199,7 +2199,7 @@ sort_checkpoint_tmp_file(BTreeDescr *descr, int cur_chkp_index)
 		}
 	}
 
-	/* sorts blocks */
+	// sorts blocks
 	if (is_compressed || use_device)
 	{
 		pg_qsort(free_blocks, free_blocks_size / sizeof(FileExtent),
@@ -2211,7 +2211,7 @@ sort_checkpoint_tmp_file(BTreeDescr *descr, int cur_chkp_index)
 				 sizeof(uint32), uint32_offsets_cmp);
 	}
 
-	/* writes sorted blocks to tmp file */
+	// writes sorted blocks to tmp file
 	if (OFileWrite(file, (Pointer) free_blocks,
 				   free_blocks_size, 0, WAIT_EVENT_DATA_FILE_WRITE) != free_blocks_size ||
 		FileSync(file, WAIT_EVENT_SLRU_SYNC) != 0)
@@ -2240,11 +2240,11 @@ checkpoint_ix_init_state(CheckpointState *state, BTreeDescr *descr)
 	chkp_inc_changecount_after(checkpoint_state);
 }
 
-/*
- * Marks a offset as free for given checkpoint number, throws an error on failure.
- *
- * It adds the offset to *.map and *.tmp files.
- */
+//
+// Marks a offset as free for given checkpoint number, throws an error on failure.
+//
+// It adds the offset to *.map and *.tmp files.
+//
 void
 free_extent_for_checkpoint(BTreeDescr *desc, FileExtent *extent, uint32 chkp_num)
 {
@@ -2259,11 +2259,11 @@ free_extent_for_checkpoint(BTreeDescr *desc, FileExtent *extent, uint32 chkp_num
 		return;
 	}
 
-	/*
-	 * User temporary trees have no shared checkpoint state.  Stash freed
-	 * extents on a backend-local list so that subsequent allocations can
-	 * recycle them without touching the checkpoint-tagged seq bufs.
-	 */
+	//
+// User temporary trees have no shared checkpoint state.  Stash freed
+// extents on a backend-local list so that subsequent allocations can
+// recycle them without touching the checkpoint-tagged seq bufs.
+//
 	if (btree_desc_is_local_temp(desc))
 	{
 		local_free_extents_push(desc, *extent);
@@ -2274,7 +2274,7 @@ free_extent_for_checkpoint(BTreeDescr *desc, FileExtent *extent, uint32 chkp_num
 
 	for (i = 0; i < 2; i++)
 	{
-		/* Don't have *.map files for BTreeStorageTemporary */
+		// Don't have *.map files for BTreeStorageTemporary
 		if (i == 0 && desc->storageType == BTreeStorageTemporary)
 			continue;
 
@@ -2302,10 +2302,10 @@ free_extent_for_checkpoint(BTreeDescr *desc, FileExtent *extent, uint32 chkp_num
 	extent->off = InvalidFileExtentOff;
 }
 
-/*
- * Returns true if page with given page number is under in-progress
- * checkpointing.
- */
+//
+// Returns true if page with given page number is under in-progress
+// checkpointing.
+//
 bool
 page_is_under_checkpoint(BTreeDescr *desc, OInMemoryBlkno blkno,
 						 bool includingHikeyBlkno)
@@ -2343,28 +2343,28 @@ page_is_under_checkpoint(BTreeDescr *desc, OInMemoryBlkno blkno,
 			desc->oids.relnode != relnode ||
 			desc->type != type)
 		{
-			/* BTree is not under checkpoint */
+			// BTree is not under checkpoint
 			result = false;
 		}
 		else if (cur_key == CurKeyFinished)
 		{
-			/* checkpoint already finished */
+			// checkpoint already finished
 			result = false;
 		}
 		else if (blkno_on_checkpoint == blkno ||
 				 (includingHikeyBlkno && hikey_blkno_on_checkpoint == blkno))
 		{
-			/* page is under checkpoint */
+			// page is under checkpoint
 			result = true;
 		}
 		else if (blkno_on_checkpoint == desc->rootInfo.rootPageBlkno && O_PAGE_IS(p, LEFTMOST))
 		{
-			/* concurrent rootPageBlkno split may happens */
+			// concurrent rootPageBlkno split may happens
 			result = true;
 		}
 		else
 		{
-			/* page is not under checkpoint */
+			// page is not under checkpoint
 			Assert(blkno_on_checkpoint != blkno);
 			result = false;
 		}
@@ -2377,9 +2377,9 @@ page_is_under_checkpoint(BTreeDescr *desc, OInMemoryBlkno blkno,
 	}
 }
 
-/*
- * Returns true if btree is under in-progress checkpointing.
- */
+//
+// Returns true if btree is under in-progress checkpointing.
+//
 bool
 tree_is_under_checkpoint(BTreeDescr *desc)
 {
@@ -2408,7 +2408,7 @@ tree_is_under_checkpoint(BTreeDescr *desc)
 			desc->oids.relnode != relnode ||
 			desc->type != type)
 		{
-			/* BTree is not under checkpoint */
+			// BTree is not under checkpoint
 			result = false;
 		}
 		else
@@ -2424,21 +2424,21 @@ tree_is_under_checkpoint(BTreeDescr *desc)
 	}
 }
 
-/*
- * Returns -1 if page must be evicted to current in progress checkpoint.
- * Returns 1 if page must be evicted to next checkpoint.
- * Return 0 if page can not be evicted.
- *
- * We can't evict page if its hikey is in range [cur_key, lvl_hikey]:
- *
- * If we evict it to the current checkpoint (last_checkpoint_number + 1),
- * we may lost the page offset on concurrent split case.
- *
- * If we evict it to the next checkpoint (last_checkpoint_number + 2)
- * a page offset will be marked as free for current checkpoint,
- * than if we add downlink with the offset to an autonomous page, and restart
- * we will have the offset both free and busy for the current checkpoint.
- */
+//
+// Returns -1 if page must be evicted to current in progress checkpoint.
+// Returns 1 if page must be evicted to next checkpoint.
+// Return 0 if page can not be evicted.
+//
+// We can't evict page if its hikey is in range [cur_key, lvl_hikey]:
+//
+// If we evict it to the current checkpoint (last_checkpoint_number + 1),
+// we may lost the page offset on concurrent split case.
+//
+// If we evict it to the next checkpoint (last_checkpoint_number + 2)
+// a page offset will be marked as free for current checkpoint,
+// than if we add downlink with the offset to an autonomous page, and restart
+// we will have the offset both free and busy for the current checkpoint.
+//
 static inline int
 side_of_checkpoint_bound(BTreeDescr *descr, Page page,
 						 OTuple cur_key, CurKeyType cur_key_type,
@@ -2450,11 +2450,11 @@ side_of_checkpoint_bound(BTreeDescr *descr, Page page,
 
 	Assert(cur_key_type == CurKeyValue || cur_key_type == CurKeyGreatest);
 
-	/* fast checks, helps to exclusive rightmost case */
+	// fast checks, helps to exclusive rightmost case
 
 	if (cur_key_type == CurKeyGreatest)
 	{
-		/* left bound on rightmost pages */
+		// left bound on rightmost pages
 		if (page_is_rightmost)
 			return 0;
 		return 1;
@@ -2463,15 +2463,15 @@ side_of_checkpoint_bound(BTreeDescr *descr, Page page,
 	Assert(cur_key_type == CurKeyValue);
 	if (page_is_rightmost)
 	{
-		/* case for rightmost page (no hikey to compare) */
+		// case for rightmost page (no hikey to compare)
 		if (bound == CheckpointBoundRightmost)
 			return 0;
 		return -1;
 	}
 
-	/*
-	 * left bound comparison
-	 */
+	//
+// left bound comparison
+//
 	Assert(!page_is_rightmost && cur_key_type == CurKeyValue);
 	BTREE_PAGE_GET_HIKEY(hikey, page);
 	cmp = o_btree_cmp(descr, &hikey, BTreeKeyNonLeafKey, &cur_key, BTreeKeyNonLeafKey);
@@ -2482,23 +2482,23 @@ side_of_checkpoint_bound(BTreeDescr *descr, Page page,
 	if (cmp < 0)
 		return 1;
 
-	/* need to check right bound */
+	// need to check right bound
 	Assert(cmp > 0);
 	if (bound == CheckpointBoundNone)
 	{
-		/* right bound does not exist */
+		// right bound does not exist
 		return -1;
 	}
 
 	if (bound == CheckpointBoundRightmost)
 	{
-		/* right bound to the end of the BTree level */
+		// right bound to the end of the BTree level
 		return 0;
 	}
 
-	/*
-	 * right bound comparison
-	 */
+	//
+// right bound comparison
+//
 	Assert(!page_is_rightmost && bound == CheckpointBoundHikey);
 	cmp = o_btree_cmp(descr, &hikey, BTreeKeyNonLeafKey, &lvl_hikey, BTreeKeyNonLeafKey);
 	if (cmp <= 0)
@@ -2506,9 +2506,9 @@ side_of_checkpoint_bound(BTreeDescr *descr, Page page,
 	return -1;
 }
 
-/*
- * Compare tree identifiers in the same order we process them on checkpoint.
- */
+//
+// Compare tree identifiers in the same order we process them on checkpoint.
+//
 static int
 chkp_ordering_cmp(OIndexType type1, Oid datoid1, Oid relnode1,
 				  OIndexType type2, Oid datoid2, Oid relnode2)
@@ -2537,9 +2537,9 @@ chkp_ordering_cmp(OIndexType type1, Oid datoid1, Oid relnode1,
 	return 0;
 }
 
-/*
- * Determine which checkpoint `blkno` should be written to.
- */
+//
+// Determine which checkpoint `blkno` should be written to.
+//
 bool
 get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 					  uint32 *checkpoint_number, bool *copy_blkno)
@@ -2586,16 +2586,16 @@ get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 		if (cmp != 0)
 		{
-			/* easy case: BTree is not under checkpoint */
+			// easy case: BTree is not under checkpoint
 			if (cmp < 0)
 			{
-				/* Already passed checkpoint */
+				// Already passed checkpoint
 				*checkpoint_number = last_checkpoint_number + 2;
 				*copy_blkno = false;
 			}
 			else
 			{
-				/* Not yet passed by checkpoint */
+				// Not yet passed by checkpoint
 				*checkpoint_number = last_checkpoint_number + 1;
 				*copy_blkno = false;
 			}
@@ -2610,19 +2610,19 @@ get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 		under_checkpoint = (chkp_lvl_blkno == blkno || chkp_lvl_hikey_blkno == blkno);
 		if (!under_checkpoint && O_PAGE_IS(page, LEFTMOST))
 		{
-			/*
-			 * Page can be under checkpoint if concurrent rootPageBlkno split
-			 * happens.
-			 */
+			//
+// Page can be under checkpoint if concurrent rootPageBlkno split
+// happens.
+//
 			under_checkpoint = chkp_lvl_blkno == desc->rootInfo.rootPageBlkno;
 		}
 
-		/*
-		 * Can't evict page which is now under checkpoint: checkpoint
-		 * algorithm does not allow this.
-		 *
-		 * That is reason why this check before curKeyType check.
-		 */
+		//
+// Can't evict page which is now under checkpoint: checkpoint
+// algorithm does not allow this.
+//
+// That is reason why this check before curKeyType check.
+//
 		if (under_checkpoint)
 		{
 			chkp_save_changecount_after(checkpoint_state, after_changecount);
@@ -2631,7 +2631,7 @@ get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 			return false;
 		}
 
-		/* the checkpointer does not write any page */
+		// the checkpointer does not write any page
 		if (cur_key_type == CurKeyLeast || cur_key_type == CurKeyFinished)
 		{
 			if (cur_key_type == CurKeyLeast)
@@ -2681,21 +2681,21 @@ get_checkpoint_number(BTreeDescr *desc, OInMemoryBlkno blkno,
 	}
 }
 
-/*
- * Sets the autonomous level by backend. It should not be called for leafs.
- */
+//
+// Sets the autonomous level by backend. It should not be called for leafs.
+//
 void
 backend_set_autonomous_level(CheckpointState *state, uint32 level)
 {
 	uint32		cur_level = ORIOLEDB_MAX_DEPTH;
 
-	/* no sense in autonomous level for leafs */
+	// no sense in autonomous level for leafs
 	Assert(level != 0);
 
-	/*
-	 * setups a new autonomous level if it less than current value of
-	 * state->autonomousLevel
-	 */
+	//
+// setups a new autonomous level if it less than current value of
+// state->autonomousLevel
+//
 	while (!pg_atomic_compare_exchange_u32(&state->autonomousLevel,
 										   &cur_level,
 										   level))
@@ -2705,14 +2705,14 @@ backend_set_autonomous_level(CheckpointState *state, uint32 level)
 	}
 }
 
-/*
- * Make checkpoint of an index (persistent or unlogged).
- *
- * The caller must hold the OrioleDB checkpointer table lock.  On success
- * (true), the lock is still held and the caller must release it.  On
- * failure (false), the lock has already been released by
- * perform_writeback_and_relock() inside checkpoint_btree().
- */
+//
+// Make checkpoint of an index (persistent or unlogged).
+//
+// The caller must hold the OrioleDB checkpointer table lock.  On success
+// (true), the lock is still held and the caller must release it.  On
+// failure (false), the lock has already been released by
+// perform_writeback_and_relock() inside checkpoint_btree().
+//
 static bool
 checkpoint_ix(int flags, BTreeDescr *descr)
 {
@@ -2736,12 +2736,12 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 	meta_page = BTREE_GET_META(descr);
 	meta_page->dirtyFlag1 = false;
 
-	/* Make checkpoint of the tree itself */
+	// Make checkpoint of the tree itself
 	init_writeback(&writeback, flags, is_compressed);
 	root_downlink = checkpoint_btree(&descr, checkpoint_state, &writeback);
 	if (!DiskDownlinkIsValid(root_downlink))
 	{
-		/* Lock already released by perform_writeback_and_relock() */
+		// Lock already released by perform_writeback_and_relock()
 		free_writeback(&writeback);
 		return false;
 	}
@@ -2750,7 +2750,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 	free_writeback(&writeback);
 	if (!descr)
 	{
-		/* Lock already released by perform_writeback_and_relock() */
+		// Lock already released by perform_writeback_and_relock()
 		return false;
 	}
 
@@ -2783,18 +2783,18 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 
 	STOPEVENT(STOPEVENT_BEFORE_BLKNO_LOCK, NULL);
 
-	/*
-	 * Need a lock to be sure, that nobody is concurrently copying block
-	 * number from previous checkpoint to current.  See write_page() for
-	 * details.
-	 */
+	//
+// Need a lock to be sure, that nobody is concurrently copying block
+// number from previous checkpoint to current.  See write_page() for
+// details.
+//
 	LWLockAcquire(&meta_page->copyBlknoLock, LW_EXCLUSIVE);
 
 	chkp_inc_changecount_before(checkpoint_state);
 	checkpoint_state->curKeyType = CurKeyFinished;
 	chkp_inc_changecount_after(checkpoint_state);
 
-	/* Make header for the map file... */
+	// Make header for the map file...
 	header.rootDownlink = root_downlink;
 	if (orioledb_s3_mode)
 		header.datafileLength = pg_atomic_read_u64(&meta_page->datafileLength[chkpNum % 2]);
@@ -2813,11 +2813,11 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 
 	if (!orioledb_s3_mode)
 	{
-		/* finalizes *.tmp file */
+		// finalizes *.tmp file
 		seq_buf_finalize(&descr->tmpBuf[cur_chkp_index]);
 		free_seq_buf_pages(descr, descr->tmpBuf[cur_chkp_index].shared);
 
-		/* finalizes *.map file */
+		// finalizes *.map file
 		map_len = seq_buf_finalize(&descr->nextChkp[cur_chkp_index]);
 		Assert(map_len >= sizeof(CheckpointFileHeader));
 		free_seq_buf_pages(descr, descr->nextChkp[cur_chkp_index].shared);
@@ -2846,10 +2846,10 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 
 	if (is_compressed && free_extents->size != 0 && !orioledb_s3_mode)
 	{
-		/*
-		 * We need to combine a *.map file content and the free_extents array
-		 * and remove all intersections
-		 */
+		//
+// We need to combine a *.map file content and the free_extents array
+// and remove all intersections
+//
 		FileExtent *map_extents = NULL;
 		off_t		map_extents_size,
 					write_offset = sizeof(CheckpointFileHeader);
@@ -2861,7 +2861,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 			/ sizeof(FileExtent);
 		if (map_extents_size > 0)
 		{
-			/* read and sort *.map file data */
+			// read and sort *.map file data
 			off_t		map_extents_bytes;
 
 			map_extents_bytes = sizeof(FileExtent) * map_extents_size;
@@ -2876,11 +2876,11 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 									   filename)));
 			}
 
-			/* sort it */
+			// sort it
 			pg_qsort(map_extents, map_extents_size,
 					 sizeof(FileExtent), file_extents_off_len_cmp);
 
-			/* and truncate the file because it may be less than original */
+			// and truncate the file because it may be less than original
 			if (FileTruncate(file, sizeof(CheckpointFileHeader),
 							 WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
 			{
@@ -2890,10 +2890,10 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 			}
 		}
 
-		Assert(free_extents->size != 0);	/* checked above */
+		Assert(free_extents->size != 0);	// checked above
 		if (map_extents_size == 0)
 		{
-			/* easy case - just write sorted file extents */
+			// easy case - just write sorted file extents
 			int			write_bytes = free_extents->size * sizeof(FileExtent);
 
 			if (OFileWrite(file, (char *) free_extents->extents,
@@ -2907,7 +2907,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 		}
 		else
 		{
-			/* create a new combined *.map file */
+			// create a new combined *.map file
 			FileExtent *cur = NULL;
 			char		write_buf[ORIOLEDB_BLCKSZ];
 			int			f_i = 0,
@@ -2935,14 +2935,14 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 					while (m_i < map_extents_size
 						   && map_extents[m_i].off < cur->off + cur->len)
 					{
-						/* skip intersection */
+						// skip intersection
 						m_i++;
 					}
 				}
 
 				if (write_buf_len + sizeof(FileExtent) > ORIOLEDB_BLCKSZ)
 				{
-					/* flush the buffer */
+					// flush the buffer
 					if (OFileWrite(file, write_buf, write_buf_len, write_offset,
 								   WAIT_EVENT_SLRU_WRITE) != write_buf_len)
 					{
@@ -2971,7 +2971,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 			}
 		}
 
-		/* free allocated bytes */
+		// free allocated bytes
 		if (map_extents_size > 0)
 			pfree(map_extents);
 		file_extents_array_free(free_extents);
@@ -2995,7 +2995,7 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 	}
 	else
 	{
-		/* nothing to do */
+		// nothing to do
 		Assert(is_compressed && free_extents->size == 0);
 		Assert(map_len >= sizeof(CheckpointFileHeader));
 		header.numFreeBlocks = (map_len - sizeof(CheckpointFileHeader)) / sizeof(FileExtent);
@@ -3046,9 +3046,9 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 }
 
 
-/*
- * Checkpointer walk over particular B-tree. Returns rootPageBlkno page offset.
- */
+//
+// Checkpointer walk over particular B-tree. Returns rootPageBlkno page offset.
+//
 static uint64
 checkpoint_btree(BTreeDescr **descrPtr, CheckpointState *state,
 				 CheckpointWriteBack *writeback)
@@ -3063,7 +3063,7 @@ checkpoint_btree(BTreeDescr **descrPtr, CheckpointState *state,
 	prev_context = MemoryContextSwitchTo(tmp_context);
 
 	skip_ucm = true;
-	/* Walk the tree recursively starting from rootPageBlkno */
+	// Walk the tree recursively starting from rootPageBlkno
 	root_downlink = checkpoint_btree_loop(descrPtr,
 										  state,
 										  writeback,
@@ -3078,31 +3078,31 @@ checkpoint_btree(BTreeDescr **descrPtr, CheckpointState *state,
 	return root_downlink;
 }
 
-/*
- * Resets autonomous level to default value and returns previous value.
- */
+//
+// Resets autonomous level to default value and returns previous value.
+//
 static inline uint32
 checkpointer_reset_autonomous_level(CheckpointState *state)
 {
 	uint32		cur_level = ORIOLEDB_MAX_DEPTH;
 
-	/*
-	 * CAS read of current autonomous level and setup it to default value
-	 */
+	//
+// CAS read of current autonomous level and setup it to default value
+//
 	while (!pg_atomic_compare_exchange_u32(&state->autonomousLevel,
 										   &cur_level,
 										   ORIOLEDB_MAX_DEPTH));
 	return cur_level;
 }
 
-/*
- * Setups autonomous flag for stack items from state->autonomousLevel.
- *
- * Should be used only under lock_page() for avoid concurrent issues in
- * min_level == autonomous_level case.
- *
- * min_level used only for assertion.
- */
+//
+// Setups autonomous flag for stack items from state->autonomousLevel.
+//
+// Should be used only under lock_page() for avoid concurrent issues in
+// min_level == autonomous_level case.
+//
+// min_level used only for assertion.
+//
 static inline void
 checkpointer_update_autonomous(BTreeDescr *desc, CheckpointState *state)
 {
@@ -3113,25 +3113,25 @@ checkpointer_update_autonomous(BTreeDescr *desc, CheckpointState *state)
 	autonomous_level = checkpointer_reset_autonomous_level(state);
 	if (autonomous_level == ORIOLEDB_MAX_DEPTH)
 	{
-		/*
-		 * autonomous level is default value, no need to setup autonomous
-		 * flags
-		 */
+		//
+// autonomous level is default value, no need to setup autonomous
+// flags
+//
 		return;
 	}
 
 	if (state->curKeyType == CurKeyLeast)
 	{
-		/*
-		 * we do not make any leaf write, no sense yet.
-		 */
+		//
+// we do not make any leaf write, no sense yet.
+//
 		return;
 	}
 
 	Assert(autonomous_level > 0);
 	Assert(OInMemoryBlknoIsValid(state->stack[autonomous_level].blkno));
 
-	/* go upwards for the stack and setup autonomous flag if needed */
+	// go upwards for the stack and setup autonomous flag if needed
 	for (i = autonomous_level; OInMemoryBlknoIsValid(state->stack[i].blkno); i++)
 	{
 		OrioleDBPageDesc *page_desc;
@@ -3148,20 +3148,20 @@ checkpointer_update_autonomous(BTreeDescr *desc, CheckpointState *state)
 			header->o_header.checkpointNum = 0;
 			if (FileExtentIsValid(page_desc->fileExtent))
 			{
-				/* the offset will not be used in current checkpoint */
+				// the offset will not be used in current checkpoint
 				free_extent_for_checkpoint(desc, &page_desc->fileExtent, cur_chkp_num);
 				MARK_DIRTY(desc, state->stack[i].blkno);
 			}
 		}
 	}
 
-	/* stack last item must be the rootPageBlkno page */
+	// stack last item must be the rootPageBlkno page
 	Assert(state->stack[i - 1].blkno == desc->rootInfo.rootPageBlkno);
 }
 
-/*
- * Locks page, updates autonomous flags and stack after rootPageBlkno split.
- */
+//
+// Locks page, updates autonomous flags and stack after rootPageBlkno split.
+//
 static void
 checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 					 OInMemoryBlkno *blkno, uint32 page_chage_count, int level)
@@ -3189,18 +3189,18 @@ checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 		return;
 	}
 
-	/*
-	 * only rootPageBlkno page split increases page level (and only for
-	 * rootPageBlkno page)
-	 */
+	//
+// only rootPageBlkno page split increases page level (and only for
+// rootPageBlkno page)
+//
 	Assert(page_level > level && *blkno == descr->rootInfo.rootPageBlkno);
 
-	/*
-	 * Concurrent rootPageBlkno spit happens. We need to fill stack from a new
-	 * rootPageBlkno level (page_level) to old rootPageBlkno level (level).
-	 */
+	//
+// Concurrent rootPageBlkno spit happens. We need to fill stack from a new
+// rootPageBlkno level (page_level) to old rootPageBlkno level (level).
+//
 
-	/* we need to setup autonomous flag the same to old rootPageBlkno level */
+	// we need to setup autonomous flag the same to old rootPageBlkno level
 	autonomous = state->stack[level].autonomous;
 
 	chkp_inc_changecount_before(state);
@@ -3221,7 +3221,7 @@ checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 		state->stack[l].autonomous = autonomous;
 		if (!autonomous && !O_PAGE_IS(page, RIGHTMOST))
 		{
-			/* we did not forget about merge */
+			// we did not forget about merge
 			copy_fixed_shmem_hikey(descr, &state->stack[l].hikey, page);
 			state->stack[l].bound = CheckpointBoundHikey;
 		}
@@ -3247,7 +3247,7 @@ checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 		tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(page, &pageLoc);
 		downlink = tuphdr->downlink;
 
-		/* Page under checkpoint shouldn't be evicted... */
+		// Page under checkpoint shouldn't be evicted...
 		Assert(DOWNLINK_IS_IN_MEMORY(downlink));
 
 		next_blkno = DOWNLINK_GET_IN_MEMORY_BLKNO(downlink);
@@ -3260,7 +3260,7 @@ checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 	}
 
 	Assert(l == level);
-	Assert(!O_PAGE_IS(page, RIGHTMOST));	/* can not be merged */
+	Assert(!O_PAGE_IS(page, RIGHTMOST));	// can not be merged
 
 	state->stack[level].blkno = *blkno;
 	state->stack[level].hikeyBlkno = *blkno;
@@ -3273,10 +3273,10 @@ checkpoint_lock_page(BTreeDescr *descr, CheckpointState *state,
 	}
 	else if (!autonomous)
 	{
-		/*
-		 * autonomous state of the level updated while we traverse down,
-		 * update parents state
-		 */
+		//
+// autonomous state of the level updated while we traverse down,
+// update parents state
+//
 		Assert(state->stack[level].bound == CheckpointBoundRightmost);
 		for (l = page_level; l > level; l--)
 		{
@@ -3385,9 +3385,9 @@ checkpoint_try_merge_page(BTreeDescr *descr, CheckpointState *state,
 	rightPage = O_GET_IN_MEMORY_PAGE(rightBlkno);
 	rpage_desc = O_GET_IN_MEMORY_PAGEDESC(rightBlkno);
 
-	/*
-	 * Сheck there is no IO in progress for the right page.
-	 */
+	//
+// Сheck there is no IO in progress for the right page.
+//
 	if (rpage_desc->ionum >= 0)
 	{
 		unlock_page(parentBlkno);
@@ -3416,9 +3416,9 @@ checkpoint_try_merge_page(BTreeDescr *descr, CheckpointState *state,
 	}
 }
 
-/*
- * Locks a given page for safely processing by the checkpointer.
- */
+//
+// Locks a given page for safely processing by the checkpointer.
+//
 static void
 checkpoint_fix_split_and_lock_page(BTreeDescr *descr, CheckpointState *state,
 								   OInMemoryBlkno *blkno, uint32 page_chage_count, int level)
@@ -3448,14 +3448,14 @@ checkpoint_fix_split_and_lock_page(BTreeDescr *descr, CheckpointState *state,
 			o_btree_split_fix_and_unlock(descr, *blkno);
 			checkpoint_reserve_undo(descr->undoType, false);
 		}
-		/* cppcheck-suppress arrayIndexOutOfBoundsCond */
+		// cppcheck-suppress arrayIndexOutOfBoundsCond
 		else if (!(level > 0 && *blkno == state->stack[level].hikeyBlkno) &&
 				 is_page_too_sparse(descr, O_GET_IN_MEMORY_PAGE(*blkno)))
 		{
-			/*
-			 * Try merge page to the right.  Skip merge for autonomous pages,
-			 * because we could miss the expected hikey then.
-			 */
+			//
+// Try merge page to the right.  Skip merge for autonomous pages,
+// because we could miss the expected hikey then.
+//
 
 			if (!checkpoint_try_merge_page(descr, state, *blkno, level))
 				break;
@@ -3630,7 +3630,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 
 	memset(&message, 0, sizeof(WalkMessage));
 
-	/* Prepare message start walk from the rootPageBlkno */
+	// Prepare message start walk from the rootPageBlkno
 	page = O_GET_IN_MEMORY_PAGE(blkno);
 	lock_page(blkno);
 	level = PAGE_GET_LEVEL(page);
@@ -3645,7 +3645,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 		state->stack[i].bound = CheckpointBoundRightmost;
 		state->stack[i].hikeyBlkno = OInvalidInMemoryBlkno;
 	}
-	/* avoid fail on first traverse to rootPageBlkno */
+	// avoid fail on first traverse to rootPageBlkno
 	state->stack[level].blkno = blkno;
 	chkp_inc_changecount_after(state);
 
@@ -3695,13 +3695,13 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 
 			page = O_GET_IN_MEMORY_PAGE(blkno);
 
-			/*
-			 * Check if it not the page we expected, because it might
-			 * disappear due to concurrent eviction.
-			 */
+			//
+// Check if it not the page we expected, because it might
+// disappear due to concurrent eviction.
+//
 			if (O_PAGE_GET_CHANGE_COUNT(page) != message.content.downwards.pageChangeCount
-				&& blkno == message.content.downwards.blkno)	/* rootPageBlkno level
-																 * does not change */
+				&& blkno == message.content.downwards.blkno)	// rootPageBlkno level
+// does not change
 			{
 				unlock_page(blkno);
 				message.action = WalkUpwards;
@@ -3714,7 +3714,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 			img = state->stack[level].image;
 			if (!state->stack[level].autonomous)
 			{
-				/* Updates right checkpoint bound. */
+				// Updates right checkpoint bound.
 				chkp_inc_changecount_before(state);
 				if (!O_PAGE_IS(page, RIGHTMOST))
 				{
@@ -3733,10 +3733,10 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 
 			if (level != 0 && state->stack[level].autonomous)
 			{
-				/*
-				 * Downwards to autonomous node, we must free file offset if
-				 * it exist.
-				 */
+				//
+// Downwards to autonomous node, we must free file offset if
+// it exist.
+//
 				BTreePageHeader *header = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
 
 				page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
@@ -3751,7 +3751,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 					}
 					else
 					{
-						/* the offset will not be used in current checkpoint */
+						// the offset will not be used in current checkpoint
 						free_extent_for_checkpoint(descr, &page_desc->fileExtent,
 												   chkpNum);
 						MARK_DIRTY(descr, blkno);
@@ -3759,10 +3759,10 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 				}
 			}
 
-			/*
-			 * Leaf pages are going to be written immediately.  So, check
-			 * there is no IO in progress.
-			 */
+			//
+// Leaf pages are going to be written immediately.  So, check
+// there is no IO in progress.
+//
 			if (level == 0)
 			{
 				int			ionum;
@@ -3789,17 +3789,17 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 				was_dirty = IS_DIRTY(blkno);
 				if (was_dirty)
 				{
-					/* Code above ensured there is no IO in progress */
+					// Code above ensured there is no IO in progress
 					Assert(page_desc->ionum < 0);
 					page_desc->ionum = assign_io_num(blkno, InvalidOffsetNumber);
 
-					/*
-					 * we assume that concurrent eviction of the parent is
-					 * forbidden by get_checkpoint_number() in walk_page()
-					 */
+					//
+// we assume that concurrent eviction of the parent is
+// forbidden by get_checkpoint_number() in walk_page()
+//
 					CLEAN_DIRTY(descr->ppool, blkno);
 
-					/* prepare_leaf_page() unlocks page */
+					// prepare_leaf_page() unlocks page
 					prepare_leaf_page(descr, state);
 
 					downlink = perform_page_io(descr,
@@ -3833,11 +3833,11 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 					Assert(FileExtentIsValid(O_GET_IN_MEMORY_PAGEDESC(blkno)->fileExtent));
 					downlink = MAKE_ON_DISK_DOWNLINK(O_GET_IN_MEMORY_PAGEDESC(blkno)->fileExtent);
 
-					/* prepare_leaf_page() unlocks page */
+					// prepare_leaf_page() unlocks page
 					prepare_leaf_page(descr, state);
 				}
 
-				/* Indicate that we've finished that page image */
+				// Indicate that we've finished that page image
 				message.action = WalkUpwards;
 				Assert(DiskDownlinkIsValid(downlink));
 				message.content.upwards.parentDirty = parent_dirty;
@@ -3856,7 +3856,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 				state->stack[level].nextkeyType = NextKeyNone;
 				continue;
 			}
-			/* else level != 0 */
+			// else level != 0
 
 			if (BTREE_PAGE_ITEMS_COUNT(img) == 0)
 			{
@@ -3864,7 +3864,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 				init_page_first_chunk(descr, img, 0);
 			}
 
-			/* saves lokey for the node */
+			// saves lokey for the node
 			if (O_TUPLE_IS_NULL(message.content.downwards.lokey.tuple))
 			{
 				state->stack[level].leftmost = true;
@@ -3891,7 +3891,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 			page_chage_count = InvalidOPageChangeCount;
 
 			state->stack[level].autonomousTupleExist = save_item;
-			/* Is everything done? */
+			// Is everything done?
 			if (!OInMemoryBlknoIsValid(state->stack[level].blkno))
 			{
 				Assert(valid_doff);
@@ -3901,10 +3901,10 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 			img = state->stack[level].image;
 			Assert(BTREE_PAGE_ITEMS_COUNT(img) > 0);
 
-			/* Did we manage to write the page? */
+			// Did we manage to write the page?
 			if (!valid_doff && !save_item)
 			{
-				/* Setup next key */
+				// Setup next key
 				if (BTREE_PAGE_ITEMS_COUNT(img) == 1)
 				{
 					BTREE_PAGE_ITEMS_COUNT(img) = 0;
@@ -3937,7 +3937,7 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 
 				if (!save_item)
 				{
-					/* make downlink */
+					// make downlink
 					BTreePageItemLocator loc;
 
 					Assert(valid_doff);
@@ -3969,11 +3969,11 @@ checkpoint_btree_loop(BTreeDescr **descrPtr,
 	}
 }
 
-/*
- * Return true if an item successfully added to checkpoint image.
- * Returns false if no enough space at the image for the item. It may happens
- * only for autonomous images.
- */
+//
+// Return true if an item successfully added to checkpoint image.
+// Returns false if no enough space at the image for the item. It may happens
+// only for autonomous images.
+//
 static inline bool
 checkpoint_image_add_item(CheckpointPageInfo *page_info,
 						  StackImageAddType type,
@@ -3986,7 +3986,7 @@ checkpoint_image_add_item(CheckpointPageInfo *page_info,
 
 	if (type == StackImageAddHikey)
 	{
-		/* hikey insert case */
+		// hikey insert case
 		Assert(key_size != 0);
 		item_size = MAXALIGN(key_size);
 
@@ -4006,9 +4006,9 @@ checkpoint_image_add_item(CheckpointPageInfo *page_info,
 	{
 		BTreePageItemLocator loc;
 
-		/* downlink insert case */
+		// downlink insert case
 		Assert(type == StackImageAddDownlink);
-		/* we need additional space for BTreeNonLeafTuphdr */
+		// we need additional space for BTreeNonLeafTuphdr
 		item_size = MAXALIGN(BTreeNonLeafTuphdrSize + key_size);
 		BTREE_PAGE_LOCATOR_TAIL(img, &loc);
 
@@ -4033,12 +4033,12 @@ checkpoint_image_add_item(CheckpointPageInfo *page_info,
 	return false;
 }
 
-/*
- * Splits the autonomous image. Last tuple is divided into two parts:
- *
- * 1. Key will be set as hikey of split image.
- * 2. BTreeNonLeafTuphdr will be returned.
- */
+//
+// Splits the autonomous image. Last tuple is divided into two parts:
+//
+// 1. Key will be set as hikey of split image.
+// 2. BTreeNonLeafTuphdr will be returned.
+//
 static BTreeNonLeafTuphdr
 autonomous_image_split(BTreeDescr *descr, CheckpointPageInfo *page_info)
 {
@@ -4050,24 +4050,24 @@ autonomous_image_split(BTreeDescr *descr, CheckpointPageInfo *page_info)
 	BTreePageItemLocator loc;
 
 	Assert(page_info->autonomous);
-	/* page must contain a full node tuple (downlink + key) */
+	// page must contain a full node tuple (downlink + key)
 	Assert(BTREE_PAGE_ITEMS_COUNT(img) > 1);
 
 	BTREE_PAGE_LOCATOR_LAST(img, &loc);
 
-	/* save internal header */
+	// save internal header
 	memcpy(&result,
 		   BTREE_PAGE_LOCATOR_GET_ITEM(img, &loc),
 		   sizeof(BTreeNonLeafTuphdr));
 
-	/* save key to the buffer */
+	// save key to the buffer
 	copy_fixed_page_key(descr, &saved_key, img, &loc);
 	key_len = MAXALIGN(o_btree_len(descr, saved_key.tuple, OKeyLength));
 
-	/* remove tuple */
+	// remove tuple
 	page_locator_delete_item(img, &loc);
 
-	/* add a new hikey */
+	// add a new hikey
 	page_resize_hikey(img, key_len);
 	BTREE_PAGE_SET_HIKEY_FLAGS(img, saved_key.tuple.formatFlags);
 	BTREE_PAGE_GET_HIKEY(hikey, img);
@@ -4075,9 +4075,9 @@ autonomous_image_split(BTreeDescr *descr, CheckpointPageInfo *page_info)
 	return result;
 }
 
-/*
- * Writes the autonomous image of given stack level to disk.
- */
+//
+// Writes the autonomous image of given stack level to disk.
+//
 static uint64
 autonomous_image_write(BTreeDescr *descr, CheckpointState *state,
 					   CheckpointWriteBack *writeback, int level, uint32 flags)
@@ -4088,7 +4088,7 @@ autonomous_image_write(BTreeDescr *descr, CheckpointState *state,
 	uint32		chkpNum = state->lastCheckpointNumber + 1;
 	FileExtent	extent;
 
-	/* prepare the image header */
+	// prepare the image header
 	img_header = (BTreePageHeader *) img;
 	img_header->o_header.checkpointNum = chkpNum;
 	img_header->undoLocation = InvalidUndoLocation;
@@ -4101,7 +4101,7 @@ autonomous_image_write(BTreeDescr *descr, CheckpointState *state,
 	extent.len = InvalidFileExtentLen;
 	extent.off = InvalidFileExtentOff;
 
-	/* write the image to disk */
+	// write the image to disk
 	split_page_by_chunks(descr, img);
 
 	downlink = perform_page_io_autonomous(descr, chkpNum, img, &extent);
@@ -4109,20 +4109,20 @@ autonomous_image_write(BTreeDescr *descr, CheckpointState *state,
 
 	Assert(DiskDownlinkIsValid(downlink));
 
-	/*
-	 * The BTree is not contain a page with the offset, so we need to free it
-	 * for next checkpoint because it will not be possible in the future.
-	 */
+	//
+// The BTree is not contain a page with the offset, so we need to free it
+// for next checkpoint because it will not be possible in the future.
+//
 	free_extent_for_checkpoint(descr, &extent, chkpNum + 1);
 
-	/* the next page no more can be leftmost for the current level */
+	// the next page no more can be leftmost for the current level
 	state->stack[level].autonomousLeftmost = false;
 	return downlink;
 }
 
-/*
- * Updates lowest level hikeys and reset autonomous flag if needed.
- */
+//
+// Updates lowest level hikeys and reset autonomous flag if needed.
+//
 static inline void
 update_lowest_level_hikey(BTreeDescr *descr, CheckpointState *state, int to_level,
 						  OTuple hikey)
@@ -4138,7 +4138,7 @@ update_lowest_level_hikey(BTreeDescr *descr, CheckpointState *state, int to_leve
 		page_info = &state->stack[i];
 		if (O_TUPLE_IS_NULL(hikey))
 		{
-			/* no more pages on the level */
+			// no more pages on the level
 			page_info->autonomous = false;
 			page_info->bound = CheckpointBoundRightmost;
 			page_info->hikeyBlkno = OInvalidInMemoryBlkno;
@@ -4153,7 +4153,7 @@ update_lowest_level_hikey(BTreeDescr *descr, CheckpointState *state, int to_leve
 										BTreeKeyNonLeafKey,
 										&hikey, BTreeKeyNonLeafKey) <= 0))
 		{
-			/* update hikey if no need in autonomous flag */
+			// update hikey if no need in autonomous flag
 			page_info->bound = CheckpointBoundHikey;
 			page_info->autonomous = false;
 			page_info->hikeyBlkno = OInvalidInMemoryBlkno;
@@ -4162,15 +4162,15 @@ update_lowest_level_hikey(BTreeDescr *descr, CheckpointState *state, int to_leve
 	}
 }
 
-/*
- * There is no free space left on the current autonomous image. The image
- * should be split and then written. Downlink to written image should be
- * inserted into parent image.
- *
- * But there are also may no left free space. All upper images should be
- * split until not found image in which downlink to child image
- * will be successfully inserted.
- */
+//
+// There is no free space left on the current autonomous image. The image
+// should be split and then written. Downlink to written image should be
+// inserted into parent image.
+//
+// But there are also may no left free space. All upper images should be
+// split until not found image in which downlink to child image
+// will be successfully inserted.
+//
 static void
 checkpoint_stack_image_split_flush(BTreeDescr *descr, CheckpointState *state,
 								   CheckpointWriteBack *writeback, int level)
@@ -4197,11 +4197,11 @@ checkpoint_stack_image_split_flush(BTreeDescr *descr, CheckpointState *state,
 		CheckpointPageInfo *curItem = &state->stack[cur_level];
 		uint32		flags = curItem->autonomousLeftmost ? O_BTREE_FLAG_LEFTMOST : 0;
 
-		/*
-		 * It might happen that "checkpointed" tree grow up higher than
-		 * original tree.  Thus, we might need to initialize the new
-		 * rootPageBlkno here.
-		 */
+		//
+// It might happen that "checkpointed" tree grow up higher than
+// original tree.  Thus, we might need to initialize the new
+// rootPageBlkno here.
+//
 		if (BTREE_PAGE_ITEMS_COUNT(curItem->image) == 0)
 		{
 			BTreePageItemLocator loc;
@@ -4229,7 +4229,7 @@ checkpoint_stack_image_split_flush(BTreeDescr *descr, CheckpointState *state,
 			if (inserted)
 				break;
 
-			/* It still might happen, that we can insert item as a hikey */
+			// It still might happen, that we can insert item as a hikey
 			inserted = checkpoint_image_add_item(curItem,
 												 StackImageAddHikey,
 												 curKey,
@@ -4268,11 +4268,11 @@ checkpoint_stack_image_split_flush(BTreeDescr *descr, CheckpointState *state,
 	}
 }
 
-/*
- * For regular pages just add a new item to current level image.
- *
- * For autonomous pages it can modify stack if on the page is not enough space.
- */
+//
+// For regular pages just add a new item to current level image.
+//
+// For autonomous pages it can modify stack if on the page is not enough space.
+//
 static void
 checkpoint_stack_image_add_item(BTreeDescr *descr, CheckpointState *state,
 								CheckpointWriteBack *writeback, int level,
@@ -4283,19 +4283,19 @@ checkpoint_stack_image_add_item(BTreeDescr *descr, CheckpointState *state,
 	if (checkpoint_image_add_item(&state->stack[level], type, item, item_size))
 		return;
 
-	/* no space for the item */
+	// no space for the item
 	checkpoint_stack_image_split_flush(descr, state, writeback, level);
 
-	/* repeat insert must be success */
+	// repeat insert must be success
 	inserted = checkpoint_image_add_item(&state->stack[level], type,
 										 item, item_size);
 	Assert(inserted);
 }
 
-/*
- * Flushes autonomous stack to the disk with the hikey to a given level
- * as upper stack limit.
- */
+//
+// Flushes autonomous stack to the disk with the hikey to a given level
+// as upper stack limit.
+//
 static void
 autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
 							   CheckpointWriteBack *writeback,
@@ -4304,22 +4304,22 @@ autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
 	uint64		downlink;
 	int			cur_level;
 
-	/*
-	 * Finds the lowest level on which images has tuples.
-	 */
+	//
+// Finds the lowest level on which images has tuples.
+//
 	for (cur_level = 1; cur_level < to_level; cur_level++)
 	{
 		if (BTREE_PAGE_ITEMS_COUNT(state->stack[cur_level].image) != 0)
 		{
-			/* It must be autonomous */
+			// It must be autonomous
 			Assert(state->stack[cur_level].autonomous);
 			break;
 		}
 	}
 
-	/*
-	 * Loops had been separated just for simplicity and it can be merged.
-	 */
+	//
+// Loops had been separated just for simplicity and it can be merged.
+//
 	for (; cur_level < to_level; cur_level++)
 	{
 		BTreeNonLeafTuphdr *tuphdr;
@@ -4327,7 +4327,7 @@ autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
 		int			flags;
 		BTreePageItemLocator loc;
 
-		/* write the autonomous image with given hikey */
+		// write the autonomous image with given hikey
 		checkpoint_stack_image_add_item(descr, state, writeback, cur_level,
 										StackImageAddHikey, hikey, hikey_size);
 
@@ -4335,16 +4335,16 @@ autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
 		downlink = autonomous_image_write(descr, state, writeback,
 										  cur_level, flags);
 
-		/* update last parent downlink with the offset */
+		// update last parent downlink with the offset
 
-		/* we do not loose a valid downlink here */
+		// we do not loose a valid downlink here
 		Assert(cur_level + 1 == to_level
 			   || state->stack[cur_level + 1].autonomousTupleExist);
 		BTREE_PAGE_LOCATOR_LAST(parent_img, &loc);
 		tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(parent_img, &loc);
 		tuphdr->downlink = downlink;
 
-		/* reset stack values for the current level */
+		// reset stack values for the current level
 
 		BTREE_PAGE_ITEMS_COUNT(state->stack[cur_level].image) = 0;
 		state->stack[cur_level].nextkeyType = NextKeyNone;
@@ -4387,7 +4387,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 
 	if (state->stack[level].nextkeyType == NextKeyGreatest)
 	{
-		/* no sense in the while loop */
+		// no sense in the while loop
 		BTREE_PAGE_LOCATOR_SET_INVALID(&loc);
 	}
 
@@ -4430,10 +4430,10 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 
 			if (cmp < 0)
 			{
-				/*
-				 * The key we met is less than nextkey.  That may happen due
-				 * to concurrent inserts.  So, skip it.
-				 */
+				//
+// The key we met is less than nextkey.  That may happen due
+// to concurrent inserts.  So, skip it.
+//
 				OTuple		hikey;
 				OTuple		levelHikey;
 
@@ -4454,10 +4454,10 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 								&levelHikey,
 								BTreeKeyNonLeafKey) > 0)
 				{
-					/*
-					 * the page is autonomous and nextkey location is last
-					 * page downlink
-					 */
+					//
+// the page is autonomous and nextkey location is last
+// page downlink
+//
 					BTREE_PAGE_LOCATOR_PREV(page, &loc);
 				}
 				else
@@ -4479,7 +4479,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 		prev_less = false;
 		tuple_processed = true;
 
-		/* the offset may change */
+		// the offset may change
 		if (autonomous)
 		{
 			tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(page, &loc);
@@ -4490,7 +4490,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 		{
 			if (!state->stack[level].autonomousTupleExist)
 			{
-				/* we need to add a new downlink to img */
+				// we need to add a new downlink to img
 				OTuple		downlink_key;
 				uint		downlink_key_size;
 				bool		nextkey = state->stack[level].nextkeyType == NextKeyValue,
@@ -4504,7 +4504,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 				}
 				else if (page_key)
 				{
-					/* easy case */
+					// easy case
 					BTREE_PAGE_READ_INTERNAL_TUPLE(downlink_key, page, &loc);
 					downlink_key_size = BTREE_PAGE_GET_ITEM_SIZE(page, &loc)
 						- BTreeNonLeafTuphdrSize;
@@ -4527,16 +4527,16 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 											   StackImageAddDownlink,
 											   downlink_key, downlink_key_size))
 				{
-					/*
-					 * unable to add downlink into the image, we need to write
-					 * autonomous image data
-					 */
+					//
+// unable to add downlink into the image, we need to write
+// autonomous image data
+//
 					Assert(autonomous);
 
-					/*
-					 * but we need to unlock page first and be ready to
-					 * continue
-					 */
+					//
+// but we need to unlock page first and be ready to
+// continue
+//
 					if (first_off)
 					{
 						state->stack[level].nextkeyType = NextKeyNone;
@@ -4552,9 +4552,9 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 
 					checkpoint_stack_image_split_flush(descr, state, writeback, level);
 
-					/*
-					 * and repeat try to add downlink
-					 */
+					//
+// and repeat try to add downlink
+//
 					message->action = WalkContinue;
 					state->stack[level].offset = BTREE_PAGE_LOCATOR_GET_OFFSET(page, &loc);
 					return;
@@ -4562,7 +4562,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 			}
 			else
 			{
-				/* downlink may be saved only for autonomous pages */
+				// downlink may be saved only for autonomous pages
 				Assert(autonomous);
 			}
 			state->stack[level].autonomousTupleExist = false;
@@ -4624,7 +4624,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 			BTreePageItemLocator nextLoc,
 						imgLastLoc;
 
-			/* copy internal header with downlink */
+			// copy internal header with downlink
 			BTREE_PAGE_LOCATOR_LAST(img, &imgLastLoc);
 			memcpy(BTREE_PAGE_LOCATOR_GET_ITEM(img, &imgLastLoc),
 				   BTREE_PAGE_LOCATOR_GET_ITEM(page, &loc),
@@ -4635,10 +4635,10 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 				OTuple		hikey;
 				int			hikey_size;
 
-				/*
-				 * Lowest levels of the stack have autonomous images with
-				 * tuples. We need to flush it to disk.
-				 */
+				//
+// Lowest levels of the stack have autonomous images with
+// tuples. We need to flush it to disk.
+//
 				Assert(autonomous);
 
 				if (BTREE_PAGE_LOCATOR_GET_OFFSET(page, &loc) == 0)
@@ -4661,16 +4661,16 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 				autonomous_stack_flush_to_disk(descr, state, writeback,
 											   level, hikey, hikey_size);
 
-				/* after this we can repeat */
+				// after this we can repeat
 				message->action = WalkContinue;
 				state->stack[level].offset = BTREE_PAGE_LOCATOR_GET_OFFSET(page, &loc);
 				return;
 			}
 
-			/*
-			 * Page is already on the disk, but we have to advance current key
-			 * ourselves...
-			 */
+			//
+// Page is already on the disk, but we have to advance current key
+// ourselves...
+//
 			nextLoc = loc;
 			BTREE_PAGE_LOCATOR_NEXT(page, &nextLoc);
 			if (BTREE_PAGE_LOCATOR_IS_VALID(page, &nextLoc) || !O_PAGE_IS(page, RIGHTMOST))
@@ -4720,7 +4720,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 		}
 		else if (DOWNLINK_IS_IN_IO(downlink))
 		{
-			/* Save the key we need to continue from */
+			// Save the key we need to continue from
 			if (BTREE_PAGE_LOCATOR_GET_OFFSET(page, &loc) == 0)
 			{
 				state->stack[level].nextkeyType = NextKeyNone;
@@ -4736,7 +4736,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 			state->stack[level].offset = BTREE_PAGE_LOCATOR_GET_OFFSET(page, &loc);
 
 			unlock_page(blkno);
-			/* IO is in-progress.  So, wait for completeness and retry. */
+			// IO is in-progress.  So, wait for completeness and retry.
 			wait_for_io_completion(DOWNLINK_GET_IO_LOCKNUM(downlink));
 			return;
 		}
@@ -4749,7 +4749,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 	O_TUPLE_SET_NULL(write_hikey);
 	if (autonomous && !write_rightmost && state->stack[level].bound == CheckpointBoundHikey)
 	{
-		/* we may need to write the autonomous image if hikeys is equal */
+		// we may need to write the autonomous image if hikeys is equal
 		int			cmp;
 		OTuple		hikey;
 		OTuple		levelHikey;
@@ -4773,7 +4773,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 			Assert(cmp >= 0);
 			if (cmp == 0)
 			{
-				/* we already write the child with the hikey */
+				// we already write the child with the hikey
 				write_hikey = levelHikey;
 				write_img = true;
 			}
@@ -4782,7 +4782,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 
 	if (autonomous)
 	{
-		/* no more need in page data */
+		// no more need in page data
 		chkp_inc_changecount_before(state);
 		state->stack[level].blkno = OInvalidInMemoryBlkno;
 		if (write_img)
@@ -4792,7 +4792,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 
 		if (!write_img)
 		{
-			/* no need to write the autonomous image */
+			// no need to write the autonomous image
 			message->action = WalkUpwards;
 			copy_from_fixed_shmem_key(&message->content.upwards.nextkey,
 									  &state->stack[level].nextkey);
@@ -4806,12 +4806,12 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 	}
 	else
 	{
-		/* If IO is in-progress then wait for its completion */
+		// If IO is in-progress then wait for its completion
 		page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 		ionum = page_desc->ionum;
 		if (ionum >= 0)
 		{
-			/* Save the key we need to continue from */
+			// Save the key we need to continue from
 			if (O_PAGE_IS(page, RIGHTMOST))
 			{
 				state->stack[level].nextkeyType = NextKeyGreatest;
@@ -4830,10 +4830,10 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 		}
 	}
 
-	/* we should write the image */
+	// we should write the image
 	Assert(write_img);
 
-	/* but first add a hikey to the image if needed */
+	// but first add a hikey to the image if needed
 	if (!write_rightmost)
 	{
 		int			hikey_len;
@@ -4857,7 +4857,7 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 	}
 	state->stack[level].autonomous = false;
 
-	/* Indicate that we've finished that page image */
+	// Indicate that we've finished that page image
 	message->action = WalkUpwards;
 	message->content.upwards.saveTuple = false;
 	if (autonomous)
@@ -4892,25 +4892,25 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 		PAGE_SET_N_ONDISK(img, BTREE_PAGE_ITEMS_COUNT(img));
 		PAGE_SET_LEVEL(img, level);
 
-		/*
-		 * We don't allow concurrent downlinks inserts into processed part of
-		 * the page.  So, just cleaning dirty flag should be correct.
-		 */
+		//
+// We don't allow concurrent downlinks inserts into processed part of
+// the page.  So, just cleaning dirty flag should be correct.
+//
 		was_dirty = IS_DIRTY(blkno);
 		if (was_dirty)
 		{
 			page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-			Assert(page_desc->ionum < 0);	/* already checked above */
+			Assert(page_desc->ionum < 0);	// already checked above
 			page_desc->ionum = assign_io_num(blkno, InvalidOffsetNumber);
 
-			/*
-			 * we assume that concurrent eviction of the parent is forbidden
-			 * by get_checkpoint_number() in walk_page()
-			 */
+			//
+// we assume that concurrent eviction of the parent is forbidden
+// by get_checkpoint_number() in walk_page()
+//
 			CLEAN_DIRTY(descr->ppool, blkno);
 		}
 
-		/* We've finished operation with the page, allow concurrent operations */
+		// We've finished operation with the page, allow concurrent operations
 		chkp_inc_changecount_before(state);
 		state->stack[level].blkno = OInvalidInMemoryBlkno;
 		state->stack[level].hikeyBlkno = OInvalidInMemoryBlkno;
@@ -4919,10 +4919,10 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 
 		if (was_dirty)
 		{
-			/*
-			 * TODO: Non-leaf page isn't modified during checkpoint.  We can
-			 * reuse original chunks layout/max key length.
-			 */
+			//
+// TODO: Non-leaf page isn't modified during checkpoint.  We can
+// reuse original chunks layout/max key length.
+//
 			split_page_by_chunks(descr, img);
 
 			written_downlink = perform_page_io(descr,
@@ -4978,21 +4978,21 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 }
 
 
-/*
- * Prepare particular leaf B-tree page for checkpointing.  Checkpointer
- * state stack item is already filled and page is locked.
- *
- * Unlocks page.
- */
+//
+// Prepare particular leaf B-tree page for checkpointing.  Checkpointer
+// state stack item is already filled and page is locked.
+//
+// Unlocks page.
+//
 static void
 prepare_leaf_page(BTreeDescr *descr, CheckpointState *state)
 {
 	Page		page;
 	OInMemoryBlkno blkno = state->stack[0].blkno;
 
-	/*
-	 * Update checkpoint bound key.
-	 */
+	//
+// Update checkpoint bound key.
+//
 	page = O_GET_IN_MEMORY_PAGE(blkno);
 
 	chkp_inc_changecount_before(state);
@@ -5010,13 +5010,13 @@ prepare_leaf_page(BTreeDescr *descr, CheckpointState *state)
 	unlock_page(blkno);
 }
 
-/*
- * Check if tree needs to be passed during checkpointing.  Is should be
- * presented in SYS_TREES_SHARED_ROOT_INFO or in SYS_TREES_EVICTED_DATA.  That
- * is, it should be either loaded to memory or evicted.  Others are guaranteed
- * to be unmodified since last checkpoint.  If tree is to be skipped, updates
- * checkpoint_state.
- */
+//
+// Check if tree needs to be passed during checkpointing.  Is should be
+// presented in SYS_TREES_SHARED_ROOT_INFO or in SYS_TREES_EVICTED_DATA.  That
+// is, it should be either loaded to memory or evicted.  Others are guaranteed
+// to be unmodified since last checkpoint.  If tree is to be skipped, updates
+// checkpoint_state.
+//
 static bool
 check_tree_needs_checkpointing(OIndexType type, ORelOids treeOids, Oid tablespace)
 {
@@ -5028,10 +5028,10 @@ check_tree_needs_checkpointing(OIndexType type, ORelOids treeOids, Oid tablespac
 	if (!skip_unmodified_trees)
 		return true;
 
-	/*
-	 * Check if we need to deal with this tree.  If tress have no shared root
-	 * info and no evicted data, skip it.
-	 */
+	//
+// Check if we need to deal with this tree.  If tress have no shared root
+// info and no evicted data, skip it.
+//
 	key.datoid = treeOids.datoid;
 	key.relnode = treeOids.relnode;
 
@@ -5111,10 +5111,10 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 	descr = o_fetch_index_descr(treeOids, type, true, NULL);
 	if (descr != NULL)
 	{
-		/*
-		 * Skip temporary tables - they use a per-backend local page pool
-		 * which is not accessible from the checkpointer process.
-		 */
+		//
+// Skip temporary tables - they use a per-backend local page pool
+// which is not accessible from the checkpointer process.
+//
 		if (descr->desc.storageType == BTreeStorageTemporary)
 		{
 			o_tables_rel_unlock_extended(&treeOids, AccessShareLock, true);
@@ -5141,12 +5141,12 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 		if (td->type >= oIndexUnique &&
 			XLogRecPtrIsInvalid(checkpoint_state->toastConsistentPtr))
 		{
-			/*
-			 * Snapshot every backend's PK-applied/SK-pending marker before
-			 * publishing the toast-consistent boundary so that recovery's
-			 * later fix-up pass sees exactly the in-flight rows that this
-			 * checkpoint cut across.
-			 */
+			//
+// Snapshot every backend's PK-applied/SK-pending marker before
+// publishing the toast-consistent boundary so that recovery's
+// later fix-up pass sees exactly the in-flight rows that this
+// checkpoint cut across.
+//
 			checkpoint_state->toastConsistentPtr = get_checkpoint_xlog_ptr();
 			checkpoint_write_pending_sk_fixups();
 		}
@@ -5197,12 +5197,12 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 		}
 		else
 		{
-			/*
-			 * BTreeStorageTemporary tables are skipped above.
-			 * BTreeStorageInMemory is only used by system trees, which are
-			 * checkpointed separately in checkpoint_sys_trees().  So only
-			 * persistent and unlogged trees should reach here.
-			 */
+			//
+// BTreeStorageTemporary tables are skipped above.
+// BTreeStorageInMemory is only used by system trees, which are
+// checkpointed separately in checkpoint_sys_trees().  So only
+// persistent and unlogged trees should reach here.
+//
 			Assert(td->storageType == BTreeStoragePersistence ||
 				   td->storageType == BTreeStorageUnlogged);
 
@@ -5232,9 +5232,9 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 	MemoryContextResetOnly(chkp_tree_context);
 }
 
-/*
- * Returns actual lastCheckpointNumber for current tree.
- */
+//
+// Returns actual lastCheckpointNumber for current tree.
+//
 uint32
 get_cur_checkpoint_number(ORelOids *oids, OIndexType type,
 						  bool *checkpoint_concurrent)
@@ -5267,7 +5267,7 @@ get_cur_checkpoint_number(ORelOids *oids, OIndexType type,
 		{
 			int			cmp;
 
-			/* datoid, relnode and ix_num setups inside changecount section */
+			// datoid, relnode and ix_num setups inside changecount section
 			Assert(OidIsValid(relnode));
 
 			cmp = chkp_ordering_cmp(type, oids->datoid, oids->relnode,
@@ -5275,7 +5275,7 @@ get_cur_checkpoint_number(ORelOids *oids, OIndexType type,
 
 			if (cmp < 0 || (cmp == 0 && completed))
 			{
-				/* BTree is already processed by current checkpoint */
+				// BTree is already processed by current checkpoint
 				result += 1;
 			}
 
@@ -5285,7 +5285,7 @@ get_cur_checkpoint_number(ORelOids *oids, OIndexType type,
 		{
 			*checkpoint_concurrent = false;
 		}
-		/* else checkpoint is not in progress */
+		// else checkpoint is not in progress
 		chkp_save_changecount_after(checkpoint_state, after_changecount);
 		if (before_changecount == after_changecount)
 			break;
@@ -5294,9 +5294,9 @@ get_cur_checkpoint_number(ORelOids *oids, OIndexType type,
 	return result;
 }
 
-/*
- * Check if we can already re-use space freed in given checkpoint.
- */
+//
+// Check if we can already re-use space freed in given checkpoint.
+//
 bool
 can_use_checkpoint_extents(BTreeDescr *desc, uint32 chkp_num)
 {
@@ -5305,10 +5305,10 @@ can_use_checkpoint_extents(BTreeDescr *desc, uint32 chkp_num)
 	if (chkp_num > checkpoint_state->lastCheckpointNumber)
 		return false;
 
-	/*
-	 * Prevent situtation when checkpoint was finished and new sequential scan
-	 * started between out checks for numSeqScans and lastCheckpointNumber.
-	 */
+	//
+// Prevent situtation when checkpoint was finished and new sequential scan
+// started between out checks for numSeqScans and lastCheckpointNumber.
+//
 	pg_read_barrier();
 
 	if (pg_atomic_read_u32(&metaPageBlkno->numSeqScans[(chkp_num - 1) % NUM_SEQ_SCANS_ARRAY_SIZE]) != 0)
@@ -5399,7 +5399,7 @@ checkpointable_tree_fill_seq_buffers(BTreeDescr *td, bool init,
 
 	if (is_compressed)
 	{
-		/* no need to initialize freeBuf shared memory */
+		// no need to initialize freeBuf shared memory
 		td->freeBuf.tag = prev_chkp_tag;
 		if (init)
 			meta_page->freeBuf.tag = prev_chkp_tag;
@@ -5439,14 +5439,14 @@ checkpointable_tree_fill_seq_buffers(BTreeDescr *td, bool init,
 	return true;
 }
 
-/*
- * Initializes metaPageBlkno information for a B-tree with pages eviction support.
- *
- * We can try to use exist on-disk data for the B-tree metaPageBlkno information or
- * initialize clear tree.
- *
- * Returns true if map file existed.
- */
+//
+// Initializes metaPageBlkno information for a B-tree with pages eviction support.
+//
+// We can try to use exist on-disk data for the B-tree metaPageBlkno information or
+// initialize clear tree.
+//
+// Returns true if map file existed.
+//
 static bool
 evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 						 uint32 *map_chkp_num, bool clear_tree)
@@ -5469,7 +5469,7 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 	}
 	else if (clear_tree)
 	{
-		/* No need to create or read a map file */
+		// No need to create or read a map file
 		file_header.rootDownlink = InvalidDiskDownlink;
 		file_header.datafileLength = 0;
 		file_header.numFreeBlocks = 0;
@@ -5514,16 +5514,16 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 
 		if (!prev_chkp_file_exist)
 		{
-			/*
-			 * Creates file with default header
-			 */
+			//
+// Creates file with default header
+//
 			file_header.rootDownlink = InvalidDiskDownlink;
 			file_header.datafileLength = 0;
 			file_header.numFreeBlocks = 0;
 			file_header.leafPagesNum = 1;
 			file_header.ctid = 0;
 		}
-		else					/* if checkpoint file exist */
+		else					// if checkpoint file exist
 		{
 			*map_chkp_num = prev_chkp_tag.num;
 			ferror = OFileRead(prev_chkp_file, (Pointer) &file_header,
@@ -5543,12 +5543,12 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 				 (unsigned long) file_header.datafileLength,
 				 file_header.leafPagesNum);
 
-			/*
-			 * The .map file may exist but have an unwritten header when a
-			 * tree was created, evicted, and the checkpoint skipped it (no
-			 * dirty pages).  Detect this and fall back to the default
-			 * empty-tree header.
-			 */
+			//
+// The .map file may exist but have an unwritten header when a
+// tree was created, evicted, and the checkpoint skipped it (no
+// dirty pages).  Detect this and fall back to the default
+// empty-tree header.
+//
 			if (DiskDownlinkIsValid(file_header.rootDownlink) &&
 				!FileExtentLenIsValid(DOWNLINK_GET_DISK_LEN(file_header.rootDownlink)))
 			{
@@ -5566,10 +5566,10 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 					 file_header.datafileLength == 0 &&
 					 file_header.leafPagesNum != 1)
 			{
-				/*
-				 * Header with all zeros but wrong leafPagesNum is also a sign
-				 * of unwritten header.
-				 */
+				//
+// Header with all zeros but wrong leafPagesNum is also a sign
+// of unwritten header.
+//
 				elog(DEBUG1, "evictable_tree_init_meta: uninitialized header "
 					 "in %s, using default",
 					 prev_chkp_fname);
@@ -5645,7 +5645,7 @@ evictable_tree_init_meta(BTreeDescr *desc, EvictedTreeData **evicted_data,
 	return result;
 }
 
-/* TODO: move this method ? */
+// TODO: move this method ?
 bool
 tbl_data_exists(ORelOids *oids, Oid tablespace)
 {
@@ -5675,7 +5675,7 @@ tbl_data_exists(ORelOids *oids, Oid tablespace)
 	o_get_prefixes_for_tablespace(ix_key.oids.datoid, ix_key.tablespace,
 								  NULL, &db_prefix);
 
-	/* TODO: more smart check */
+	// TODO: more smart check
 	filename = psprintf("%s/%u", db_prefix, oids->relnode);
 	file = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
 	pfree(filename);
@@ -5690,9 +5690,9 @@ tbl_data_exists(ORelOids *oids, Oid tablespace)
 	return false;
 }
 
-/*
- * Initializes B-tree with a page eviction support, but without checkpoint support.
- */
+//
+// Initializes B-tree with a page eviction support, but without checkpoint support.
+//
 void
 evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 {
@@ -5728,14 +5728,14 @@ evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 		&meta_page->freeBuf};
 		int			i = 0;
 
-		/*
-		 * BTreeStorageTemporary trees do not maintain a .map file, so skip
-		 * nextChkp initialization.  User temporary trees also rely on a
-		 * backend-local free space map (see free_extents.c) and do not
-		 * consult the tmpBuf / freeBuf seq bufs for allocations, but the seq
-		 * bufs are still initialized so that the regular eviction teardown in
-		 * btree_finalize_private_seq_bufs works uniformly.
-		 */
+		//
+// BTreeStorageTemporary trees do not maintain a .map file, so skip
+// nextChkp initialization.  User temporary trees also rely on a
+// backend-local free space map (see free_extents.c) and do not
+// consult the tmpBuf / freeBuf seq bufs for allocations, but the seq
+// bufs are still initialized so that the regular eviction teardown in
+// btree_finalize_private_seq_bufs works uniformly.
+//
 		if (desc->storageType == BTreeStorageTemporary)
 			i = 1;
 
@@ -5745,7 +5745,7 @@ evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 
 	if (is_compressed)
 	{
-		/* no need to initialize freeBuf shared memory */
+		// no need to initialize freeBuf shared memory
 		desc->freeBuf.tag = tmp_tag;
 		if (init_shmem)
 			meta_page->freeBuf.tag = tmp_tag;
@@ -5784,9 +5784,9 @@ evictable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 		pfree(evicted_tree_data);
 }
 
-/*
- * Initializes B-tree with checkpoint support.
- */
+//
+// Initializes B-tree with checkpoint support.
+//
 void
 checkpointable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 {
@@ -5804,11 +5804,11 @@ checkpointable_tree_init(BTreeDescr *desc, bool init_shmem, bool *was_evicted)
 		 desc->oids.datoid, desc->oids.relnode,
 		 chkp_num, checkpoint_concurrent);
 
-	/*
-	 * We shouldn't initialize shared memory concurrently to checkpoint.
-	 * Checkpointer should have initialized that before start working on this
-	 * tree.
-	 */
+	//
+// We shouldn't initialize shared memory concurrently to checkpoint.
+// Checkpointer should have initialized that before start working on this
+// tree.
+//
 	Assert(!init_shmem || !checkpoint_concurrent);
 
 	btree_open_smgr(desc);
@@ -5898,7 +5898,7 @@ foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
 
 	if (prev != NULL && prev->off + prev->len > extent.off)
 	{
-		/* cutting in progress, skip this part */
+		// cutting in progress, skip this part
 		Assert(prev->off + prev->len == extent.off + extent.len);
 		append = false;
 	}
@@ -5911,10 +5911,10 @@ foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
 	{
 		file_extents_array_append(array, &extent);
 
-		/*
-		 * we expect that the array will be sorted in ascending sort order
-		 * (off, len)
-		 */
+		//
+// we expect that the array will be sorted in ascending sort order
+// (off, len)
+//
 		Assert(array->size == 1
 			   || (array->extents[array->size - 2].off < array->extents[array->size - 1].off));
 	}
@@ -5959,13 +5959,13 @@ add_systrees_lock_undo(bool lock)
 	release_undo_size(UndoLogSystem);
 }
 
-/*
- * systrees_modify_start() and systrees_modify_end() should surround code
- * blocks, which modifies system trees and shouldn't be done concurrently to
- * checkpoint.
- *
- * oSysTreesLock is held during undo replay.
- */
+//
+// systrees_modify_start() and systrees_modify_end() should surround code
+// blocks, which modifies system trees and shouldn't be done concurrently to
+// checkpoint.
+//
+// oSysTreesLock is held during undo replay.
+//
 void
 systrees_modify_start(void)
 {

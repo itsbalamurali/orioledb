@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * ddl.c
- *		Routines for DDL handling.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/ddl.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// ddl.c
+// Routines for DDL handling.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/ddl.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -113,9 +113,9 @@ static void o_drop_table(ORelOids oids);
 
 typedef struct
 {
-	Oid			dest_dboid;		/* DB we are trying to move */
-	Oid			src_tsoid;		/* tablespace we are trying to move from */
-	Oid			dest_tsoid;		/* tablespace we are trying to move to */
+	Oid			dest_dboid;		// DB we are trying to move
+	Oid			src_tsoid;		// tablespace we are trying to move from
+	Oid			dest_tsoid;		// tablespace we are trying to move to
 } movedb_params;
 
 static ProcessUtility_hook_type next_ProcessUtility_hook = NULL;
@@ -197,7 +197,7 @@ alter_table_type_to_string(AlterTableType cmdtype)
 			return "ALTER COLUMN ... DROP EXPRESSION";
 #if PG_VERSION_NUM < 180000
 		case AT_CheckNotNull:
-			return NULL;		/* not real grammar */
+			return NULL;		// not real grammar
 #endif
 		case AT_SetStatistics:
 			return "ALTER COLUMN ... SET STATISTICS";
@@ -212,7 +212,7 @@ alter_table_type_to_string(AlterTableType cmdtype)
 		case AT_DropColumn:
 		case AT_AddIndex:
 		case AT_ReAddIndex:
-			return NULL;		/* not real grammar */
+			return NULL;		// not real grammar
 		case AT_AddConstraint:
 		case AT_ReAddConstraint:
 		case AT_ReAddDomainConstraint:
@@ -224,7 +224,7 @@ alter_table_type_to_string(AlterTableType cmdtype)
 			return "VALIDATE CONSTRAINT";
 		case AT_DropConstraint:
 		case AT_ReAddComment:
-			return NULL;		/* not real grammar */
+			return NULL;		// not real grammar
 		case AT_AlterColumnType:
 			return "ALTER COLUMN ... SET DATA TYPE";
 		case AT_AlterColumnGenericOptions:
@@ -250,7 +250,7 @@ alter_table_type_to_string(AlterTableType cmdtype)
 		case AT_ResetRelOptions:
 			return "RESET";
 		case AT_ReplaceRelOptions:
-			return NULL;		/* not real grammar */
+			return NULL;		// not real grammar
 		case AT_EnableTrig:
 			return "ENABLE TRIGGER";
 		case AT_EnableAlwaysTrig:
@@ -312,7 +312,7 @@ alter_table_type_to_string(AlterTableType cmdtype)
 			return "ALTER COLUMN ... SET EXPRESSION";
 #endif
 		case AT_ReAddStatistics:
-			return NULL;		/* not real grammar */
+			return NULL;		// not real grammar
 	}
 
 	return NULL;
@@ -336,67 +336,67 @@ is_alter_table_partition(PlannedStmt *pstmt)
 }
 
 
-/*
- * Given a VacuumRelation, fill in the table OID if it wasn't specified,
- * and optionally add VacuumRelations for partitions of the table.
- *
- * If a VacuumRelation does not have an OID supplied and is a partitioned
- * table, an extra entry will be added to the output for each partition.
- * Presently, only autovacuum supplies OIDs when calling vacuum(), and
- * it does not want us to expand partitioned tables.
- */
+//
+// Given a VacuumRelation, fill in the table OID if it wasn't specified,
+// and optionally add VacuumRelations for partitions of the table.
+//
+// If a VacuumRelation does not have an OID supplied and is a partitioned
+// table, an extra entry will be added to the output for each partition.
+// Presently, only autovacuum supplies OIDs when calling vacuum(), and
+// it does not want us to expand partitioned tables.
+//
 static List *
 expand_vacuum_rel(VacuumRelation *vrel, int options)
 {
 	List	   *vacrels = NIL;
 
-	/* If caller supplied OID, there's nothing we need do here. */
+	// If caller supplied OID, there's nothing we need do here.
 	if (OidIsValid(vrel->oid))
 	{
 		vacrels = lappend(vacrels, vrel);
 	}
 	else
 	{
-		/* Process a specific relation, and possibly partitions thereof */
+		// Process a specific relation, and possibly partitions thereof
 		Oid			relid;
 		HeapTuple	tuple;
 		Form_pg_class classForm;
 		bool		include_parts;
 		int			rvr_opts;
 
-		/*
-		 * We transiently take AccessShareLock to protect the syscache lookup
-		 * below, as well as find_all_inheritors's expectation that the caller
-		 * holds some lock on the starting relation.
-		 */
+		//
+// We transiently take AccessShareLock to protect the syscache lookup
+// below, as well as find_all_inheritors's expectation that the caller
+// holds some lock on the starting relation.
+//
 		rvr_opts = (options & VACOPT_SKIP_LOCKED) ? RVR_SKIP_LOCKED : 0;
 		relid = RangeVarGetRelidExtended(vrel->relation,
 										 AccessShareLock,
 										 rvr_opts,
 										 NULL, NULL);
 
-		/*
-		 * If the lock is unavailable, emit the same log statement that
-		 * vacuum_rel() and analyze_rel() would.
-		 */
+		//
+// If the lock is unavailable, emit the same log statement that
+// vacuum_rel() and analyze_rel() would.
+//
 		if (!OidIsValid(relid))
 		{
 			return vacrels;
 		}
 
-		/*
-		 * To check whether the relation is a partitioned table and its
-		 * ownership, fetch its syscache entry.
-		 */
+		//
+// To check whether the relation is a partitioned table and its
+// ownership, fetch its syscache entry.
+//
 		tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 		if (!HeapTupleIsValid(tuple))
 			elog(ERROR, "cache lookup failed for relation %u", relid);
 		classForm = (Form_pg_class) GETSTRUCT(tuple);
 
-		/*
-		 * Make a returnable VacuumRelation for this rel if user is a proper
-		 * owner.
-		 */
+		//
+// Make a returnable VacuumRelation for this rel if user is a proper
+// owner.
+//
 		if (vacuum_is_relation_owner(relid, classForm, options))
 		{
 			vacrels = lappend(vacrels, makeVacuumRelation(vrel->relation,
@@ -407,15 +407,15 @@ expand_vacuum_rel(VacuumRelation *vrel, int options)
 		include_parts = (classForm->relkind == RELKIND_PARTITIONED_TABLE);
 		ReleaseSysCache(tuple);
 
-		/*
-		 * If it is, make relation list entries for its partitions.  Note that
-		 * the list returned by find_all_inheritors() includes the passed-in
-		 * OID, so we have to skip that.  There's no point in taking locks on
-		 * the individual partitions yet, and doing so would just add
-		 * unnecessary deadlock risk.  For this last reason we do not check
-		 * yet the ownership of the partitions, which get added to the list to
-		 * process.  Ownership will be checked later on anyway.
-		 */
+		//
+// If it is, make relation list entries for its partitions.  Note that
+// the list returned by find_all_inheritors() includes the passed-in
+// OID, so we have to skip that.  There's no point in taking locks on
+// the individual partitions yet, and doing so would just add
+// unnecessary deadlock risk.  For this last reason we do not check
+// yet the ownership of the partitions, which get added to the list to
+// process.  Ownership will be checked later on anyway.
+//
 		if (include_parts)
 		{
 			List	   *part_oids = find_all_inheritors(relid, NoLock, NULL);
@@ -426,40 +426,40 @@ expand_vacuum_rel(VacuumRelation *vrel, int options)
 				Oid			part_oid = lfirst_oid(part_lc);
 
 				if (part_oid == relid)
-					continue;	/* ignore original table */
+					continue;	// ignore original table
 
-				/*
-				 * We omit a RangeVar since it wouldn't be appropriate to
-				 * complain about failure to open one of these relations
-				 * later.
-				 */
+				//
+// We omit a RangeVar since it wouldn't be appropriate to
+// complain about failure to open one of these relations
+// later.
+//
 				vacrels = lappend(vacrels, makeVacuumRelation(NULL,
 															  part_oid,
 															  vrel->va_cols));
 			}
 		}
 
-		/*
-		 * Release lock again.  This means that by the time we actually try to
-		 * process the table, it might be gone or renamed.  In the former case
-		 * we'll silently ignore it; in the latter case we'll process it
-		 * anyway, but we must beware that the RangeVar doesn't necessarily
-		 * identify it anymore.  This isn't ideal, perhaps, but there's little
-		 * practical alternative, since we're typically going to commit this
-		 * transaction and begin a new one between now and then.  Moreover,
-		 * holding locks on multiple relations would create significant risk
-		 * of deadlock.
-		 */
+		//
+// Release lock again.  This means that by the time we actually try to
+// process the table, it might be gone or renamed.  In the former case
+// we'll silently ignore it; in the latter case we'll process it
+// anyway, but we must beware that the RangeVar doesn't necessarily
+// identify it anymore.  This isn't ideal, perhaps, but there's little
+// practical alternative, since we're typically going to commit this
+// transaction and begin a new one between now and then.  Moreover,
+// holding locks on multiple relations would create significant risk
+// of deadlock.
+//
 		UnlockRelationOid(relid, AccessShareLock);
 	}
 
 	return vacrels;
 }
 
-/*
- * Construct a list of VacuumRelations for all vacuumable rels in
- * the current database.
- */
+//
+// Construct a list of VacuumRelations for all vacuumable rels in
+// the current database.
+//
 static List *
 get_all_vacuum_rels(int options)
 {
@@ -477,25 +477,25 @@ get_all_vacuum_rels(int options)
 		Form_pg_class classForm = (Form_pg_class) GETSTRUCT(tuple);
 		Oid			relid = classForm->oid;
 
-		/* check permissions of relation */
+		// check permissions of relation
 		if (!vacuum_is_relation_owner(relid, classForm, options))
 			continue;
 
-		/*
-		 * We include partitioned tables here; depending on which operation is
-		 * to be performed, caller will decide whether to process or ignore
-		 * them.
-		 */
+		//
+// We include partitioned tables here; depending on which operation is
+// to be performed, caller will decide whether to process or ignore
+// them.
+//
 		if (classForm->relkind != RELKIND_RELATION &&
 			classForm->relkind != RELKIND_MATVIEW &&
 			classForm->relkind != RELKIND_PARTITIONED_TABLE)
 			continue;
 
-		/*
-		 * Build VacuumRelation(s) specifying the table OIDs to be processed.
-		 * We omit a RangeVar since it wouldn't be appropriate to complain
-		 * about failure to open one of these relations later.
-		 */
+		//
+// Build VacuumRelation(s) specifying the table OIDs to be processed.
+// We omit a RangeVar since it wouldn't be appropriate to complain
+// about failure to open one of these relations later.
+//
 		vacrels = lappend(vacrels, makeVacuumRelation(NULL,
 													  relid,
 													  NIL));
@@ -506,7 +506,7 @@ get_all_vacuum_rels(int options)
 	return vacrels;
 }
 
-/* Based on postgres function ReindexMultipleTables */
+// Based on postgres function ReindexMultipleTables
 static bool
 check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool concurrently)
 {
@@ -523,10 +523,10 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 		   objectKind == REINDEX_OBJECT_SYSTEM ||
 		   objectKind == REINDEX_OBJECT_DATABASE);
 
-	/*
-	 * This matches the options enforced by the grammar, where the object name
-	 * is optional for DATABASE and SYSTEM.
-	 */
+	//
+// This matches the options enforced by the grammar, where the object name
+// is optional for DATABASE and SYSTEM.
+//
 	Assert(objectName || objectKind != REINDEX_OBJECT_SCHEMA);
 
 	if (objectKind == REINDEX_OBJECT_SYSTEM && concurrently)
@@ -534,12 +534,12 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot reindex system catalogs concurrently")));
 
-	/*
-	 * Get OID of object to reindex, being the database currently being used
-	 * by session for a database or for system catalogs, or the schema defined
-	 * by caller. At the same time do permission checks that need different
-	 * processing depending on the object type.
-	 */
+	//
+// Get OID of object to reindex, being the database currently being used
+// by session for a database or for system catalogs, or the schema defined
+// by caller. At the same time do permission checks that need different
+// processing depending on the object type.
+//
 	if (objectKind == REINDEX_OBJECT_SCHEMA)
 	{
 		objectOid = get_namespace_oid(objectName, false);
@@ -569,21 +569,21 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 						   get_database_name(objectOid));
 	}
 
-	/*
-	 * Create a memory context that will survive forced transaction commits we
-	 * do below.  Since it is a child of PortalContext, it will go away
-	 * eventually even if we suffer an error; there's no need for special
-	 * abort cleanup logic.
-	 */
+	//
+// Create a memory context that will survive forced transaction commits we
+// do below.  Since it is a child of PortalContext, it will go away
+// eventually even if we suffer an error; there's no need for special
+// abort cleanup logic.
+//
 	private_context = AllocSetContextCreate(PortalContext,
 											"check_multiple_tables",
 											ALLOCSET_SMALL_SIZES);
 
-	/*
-	 * Define the search keys to find the objects to reindex. For a schema, we
-	 * select target relations using relnamespace, something not necessary for
-	 * a database-wide operation.
-	 */
+	//
+// Define the search keys to find the objects to reindex. For a schema, we
+// select target relations using relnamespace, something not necessary for
+// a database-wide operation.
+//
 	if (objectKind == REINDEX_OBJECT_SCHEMA)
 	{
 		num_keys = 1;
@@ -595,12 +595,12 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 	else
 		num_keys = 0;
 
-	/*
-	 * Scan pg_class to build a list of the relations we need to reindex.
-	 *
-	 * We only consider plain relations and materialized views here (toast
-	 * rels will be processed indirectly by reindex_relation).
-	 */
+	//
+// Scan pg_class to build a list of the relations we need to reindex.
+//
+// We only consider plain relations and materialized views here (toast
+// rels will be processed indirectly by reindex_relation).
+//
 	relationRelation = table_open(RelationRelationId, AccessShareLock);
 	scan = table_beginscan_catalog(relationRelation, num_keys, scan_keys);
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
@@ -609,26 +609,26 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 		Oid			relid = classtuple->oid;
 		Relation	tbl;
 
-		/*
-		 * Only regular tables and matviews can have indexes, so ignore any
-		 * other kind of relation.
-		 *
-		 * Partitioned tables/indexes are skipped but matching leaf partitions
-		 * are processed.
-		 */
+		//
+// Only regular tables and matviews can have indexes, so ignore any
+// other kind of relation.
+//
+// Partitioned tables/indexes are skipped but matching leaf partitions
+// are processed.
+//
 		if (classtuple->relkind != RELKIND_RELATION &&
 			classtuple->relkind != RELKIND_MATVIEW)
 			continue;
 
-		/* Skip temp tables of other backends; we can't reindex them at all */
+		// Skip temp tables of other backends; we can't reindex them at all
 		if (classtuple->relpersistence == RELPERSISTENCE_TEMP &&
 			!isTempNamespace(classtuple->relnamespace))
 			continue;
 
-		/*
-		 * Check user/system classification.  SYSTEM processes all the
-		 * catalogs, and DATABASE processes everything that's not a catalog.
-		 */
+		//
+// Check user/system classification.  SYSTEM processes all the
+// catalogs, and DATABASE processes everything that's not a catalog.
+//
 		if (objectKind == REINDEX_OBJECT_SYSTEM &&
 			!IsCatalogRelationOid(relid))
 			continue;
@@ -636,22 +636,22 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 				 IsCatalogRelationOid(relid))
 			continue;
 
-		/*
-		 * The table can be reindexed if the user is superuser, the table
-		 * owner, or the database/schema owner (but in the latter case, only
-		 * if it's not a shared relation).  object_ownercheck includes the
-		 * superuser case, and depending on objectKind we already know that
-		 * the user has permission to run REINDEX on this database or schema
-		 * per the permission checks at the beginning of this routine.
-		 */
+		//
+// The table can be reindexed if the user is superuser, the table
+// owner, or the database/schema owner (but in the latter case, only
+// if it's not a shared relation).  object_ownercheck includes the
+// superuser case, and depending on objectKind we already know that
+// the user has permission to run REINDEX on this database or schema
+// per the permission checks at the beginning of this routine.
+//
 		if (classtuple->relisshared &&
 			object_ownercheck(RelationRelationId, relid, GetUserId()))
 			continue;
 
-		/*
-		 * Skip system tables, since index_create() would reject indexing them
-		 * concurrently (and it would likely fail if we tried).
-		 */
+		//
+// Skip system tables, since index_create() would reject indexing them
+// concurrently (and it would likely fail if we tried).
+//
 		if (concurrently && IsCatalogRelationOid(relid))
 		{
 			continue;
@@ -690,13 +690,13 @@ check_multiple_tables(const char *objectName, ReindexObjectType objectKind, bool
 }
 
 #if PG_VERSION_NUM >= 170000
-/*
- * create_ctas_internal
- *
- * Internal utility used for the creation of the definition of a relation
- * created via CREATE TABLE AS or a materialized view.  Caller needs to
- * provide a list of attributes (ColumnDef nodes).
- */
+//
+// create_ctas_internal
+//
+// Internal utility used for the creation of the definition of a relation
+// created via CREATE TABLE AS or a materialized view.  Caller needs to
+// provide a list of attributes (ColumnDef nodes).
+//
 static ObjectAddress
 create_ctas_internal(List *attrList, IntoClause *into)
 {
@@ -711,14 +711,14 @@ create_ctas_internal(List *attrList, IntoClause *into)
 #endif
 	ObjectAddress intoRelationAddr;
 
-	/* This code supports both CREATE TABLE AS and CREATE MATERIALIZED VIEW */
+	// This code supports both CREATE TABLE AS and CREATE MATERIALIZED VIEW
 	is_matview = (into->viewQuery != NULL);
 	relkind = is_matview ? RELKIND_MATVIEW : RELKIND_RELATION;
 
-	/*
-	 * Create the target relation by faking up a CREATE TABLE parsetree and
-	 * passing it to DefineRelation.
-	 */
+	//
+// Create the target relation by faking up a CREATE TABLE parsetree and
+// passing it to DefineRelation.
+//
 	create->relation = into->rel;
 	create->tableElts = attrList;
 	create->inhRelations = NIL;
@@ -730,20 +730,20 @@ create_ctas_internal(List *attrList, IntoClause *into)
 	create->if_not_exists = false;
 	create->accessMethod = into->accessMethod;
 
-	/*
-	 * Create the relation.  (This will error out if there's an existing view,
-	 * so we don't need more code to complain if "replace" is false.)
-	 */
+	//
+// Create the relation.  (This will error out if there's an existing view,
+// so we don't need more code to complain if "replace" is false.)
+//
 	intoRelationAddr = DefineRelation(create, relkind, InvalidOid, NULL, NULL);
 
-	/*
-	 * If necessary, create a TOAST table for the target table.  Note that
-	 * NewRelationCreateToastTable ends with CommandCounterIncrement(), so
-	 * that the TOAST table will be visible for insertion.
-	 */
+	//
+// If necessary, create a TOAST table for the target table.  Note that
+// NewRelationCreateToastTable ends with CommandCounterIncrement(), so
+// that the TOAST table will be visible for insertion.
+//
 	CommandCounterIncrement();
 
-	/* parse and validate reloptions for the toast table */
+	// parse and validate reloptions for the toast table
 	toast_options = transformRelOptions((Datum) 0,
 										create->options,
 										"toast",
@@ -754,10 +754,10 @@ create_ctas_internal(List *attrList, IntoClause *into)
 
 	NewRelationCreateToastTable(intoRelationAddr.objectId, toast_options);
 
-	/* Create the "view" part of a materialized view. */
+	// Create the "view" part of a materialized view.
 	if (is_matview)
 	{
-		/* StoreViewQuery scribbles on tree, so make a copy */
+		// StoreViewQuery scribbles on tree, so make a copy
 		Query	   *query = (Query *) copyObject(into->viewQuery);
 
 		StoreViewQuery(intoRelationAddr.objectId, query, false);
@@ -767,12 +767,12 @@ create_ctas_internal(List *attrList, IntoClause *into)
 	return intoRelationAddr;
 }
 
-/*
- * create_ctas_nodata
- *
- * Create CTAS or materialized view when WITH NO DATA is used, starting from
- * the targetlist of the SELECT or view definition.
- */
+//
+// create_ctas_nodata
+//
+// Create CTAS or materialized view when WITH NO DATA is used, starting from
+// the targetlist of the SELECT or view definition.
+//
 static ObjectAddress
 create_ctas_nodata(List *tlist, IntoClause *into)
 {
@@ -780,11 +780,11 @@ create_ctas_nodata(List *tlist, IntoClause *into)
 	ListCell   *t,
 			   *lc;
 
-	/*
-	 * Build list of ColumnDefs from non-junk elements of the tlist.  If a
-	 * column name list was specified in CREATE TABLE AS, override the column
-	 * names in the query.  (Too few column names are OK, too many are not.)
-	 */
+	//
+// Build list of ColumnDefs from non-junk elements of the tlist.  If a
+// column name list was specified in CREATE TABLE AS, override the column
+// names in the query.  (Too few column names are OK, too many are not.)
+//
 	attrList = NIL;
 	lc = list_head(into->colNames);
 	foreach(t, tlist)
@@ -809,12 +809,12 @@ create_ctas_nodata(List *tlist, IntoClause *into)
 								exprTypmod((Node *) tle->expr),
 								exprCollation((Node *) tle->expr));
 
-			/*
-			 * It's possible that the column is of a collatable type but the
-			 * collation could not be resolved, so double-check.  (We must
-			 * check this here because DefineRelation would adopt the type's
-			 * default collation rather than complaining.)
-			 */
+			//
+// It's possible that the column is of a collatable type but the
+// collation could not be resolved, so double-check.  (We must
+// check this here because DefineRelation would adopt the type's
+// default collation rather than complaining.)
+//
 			if (!OidIsValid(col->collOid) &&
 				type_is_collatable(col->typeName->typeOid))
 				ereport(ERROR,
@@ -833,7 +833,7 @@ create_ctas_nodata(List *tlist, IntoClause *into)
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("too many column names were specified")));
 
-	/* Create the relation definition using the ColumnDef list */
+	// Create the relation definition using the ColumnDef list
 	return create_ctas_internal(attrList, into);
 }
 #endif
@@ -852,10 +852,10 @@ ReindexPartitions(Oid relid, bool concurrently)
 		Oid			partoid = lfirst_oid(lc);
 		Relation	part_rel = relation_open(partoid, AccessShareLock);
 
-		/*
-		 * This discards partitioned tables, partitioned indexes and foreign
-		 * tables.
-		 */
+		//
+// This discards partitioned tables, partitioned indexes and foreign
+// tables.
+//
 		if (!RELKIND_HAS_STORAGE(part_rel->rd_rel->relkind))
 		{
 			relation_close(part_rel, AccessShareLock);
@@ -906,11 +906,11 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	ParseState *pstate;
 	bool		call_next = true;
 
-	/* copied from standard_ProcessUtility */
+	// copied from standard_ProcessUtility
 	if (readOnlyTree)
 		pstmt = copyObject(pstmt);
 
-	/* Is this enough? */
+	// Is this enough?
 	if (isTopLevel)
 	{
 		in_rewrite = false;
@@ -925,31 +925,31 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	pstate->p_sourcetext = queryString;
 	pstate->p_queryEnv = env;
 
-	/*
-	 * DDL WAL ordering barrier.
-	 *
-	 * OrioleDB does not emit its WAL records immediately and directly into
-	 * PostgreSQL WAL.  We first accumulate Oriole records in a per-backend
-	 * local WAL buffer and flush that buffer either: - when it overflows, or
-	 * - at transaction finalization.
-	 *
-	 * This deferred flushing can reorder OrioleDB WAL records relative to
-	 * PostgreSQL-native WAL records generated by utility commands (DDL). In
-	 * particular, a utility command may generate PG WAL immediately, while
-	 * Oriole's related records stay buffered until later.  On crash/recovery
-	 * or logical decoding this may surface as observing PG DDL changes before
-	 * the corresponding Oriole metadata/state changes, which breaks
-	 * assumptions about atomicity and visibility of DDL boundaries.
-	 *
-	 * To enforce a stable ordering across the two WAL streams, we treat entry
-	 * into ProcessUtility as a barrier: before executing any utility command
-	 * we flush any pending Oriole local WAL so that all Oriole records
-	 * produced by prior statements become durable/visible in WAL *before*
-	 * this DDL starts producing PostgreSQL WAL.
-	 *
-	 * Note: recovery workers do not produce local WAL in the same way and
-	 * must not perform this flush here.
-	 */
+	//
+// DDL WAL ordering barrier.
+//
+// OrioleDB does not emit its WAL records immediately and directly into
+// PostgreSQL WAL.  We first accumulate Oriole records in a per-backend
+// local WAL buffer and flush that buffer either: - when it overflows, or
+// - at transaction finalization.
+//
+// This deferred flushing can reorder OrioleDB WAL records relative to
+// PostgreSQL-native WAL records generated by utility commands (DDL). In
+// particular, a utility command may generate PG WAL immediately, while
+// Oriole's related records stay buffered until later.  On crash/recovery
+// or logical decoding this may surface as observing PG DDL changes before
+// the corresponding Oriole metadata/state changes, which breaks
+// assumptions about atomicity and visibility of DDL boundaries.
+//
+// To enforce a stable ordering across the two WAL streams, we treat entry
+// into ProcessUtility as a barrier: before executing any utility command
+// we flush any pending Oriole local WAL so that all Oriole records
+// produced by prior statements become durable/visible in WAL *before*
+// this DDL starts producing PostgreSQL WAL.
+//
+// Note: recovery workers do not produce local WAL in the same way and
+// must not perform this flush here.
+//
 	if (!is_recovery_process() && !local_wal_is_empty())
 		flush_local_wal(false, false);
 
@@ -963,21 +963,21 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 		objtype = atstmt->objtype;
 
-		/*
-		 * alter_type_exprs is expected to be allocated in PortalContext so it
-		 * isn't freed by us and pointer may be invalid there
-		 */
+		//
+// alter_type_exprs is expected to be allocated in PortalContext so it
+// isn't freed by us and pointer may be invalid there
+//
 		alter_type_exprs = NIL;
 		dropped_attrs = NIL;
 
-		/*
-		 * ALTER TYPE ADD ATTRIBUTE on a composite type does not alter the
-		 * on-disk representation or comparison order of stored composite
-		 * values: existing tuples keep their natts count and the extra fields
-		 * read back as NULL.  Skip the composite-type dependency check in
-		 * that case.  DROP ATTRIBUTE and ALTER ATTRIBUTE TYPE change
-		 * comparison semantics and stay strict.
-		 */
+		//
+// ALTER TYPE ADD ATTRIBUTE on a composite type does not alter the
+// on-disk representation or comparison order of stored composite
+// values: existing tuples keep their natts count and the extra fields
+// read back as NULL.  Skip the composite-type dependency check in
+// that case.  DROP ATTRIBUTE and ALTER ATTRIBUTE TYPE change
+// comparison semantics and stay strict.
+//
 		o_composite_alter_index_safe = false;
 		if (objtype == OBJECT_TYPE && atstmt->cmds != NIL)
 		{
@@ -997,11 +997,11 @@ orioledb_utility_command(PlannedStmt *pstmt,
 			o_composite_alter_index_safe = all_safe;
 		}
 
-		/*
-		 * Figure out lock mode, and acquire lock.  This also does basic
-		 * permissions checks, so that we won't wait for a lock on (for
-		 * example) a relation on which we have no permissions.
-		 */
+		//
+// Figure out lock mode, and acquire lock.  This also does basic
+// permissions checks, so that we won't wait for a lock on (for
+// example) a relation on which we have no permissions.
+//
 		lockmode = AlterTableGetLockLevel(atstmt->cmds);
 		relid = AlterTableLookupRelation(atstmt, lockmode);
 
@@ -1018,7 +1018,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 				{
 					AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
 
-					/* make checks */
+					// make checks
 					switch (cmd->subtype)
 					{
 						case AT_AddColumn:
@@ -1120,11 +1120,11 @@ orioledb_utility_command(PlannedStmt *pstmt,
 			}
 			else if (rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE)
 			{
-				/*
-				 * Parent partition table is always heap-based, however child
-				 * partitions can use orioledb, so we need to process
-				 * non-oriole relations as well
-				 */
+				//
+// Parent partition table is always heap-based, however child
+// partitions can use orioledb, so we need to process
+// non-oriole relations as well
+//
 				ListCell   *lc;
 
 				foreach(lc, atstmt->cmds)
@@ -1144,10 +1144,10 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	{
 		RenameStmt *stmt = (RenameStmt *) pstmt->utilityStmt;
 
-		/*
-		 * Renaming a composite type or one of its attributes touches only
-		 * catalog names; stored composite values are unaffected.
-		 */
+		//
+// Renaming a composite type or one of its attributes touches only
+// catalog names; stored composite values are unaffected.
+//
 		if (stmt->renameType == OBJECT_TYPE ||
 			stmt->renameType == OBJECT_ATTRIBUTE)
 			o_composite_alter_index_safe = true;
@@ -1158,7 +1158,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 		if (stmt->relation != NULL)
 		{
-			/* This is the single-relation case. */
+			// This is the single-relation case.
 			Oid			tableOid;
 			Relation	rel = NULL;
 			bool		orioledb;
@@ -1295,7 +1295,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 						 parser_errposition(pstate, opt->location)));
 		}
 
-		/* Show same error as in ExecReindex */
+		// Show same error as in ExecReindex
 		if (concurrently)
 			PreventInTransactionBlock(isTopLevel,
 									  "REINDEX CONCURRENTLY");
@@ -1304,7 +1304,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 		{
 			Oid			tablespaceOid = get_tablespace_oid(tablespacename, false);
 
-			/* Check permissions except when moving to database's default */
+			// Check permissions except when moving to database's default
 			if (OidIsValid(tablespaceOid) &&
 				tablespaceOid != MyDatabaseTableSpace)
 			{
@@ -1478,11 +1478,11 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 				address = create_ctas_nodata(query->targetList, into);
 
-				/*
-				 * We cannot just use rel->rd_rules in access hook, because it
-				 * recalculates expression two times if it executes postgreses
-				 * code, even if it skips insertion to table
-				 */
+				//
+// We cannot just use rel->rd_rules in access hook, because it
+// recalculates expression two times if it executes postgreses
+// code, even if it skips insertion to table
+//
 				savedDataQuery = (Query *) copyObject(into->viewQuery);
 #if PG_VERSION_NUM >= 180000
 				RefreshMatViewByOid(address.objectId, true, true, false,
@@ -1577,7 +1577,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, CreatedbStmt))
 	{
-		/* no event triggers for global objects */
+		// no event triggers for global objects
 		PreventInTransactionBlock(isTopLevel, "CREATE DATABASE");
 		o_createdb(pstate, (CreatedbStmt *) pstmt->utilityStmt);
 
@@ -1621,10 +1621,10 @@ orioledb_utility_command(PlannedStmt *pstmt,
 	}
 	else if (IsA(pstmt->utilityStmt, AlterTableStmt))
 	{
-		/*
-		 * We don't need to check the lists for NIL list_free_deep() already
-		 * does that.
-		 */
+		//
+// We don't need to check the lists for NIL list_free_deep() already
+// does that.
+//
 		list_free_deep(drop_index_list);
 		drop_index_list = NIL;
 
@@ -1639,10 +1639,10 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 		o_composite_alter_index_safe = false;
 
-		/*
-		 * Don't free memory explicitly, delegate it to the memory context
-		 * mechanism
-		 */
+		//
+// Don't free memory explicitly, delegate it to the memory context
+// mechanism
+//
 		o_added_columns = NIL;
 	}
 	else if (IsA(pstmt->utilityStmt, RenameStmt))
@@ -1659,12 +1659,12 @@ orioledb_utility_command(PlannedStmt *pstmt,
 
 		if (seqstmt->for_identity)
 		{
-			/*
-			 * Here we enrich already existing list elements with data about
-			 * created sequences. We reuse the same list for enriched data, so
-			 * first pop the head element, enrich it with data, then push it
-			 * back to the list tail
-			 */
+			//
+// Here we enrich already existing list elements with data about
+// created sequences. We reuse the same list for enriched data, so
+// first pop the head element, enrich it with data, then push it
+// back to the list tail
+//
 			NextValueExpr *nve = makeNode(NextValueExpr);
 
 			List	   *pair = linitial(o_added_columns);
@@ -1677,7 +1677,7 @@ orioledb_utility_command(PlannedStmt *pstmt,
 			nve->typeId = typeOid;
 
 			o_added_columns = lappend(o_added_columns,
-			/* cppcheck-suppress unknownEvaluationOrder */
+			// cppcheck-suppress unknownEvaluationOrder
 									  list_make2(expression_planner((Expr *) nve), makeString(colname)));
 		}
 	}
@@ -1733,20 +1733,20 @@ o_alter_column_type(AlterTableCmd *cmd, const char *queryString, Relation rel)
 									   EXPR_KIND_ALTER_COL_TRANSFORM);
 #if PG_VERSION_NUM >= 180000
 
-		/*
-		 * If the USING expression references a virtual generated column,
-		 * substitute the underlying generation expression before stashing it
-		 * away; the rewrite loop later hands this expression to
-		 * ExecPrepareExpr / o_eval_default, which would otherwise raise
-		 * "unexpected virtual generated column reference" on the bare Var.
-		 */
+		//
+// If the USING expression references a virtual generated column,
+// substitute the underlying generation expression before stashing it
+// away; the rewrite loop later hands this expression to
+// ExecPrepareExpr / o_eval_default, which would otherwise raise
+// "unexpected virtual generated column reference" on the bare Var.
+//
 		cooked_default = expand_generated_columns_in_expr(cooked_default,
 														  rel, 1);
 #endif
 		attnum = get_attnum(RelationGetRelid(rel), cmd->name);
 		alter_type_exprs =
 			lappend(alter_type_exprs,
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 					list_make4(makeInteger(attnum), makeInteger(rel->rd_rel->oid), cooked_default, makeString(cmd->name)));
 	}
 }
@@ -1761,13 +1761,13 @@ o_find_collation_dependencies(Oid colloid)
 	HeapTuple	collationtup;
 	Form_pg_collation collform;
 
-	/* since this function recurses, it could be driven to stack overflow */
+	// since this function recurses, it could be driven to stack overflow
 	check_stack_depth();
 
-	/*
-	 * We scan pg_depend to find those things that depend on the given type.
-	 * (We assume we can ignore refobjsubid for a type.)
-	 */
+	//
+// We scan pg_depend to find those things that depend on the given type.
+// (We assume we can ignore refobjsubid for a type.)
+//
 	depRel = table_open(DependRelationId, AccessShareLock);
 
 	ScanKeyInit(&key[0],
@@ -1792,8 +1792,8 @@ o_find_collation_dependencies(Oid colloid)
 		Form_pg_depend pg_depend = (Form_pg_depend) GETSTRUCT(depTup);
 		Relation	rel;
 
-		/* Else, ignore dependees that aren't user columns of relations */
-		/* (we assume system columns are never of interesting types) */
+		// Else, ignore dependees that aren't user columns of relations
+		// (we assume system columns are never of interesting types)
 		if (pg_depend->classid != RelationRelationId)
 			continue;
 
@@ -1846,13 +1846,13 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 	SysScanDesc depScan;
 	HeapTuple	depTup;
 
-	/* since this function recurses, it could be driven to stack overflow */
+	// since this function recurses, it could be driven to stack overflow
 	check_stack_depth();
 
-	/*
-	 * We scan pg_depend to find those things that depend on the given type.
-	 * (We assume we can ignore refobjsubid for a type.)
-	 */
+	//
+// We scan pg_depend to find those things that depend on the given type.
+// (We assume we can ignore refobjsubid for a type.)
+//
 	depRel = table_open(DependRelationId, AccessShareLock);
 
 	ScanKeyInit(&key[0],
@@ -1872,21 +1872,21 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 		Form_pg_depend pg_depend = (Form_pg_depend) GETSTRUCT(depTup);
 		Relation	rel;
 
-		/* Check for directly dependent types */
+		// Check for directly dependent types
 		if (pg_depend->classid == TypeRelationId)
 		{
-			/*
-			 * This must be an array, domain, or range containing the given
-			 * type, so recursively check for uses of this type.  Note that
-			 * any error message will mention the original type not the
-			 * container; this is intentional.
-			 */
+			//
+// This must be an array, domain, or range containing the given
+// type, so recursively check for uses of this type.  Note that
+// any error message will mention the original type not the
+// container; this is intentional.
+//
 			o_find_composite_type_dependencies(pg_depend->objid, origRelation);
 			continue;
 		}
 
-		/* Else, ignore dependees that aren't user columns of relations */
-		/* (we assume system columns are never of interesting types) */
+		// Else, ignore dependees that aren't user columns of relations
+		// (we assume system columns are never of interesting types)
 		if (pg_depend->classid != RelationRelationId ||
 			pg_depend->objsubid <= 0)
 			continue;
@@ -1938,10 +1938,10 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 		}
 		else if (OidIsValid(rel->rd_rel->reltype))
 		{
-			/*
-			 * A view or composite type itself isn't a problem, but we must
-			 * recursively check for indirect dependencies via its rowtype.
-			 */
+			//
+// A view or composite type itself isn't a problem, but we must
+// recursively check for indirect dependencies via its rowtype.
+//
 			o_find_composite_type_dependencies(rel->rd_rel->reltype,
 											   origRelation);
 		}
@@ -1978,7 +1978,7 @@ ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid ob
 		}
 	}
 
-	/* code from ATPrepAlterColumnType */
+	// code from ATPrepAlterColumnType
 	if (!expr)
 	{
 		expr = (Node *) makeVar(1, subId, old_field->typid, old_field->typmod,
@@ -1994,7 +1994,7 @@ ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid ob
 		{
 			char	   *field_name = pstrdup(field->name.data);
 
-			/* cppcheck-suppress unknownEvaluationOrder */
+			// cppcheck-suppress unknownEvaluationOrder
 			alter_type_exprs = lappend(alter_type_exprs, list_make4(makeInteger(subId), makeInteger(objectId), expr, makeString(field_name)));
 		}
 		assign_expr_collations(pstate, expr);
@@ -2002,7 +2002,7 @@ ATColumnChangeRequiresRewrite(OTableField *old_field, OTableField *field, Oid ob
 
 		while (!rewrite)
 		{
-			/* only one varno, so no need to check that */
+			// only one varno, so no need to check that
 			if (IsA(expr, Var) && ((Var *) expr)->varattno == subId)
 				break;
 			else if (IsA(expr, RelabelType))
@@ -2190,16 +2190,16 @@ create_o_table_for_rel(Relation rel)
 
 typedef struct
 {
-	DestReceiver pub;			/* publicly-known function pointers */
+	DestReceiver pub;			// publicly-known function pointers
 	Relation	rel;
 	OTableDescr *descr;
 	CommitSeqNo csn;
 	OXid		oxid;
 } DR_transientrel;
 
-/*
- * transientrel_startup --- executor startup
- */
+//
+// transientrel_startup --- executor startup
+//
 static void
 transientrel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 {
@@ -2210,9 +2210,9 @@ transientrel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	myState->csn = oSnapshot.csn;
 }
 
-/*
- * transientrel_receive --- receive one tuple
- */
+//
+// transientrel_receive --- receive one tuple
+//
 static bool
 transientrel_receive(TupleTableSlot *slot, DestReceiver *self)
 {
@@ -2220,22 +2220,22 @@ transientrel_receive(TupleTableSlot *slot, DestReceiver *self)
 
 	o_tbl_insert(myState->descr, myState->rel, slot, myState->oxid, myState->csn);
 
-	/* We know this is a newly created relation, so there are no indexes */
+	// We know this is a newly created relation, so there are no indexes
 
 	return true;
 }
 
-/*
- * transientrel_shutdown --- executor end
- */
+//
+// transientrel_shutdown --- executor end
+//
 static void
 transientrel_shutdown(DestReceiver *self)
 {
 }
 
-/*
- * transientrel_destroy --- release DestReceiver object
- */
+//
+// transientrel_destroy --- release DestReceiver object
+//
 static void
 transientrel_destroy(DestReceiver *self)
 {
@@ -2289,40 +2289,40 @@ rewrite_matview(Relation rel, OTable *old_o_table, OTable *new_o_table)
 	Query	   *copied_query;
 	Query	   *query;
 
-	/* Lock and rewrite, using a copy to preserve the original query. */
+	// Lock and rewrite, using a copy to preserve the original query.
 	copied_query = copyObject(savedDataQuery);
 	AcquireRewriteLocks(copied_query, true, false);
 	rewritten = QueryRewrite(copied_query);
 
-	/* SELECT should never rewrite to more or less than one SELECT query */
+	// SELECT should never rewrite to more or less than one SELECT query
 	if (list_length(rewritten) != 1)
 		elog(ERROR, "unexpected rewrite result for REFRESH MATERIALIZED VIEW");
 	query = (Query *) linitial(rewritten);
 
-	/* Check for user-requested abort. */
+	// Check for user-requested abort.
 	CHECK_FOR_INTERRUPTS();
 
-	/* Plan the query which will generate data for the refresh. */
+	// Plan the query which will generate data for the refresh.
 	plan = pg_plan_query(query, "ORIOLEDB rewrite_matview", CURSOR_OPT_PARALLEL_OK, NULL);
 
-	/*
-	 * Use a snapshot with an updated command ID to ensure this query sees
-	 * results of any previously executed queries.  (This could only matter if
-	 * the planner executed an allegedly-stable function that changed the
-	 * database contents, but let's do it anyway to be safe.)
-	 */
+	//
+// Use a snapshot with an updated command ID to ensure this query sees
+// results of any previously executed queries.  (This could only matter if
+// the planner executed an allegedly-stable function that changed the
+// database contents, but let's do it anyway to be safe.)
+//
 	PushCopiedSnapshot(GetActiveSnapshot());
 	UpdateActiveSnapshotCommandId();
 
-	/* Create a QueryDesc, redirecting output to our tuple receiver */
+	// Create a QueryDesc, redirecting output to our tuple receiver
 	queryDesc = CreateQueryDesc(plan, "ORIOLEDB rewrite_matview",
 								GetActiveSnapshot(), InvalidSnapshot,
 								dest, NULL, NULL, 0);
 
-	/* call ExecutorStart to prepare the plan for execution */
+	// call ExecutorStart to prepare the plan for execution
 	ExecutorStart(queryDesc, 0);
 
-	/* run the plan */
+	// run the plan
 #if PG_VERSION_NUM < 180000
 	ExecutorRun(queryDesc, ForwardScanDirection, 0, true);
 #else
@@ -2331,7 +2331,7 @@ rewrite_matview(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 	pgstat_count_heap_insert(rel, queryDesc->estate->es_processed);
 
-	/* and clean up */
+	// and clean up
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
 
@@ -2372,16 +2372,16 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 	new_slot = MakeSingleTupleTableSlot(descr->tupdesc, &TTSOpsOrioleDB);
 	sscan = make_btree_seq_scan(&GET_PRIMARY(old_descr)->desc, &o_in_progress_snapshot, NULL);
 
-	/*
-	 * OrioleDB engine change execution order when relation is rewritten. So
-	 * real data transfer from old relation to the new one executed after
-	 * dropping. So in statements with moving data from one column to another
-	 * via ALTER COLUMN and DROP we gather an error that column already
-	 * dropped. To avoid this behavior mark column dropped in current
-	 * statement as not dropped. This is ugly solution actually need refactor
-	 * handling of ALTER TABLE to avoid global vars and lists that brings a
-	 * lot of bugs.
-	 */
+	//
+// OrioleDB engine change execution order when relation is rewritten. So
+// real data transfer from old relation to the new one executed after
+// dropping. So in statements with moving data from one column to another
+// via ALTER COLUMN and DROP we gather an error that column already
+// dropped. To avoid this behavior mark column dropped in current
+// statement as not dropped. This is ugly solution actually need refactor
+// handling of ALTER TABLE to avoid global vars and lists that brings a
+// lot of bugs.
+//
 	if (OidIsValid(o_saved_relrewrite))
 	{
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
@@ -2416,7 +2416,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
-	/* Prepare CHECK constraint expressions for validation during rewrite */
+	// Prepare CHECK constraint expressions for validation during rewrite
 	if (num_check > 0)
 	{
 		int			i;
@@ -2432,15 +2432,15 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 #if PG_VERSION_NUM >= 180000
 
-			/*
-			 * PG18 lets generated columns be VIRTUAL, in which case the
-			 * column has no storage and ExecCheck's expression evaluator must
-			 * see the underlying generation expression where the constraint
-			 * references such a column.  Upstream ATRewriteTable does the
-			 * same substitution before preparing the CHECK expression;
-			 * without it we'd raise "unexpected virtual generated column
-			 * reference" the moment ExecCheck reads the attribute.
-			 */
+			//
+// PG18 lets generated columns be VIRTUAL, in which case the
+// column has no storage and ExecCheck's expression evaluator must
+// see the underlying generation expression where the constraint
+// references such a column.  Upstream ATRewriteTable does the
+// same substitution before preparing the CHECK expression;
+// without it we'd raise "unexpected virtual generated column
+// reference" the moment ExecCheck reads the attribute.
+//
 			checkconstexpr = (Expr *) expand_generated_columns_in_expr((Node *) checkconstexpr,
 																	   rel, 1);
 #endif
@@ -2457,18 +2457,18 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 		slot_getallattrs(old_slot);
 		tts_orioledb_detoast(old_slot);
 
-		/*
-		 * Constraints and GENERATED expressions might reference the tableoid
-		 * column, so fill tts_tableOid with the desired value.
-		 */
+		//
+// Constraints and GENERATED expressions might reference the tableoid
+// column, so fill tts_tableOid with the desired value.
+//
 		new_slot->tts_tableOid = RelationGetRelid(rel);
 
-		/*
-		 * Process tuple in two phases: 1) Non-generated attrs 2) Generated
-		 * attrs only Rewriting tuples in such manner helps to handle
-		 * situations when a generated column depends on the value of another
-		 * changing column.
-		 */
+		//
+// Process tuple in two phases: 1) Non-generated attrs 2) Generated
+// attrs only Rewriting tuples in such manner helps to handle
+// situations when a generated column depends on the value of another
+// changing column.
+//
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
 		{
 			Node	   *expr = NULL;
@@ -2477,24 +2477,24 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 			OTupleAttrFull *old_attr = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
 			OTupleAttrFull *rel_attr = OTupleDescAttrSlow(rel->rd_att, i);
 
-			/*
-			 * Dropped columns leave a placeholder attribute with atttypid set
-			 * to InvalidOid; touching its type from get_typtype / domain /
-			 * default machinery would raise "cache lookup failed for type 0",
-			 * and a dropped-from-varlena placeholder paired with the
-			 * zero-initialized tts_values[i]/tts_isnull[i]=false produced by
-			 * the second phase's skip would later crash tts_orioledb_toast at
-			 * VARATT_IS_EXTERNAL_ONDISK(slot->tts_values[i]).  Force the slot
-			 * cell to null up front -- this check has to run before the
-			 * attgenerated short-circuit below, because a GENERATED column
-			 * that was later dropped would otherwise fall through the "skip
-			 * generated" branch and leave the slot zero-initialized.
-			 *
-			 * Consult the relation's own tupdesc (which still reflects
-			 * pg_attribute) for the authoritative dropped status here; the
-			 * workaround above can unmark old_slot's attisdropped to let
-			 * same-statement USING expressions read the old value.
-			 */
+			//
+// Dropped columns leave a placeholder attribute with atttypid set
+// to InvalidOid; touching its type from get_typtype / domain /
+// default machinery would raise "cache lookup failed for type 0",
+// and a dropped-from-varlena placeholder paired with the
+// zero-initialized tts_values[i]/tts_isnull[i]=false produced by
+// the second phase's skip would later crash tts_orioledb_toast at
+// VARATT_IS_EXTERNAL_ONDISK(slot->tts_values[i]).  Force the slot
+// cell to null up front -- this check has to run before the
+// attgenerated short-circuit below, because a GENERATED column
+// that was later dropped would otherwise fall through the "skip
+// generated" branch and leave the slot zero-initialized.
+//
+// Consult the relation's own tupdesc (which still reflects
+// pg_attribute) for the authoritative dropped status here; the
+// workaround above can unmark old_slot's attisdropped to let
+// same-statement USING expressions read the old value.
+//
 			if (rel_attr->attisdropped)
 			{
 				new_slot->tts_values[i] = 0;
@@ -2507,21 +2507,21 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 			expr = o_get_alter_type_expr(rel, i);
 
-			/*
-			 * old_slot may not contain all new properties if there are
-			 * multiple expressions within a single ALTER TABLE.
-			 */
+			//
+// old_slot may not contain all new properties if there are
+// multiple expressions within a single ALTER TABLE.
+//
 			has_def = old_attr->atthasdef || rel_attr->atthasdef;
 
-			/*
-			 * Build default for columns which have explicit DEFAULT
-			 * expressions
-			 */
+			//
+// Build default for columns which have explicit DEFAULT
+// expressions
+//
 			should_build_def = !expr && has_def && !old_attr->atthasmissing &&
 				i >= primary_init_nfields &&
 				old_slot->tts_isnull[i];
 
-			/* If column has domain type, try to build domain default value */
+			// If column has domain type, try to build domain default value
 			should_build_def |= !expr && get_typtype(old_attr->atttypid) == TYPTYPE_DOMAIN && old_slot->tts_isnull[i];
 
 			if (should_build_def)
@@ -2531,13 +2531,13 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 				expr = defaultexpr;
 			}
 
-			/*
-			 * When the new column is of a domain type: the domain might have
-			 * a not-null constraint, or a check constraint that indirectly
-			 * rejects nulls.  If there are any domain constraints then we
-			 * construct an explicit NULL default value that will be passed
-			 * through CoerceToDomain processing.
-			 */
+			//
+// When the new column is of a domain type: the domain might have
+// a not-null constraint, or a check constraint that indirectly
+// rejects nulls.  If there are any domain constraints then we
+// construct an explicit NULL default value that will be passed
+// through CoerceToDomain processing.
+//
 			if (!old_attr->attisdropped && !expr && DomainHasConstraints(old_attr->atttypid) &&
 				old_slot->tts_isnull[i])
 			{
@@ -2567,7 +2567,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 														COERCION_ASSIGNMENT,
 														COERCE_IMPLICIT_CAST,
 														-1);
-				if (defval == NULL) /* should not happen */
+				if (defval == NULL) // should not happen
 					elog(ERROR, "failed to coerce base type to domain");
 				expr = defval;
 			}
@@ -2586,7 +2586,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 					}
 				}
 
-				if (expr == NULL)	/* should not happen */
+				if (expr == NULL)	// should not happen
 					elog(ERROR, "failed to find sequence for brand-new column %s", old_attr->attname.data);
 			}
 
@@ -2594,7 +2594,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 							old_slot, new_slot, old_slot);
 		}
 
-		/* Make new_slot valid for using it as a scan_slot in o_fill_new_slot */
+		// Make new_slot valid for using it as a scan_slot in o_fill_new_slot
 		ExecStoreVirtualTuple(new_slot);
 
 		for (int i = 0; i < old_slot->tts_tupleDescriptor->natts; i++)
@@ -2603,7 +2603,7 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 			OTupleAttrFull *old_attr = OTupleDescAttrSlow(old_slot->tts_tupleDescriptor, i);
 			OTupleAttrFull *rel_attr = OTupleDescAttrSlow(rel->rd_att, i);
 
-			/* See note above: skip placeholder dropped attributes. */
+			// See note above: skip placeholder dropped attributes.
 			if (rel_attr->attisdropped)
 				continue;
 
@@ -2612,17 +2612,17 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 
 			expr = o_get_alter_type_expr(rel, i);
 
-			/*
-			 * Build new value for GENERATED column if the generation
-			 * expression has been updated using ALTER TABLE ... SET
-			 * EXPRESSION ..., if the value was not present in the existing
-			 * row, or if the column type has changed.
-			 */
+			//
+// Build new value for GENERATED column if the generation
+// expression has been updated using ALTER TABLE ... SET
+// EXPRESSION ..., if the value was not present in the existing
+// row, or if the column type has changed.
+//
 			if (expr || (old_slot->tts_isnull[i] ||
 						 (o_alter_generated_column_id != NIL
 						  && list_member(
 										 o_alter_generated_column_id,
-			/* cppcheck-suppress unknownEvaluationOrder */
+			// cppcheck-suppress unknownEvaluationOrder
 										 list_make2(makeInteger(RelationGetRelid(rel)), makeInteger(i + 1))))))
 			{
 				Node	   *defaultexpr = build_column_default(rel, i + 1);
@@ -2630,17 +2630,17 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 				expr = defaultexpr;
 			}
 
-			/*
-			 * Use new_slot as a scan slot, because all generated attrs depend
-			 * only on new values
-			 */
+			//
+// Use new_slot as a scan slot, because all generated attrs depend
+// only on new values
+//
 			o_fill_new_slot(new_o_table, rel, i, expr,
 							old_slot, new_slot, new_slot);
 		}
 
 		new_slot->tts_nvalid = new_slot->tts_tupleDescriptor->natts;
 
-		/* Validate CHECK constraints on the rewritten tuple */
+		// Validate CHECK constraints on the rewritten tuple
 		if (num_check > 0)
 		{
 			int			j;
@@ -2657,18 +2657,18 @@ rewrite_table(Relation rel, OTable *old_o_table, OTable *new_o_table)
 			}
 		}
 
-		/*
-		 * Validate NOT NULL constraints on the rewritten tuple.  Upstream's
-		 * ATRewriteTable path catches this via ExecConstraints, which also
-		 * verifies notnull; we ran only ExecCheck above and would otherwise
-		 * let a freshly-added "GENERATED ... VIRTUAL NOT NULL" column past
-		 * the rewrite when its expression yields NULL for an existing row.
-		 *
-		 * Skip constraints marked NOT VALID (PG18 attnullability=INVALID).
-		 * The constraint exists but is intentionally unverified against
-		 * existing rows; ALTER TABLE ... VALIDATE CONSTRAINT is what runs the
-		 * scan that actually rejects null rows.
-		 */
+		//
+// Validate NOT NULL constraints on the rewritten tuple.  Upstream's
+// ATRewriteTable path catches this via ExecConstraints, which also
+// verifies notnull; we ran only ExecCheck above and would otherwise
+// let a freshly-added "GENERATED ... VIRTUAL NOT NULL" column past
+// the rewrite when its expression yields NULL for an existing row.
+//
+// Skip constraints marked NOT VALID (PG18 attnullability=INVALID).
+// The constraint exists but is intentionally unverified against
+// existing rows; ALTER TABLE ... VALIDATE CONSTRAINT is what runs the
+// scan that actually rejects null rows.
+//
 		for (int j = 0; j < rel->rd_att->natts; j++)
 		{
 			Form_pg_attribute attr = TupleDescAttr(rel->rd_att, j);
@@ -2754,10 +2754,10 @@ redefine_indices(Relation rel, OTable *new_o_table, bool primary, Oid oldRelnode
 		ORelOids	oids;
 		OTable	   *updated_o_table;
 
-		/*
-		 * Partial reimplementation of assign_new_oids just for toast, because
-		 * it isn't called for tables without pkeys here, but it should
-		 */
+		//
+// Partial reimplementation of assign_new_oids just for toast, because
+// it isn't called for tables without pkeys here, but it should
+//
 
 		ORelOidsSetFromRel(oids, rel);
 		updated_o_table = o_tables_get(oids);
@@ -2826,27 +2826,27 @@ change_bridging_option(Relation rel, bool value, bool isReset)
 
 	pgclass = table_open(RelationRelationId, RowExclusiveLock);
 
-	/* Fetch heap tuple */
+	// Fetch heap tuple
 	relid = RelationGetRelid(rel);
 	tuple = SearchSysCacheLocked1(RELOID, ObjectIdGetDatum(relid));
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for relation %u", relid);
 
-	/* Get the old reloptions */
+	// Get the old reloptions
 	datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
 
-	/* Generate new proposed reloptions (text array) */
+	// Generate new proposed reloptions (text array)
 	bridging_def = makeDefElem("index_bridging", isReset ? NULL : (Node *) makeBoolean(value), -1);
 	newOptions = transformRelOptions(isnull ? (Datum) 0 : datum,
 									 list_make1(bridging_def), NULL, validnsps, false, isReset);
 
-	/* Validate */
+	// Validate
 	(void) table_reloptions(rel, rel->rd_rel->relkind, newOptions, true);
 
-	/*
-	 * All we need do here is update the pg_class row; the new options will be
-	 * propagated into relcaches during post-commit cache inval.
-	 */
+	//
+// All we need do here is update the pg_class row; the new options will be
+// propagated into relcaches during post-commit cache inval.
+//
 	memset(repl_val, 0, sizeof(repl_val));
 	memset(repl_null, false, sizeof(repl_null));
 	memset(repl_repl, false, sizeof(repl_repl));
@@ -3025,7 +3025,7 @@ cleanup_tablespace_dir(char *tablespace_path)
 
 		dbDirName = psprintf("%s/%u", tablespace_path, dbOid);
 
-		/* We assume that postgres throws it's own errors on not empty dirs */
+		// We assume that postgres throws it's own errors on not empty dirs
 		if (rmdir(dbDirName) < 0 && errno != ENOTEMPTY)
 		{
 			ereport(FATAL,
@@ -3037,7 +3037,7 @@ cleanup_tablespace_dir(char *tablespace_path)
 	}
 	fsync_fname_ext(tablespace_path, true, false, FATAL);
 
-	/* We assume that postgres throws it's own errors on not empty dirs */
+	// We assume that postgres throws it's own errors on not empty dirs
 	if (rmdir(tablespace_path) < 0 && errno != ENOTEMPTY)
 	{
 		ereport(FATAL,
@@ -3046,7 +3046,7 @@ cleanup_tablespace_dir(char *tablespace_path)
 						tablespace_path)));
 	}
 
-	/* We assume that postgres throws it's own errors on not empty dirs */
+	// We assume that postgres throws it's own errors on not empty dirs
 	if (errno != 0 && errno != ENOTEMPTY)
 	{
 		ereport(ERROR, (errcode_for_file_access(),
@@ -3055,12 +3055,12 @@ cleanup_tablespace_dir(char *tablespace_path)
 	closedir(dir);
 }
 
-/*
- * get_collation		- fetch qualified name of a collation
- *
- * If collation is InvalidOid or is the default for the given actual_datatype,
- * then the return value is NIL.
- */
+//
+// get_collation		- fetch qualified name of a collation
+//
+// If collation is InvalidOid or is the default for the given actual_datatype,
+// then the return value is NIL.
+//
 static List *
 get_collation(Oid collation, Oid actual_datatype)
 {
@@ -3071,31 +3071,31 @@ get_collation(Oid collation, Oid actual_datatype)
 	char	   *coll_name;
 
 	if (!OidIsValid(collation))
-		return NIL;				/* easy case */
+		return NIL;				// easy case
 	if (collation == get_typcollation(actual_datatype))
-		return NIL;				/* just let it default */
+		return NIL;				// just let it default
 
 	ht_coll = SearchSysCache1(COLLOID, ObjectIdGetDatum(collation));
 	if (!HeapTupleIsValid(ht_coll))
 		elog(ERROR, "cache lookup failed for collation %u", collation);
 	coll_rec = (Form_pg_collation) GETSTRUCT(ht_coll);
 
-	/* For simplicity, we always schema-qualify the name */
+	// For simplicity, we always schema-qualify the name
 	nsp_name = get_namespace_name(coll_rec->collnamespace);
 	coll_name = pstrdup(NameStr(coll_rec->collname));
-	/* cppcheck-suppress unknownEvaluationOrder */
+	// cppcheck-suppress unknownEvaluationOrder
 	result = list_make2(makeString(nsp_name), makeString(coll_name));
 
 	ReleaseSysCache(ht_coll);
 	return result;
 }
 
-/*
- * get_opclass			- fetch qualified name of an index operator class
- *
- * If the opclass is the default for the given actual_datatype, then
- * the return value is NIL.
- */
+//
+// get_opclass			- fetch qualified name of an index operator class
+//
+// If the opclass is the default for the given actual_datatype, then
+// the return value is NIL.
+//
 static List *
 get_opclass(Oid opclass, Oid actual_datatype)
 {
@@ -3110,11 +3110,11 @@ get_opclass(Oid opclass, Oid actual_datatype)
 
 	if (GetDefaultOpClass(actual_datatype, opc_rec->opcmethod) != opclass)
 	{
-		/* For simplicity, we always schema-qualify the name */
+		// For simplicity, we always schema-qualify the name
 		char	   *nsp_name = get_namespace_name(opc_rec->opcnamespace);
 		char	   *opc_name = pstrdup(NameStr(opc_rec->opcname));
 
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 		result = list_make2(makeString(nsp_name), makeString(opc_name));
 	}
 
@@ -3183,11 +3183,11 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 				descr = relation_get_descr(rel);
 
-				/*
-				 * Descriptor should be there as long as it's not temporary
-				 * relation.  Descriptors of temporary relations might be
-				 * already deleted.
-				 */
+				//
+// Descriptor should be there as long as it's not temporary
+// relation.  Descriptors of temporary relations might be
+// already deleted.
+//
 				Assert(rel->rd_rel->relpersistence == RELPERSISTENCE_TEMP ||
 					   descr);
 
@@ -3206,7 +3206,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				o_table = o_tables_get(oids);
 				if (o_table == NULL)
 				{
-					/* table does not exist */
+					// table does not exist
 					elog(NOTICE, "orioledb table \"%s\" not found",
 						 RelationGetRelationName(rel));
 				}
@@ -3227,7 +3227,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						o_tables_update(o_table, oxid, oSnapshot.csn);
 						o_tables_after_update(o_table, oxid, oSnapshot.csn);
 						o_tables_rel_meta_unlock(rel, InvalidOid);
-						/* cppcheck-suppress unknownEvaluationOrder */
+						// cppcheck-suppress unknownEvaluationOrder
 						dropped_attrs = lappend(dropped_attrs, list_make2(makeInteger(objectId), makeInteger(subId)));
 					}
 					o_table_free(o_table);
@@ -3236,10 +3236,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			else if (rel->rd_rel->relkind == RELKIND_INDEX &&
 					 !(drop_arg->dropflags & PERFORM_DELETION_OF_RELATION))
 			{
-				/*
-				 * dropflags == PERFORM_DELETION_OF_RELATION ignored, to not
-				 * drop indices when whole table dropped
-				 */
+				//
+// dropflags == PERFORM_DELETION_OF_RELATION ignored, to not
+// drop indices when whole table dropped
+//
 				Relation	tbl = relation_open(rel->rd_index->indrelid,
 												AccessShareLock);
 
@@ -3265,7 +3265,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						relname = makeString(rel->rd_rel->relname.data);
 						if (list_member_oid(o_reuse_indices, objectId))
 						{
-							/* Do not drop index if it is set for reuse */
+							// Do not drop index if it is set for reuse
 							elog(DEBUG1, "object_access_hook: skipping index %d drop as it is set for reuse", objectId);
 						}
 						else if (!(drop_arg->dropflags &
@@ -3300,16 +3300,16 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					 tbl->rd_rel->relkind == RELKIND_MATVIEW) &&
 					is_orioledb_rel(tbl))
 				{
-					/*
-					 * TODO: probably better way would be to add hook to
-					 * findDependentObjects and filter partition index
-					 * dependencies there, but for now
-					 * PERFORM_DELETION_OF_RELATION passed for partition index
-					 * dependency and I'm not sure how to properly filter out
-					 * only this kind of dependency and do not touch behaviour
-					 * that not drops indices during table drop to not rebuild
-					 * them
-					 */
+					//
+// TODO: probably better way would be to add hook to
+// findDependentObjects and filter partition index
+// dependencies there, but for now
+// PERFORM_DELETION_OF_RELATION passed for partition index
+// dependency and I'm not sure how to properly filter out
+// only this kind of dependency and do not touch behaviour
+// that not drops indices during table drop to not rebuild
+// them
+//
 
 					Relation	depRel;
 					ObjectAddress object;
@@ -3344,7 +3344,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							foundDep->deptype == DEPENDENCY_PARTITION_SEC)
 						{
 							partition_drop_index_list = list_append_unique(partition_drop_index_list,
-							/* cppcheck-suppress unknownEvaluationOrder */
+							// cppcheck-suppress unknownEvaluationOrder
 																		   list_make2_oid(rel->rd_rel->oid,
 																						  rel->rd_index->indrelid));
 							break;
@@ -3363,11 +3363,11 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				Relation	tbl = relation_open(rel->rd_index->indrelid,
 												AccessShareLock);
 
-				/*
-				 * We don't have secondary index dependencies at this moment
-				 * so we are passing them in partition_drop_index_list from
-				 * before
-				 */
+				//
+// We don't have secondary index dependencies at this moment
+// so we are passing them in partition_drop_index_list from
+// before
+//
 				if (partition_drop_index_list != NIL)
 				{
 					foreach(lc, partition_drop_index_list)
@@ -3483,7 +3483,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					  rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 					 (subId != 0) && is_orioledb_rel(rel))
 			{
-				/* Branch is taken during ALTER TABLE ... ADD COLUMN */
+				// Branch is taken during ALTER TABLE ... ADD COLUMN
 				OTableField *field;
 				OTable	   *o_table;
 				ORelOids	oids;
@@ -3495,7 +3495,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				o_table = o_tables_get(oids);
 				if (o_table == NULL)
 				{
-					/* table does not exist */
+					// table does not exist
 					elog(NOTICE, "orioledb table \"%s\" not found", RelationGetRelationName(rel));
 				}
 				else
@@ -3519,14 +3519,14 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 					o_table_resize_constr(o_table);
 
-					/*
-					 * The domain expression may have already been created, so
-					 * we need to explicitly call o_table_fill_constr to
-					 * propagate the default value of the domain type to the
-					 * new column. For non-domain types this will be called by
-					 * another access_hook call only after the default value
-					 * is created in pg catalog.
-					 */
+					//
+// The domain expression may have already been created, so
+// we need to explicitly call o_table_fill_constr to
+// propagate the default value of the domain type to the
+// new column. For non-domain types this will be called by
+// another access_hook call only after the default value
+// is created in pg catalog.
+//
 					if (get_typtype(field->typid) == TYPTYPE_DOMAIN && !in_rewrite)
 					{
 						o_table_fill_constr(o_table, rel, subId - 1, NULL, field);
@@ -3564,7 +3564,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				Oid			tbl_oid;
 				Relation	tbl = NULL;
 
-				/* This is faster than dependency scan */
+				// This is faster than dependency scan
 				tbl_oid = pg_strtoint64(strrchr(rel->rd_rel->relname.data,
 												'_') + 1);
 
@@ -3578,7 +3578,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			}
 			else if (rel->rd_rel->relkind == RELKIND_INDEX)
 			{
-				/* Checks and adds bridged indexes */
+				// Checks and adds bridged indexes
 				Relation	tbl;
 
 				CommandCounterIncrement();
@@ -3620,7 +3620,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 						Assert(rel->rd_rel->relkind == RELKIND_INDEX);
 
-						/* In case of index reuse, update the index oid */
+						// In case of index reuse, update the index oid
 						if (ix_num != InvalidIndexNumber && list_member_oid(o_reuse_indices, o_table->indices[ix_num].oids.reloid))
 						{
 							Oid			old_oid = o_table->indices[ix_num].oids.reloid;
@@ -3673,15 +3673,15 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 						if (add_bridging)
 						{
-							/*
-							 * Ensure the table has a toast relation before
-							 * adding the bridge index.  The bridge rebuild
-							 * path recreates all indices including the toast
-							 * tree, so the toast OIDs must already be set.
-							 * During CREATE TABLE the toast table may not
-							 * exist yet if table inherits indices from parent
-							 * table.
-							 */
+							//
+// Ensure the table has a toast relation before
+// adding the bridge index.  The bridge rebuild
+// path recreates all indices including the toast
+// tree, so the toast OIDs must already be set.
+// During CREATE TABLE the toast table may not
+// exist yet if table inherits indices from parent
+// table.
+//
 							if (!ORelOidsIsValid(o_table->toast_oids))
 							{
 								Datum		toast_options;
@@ -3704,12 +3704,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 								relation_close(tbl, AccessShareLock);
 
-								/*
-								 * NewRelationCreateToastTable ends with
-								 * CommandCounterIncrement(), so that the
-								 * TOAST table will be visible for
-								 * add_bridge_index().
-								 */
+								//
+// NewRelationCreateToastTable ends with
+// CommandCounterIncrement(), so that the
+// TOAST table will be visible for
+// add_bridge_index().
+//
 								NewRelationCreateToastTable(rel->rd_index->indrelid, toast_options);
 
 								tbl = relation_open(rel->rd_index->indrelid, AccessShareLock);
@@ -3746,7 +3746,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			o_table = o_tables_get(oids);
 			if (o_table == NULL)
 			{
-				/* table does not exist */
+				// table does not exist
 				elog(NOTICE, "orioledb table \"%s\" not found",
 					 RelationGetRelationName(rel));
 			}
@@ -3762,7 +3762,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				orioledb_attr_to_field(field,
 									   TupleDescAttr(rel->rd_att, subId - 1));
 
-				/* TODO: Probably use CheckIndexCompatible here */
+				// TODO: Probably use CheckIndexCompatible here
 				changed = old_field.typid != field->typid ||
 					old_field.typmod != field->typmod ||
 					old_field.collation != field->collation;
@@ -3786,7 +3786,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					o_tables_after_update(o_table, oxid, oSnapshot.csn);
 					o_tables_rel_meta_unlock(rel, InvalidOid);
 
-					/* This has no effect? */
+					// This has no effect?
 					o_table->fields[subId - 1] = old_field;
 					o_table_free(o_table);
 				}
@@ -3828,7 +3828,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				o_table = o_tables_get(oids);
 				if (o_table == NULL)
 				{
-					/* table does not exist */
+					// table does not exist
 					elog(NOTICE, "orioledb table \"%s\" not found",
 						 RelationGetRelationName(rel));
 				}
@@ -3848,7 +3848,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 										   TupleDescAttr(rel->rd_att,
 														 subId - 1));
 
-					/* TODO: Probably use CheckIndexCompatible here */
+					// TODO: Probably use CheckIndexCompatible here
 					changed_ty = old_field.typid != field->typid ||
 						old_field.typmod != field->typmod ||
 						old_field.collation != field->collation;
@@ -3860,16 +3860,16 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							in_rewrite = true;
 					}
 
-					/*
-					 * Alter table on generated column triggers table rewrite
-					 * due to need of recalculating column value for existing
-					 * rows
-					 */
+					//
+// Alter table on generated column triggers table rewrite
+// due to need of recalculating column value for existing
+// rows
+//
 					if (old_field.generated)
 					{
 						in_rewrite = true;
 						o_alter_generated_column_id = lappend(o_alter_generated_column_id,
-						/* cppcheck-suppress unknownEvaluationOrder */
+						// cppcheck-suppress unknownEvaluationOrder
 															  list_make2(makeInteger(objectId), makeInteger(subId)));
 					}
 
@@ -4082,10 +4082,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					  rel->rd_rel->relkind == RELKIND_MATVIEW) &&
 					 (subId == 0))
 			{
-				/*
-				 * We come here during "ALTER TABLE ... SET TABLESPACE" after
-				 * orioledb_relation_copy_data
-				 */
+				//
+// We come here during "ALTER TABLE ... SET TABLESPACE" after
+// orioledb_relation_copy_data
+//
 				if (is_orioledb_rel(rel))
 				{
 					ORelOids	old_oids;
@@ -4133,10 +4133,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					CommandCounterIncrement();
 					tbl = relation_open(o_saved_relrewrite, AccessShareLock);
 
-					/*
-					 * Redefinig primary key here to not do rebuild after
-					 * rewrite_table
-					 */
+					//
+// Redefinig primary key here to not do rebuild after
+// rewrite_table
+//
 					redefine_indices(tbl, new_o_table, true, InvalidOid);
 
 					o_table_free(new_o_table);
@@ -4173,7 +4173,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 				Oid			tbl_oid;
 				Relation	tbl = NULL;
 
-				/* This is faster than dependency scan */
+				// This is faster than dependency scan
 				tbl_oid = pg_strtoint64(strrchr(rel->rd_rel->relname.data,
 												'_') + 1);
 				CommandCounterIncrement();
@@ -4195,10 +4195,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					if (OidIsValid(o_saved_reltablespace) &&
 						o_saved_reltablespace != reltablespace)
 					{
-						/*
-						 * We come here during "ALTER TABLE ... SET
-						 * TABLESPACE"
-						 */
+						//
+// We come here during "ALTER TABLE ... SET
+// TABLESPACE"
+//
 						OTable	   *old_o_table,
 								   *new_o_table;
 
@@ -4217,10 +4217,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 						CommandCounterIncrement();
 						tbl = relation_open(tbl_oid, AccessShareLock);
 
-						/*
-						 * Redefinig primary key here to not do rebuild after
-						 * rewrite_table
-						 */
+						//
+// Redefinig primary key here to not do rebuild after
+// rewrite_table
+//
 						redefine_indices(tbl, new_o_table, true, old_o_table->oids.relnode);
 
 						o_table_free(new_o_table);
@@ -4232,10 +4232,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 							case RELKIND_RELATION:
 							case RELKIND_MATVIEW:
 
-								/*
-								 * for matview we just copy data to not
-								 * recalculate expressions
-								 */
+								//
+// for matview we just copy data to not
+// recalculate expressions
+//
 								Assert(alter_type_exprs == NIL);
 								rewrite_table(tbl, old_o_table, new_o_table);
 								break;
@@ -4254,9 +4254,9 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					}
 					else
 					{
-						/*
-						 * We come here during "ALTER TABLE ... SET <OPTION>"
-						 */
+						//
+// We come here during "ALTER TABLE ... SET <OPTION>"
+//
 						descr = o_fetch_table_descr(oids);
 						Assert(descr);
 						ResourceOwnerRememberOTableDescr(CurrentResourceOwner, descr);
@@ -4403,12 +4403,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 	}
 	else if (access == OAT_POST_ALTER && classId == DatabaseRelationId)
 	{
-		/*
-		 * Move all the orioledb objects from the source tablespace to the
-		 * destination tablespace. At this point CHECKPOINT was done and there
-		 * is no new connection to the moved database because
-		 * LockSharedObjectForSession on database was done as well.
-		 */
+		//
+// Move all the orioledb objects from the source tablespace to the
+// destination tablespace. At this point CHECKPOINT was done and there
+// is no new connection to the moved database because
+// LockSharedObjectForSession on database was done as well.
+//
 		if (OidIsValid(o_movedb_data.dest_dboid) &&
 			OidIsValid(o_movedb_data.src_tsoid) &&
 			OidIsValid(o_movedb_data.dest_tsoid) &&
@@ -4424,9 +4424,9 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			o_get_prefixes_for_tablespace(o_movedb_data.dest_dboid, o_movedb_data.src_tsoid, NULL, &src_dbpath);
 			o_get_prefixes_for_tablespace(o_movedb_data.dest_dboid, o_movedb_data.dest_tsoid, &dst_prefix, &dst_dbpath);
 
-			/*
-			 * Fast exit if there are no relations in the source tablespace.
-			 */
+			//
+// Fast exit if there are no relations in the source tablespace.
+//
 			dir = AllocateDir(src_dbpath);
 			if (dir != NULL)
 			{
@@ -4465,10 +4465,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 					FreeDir(dir);
 
-					/*
-					 * The directory exists but is empty. We must remove it
-					 * before using the copydir function.
-					 */
+					//
+// The directory exists but is empty. We must remove it
+// before using the copydir function.
+//
 					if (rmdir(dst_dbpath) != 0)
 						elog(ERROR, "could not remove directory \"%s\": %m",
 							 dst_dbpath);
@@ -4511,7 +4511,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		CommandCounterIncrement();
 		if (!old_indisprimary && rel->rd_index->indisprimary)
 		{
-			/* Executed during ADD PRIMARY KEY USING INDEX */
+			// Executed during ADD PRIMARY KEY USING INDEX
 			Relation	tbl;
 
 			tbl = relation_open(rel->rd_index->indrelid, AccessShareLock);
@@ -4575,7 +4575,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			struct stat st;
 			int			rllen;
 
-			/* Skip special stuff */
+			// Skip special stuff
 			if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0)
 				continue;
 
@@ -4624,14 +4624,14 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 #if PG_VERSION_NUM >= 180000
 
-	/*
-	 * In PostgreSQL 18, NOT NULL constraints are represented as catalog
-	 * objects in pg_constraint rather than just a flag on pg_attribute. We
-	 * intercept constraint changes to keep the OrioleDB cache in sync.
-	 *
-	 * We ignore cascade drops (using dropflags and statement type) to avoid
-	 * redundant table updates when the parent column/table is also dropping.
-	 */
+	//
+// In PostgreSQL 18, NOT NULL constraints are represented as catalog
+// objects in pg_constraint rather than just a flag on pg_attribute. We
+// intercept constraint changes to keep the OrioleDB cache in sync.
+//
+// We ignore cascade drops (using dropflags and statement type) to avoid
+// redundant table updates when the parent column/table is also dropping.
+//
 	else if ((access == OAT_POST_CREATE || access == OAT_POST_ALTER ||
 			  (access == OAT_DROP &&
 			   !(((ObjectAccessDrop *) arg)->dropflags & (PERFORM_DELETION_OF_RELATION | PERFORM_DELETION_INTERNAL))
@@ -4645,17 +4645,17 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		bool		use_self_scan = access == OAT_POST_CREATE || access == OAT_POST_ALTER;
 		Form_pg_constraint conForm;
 
-		/*
-		 * TODO: Should we optimize the following commands and do not update
-		 * the metadata unnecessarily: - ALTER TABLE <table> DROP COLUMN
-		 * <col>; - DROP TYPE <type> CASCADE;
-		 */
+		//
+// TODO: Should we optimize the following commands and do not update
+// the metadata unnecessarily: - ALTER TABLE <table> DROP COLUMN
+// <col>; - DROP TYPE <type> CASCADE;
+//
 
-		/*
-		 * In case of OAT_POST_CREATE and OAT_POST_ALTER we need to scan the
-		 * catalog using SnapshotSelf because pg_constraint entry is not
-		 * visible right now.
-		 */
+		//
+// In case of OAT_POST_CREATE and OAT_POST_ALTER we need to scan the
+// catalog using SnapshotSelf because pg_constraint entry is not
+// visible right now.
+//
 		if (use_self_scan)
 		{
 			conRel = table_open(ConstraintRelationId, AccessShareLock);
@@ -4710,12 +4710,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 					fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 					o_tables_rel_meta_lock(conrel);
 
-					/*
-					 * Directly update the notnull flag on the OrioleDB table
-					 * metadata. We avoid delegating to the relation attribute
-					 * hook because rel->rd_att may not be fully updated yet
-					 * during constraint creation.
-					 */
+					//
+// Directly update the notnull flag on the OrioleDB table
+// metadata. We avoid delegating to the relation attribute
+// hook because rel->rd_att may not be fully updated yet
+// during constraint creation.
+//
 					for (int i = 0; i < numkeys; i++)
 					{
 						int			attnum = attnums[i];
@@ -4732,10 +4732,10 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 
 					if (changed)
 					{
-						/*
-						 * Persist the updated configuration to the OrioleDB
-						 * catalog tree
-						 */
+						//
+// Persist the updated configuration to the OrioleDB
+// catalog tree
+//
 						o_indices_update(o_table, PrimaryIndexNumber, oxid, oSnapshot.csn);
 						o_tables_update(o_table, oxid, oSnapshot.csn);
 						o_tables_after_update(o_table, oxid, oSnapshot.csn);
@@ -4747,7 +4747,7 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 			relation_close(conrel, AccessShareLock);
 		}
 
-		/* Cleanup */
+		// Cleanup
 		if (use_self_scan)
 		{
 			systable_endscan(scan);
@@ -4764,12 +4764,12 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		old_objectaccess_hook(access, classId, objectId, subId, arg);
 }
 
-/*
- * Look up info about the database named "name".  If the database exists,
- * obtain the specified lock type on it, fill in any of the remaining
- * parameters that aren't NULL, and return true.  If no such database,
- * return false.
- */
+//
+// Look up info about the database named "name".  If the database exists,
+// obtain the specified lock type on it, fill in any of the remaining
+// parameters that aren't NULL, and return true.  If no such database,
+// return false.
+//
 static bool
 get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 {
@@ -4778,14 +4778,14 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 
 	Assert(name);
 
-	/* Caller may wish to grab a better lock on pg_database beforehand... */
+	// Caller may wish to grab a better lock on pg_database beforehand...
 	relation = table_open(DatabaseRelationId, AccessShareLock);
 
-	/*
-	 * Loop covers the rare case where the database is renamed before we can
-	 * lock it.  We try again just in case we can find a new one of the same
-	 * name.
-	 */
+	//
+// Loop covers the rare case where the database is renamed before we can
+// lock it.  We try again just in case we can find a new one of the same
+// name.
+//
 	for (;;)
 	{
 		ScanKeyData scanKey;
@@ -4793,10 +4793,10 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 		HeapTuple	tuple;
 		Oid			dbOid;
 
-		/*
-		 * there's no syscache for database-indexed-by-name, so must do it the
-		 * hard way
-		 */
+		//
+// there's no syscache for database-indexed-by-name, so must do it the
+// hard way
+//
 		ScanKeyInit(&scanKey,
 					Anum_pg_database_datname,
 					BTEqualStrategyNumber, F_NAMEEQ,
@@ -4809,7 +4809,7 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 
 		if (!HeapTupleIsValid(tuple))
 		{
-			/* definitely no database of that name */
+			// definitely no database of that name
 			systable_endscan(scan);
 			break;
 		}
@@ -4818,17 +4818,17 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 
 		systable_endscan(scan);
 
-		/*
-		 * Now that we have a database OID, we can try to lock the DB.
-		 */
+		//
+// Now that we have a database OID, we can try to lock the DB.
+//
 		if (lockmode != NoLock)
 			LockSharedObject(DatabaseRelationId, dbOid, 0, lockmode);
 
-		/*
-		 * And now, re-fetch the tuple by OID.  If it's still there and still
-		 * the same name, we win; else, drop the lock and loop back to try
-		 * again.
-		 */
+		//
+// And now, re-fetch the tuple by OID.  If it's still there and still
+// the same name, we win; else, drop the lock and loop back to try
+// again.
+//
 		tuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(dbOid));
 		if (HeapTupleIsValid(tuple))
 		{
@@ -4836,7 +4836,7 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 
 			if (strcmp(name, NameStr(dbform->datname)) == 0)
 			{
-				/* oid of the database */
+				// oid of the database
 				if (dbIdP)
 					*dbIdP = dbOid;
 
@@ -4844,7 +4844,7 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 				result = true;
 				break;
 			}
-			/* can only get here if it was just renamed */
+			// can only get here if it was just renamed
 			ReleaseSysCache(tuple);
 		}
 
@@ -4857,9 +4857,9 @@ get_db_info(const char *name, LOCKMODE lockmode, Oid *dbIdP)
 	return result;
 }
 
-/*
- * OrioleDB implementation of CREATE DATABASE.
- */
+//
+// OrioleDB implementation of CREATE DATABASE.
+//
 static Oid
 o_createdb(ParseState *pstate, const CreatedbStmt *stmt)
 {
@@ -4869,12 +4869,12 @@ o_createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	const char *dbtemplate = NULL;
 	Oid			result;
 
-	/*
-	 * Currently we don't support a template database which has OrioleDB
-	 * tables. The function raises an error otherwise.
-	 */
+	//
+// Currently we don't support a template database which has OrioleDB
+// tables. The function raises an error otherwise.
+//
 
-	/* Extract options from the statement node tree */
+	// Extract options from the statement node tree
 	foreach(option, stmt->options)
 	{
 		DefElem    *defel = (DefElem *) lfirst(option);
@@ -4886,12 +4886,12 @@ o_createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	if (dtemplate && dtemplate->arg)
 		dbtemplate = defGetString(dtemplate);
 	if (!dbtemplate)
-		dbtemplate = "template1";	/* Default template database name */
+		dbtemplate = "template1";	// Default template database name
 
-	/*
-	 * Similar to createdb() we obtain share lock on the template database
-	 * within get_db_info().
-	 */
+	//
+// Similar to createdb() we obtain share lock on the template database
+// within get_db_info().
+//
 	if (!get_db_info(dbtemplate, ShareLock, &src_dboid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_DATABASE),
@@ -4904,18 +4904,18 @@ o_createdb(ParseState *pstate, const CreatedbStmt *stmt)
 				 errmsg("template database \"%s\" has OrioleDB tables",
 						dbtemplate)));
 
-	/*
-	 * Call standard PostgreSQL createdb().  It will create and copy
-	 * PostgreSQL catalog and user objects.
-	 *
-	 * createdb() will leave source pg_database entry in ShareLock mode and
-	 * therefore no new connections will be allowed until end of transaction.
-	 */
+	//
+// Call standard PostgreSQL createdb().  It will create and copy
+// PostgreSQL catalog and user objects.
+//
+// createdb() will leave source pg_database entry in ShareLock mode and
+// therefore no new connections will be allowed until end of transaction.
+//
 	result = createdb(pstate, stmt);
 
-	/*
-	 * Now we need to copy OrioleDB objects.
-	 */
+	//
+// Now we need to copy OrioleDB objects.
+//
 
 	return result;
 }
@@ -4931,9 +4931,9 @@ o_check_movedb(const AlterDatabaseStmt *stmt, movedb_params *movedb)
 
 	if (!get_db_info(stmt->dbname, NoLock, &db_id))
 
-		/*
-		 * Lets standard processing of moving datatabase generates an error.
-		 */
+		//
+// Lets standard processing of moving datatabase generates an error.
+//
 		return;
 
 
@@ -4943,10 +4943,10 @@ o_check_movedb(const AlterDatabaseStmt *stmt, movedb_params *movedb)
 
 		if (strcmp(defel->defname, "tablespace") == 0)
 		{
-			/*
-			 * skip check options because it will done in core statement
-			 * handling before this hook was called.
-			 */
+			//
+// skip check options because it will done in core statement
+// handling before this hook was called.
+//
 			dtablespace = defel;
 		}
 	}
@@ -4974,7 +4974,7 @@ o_movedb_failure_callback(int code, Datum arg)
 	movedb_params *fparms = (movedb_params *) DatumGetPointer(arg);
 	char	   *dstpath = NULL;
 
-	/* Get rid of anything we managed to copy to the target directory */
+	// Get rid of anything we managed to copy to the target directory
 	o_get_prefixes_for_tablespace(fparms->dest_dboid, fparms->dest_tsoid, NULL, &dstpath);
 
 	if (dstpath)
@@ -4993,11 +4993,11 @@ o_parse_compress(const char *value)
 	bool		invalid_syntax = false;
 	bool		out_of_range = false;
 
-	/* skip leading spaces */
+	// skip leading spaces
 	while (likely(*ptr) && isspace((unsigned char) *ptr))
 		ptr++;
 
-	/* handle sign */
+	// handle sign
 	if (*ptr == '-')
 	{
 		ptr++;
@@ -5006,13 +5006,13 @@ o_parse_compress(const char *value)
 	else if (*ptr == '+')
 		ptr++;
 
-	/* require at least one digit */
+	// require at least one digit
 	if (unlikely(!isdigit((unsigned char) *ptr)))
 		invalid_syntax = true;
 
 	if (!invalid_syntax)
 	{
-		/* process digits */
+		// process digits
 		while (*ptr && isdigit((unsigned char) *ptr))
 		{
 			int8		digit = (*ptr++ - '0');
@@ -5024,7 +5024,7 @@ o_parse_compress(const char *value)
 
 		if (!out_of_range)
 		{
-			/* allow trailing whitespace, but not other trailing chars */
+			// allow trailing whitespace, but not other trailing chars
 			while (*ptr != '\0' && isspace((unsigned char) *ptr))
 				ptr++;
 
@@ -5035,7 +5035,7 @@ o_parse_compress(const char *value)
 			{
 				if (!neg)
 				{
-					/* could fail if input is most negative number */
+					// could fail if input is most negative number
 					if (unlikely(result == PG_INT16_MIN))
 						out_of_range = true;
 					if (!out_of_range)
@@ -5107,10 +5107,10 @@ o_ddl_cleanup(void)
 		o_alter_generated_column_id = NIL;
 	}
 
-	/*
-	 * Don't free memory explicitly, delegate it to the memory context
-	 * mechanism
-	 */
+	//
+// Don't free memory explicitly, delegate it to the memory context
+// mechanism
+//
 	o_added_columns = NIL;
 	o_in_add_column = false;
 	create_stmt = NULL;
@@ -5128,11 +5128,11 @@ o_get_alter_type_expr(Relation rel, int attidx)
 		AttrNumber	attnum = intVal(linitial((List *) lfirst(lc)));
 		Oid			relOid = intVal(lsecond((List *) lfirst(lc)));
 
-		/*
-		 * To get correct expression we need check both relation and attribute
-		 * number. Because of postgres inheritance allows different attribute
-		 * number for the same column in parent and child relations.
-		 */
+		//
+// To get correct expression we need check both relation and attribute
+// number. Because of postgres inheritance allows different attribute
+// number for the same column in parent and child relations.
+//
 		if (relOid == rel->rd_rel->oid && attnum == attidx + 1)
 		{
 			expr = (Node *) lthird((List *) lfirst(lc));
@@ -5175,10 +5175,10 @@ o_fill_new_slot(OTable *new_o_table, Relation rel, int attidx,
 	}
 }
 
-/*
- * Store only the column's type and name for
- * further enrichment during sequence relation creation
- */
+//
+// Store only the column's type and name for
+// further enrichment during sequence relation creation
+//
 static void
 o_process_added_column(AlterTableCmd *cmd)
 {
@@ -5205,6 +5205,6 @@ o_process_added_column(AlterTableCmd *cmd)
 		typeid = typenameTypeId(NULL, def->typeName);
 
 	o_added_columns = lappend(o_added_columns,
-	/* cppcheck-suppress unknownEvaluationOrder */
+	// cppcheck-suppress unknownEvaluationOrder
 							  list_make2(makeInteger(typeid), makeString(def->colname)));
 }

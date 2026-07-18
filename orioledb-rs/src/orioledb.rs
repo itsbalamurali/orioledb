@@ -1,17 +1,17 @@
-/*-------------------------------------------------------------------------
- *
- * orioledb.c
- *		Main file: setup shared memory, hooks and other general-purpose
- *		routines.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/orioledb.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// orioledb.c
+// Main file: setup shared memory, hooks and other general-purpose
+// routines.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/orioledb.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -100,7 +100,7 @@ OrioleDBPageDesc *page_descs = NULL;
 Page	   *local_ppool_pages = NULL;
 OrioleDBPageDesc *local_ppool_page_descs = NULL;
 
-/* Custom GUC variables */
+// Custom GUC variables
 int			orioledb_serializable_mode = O_SERIALIZABLE_TABLE_LOCK;
 bool		orioledb_debug_disable_multi_insert = false;
 
@@ -169,11 +169,11 @@ bool		orioledb_strict_mode = false;
 XLogRecPtr	replay_until_lsn = InvalidXLogRecPtr;
 static char *replay_until_lsn_string;
 
-/* For page eviction/read checkpoint test only */
+// For page eviction/read checkpoint test only
 uint32		min_read_page_checkpoint = UINT32_MAX;
 uint32		max_read_page_checkpoint = 0;
 
-/* Previous values of hooks to chain call them */
+// Previous values of hooks to chain call them
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
 static void (*prev_shmem_request_hook) (void) = NULL;
 static base_init_startup_hook_type prev_base_init_startup_hook = NULL;
@@ -188,16 +188,16 @@ static skip_tree_height_hook_type prev_skip_tree_height_hook = NULL;
 CheckPoint_hook_type next_CheckPoint_hook = NULL;
 static bool o_newlocale_from_collation(void);
 
-/*
- * Temporary memory context for BTree operations. Helps us to avoid
- * excessive code complexity.
- */
+//
+// Temporary memory context for BTree operations. Helps us to avoid
+// excessive code complexity.
+//
 MemoryContext btree_insert_context = NULL;
 
-/*
- * Memory context for btree sequential scans.  Scans needs to survive till
- * seq_scans_cleanup().
- */
+//
+// Memory context for btree sequential scans.  Scans needs to survive till
+// seq_scans_cleanup().
+//
 MemoryContext btree_seqscan_context = NULL;
 
 static OPagePool page_pools[OPagePoolTypesCount];
@@ -217,10 +217,10 @@ typedef struct
 	void		(*shmem_init) (Pointer ptr, bool found);
 } ShmemItem;
 
-/*
- * checkpoint_shmem_init() should be before recovery_shmem_init().
- * See recovery_shmem_init() for description.
- */
+//
+// checkpoint_shmem_init() should be before recovery_shmem_init().
+// See recovery_shmem_init() for description.
+//
 static ShmemItem shmemItems[] = {
 	{btree_io_shmem_needs, btree_io_shmem_init},
 	{page_state_shmem_needs, page_state_shmem_init},
@@ -281,7 +281,7 @@ wal_desc_check_version(const WalReaderState *r)
 
 	if (r->container.version > ORIOLEDB_WAL_VERSION)
 	{
-		/* WAL from future version */
+		// WAL from future version
 		return WALPARSE_BAD_VERSION;
 	}
 
@@ -363,7 +363,7 @@ orioledb_rm_desc(StringInfo buf, XLogReaderState *record)
 		.start = startPtr,
 		.end = endPtr,
 		.ptr = startPtr,
-		/* Consumer */
+		// Consumer
 		.ctx = &dctx,
 		.check_version = wal_desc_check_version,
 		.on_container = NULL,
@@ -407,10 +407,10 @@ static RmgrData rmgr =
 	.rm_decode = orioledb_decode
 };
 
-/*
- * We currently do not support restarting PG instance from within the extension
- * on certain systems. Refuse to enable rewind on those systems.
- */
+//
+// We currently do not support restarting PG instance from within the extension
+// on certain systems. Refuse to enable rewind on those systems.
+//
 static bool
 orioledb_enable_rewind_check_hook(bool *newval, void **extra, GucSource source)
 {
@@ -429,14 +429,14 @@ orioledb_enable_rewind_check_hook(bool *newval, void **extra, GucSource source)
 		return false;
 	}
 #endif
-	/* Supported system or newval == false */
+	// Supported system or newval == false
 	return true;
 }
 
 
-/*
- * GUC check_hook for orioledb.replay_until_lsn
- */
+//
+// GUC check_hook for orioledb.replay_until_lsn
+//
 static bool
 orioledb_replay_until_lsn_check_hook(char **newval, void **extra, GucSource source)
 {
@@ -478,7 +478,7 @@ _PG_init(void)
 	o_verify_dir_exists_or_create(pstrdup(ORIOLEDB_UNDO_DIR), NULL, NULL);
 	o_verify_dir_exists_or_create(psprintf("%s/1", ORIOLEDB_DATA_DIR), NULL, NULL);
 
-	/* See InitializeMaxBackends(), InitProcGlobal() */
+	// See InitializeMaxBackends(), InitProcGlobal()
 #if PG_VERSION_NUM >= 180000
 	max_procs = MaxConnections + autovacuum_worker_slots + 1 +
 		max_worker_processes + max_wal_senders + NUM_SPECIAL_WORKER_PROCS + NUM_AUXILIARY_PROCS;
@@ -759,10 +759,10 @@ _PG_init(void)
 							NULL,
 							NULL);
 
-	/*
-	 * This variable added because we need values less than minimum value of
-	 * checkpoint_timeout(30s) for tests.
-	 */
+	//
+// This variable added because we need values less than minimum value of
+// checkpoint_timeout(30s) for tests.
+//
 	DefineCustomIntVariable("orioledb.debug_checkpoint_timeout",
 							"Sets the maximum time between automatic WAL checkpoints.",
 							NULL,
@@ -776,10 +776,10 @@ _PG_init(void)
 							NULL,
 							NULL);
 
-	/*
-	 * How much time orioledb checkpoint can take relative to PostgreSQL
-	 * checkpoint.
-	 */
+	//
+// How much time orioledb checkpoint can take relative to PostgreSQL
+// checkpoint.
+//
 	DefineCustomRealVariable("orioledb.checkpoint_completion_ratio",
 							 "ratio of orioledb checkpoint to postgres checkpoint.",
 							 NULL,
@@ -1223,7 +1223,7 @@ _PG_init(void)
 		use_device = false;
 	}
 
-	/* Register background writers */
+	// Register background writers
 	for (i = 0; i < bgwriter_num_workers; i++)
 		register_bgwriter(i);
 
@@ -1247,11 +1247,11 @@ _PG_init(void)
 		}
 	}
 
-	/* Register S3 workers */
+	// Register S3 workers
 	for (i = 0; orioledb_s3_mode && (i < s3_num_workers); i++)
 		register_s3worker(i);
 
-	/* Register custom deTOAST function */
+	// Register custom deTOAST function
 	register_o_detoast_func(o_detoast);
 
 	o_tableam_descr_init();
@@ -1267,7 +1267,7 @@ _PG_init(void)
 												  "orioledb B-tree seqential scans context",
 												  ALLOCSET_DEFAULT_SIZES);
 
-	/* Setup the required hooks. */
+	// Setup the required hooks.
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = orioledb_shmem_request;
 	prev_shmem_startup_hook = shmem_startup_hook;
@@ -1434,9 +1434,9 @@ ppools_shmem_init(Pointer ptr, bool found)
 	}
 }
 
-/*
- * Estimate amount of shared memory required by OrioleDB extension.
- */
+//
+// Estimate amount of shared memory required by OrioleDB extension.
+//
 static Size
 orioledb_memsize(void)
 {
@@ -1460,9 +1460,9 @@ orioledb_on_shmem_exit(int code, Datum arg)
 		s3_delete_lock_file();
 }
 
-/*
- * Request for shared memory and lwlocks
- */
+//
+// Request for shared memory and lwlocks
+//
 static void
 orioledb_shmem_request(void)
 {
@@ -1474,10 +1474,10 @@ orioledb_shmem_request(void)
 	RequestNamedLWLockTranche("orioledb_unique_locks", max_procs * 4);
 }
 
-/*
- * Initialize OrioleDB's shared memory.  Called on database instanse start
- * or restart.
- */
+//
+// Initialize OrioleDB's shared memory.  Called on database instanse start
+// or restart.
+//
 static void
 orioledb_shmem_startup(void)
 {
@@ -1490,10 +1490,10 @@ orioledb_shmem_startup(void)
 		prev_shmem_startup_hook();
 	shared_segment = NULL;
 
-	/*
-	 * We must hold AddinShmemInitLock while initialization of our shared
-	 * memory.
-	 */
+	//
+// We must hold AddinShmemInitLock while initialization of our shared
+// memory.
+//
 	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
 
 	shared_segment = ShmemInitStruct("orioledb_enigne",
@@ -1550,14 +1550,14 @@ orioledb_check_shmem(void)
 				 errmsg("orioledb must be loaded via shared_preload_libraries")));
 }
 
-/*
- * Test to see if a directory exists.
- *
- * Returns:
- *		0 if nonexistent
- *		1 if exists
- *		-1 if trouble accessing directory (errno reflects the error)
- */
+//
+// Test to see if a directory exists.
+//
+// Returns:
+// 0 if nonexistent
+// 1 if exists
+// -1 if trouble accessing directory (errno reflects the error)
+//
 static int
 o_check_dir(const char *dir)
 {
@@ -1568,15 +1568,15 @@ o_check_dir(const char *dir)
 		return (errno == ENOENT) ? 0 : -1;
 
 	if (closedir(chkdir))
-		return -1;				/* error executing closedir */
+		return -1;				// error executing closedir
 
 	return 1;
 }
 
-/*
- * Verify that the given directory exists. If it does not exist, it is created.
- */
-/* TODO: Add some kind of caching for calling mkdir */
+//
+// Verify that the given directory exists. If it does not exist, it is created.
+//
+// TODO: Add some kind of caching for calling mkdir
 void
 o_verify_dir_exists_or_create(char *dirname, bool *created, bool *found)
 {
@@ -1586,9 +1586,9 @@ o_verify_dir_exists_or_create(char *dirname, bool *created, bool *found)
 	{
 		case 0:
 
-			/*
-			 * Does not exist, so create
-			 */
+			//
+// Does not exist, so create
+//
 			if (pg_mkdir_p(dirname, pg_dir_create_mode) == -1)
 			{
 				if (errno == EEXIST)
@@ -1606,17 +1606,17 @@ o_verify_dir_exists_or_create(char *dirname, bool *created, bool *found)
 			return;
 		case 1:
 
-			/*
-			 * Exists
-			 */
+			//
+// Exists
+//
 			if (found)
 				*found = true;
 			return;
 		case -1:
 
-			/*
-			 * Access problem
-			 */
+			//
+// Access problem
+//
 			errstr = strerror(errno);
 			elog(ERROR, "could not access directory \"%s\": %s",
 				 dirname, errstr);
@@ -1643,7 +1643,7 @@ orioledb_page_stats(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -1654,9 +1654,9 @@ orioledb_page_stats(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	/*
-	 * Build and return the tuple
-	 */
+	//
+// Build and return the tuple
+//
 	MemSet(nulls, 0, sizeof(nulls));
 	for (i = 0; i < OPagePoolTypesCount; i++)
 	{
@@ -1698,7 +1698,7 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 	int32		ppool_arg = OPagePoolMain;
 	OPagePoolType ppool_type;
 
-	/* optional first argument: page pool type (int) */
+	// optional first argument: page pool type (int)
 	if (PG_NARGS() > 0 && !PG_ARGISNULL(0))
 		ppool_arg = PG_GETARG_INT32(0);
 
@@ -1714,7 +1714,7 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -1725,7 +1725,7 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	/* compute start and end blkno for requested pool */
+	// compute start and end blkno for requested pool
 	switch (ppool_type)
 	{
 		case OPagePoolFreeTree:
@@ -1741,7 +1741,7 @@ orioledb_print_pool_pages(PG_FUNCTION_ARGS)
 			end_blkno = start_blkno + page_pools[OPagePoolMain].size;
 			break;
 		default:
-			/* defensive fallback */
+			// defensive fallback
 			start_blkno = 0;
 			end_blkno = 0;
 			break;
@@ -1864,7 +1864,7 @@ o_invalidate_oids(ORelOids oids)
 	msg.usr.arg2 = oids.reloid;
 	msg.usr.arg3 = oids.relnode;
 
-	/* check AddCatcacheInvalidationMessage() for an explanation */
+	// check AddCatcacheInvalidationMessage() for an explanation
 	VALGRIND_MAKE_MEM_DEFINED(&msg, sizeof(msg));
 
 	SendSharedInvalidMessages(&msg, 1);
@@ -1887,9 +1887,9 @@ orioledb_commit_hash(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(cstring_to_text(STRINGIZE(COMMIT_HASH)));
 }
 
-/*
- * Returns a page pool by the type.
- */
+//
+// Returns a page pool by the type.
+//
 PagePool *
 get_ppool(OPagePoolType type)
 {
@@ -1897,9 +1897,9 @@ get_ppool(OPagePoolType type)
 	return (PagePool *) &page_pools[type];
 }
 
-/*
- * Returns a page pool for the page number.
- */
+//
+// Returns a page pool for the page number.
+//
 PagePool *
 get_ppool_by_blkno(OInMemoryBlkno blkno)
 {
@@ -1917,9 +1917,9 @@ get_ppool_by_blkno(OInMemoryBlkno blkno)
 	return (PagePool *) &page_pools[OPagePoolCatalog];
 }
 
-/*
- * Returns count of all dirty pages (sum of dirty pages for all page pools).
- */
+//
+// Returns count of all dirty pages (sum of dirty pages for all page pools).
+//
 OInMemoryBlkno
 get_dirty_pages_count_sum(void)
 {
@@ -2038,7 +2038,7 @@ orioledb_get_relation_info_hook(PlannerInfo *root,
 
 	if (is_orioledb_rel(relation))
 	{
-		/* Evade parallel scan of OrioleDB's tables */
+		// Evade parallel scan of OrioleDB's tables
 		rel->rel_parallel_workers = RelationGetParallelWorkers(relation, -1);
 		if (rel->rel_parallel_workers > 0)
 			elog(DEBUG3, "Rel parallel workers = %d", rel->rel_parallel_workers);
@@ -2068,29 +2068,29 @@ orioledb_get_relation_info_hook(PlannerInfo *root,
 
 					options = (OBTOptions *) index->rd_options;
 
-					/*
-					 * TODO: Remove when parallel index scan will be
-					 * implemented
-					 */
+					//
+// TODO: Remove when parallel index scan will be
+// implemented
+//
 					info->amcanparallel = false;
 
-					/*
-					 * Only the single-field uint64 encoding is enabled in the
-					 * planner for now.  The composite (fixed-key) path is
-					 * fully implemented and unit-tested, but choosing it well
-					 * needs a bitmap-heap cost that reflects orioledb's
-					 * primary-index scan at plan-generation time (a
-					 * patched-PG change); until then it stays out of
-					 * amhasgetbitmap.
-					 */
+					//
+// Only the single-field uint64 encoding is enabled in the
+// planner for now.  The composite (fixed-key) path is
+// fully implemented and unit-tested, but choosing it well
+// needs a bitmap-heap cost that reflects orioledb's
+// primary-index scan at plan-generation time (a
+// patched-PG change); until then it stays out of
+// amhasgetbitmap.
+//
 
-					/*
-					 * Offer a bitmap scan whenever the primary key can back
-					 * one (single int/ctid, or a composite of small ints).
-					 * This covers row-array IN() on a composite primary key,
-					 * planned as a BitmapOr of per-tuple primary-index scans,
-					 * which on large tables beats the common-prefix scan.
-					 */
+					//
+// Offer a bitmap scan whenever the primary key can back
+// one (single int/ctid, or a composite of small ints).
+// This covers row-array IN() on a composite primary key,
+// planned as a BitmapOr of per-tuple primary-index scans,
+// which on large tables beats the common-prefix scan.
+//
 					hasbitmap = o_keybitmap_pk_mode(primary, NULL) != O_KEYBITMAP_NONE;
 					info->amhasgetbitmap = hasbitmap;
 
@@ -2213,12 +2213,12 @@ check_debug_max_bridge_ctid(char **newval, void **extra, GucSource source)
 							*newval)));
 		blockNumber = (BlockNumber) cvt;
 
-		/*
-		 * Cope with possibility that unsigned long is wider than BlockNumber,
-		 * in which case strtoul will not raise an error for some values that
-		 * are out of the range of BlockNumber.  (See similar code in
-		 * oidin().)
-		 */
+		//
+// Cope with possibility that unsigned long is wider than BlockNumber,
+// in which case strtoul will not raise an error for some values that
+// are out of the range of BlockNumber.  (See similar code in
+// oidin().)
+//
 #if SIZEOF_LONG > 4
 		if (cvt != (unsigned long) blockNumber &&
 			cvt != (unsigned long) ((int32) blockNumber))

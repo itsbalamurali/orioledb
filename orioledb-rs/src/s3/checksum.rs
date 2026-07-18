@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * checksum.c
- * 		Declarations for calculating checksums of S3-specific data.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/checksum.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// checksum.c
+// Declarations for calculating checksums of S3-specific data.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/checksum.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -26,11 +26,11 @@
 
 static void initHashTable(S3ChecksumState *state, const char *filename);
 
-/*
- * Allocate S3ChecksumState and initalize hashTable by reading filename.  A
- * caller should prepare a buffer for S3FileChecksum entries, the caller is
- * responsible to release the buffer.
- */
+//
+// Allocate S3ChecksumState and initalize hashTable by reading filename.  A
+// caller should prepare a buffer for S3FileChecksum entries, the caller is
+// responsible to release the buffer.
+//
 S3ChecksumState *
 makeS3ChecksumState(uint32 checkpointNumber, S3FileChecksum *fileChecksums,
 					uint32 fileChecksumsMaxLen, const char *filename)
@@ -49,10 +49,10 @@ makeS3ChecksumState(uint32 checkpointNumber, S3FileChecksum *fileChecksums,
 	return res;
 }
 
-/*
- * Free S3ChecksumState and hashTable.  A caller is responsible to release the
- * buffer of S3FileChecksum entries.
- */
+//
+// Free S3ChecksumState and hashTable.  A caller is responsible to release the
+// buffer of S3FileChecksum entries.
+//
 void
 freeS3ChecksumState(S3ChecksumState *state)
 {
@@ -63,9 +63,9 @@ freeS3ChecksumState(S3ChecksumState *state)
 	pfree(state);
 }
 
-/*
- * Initialize a hash table to store checksums of database files.
- */
+//
+// Initialize a hash table to store checksums of database files.
+//
 static void
 initHashTable(S3ChecksumState *state, const char *filename)
 {
@@ -83,7 +83,7 @@ initHashTable(S3ChecksumState *state, const char *filename)
 	file = AllocateFile(filename, "r");
 	if (file == NULL)
 	{
-		/* Just ignore if the file doesn't exist */
+		// Just ignore if the file doesn't exist
 		if (errno == ENOENT)
 			return;
 
@@ -93,7 +93,7 @@ initHashTable(S3ChecksumState *state, const char *filename)
 	}
 
 	state->hashTable = hash_create("S3FileChecksum hash table",
-								   32,	/* arbitrary initial size */
+								   32,	// arbitrary initial size
 								   &ctl,
 								   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
@@ -119,17 +119,17 @@ initHashTable(S3ChecksumState *state, const char *filename)
 						 errmsg("unexpected checkpoint number in the checksum file \"%s\": %s",
 								filename, buf.data)));
 
-			/* Put the filename and its checksum into the hash table */
+			// Put the filename and its checksum into the hash table
 			newEntry = (S3FileChecksum *) hash_search(state->hashTable,
 													  key, HASH_ENTER, &found);
-			/* Normally we shouldn't have duplicated keys in the file */
+			// Normally we shouldn't have duplicated keys in the file
 			if (found)
 				ereport(ERROR,
 						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						 errmsg("the file name is duplicated in the checksum file \"%s\": %s",
 								filename, buf.data)));
 
-			/* filename is already filled in */
+			// filename is already filled in
 			strlcpy(newEntry->checksum, fileEntry.checksum, sizeof(fileEntry.checksum));
 			newEntry->checkpointNumber = fileEntry.checkpointNumber;
 			newEntry->changed = false;
@@ -151,9 +151,9 @@ initHashTable(S3ChecksumState *state, const char *filename)
 	FreeFile(file);
 }
 
-/*
- * Save current workers' fileChecksums array into a temporary file.
- */
+//
+// Save current workers' fileChecksums array into a temporary file.
+//
 void
 flushS3ChecksumState(S3ChecksumState *state, const char *filename)
 {
@@ -161,10 +161,10 @@ flushS3ChecksumState(S3ChecksumState *state, const char *filename)
 
 	Assert(state->fileChecksums != NULL);
 
-	/*
-	 * We open the file for append in case if previous flush already created
-	 * the file.
-	 */
+	//
+// We open the file for append in case if previous flush already created
+// the file.
+//
 	file = AllocateFile(filename, "a");
 	if (file == NULL)
 		ereport(ERROR,
@@ -191,10 +191,10 @@ flushS3ChecksumState(S3ChecksumState *state, const char *filename)
 	state->fileChecksumsLen = 0;
 }
 
-/*
- * Check if a PostgreSQL file changed since last checkpoint and return
- * S3FileChecksum.
- */
+//
+// Check if a PostgreSQL file changed since last checkpoint and return
+// S3FileChecksum.
+//
 S3FileChecksum *
 getS3FileChecksum(S3ChecksumState *state, const char *filename,
 				  Pointer data, uint64 size)
@@ -204,10 +204,10 @@ getS3FileChecksum(S3ChecksumState *state, const char *filename,
 	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
 	char		checksumstringbuf[O_SHA256_DIGEST_STRING_LENGTH];
 
-	/*
-	 * hashTable might not have been initialized before if a checksum file
-	 * hasn't been found.
-	 */
+	//
+// hashTable might not have been initialized before if a checksum file
+// hasn't been found.
+//
 	if (state->hashTable != NULL)
 	{
 		char		key[MAXPGPATH];
@@ -243,7 +243,7 @@ getS3FileChecksum(S3ChecksumState *state, const char *filename,
 		newEntry->checkpointNumber = prevEntry->checkpointNumber;
 	}
 
-	/* Store new entry into the checksum state */
+	// Store new entry into the checksum state
 	if (state->fileChecksumsLen >= state->fileChecksumsMaxLen)
 		elog(ERROR, "size of S3FileChecksum buffer is smaller than requested, "
 			 "current size is %d", state->fileChecksumsMaxLen);

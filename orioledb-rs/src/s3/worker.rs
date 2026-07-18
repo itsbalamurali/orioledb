@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * worker.c
- *		Routines for S3 worker process.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/worker.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// worker.c
+// Routines for S3 worker process.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/worker.c
+//
+// -------------------------------------------------------------------------
+//
 #include "c.h"
 #include "postgres.h"
 
@@ -56,7 +56,7 @@ typedef struct S3WorkerCtl
 	pg_atomic_uint32 fileChecksumsCnt;
 	ConditionVariable fileChecksumsFlushedCV;
 
-	/* S3 workers are in progress of putting PostgreSQL files into S3 bucket */
+	// S3 workers are in progress of putting PostgreSQL files into S3 bucket
 	pg_atomic_flag workersInProgress[FLEXIBLE_ARRAY_MEMBER];
 } S3WorkerCtl;
 
@@ -118,7 +118,7 @@ register_s3worker(int num)
 {
 	BackgroundWorker worker;
 
-	/* Set up background worker parameters */
+	// Set up background worker parameters
 	memset(&worker, 0, sizeof(worker));
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_CLASS_SYSTEM;
 	worker.bgw_start_time = BgWorkerStart_PostmasterStart;
@@ -132,9 +132,9 @@ register_s3worker(int num)
 	RegisterBackgroundWorker(&worker);
 }
 
-/*
- * Wait until all S3 workers flushed their checksum files.
- */
+//
+// Wait until all S3 workers flushed their checksum files.
+//
 static void
 s3_workers_wait_for_flush(void)
 {
@@ -159,13 +159,13 @@ s3_workers_wait_for_flush(void)
 	ConditionVariableCancelSleep();
 }
 
-/*
- * Prepare S3 workers to checkpoint database files.
- */
+//
+// Prepare S3 workers to checkpoint database files.
+//
 void
 s3_workers_checkpoint_init(void)
 {
-	/* Just in case delete any leftover files */
+	// Just in case delete any leftover files
 	for (int i = 0; i < s3_num_workers; i++)
 	{
 		char		worker_filename[MAXPGPATH];
@@ -179,9 +179,9 @@ s3_workers_checkpoint_init(void)
 	}
 }
 
-/*
- * Compact all S3 workers checksum files into one file.
- */
+//
+// Compact all S3 workers checksum files into one file.
+//
 void
 s3_workers_checkpoint_finish(void)
 {
@@ -208,10 +208,10 @@ s3_workers_checkpoint_finish(void)
 		worker_file = BasicOpenFile(worker_filename, O_RDONLY | PG_BINARY);
 		if (worker_file < 0)
 		{
-			/*
-			 * In case if this worker didn't manage to process any
-			 * S3TaskTypeWritePGFile just skip it.
-			 */
+			//
+// In case if this worker didn't manage to process any
+// S3TaskTypeWritePGFile just skip it.
+//
 			if (errno == ENOENT)
 				continue;
 
@@ -243,7 +243,7 @@ s3_workers_checkpoint_finish(void)
 
 	close(file);
 
-	/* The compaction is completed, now we can remove worker files */
+	// The compaction is completed, now we can remove worker files
 	for (int i = 0; i < s3_num_workers; i++)
 	{
 		char		worker_filename[MAXPGPATH];
@@ -274,9 +274,9 @@ flush_worker_checksum_state(void)
 	flushS3ChecksumState(checksum_state, filename);
 }
 
-/*
- * Process the task at given location.
- */
+//
+// Process the task at given location.
+//
 static void
 s3process_task(uint64 taskLocation)
 {
@@ -561,7 +561,7 @@ s3process_task(uint64 taskLocation)
 
 		pfree(objectname);
 
-		/* Mark this task as processed */
+		// Mark this task as processed
 		pg_atomic_fetch_sub_u32(&workers_ctl->fileChecksumsCnt, 1);
 	}
 
@@ -569,9 +569,9 @@ s3process_task(uint64 taskLocation)
 	s3_queue_erase_task(taskLocation);
 }
 
-/*
- * Schedule a synchronization of given data file to S3.
- */
+//
+// Schedule a synchronization of given data file to S3.
+//
 S3TaskLocation
 s3_schedule_file_write(uint32 chkpNum, char *filename, bool delete)
 {
@@ -598,9 +598,9 @@ s3_schedule_file_write(uint32 chkpNum, char *filename, bool delete)
 	return location;
 }
 
-/*
- * Schedule a synchronization of given empty directory to S3.
- */
+//
+// Schedule a synchronization of given empty directory to S3.
+//
 S3TaskLocation
 s3_schedule_empty_dir_write(uint32 chkpNum, char *dirname)
 {
@@ -627,9 +627,9 @@ s3_schedule_empty_dir_write(uint32 chkpNum, char *dirname)
 	return location;
 }
 
-/*
- * Schedule a synchronization of given data file part to S3.
- */
+//
+// Schedule a synchronization of given data file part to S3.
+//
 S3TaskLocation
 s3_schedule_file_part_write(uint32 chkpNum, OIndexKey key,
 							int32 segNum, int32 partNum)
@@ -659,9 +659,9 @@ s3_schedule_file_part_write(uint32 chkpNum, OIndexKey key,
 	return location;
 }
 
-/*
- * Schedule the read of given data file part from S3.
- */
+//
+// Schedule the read of given data file part from S3.
+//
 static S3TaskLocation
 s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 						   int32 partNum)
@@ -686,10 +686,10 @@ s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 	status = s3_header_mark_part_loading(tag, partNum);
 	if (status == S3PartStatusLoading)
 	{
-		/*
-		 * The task is already scheduled.  We don't know the location, but we
-		 * know it's lower than current insert location.
-		 */
+		//
+// The task is already scheduled.  We don't know the location, but we
+// know it's lower than current insert location.
+//
 		return s3_queue_get_insert_location();
 	}
 	else if (status == S3PartStatusLoaded)
@@ -716,9 +716,9 @@ s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key, int32 segNum,
 	return location;
 }
 
-/*
- * Schedule a synchronization of given WAL file to S3.
- */
+//
+// Schedule a synchronization of given WAL file to S3.
+//
 S3TaskLocation
 s3_schedule_wal_file_write(char *filename)
 {
@@ -743,9 +743,9 @@ s3_schedule_wal_file_write(char *filename)
 	return location;
 }
 
-/*
- * Schedule a synchronization of given UNDO file to S3.
- */
+//
+// Schedule a synchronization of given UNDO file to S3.
+//
 S3TaskLocation
 s3_schedule_undo_file_write(UndoLogType undoType, uint64 fileNum)
 {
@@ -768,9 +768,9 @@ s3_schedule_undo_file_write(UndoLogType undoType, uint64 fileNum)
 }
 
 
-/*
- * Schedule the load of given downlink from S3 to local storage.
- */
+//
+// Schedule the load of given downlink from S3 to local storage.
+//
 S3TaskLocation
 s3_schedule_downlink_load(BTreeDescr *desc, uint64 downlink)
 {
@@ -822,9 +822,9 @@ s3_schedule_downlink_load(BTreeDescr *desc, uint64 downlink)
 	return result;
 }
 
-/*
- * Schedule a synchronization of given file to S3.
- */
+//
+// Schedule a synchronization of given file to S3.
+//
 S3TaskLocation
 s3_schedule_root_file_write(char *filename, bool delete)
 {
@@ -850,9 +850,9 @@ s3_schedule_root_file_write(char *filename, bool delete)
 	return location;
 }
 
-/*
- * Schedule a synchronization of given PGDATA file to S3.
- */
+//
+// Schedule a synchronization of given PGDATA file to S3.
+//
 S3TaskLocation
 s3_schedule_pg_file_write(uint32 chkpNum, char *filename)
 {
@@ -912,18 +912,18 @@ s3worker_main(Datum main_arg)
 
 	worker_num = Int32GetDatum(main_arg);
 
-	/* enable timeout for relation lock */
+	// enable timeout for relation lock
 	RegisterTimeout(DEADLOCK_TIMEOUT, CheckDeadLockAlert);
 
-	/* enable relation cache invalidation (remove old OTableDescr) */
+	// enable relation cache invalidation (remove old OTableDescr)
 	RelationCacheInitialize();
 	InitCatalogCache();
 	SharedInvalBackendInit(false);
 
-	/* show the s3 worker in pg_stat_activity, */
+	// show the s3 worker in pg_stat_activity,
 	InitializeSessionUserIdStandalone();
 
-	/* catch SIGTERM signal for reason to not interrupt background writing */
+	// catch SIGTERM signal for reason to not interrupt background writing
 	pqsignal(SIGTERM, SignalHandlerForShutdownRequest);
 	BackgroundWorkerUnblockSignals();
 
@@ -942,10 +942,10 @@ s3worker_main(Datum main_arg)
 	{
 		MemoryContextSwitchTo(CurTransactionContext);
 
-		/*
-		 * There might be task to process saved into shared memory.  If so,
-		 * pick and process it.
-		 */
+		//
+// There might be task to process saved into shared memory.  If so,
+// pick and process it.
+//
 		if (workers_locations[worker_num] != InvalidS3TaskLocation)
 		{
 			s3process_task(workers_locations[worker_num]);
@@ -959,9 +959,9 @@ s3worker_main(Datum main_arg)
 			if (ShutdownRequestPending)
 				break;
 
-			/*
-			 * Sleep until we are signaled or it's time to check the queue.
-			 */
+			//
+// Sleep until we are signaled or it's time to check the queue.
+//
 			rc = WaitLatch(MyLatch, wake_events,
 						   BgWriterDelay,
 						   WAIT_EVENT_BGWRITER_MAIN);
@@ -971,11 +971,11 @@ s3worker_main(Datum main_arg)
 
 			CHECK_FOR_INTERRUPTS();
 
-			/*
-			 * Task processing loop.  It might happen that error occurs and
-			 * worker restarts.  We save the task location to the shared
-			 * memory to be able to process it after restart.
-			 */
+			//
+// Task processing loop.  It might happen that error occurs and
+// worker restarts.  We save the task location to the shared
+// memory to be able to process it after restart.
+//
 			while ((taskLocation = s3_queue_try_pick_task()) != InvalidS3TaskLocation)
 			{
 				workers_locations[worker_num] = taskLocation;
@@ -986,7 +986,7 @@ s3worker_main(Datum main_arg)
 			if (!pg_atomic_unlocked_test_flag(&workers_ctl->workersInProgress[worker_num]) &&
 				pg_atomic_read_u32(&workers_ctl->fileChecksumsCnt) == 0)
 			{
-				/* checksum_state might be NULL if the worker restarted */
+				// checksum_state might be NULL if the worker restarted
 				if (checksum_state != NULL)
 				{
 					if (checksum_state->fileChecksumsLen > 0)

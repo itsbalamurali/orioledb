@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * slot.c
- * 		Routines for orioledb tuple slot implementation
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tuple/slot.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// slot.c
+// Routines for orioledb tuple slot implementation
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tuple/slot.c
+//
+// -------------------------------------------------------------------------
+//
 #include "c.h"
 #include "postgres.h"
 
@@ -134,7 +134,7 @@ tts_orioledb_make_key(TupleTableSlot *slot, OTableDescr *descr)
 		{
 			int			attindex = attnum - 1 - ctid_off;
 #ifdef USE_ASSERT_CHECKING
-			/* PK attributes shouldn't be external or compressed */
+			// PK attributes shouldn't be external or compressed
 			Form_pg_attribute att;
 
 			att = TupleDescAttr(slot->tts_tupleDescriptor,
@@ -170,7 +170,7 @@ make_key_from_secondary_slot(TupleTableSlot *slot, OIndexDescr *idx, OTableDescr
 		int			attindex = pk_attnum - 1;
 
 #ifdef USE_ASSERT_CHECKING
-		/* PK attributes shouldn't be external or compressed */
+		// PK attributes shouldn't be external or compressed
 		Form_pg_attribute att;
 
 		att = TupleDescAttr(slot->tts_tupleDescriptor, pk_attnum - 1);
@@ -203,89 +203,89 @@ alloc_to_toast_vfree_detoasted(TupleTableSlot *slot)
 	oslot->detoasted = (Datum *) ((Pointer) oslot->to_toast + MAXALIGN(sizeof(char) * totalNatts + sizeof(bool) * totalNatts));
 }
 
-/*
- * This function is designed to populate the attributes of a tuple table slot
- * from an OrioleDB tuple.  It selectively retrieves attributes based on
- * the provided number of attributes (__natts) and updates the slot's values
- * and null flags accordingly.
- */
+//
+// This function is designed to populate the attributes of a tuple table slot
+// from an OrioleDB tuple.  It selectively retrieves attributes based on
+// the provided number of attributes (__natts) and updates the slot's values
+// and null flags accordingly.
+//
 static void
 tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 {
-	/*
-	 * Cast the generic TupleTableSlot to an OTableSlot for OrioleDB specific
-	 * operations.
-	 */
+	//
+// Cast the generic TupleTableSlot to an OTableSlot for OrioleDB specific
+// operations.
+//
 	OTableSlot *oslot = (OTableSlot *) slot;
 
-	/* Declaration of variables used throughout the function. */
+	// Declaration of variables used throughout the function.
 	int			natts,
 				attnum,
 				ctid_off = 0;
-	OTableDescr *descr = oslot->descr;	/* Descriptor for the table. */
-	Datum	   *values = slot->tts_values;	/* Array to store attribute
-											 * values. */
-	bool	   *isnull = slot->tts_isnull;	/* Array to store null flags for
-											 * attributes. */
-	bool		hastoast = false;	/* Flag to indicate presence of TOASTed
-									 * attributes. */
+	OTableDescr *descr = oslot->descr;	// Descriptor for the table.
+	Datum	   *values = slot->tts_values;	// Array to store attribute
+// values.
+	bool	   *isnull = slot->tts_isnull;	// Array to store null flags for
+// attributes.
+	bool		hastoast = false;	// Flag to indicate presence of TOASTed
+// attributes.
 	OIndexDescr *idx;
 	bool		index_order;
 	int			cur_tbl_attnum = 0;
 	bool	   *isfilled = NULL;
 
-	/*
-	 * Early return if the requested number of attributes is already valid or
-	 * the tuple is null.
-	 */
+	//
+// Early return if the requested number of attributes is already valid or
+// the tuple is null.
+//
 	if (__natts <= slot->tts_nvalid || O_TUPLE_IS_NULL(oslot->tuple))
 		return;
 
-	/* Ensure the descriptor is not NULL. */
+	// Ensure the descriptor is not NULL.
 	Assert(descr);
 	if (oslot->ixnum == BridgeIndexNumber)
 		idx = descr->bridge;
 	else
 		idx = descr->indices[oslot->ixnum];
 
-	/* Determine if the attributes should be fetched in index order. */
+	// Determine if the attributes should be fetched in index order.
 	index_order = slot->tts_tupleDescriptor->tdtypeid == RECORDOID;
 	if (oslot->ixnum == PrimaryIndexNumber)
 		index_order = index_order &&
 			slot->tts_tupleDescriptor->natts == idx->nFields;
 
-	/*
-	 * Ensure that if there are valid attributes, the slot is for the primary
-	 * index.
-	 */
+	//
+// Ensure that if there are valid attributes, the slot is for the primary
+// index.
+//
 	Assert(slot->tts_nvalid == 0 || oslot->ixnum == PrimaryIndexNumber);
 
-	/*
-	 * Determine the offset of the attributes due to the possible presence of
-	 * ctid column.
-	 */
+	//
+// Determine the offset of the attributes due to the possible presence of
+// ctid column.
+//
 	if (GET_PRIMARY(descr)->primaryIsCtid && oslot->ixnum == PrimaryIndexNumber)
 		ctid_off++;
 
-	/*
-	 * Determine the offset of the attributes due to the possible presence of
-	 * index_bridging_ctid column.
-	 */
+	//
+// Determine the offset of the attributes due to the possible presence of
+// index_bridging_ctid column.
+//
 	if (GET_PRIMARY(descr)->bridging && oslot->ixnum == PrimaryIndexNumber)
 		ctid_off++;
 
-	/*
-	 * Determine the number of attributes to process based on the index type
-	 * and the order of attributes.
-	 */
+	//
+// Determine the number of attributes to process based on the index type
+// and the order of attributes.
+//
 	if (oslot->ixnum == PrimaryIndexNumber && oslot->leafTuple)
 	{
 		if (index_order)
 		{
-			/*
-			 * The attributes are stored in the index order.  So fetch all the
-			 * attributes at once.
-			 */
+			//
+// The attributes are stored in the index order.  So fetch all the
+// attributes at once.
+//
 			natts = descr->tupdesc->natts;
 		}
 		else
@@ -295,25 +295,25 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 	}
 	else
 	{
-		/*
-		 * For secondary indexes, the attributes are also stored in the index
-		 * order.  So fetch all the attributes at once.
-		 */
+		//
+// For secondary indexes, the attributes are also stored in the index
+// order.  So fetch all the attributes at once.
+//
 		natts = oslot->state.desc->natts;
 	}
 
 	isfilled = MemoryContextAllocZero(slot->tts_mcxt, Max(natts, __natts));
 
-	/* Iterate over the attributes to populate values and null flags. */
+	// Iterate over the attributes to populate values and null flags.
 	for (attnum = slot->tts_nvalid; attnum < natts; attnum++)
 	{
 		Form_pg_attribute thisatt;
 		int			res_attnum = 0;
 
-		/*
-		 * Determine the result attribute number based on the index type and
-		 * the order of attributes.
-		 */
+		//
+// Determine the result attribute number based on the index type and
+// the order of attributes.
+//
 		if (oslot->ixnum == PrimaryIndexNumber)
 		{
 			if (index_order)
@@ -329,16 +329,16 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 			}
 			else
 			{
-				/*
-				 * Map leaf position to table column position using
-				 * tableAttnums.  For normal tables where index order matches
-				 * table order this is identity.  For attached partitions with
-				 * reordered columns, this correctly remaps to the right table
-				 * column.
-				 *
-				 * tableAttnums values are 1-based and offset by +2 for
-				 * ctid-based PKs or +1 otherwise (see o_index_fill_descr).
-				 */
+				//
+// Map leaf position to table column position using
+// tableAttnums.  For normal tables where index order matches
+// table order this is identity.  For attached partitions with
+// reordered columns, this correctly remaps to the right table
+// column.
+//
+// tableAttnums values are 1-based and offset by +2 for
+// ctid-based PKs or +1 otherwise (see o_index_fill_descr).
+//
 				res_attnum = (oslot->leafTuple) ? attnum : (idx->tableAttnums[attnum] - (idx->primaryIsCtid ? 2 : 1));
 			}
 		}
@@ -354,39 +354,39 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 			Assert(false);
 		}
 
-		/* Ensure the result attribute number is valid. */
+		// Ensure the result attribute number is valid.
 		Assert(res_attnum >= -2);
 		if (res_attnum >= 0)
 		{
 			if (oslot->ixnum == BridgeIndexNumber && attnum == 0)
 			{
-				/*
-				 * first bridge_ctid attribute was already read in
-				 * tts_orioledb_init_reader
-				 */
+				//
+// first bridge_ctid attribute was already read in
+// tts_orioledb_init_reader
+//
 				values[res_attnum] = PointerGetDatum(&oslot->bridge_ctid);
 				isnull[res_attnum] = false;
 				continue;
 			}
 
-			/*
-			 * Read the next field value and update the slot's value and null
-			 * arrays.
-			 */
+			//
+// Read the next field value and update the slot's value and null
+// arrays.
+//
 			values[res_attnum] = o_tuple_read_next_field(&oslot->state,
 														 &isnull[res_attnum]);
 			isfilled[res_attnum] = true;
 
-			/* Determine the attribute metadata based on the index and order. */
+			// Determine the attribute metadata based on the index and order.
 			if (oslot->ixnum == PrimaryIndexNumber && !index_order)
 				thisatt = TupleDescAttr(slot->tts_tupleDescriptor, res_attnum);
 			else
 				thisatt = TupleDescAttr(idx->leafTupdesc, attnum);
 
-			/*
-			 * Check for TOASTed attributes and adjust the number of
-			 * attributes if necessary.
-			 */
+			//
+// Check for TOASTed attributes and adjust the number of
+// attributes if necessary.
+//
 			if (!isnull[res_attnum] && !thisatt->attbyval && thisatt->attlen < 0)
 			{
 				Pointer		p = DatumGetPointer(values[res_attnum]);
@@ -403,7 +403,7 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 		{
 			if (!idx->bridging)
 			{
-				/* Special handling for ctid attribute. */
+				// Special handling for ctid attribute.
 				Datum		iptr_value PG_USED_FOR_ASSERTS_ONLY;
 				bool		iptr_null;
 
@@ -417,29 +417,29 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 		}
 		else if (res_attnum == -2)
 		{
-			/* Handle dropped attributes by reading and ignoring the value. */
+			// Handle dropped attributes by reading and ignoring the value.
 			bool		dropped_null;
 
 			(void) o_tuple_read_next_field(&oslot->state, &dropped_null);
 		}
 	}
 
-	/* Process TOASTed attributes if any were found. */
+	// Process TOASTed attributes if any were found.
 	if (hastoast)
 	{
 		OTuple		pkey;
 
-		/* Allocate memory for TOASTed attributes if not already done. */
+		// Allocate memory for TOASTed attributes if not already done.
 		if (!oslot->to_toast)
 			alloc_to_toast_vfree_detoasted(slot);
 
-		/* Generate a primary key for the TOASTed attributes. */
+		// Generate a primary key for the TOASTed attributes.
 		if (oslot->ixnum == PrimaryIndexNumber)
 			pkey = tts_orioledb_make_key(slot, descr);
 		else
 			pkey = make_key_from_secondary_slot(slot, idx, descr);
 
-		/* Iterate over attributes to process TOASTed values. */
+		// Iterate over attributes to process TOASTed values.
 		for (attnum = 0; attnum < natts; attnum++)
 		{
 			Form_pg_attribute thisatt;
@@ -451,7 +451,7 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 
 				if (IS_TOAST_POINTER(p))
 				{
-					/* Replace TOASTed value with a detoasted version. */
+					// Replace TOASTed value with a detoasted version.
 					MemoryContext mcxt = MemoryContextSwitchTo(slot->tts_mcxt);
 					OToastValue toastValue;
 
@@ -466,12 +466,12 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 				}
 			}
 		}
-		/* Free the primary key memory except for bump context */
+		// Free the primary key memory except for bump context
 		if (!is_bump_memory_context(CurrentMemoryContext))
 			pfree(pkey.data);
 	}
 
-	/* Ensure the number of processed attributes matches the expected count. */
+	// Ensure the number of processed attributes matches the expected count.
 	Assert(attnum == natts);
 
 	{
@@ -486,7 +486,7 @@ tts_orioledb_getsomeattrs(TupleTableSlot *slot, int __natts)
 			}
 		}
 
-		/* Update the slot's valid attribute count. */
+		// Update the slot's valid attribute count.
 		slot->tts_nvalid = first_unfilled;
 	}
 
@@ -545,16 +545,16 @@ tts_orioledb_getsysattr(TupleTableSlot *slot, int attnum, bool *isnull)
 	elog(ERROR, "orioledb tuples does not have system attribute: %s",
 		 att->attname.data);
 
-	return 0;					/* silence compiler warnings */
+	return 0;					// silence compiler warnings
 }
 
-/*
- * To materialize a virtual slot all the datums that aren't passed by value
- * have to be copied into the slot's memory context.  To do so, compute the
- * required size, and allocate enough memory to store all attributes.  That's
- * good for cache hit ratio, but more importantly requires only memory
- * allocation/deallocation.
- */
+//
+// To materialize a virtual slot all the datums that aren't passed by value
+// have to be copied into the slot's memory context.  To do so, compute the
+// required size, and allocate enough memory to store all attributes.  That's
+// good for cache hit ratio, but more importantly requires only memory
+// allocation/deallocation.
+//
 static void
 tts_orioledb_materialize(TupleTableSlot *slot)
 {
@@ -563,13 +563,13 @@ tts_orioledb_materialize(TupleTableSlot *slot)
 	Size		sz = 0;
 	char	   *data;
 
-	/* already materialized */
+	// already materialized
 	if (TTS_SHOULDFREE(slot))
 		return;
 
 	slot_getallattrs(slot);
 
-	/* compute size of memory required */
+	// compute size of memory required
 	for (int natt = 0; natt < desc->natts; natt++)
 	{
 		Form_pg_attribute att = TupleDescAttr(desc, natt);
@@ -583,10 +583,10 @@ tts_orioledb_materialize(TupleTableSlot *slot)
 		if (att->attlen == -1 &&
 			VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val)))
 		{
-			/*
-			 * We want to flatten the expanded value so that the materialized
-			 * slot doesn't depend on it.
-			 */
+			//
+// We want to flatten the expanded value so that the materialized
+// slot doesn't depend on it.
+//
 			sz = att_align_nominal(sz, att->attalign);
 			sz += EOH_get_flat_size(DatumGetEOHP(val));
 		}
@@ -597,15 +597,15 @@ tts_orioledb_materialize(TupleTableSlot *slot)
 		}
 	}
 
-	/* all data is byval */
+	// all data is byval
 	if (sz == 0)
 		return;
 
-	/* allocate memory */
+	// allocate memory
 	oslot->data = data = MemoryContextAlloc(slot->tts_mcxt, sz);
 	slot->tts_flags |= TTS_FLAG_SHOULDFREE;
 
-	/* and copy all attributes into the pre-allocated space */
+	// and copy all attributes into the pre-allocated space
 	for (int natt = 0; natt < desc->natts; natt++)
 	{
 		Form_pg_attribute att = TupleDescAttr(desc, natt);
@@ -621,10 +621,10 @@ tts_orioledb_materialize(TupleTableSlot *slot)
 		{
 			Size		data_length;
 
-			/*
-			 * We want to flatten the expanded value so that the materialized
-			 * slot doesn't depend on it.
-			 */
+			//
+// We want to flatten the expanded value so that the materialized
+// slot doesn't depend on it.
+//
 			ExpandedObjectHeader *eoh = DatumGetEOHP(val);
 
 			data = (char *) att_align_nominal(data,
@@ -747,7 +747,7 @@ tts_orioledb_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 	dstslot->tts_nvalid = srcdesc->natts;
 	dstslot->tts_flags &= ~TTS_FLAG_EMPTY;
 
-	/* make sure storage doesn't depend on external memory */
+	// make sure storage doesn't depend on external memory
 	tts_orioledb_materialize(dstslot);
 }
 
@@ -982,13 +982,13 @@ o_get_idx_expr_att(TupleTableSlot *slot, OIndexDescr *idx,
 	return result;
 }
 
-/*
- * Prepares values for index tuple.  Works for leaf and non-leaf tuples of
- * secondary index and non-leaf tuple of primary index.
- *
- * Detoasts all the values and marks detoasted values in 'detoasted' array.
- * If 'detoasted' array isn't given, asserts not values are toasted.
- */
+//
+// Prepares values for index tuple.  Works for leaf and non-leaf tuples of
+// secondary index and non-leaf tuple of primary index.
+//
+// Detoasts all the values and marks detoasted values in 'detoasted' array.
+// If 'detoasted' array isn't given, asserts not values are toasted.
+//
 static void
 tts_orioledb_get_index_values(TupleTableSlot *slot, OIndexDescr *idx,
 							  Datum *values, bool *isnull, bool leaf)
@@ -1055,7 +1055,7 @@ tts_orioledb_make_secondary_tuple(TupleTableSlot *slot, OIndexDescr *idx, bool l
 	return o_form_tuple(tupleDesc, spec, 0, values, isnull, bridge_data_arg);
 }
 
-/* fills key bound from tuple or index tuple that belongs to current BTree */
+// fills key bound from tuple or index tuple that belongs to current BTree
 void
 tts_orioledb_fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx,
 							OBTreeKeyBound *bound)
@@ -1098,9 +1098,9 @@ tts_orioledb_fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx,
 	}
 }
 
-/*
- * Appends index key stored in the tuple slot to the given string.
- */
+//
+// Appends index key stored in the tuple slot to the given string.
+//
 void
 appendStringInfoIndexKey(StringInfo str, TupleTableSlot *slot, OIndexDescr *id)
 {
@@ -1146,10 +1146,10 @@ appendStringInfoIndexKey(StringInfo str, TupleTableSlot *slot, OIndexDescr *id)
 	appendStringInfo(str, ")");
 }
 
-/*
- * Returns a string representation of the index key that is stored in the
- * tuple slot.
- */
+//
+// Returns a string representation of the index key that is stored in the
+// tuple slot.
+//
 char *
 tss_orioledb_print_idx_key(TupleTableSlot *slot, OIndexDescr *id)
 {
@@ -1161,10 +1161,10 @@ tss_orioledb_print_idx_key(TupleTableSlot *slot, OIndexDescr *id)
 	return buf.data;
 }
 
-/*
- * Returns the expected length of the tuple that will be stored in the primary
- * key index.
- */
+//
+// Returns the expected length of the tuple that will be stored in the primary
+// key index.
+//
 static inline int
 expected_tuple_len(TupleTableSlot *slot, OTableDescr *descr)
 {
@@ -1193,10 +1193,10 @@ expected_tuple_len(TupleTableSlot *slot, OTableDescr *descr)
 	return tup_size;
 }
 
-/*
- * Returns true if the tuple stored in the slot fits the maximum size to be
- * stored in the index.
- */
+//
+// Returns true if the tuple stored in the slot fits the maximum size to be
+// stored in the index.
+//
 static inline bool
 can_be_stored_in_index(TupleTableSlot *slot, OTableDescr *descr)
 {
@@ -1209,10 +1209,10 @@ can_be_stored_in_index(TupleTableSlot *slot, OTableDescr *descr)
 	return false;
 }
 
-/*
- * Apply TOAST including compression and out-of-line storage to the tuple
- * stored in the slot if necessary.
- */
+//
+// Apply TOAST including compression and out-of-line storage to the tuple
+// stored in the slot if necessary.
+//
 void
 tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 {
@@ -1236,7 +1236,7 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 
 	slot_getallattrs(slot);
 
-	/* temporary, pointers to TupleDesc attributes */
+	// temporary, pointers to TupleDesc attributes
 	natts = tupdesc->natts;
 	for (i = 0; i < natts; i++)
 	{
@@ -1250,13 +1250,13 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 	if (!has_toasted)
 		full_size = expected_tuple_len(slot, descr);
 
-	/* we do not need use TOAST */
+	// we do not need use TOAST
 	if (full_size <= O_BTREE_MAX_TUPLE_SIZE && !has_toasted)
 	{
 		return;
 	}
 
-	/* if we there than tuple's values should be TOASTed or compressed */
+	// if we there than tuple's values should be TOASTed or compressed
 	if (!oslot->to_toast)
 		alloc_to_toast_vfree_detoasted(slot);
 
@@ -1268,18 +1268,18 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 
 	memset(oslot->to_toast, ORIOLEDB_TO_TOAST_OFF, sizeof(bool) * natts);
 
-	/* if we can not compress tuple, we do not try do it */
+	// if we can not compress tuple, we do not try do it
 	if (full_size > O_BTREE_MAX_TUPLE_SIZE)
 	{
 		return;
 	}
 
-	/*
-	 * If we there than we must calculate which values should be compressed or
-	 * TOASTed.
-	 */
+	//
+// If we there than we must calculate which values should be compressed or
+// TOASTed.
+//
 	to_toastn = 0;
-	/* to make it easy now all values must be reTOASTed */
+	// to make it easy now all values must be reTOASTed
 	for (i = 0; i < descr->ntoastable; i++)
 	{
 		toast_attn = descr->toastable[i] - ctid_off;
@@ -1304,7 +1304,7 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 					var_size;
 		MemoryContext oldMctx;
 
-		/* search max unprocessed value */
+		// search max unprocessed value
 		for (i = 0; i < descr->ntoastable; i++)
 		{
 			toast_attn = descr->toastable[i] - ctid_off;
@@ -1326,19 +1326,19 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 					max_attn = toast_attn;
 				}
 			}
-			/* else we already process it or it is NULL */
+			// else we already process it or it is NULL
 		}
 
-		/* we have no values which can be toasted */
+		// we have no values which can be toasted
 		if (max_attn == -1)
 			break;
 
 		att = TupleDescAttr(tupdesc, max_attn);
 
-		/*
-		 * If the value is already compressed or can not be compressed - it
-		 * must be toasted
-		 */
+		//
+// If the value is already compressed or can not be compressed - it
+// must be toasted
+//
 		if (VARATT_IS_COMPRESSED(slot->tts_values[max_attn])
 			|| att->attstorage == TYPSTORAGE_EXTERNAL)
 		{
@@ -1354,40 +1354,40 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 
 		if (DatumGetPointer(tmp) != NULL)
 		{
-			/* Suceessfully compressed, replace the value */
+			// Suceessfully compressed, replace the value
 
-			/* free the old value */
+			// free the old value
 			if (oslot->vfree[max_attn])
 				pfree(DatumGetPointer(slot->tts_values[max_attn]));
-			/* store the new value and mark to free it later */
+			// store the new value and mark to free it later
 			slot->tts_values[max_attn] = tmp;
 			oslot->vfree[max_attn] = true;
 		}
 		else if (att->attstorage != TYPSTORAGE_MAIN)
 		{
-			/* Compression failed, try to TOAST it */
+			// Compression failed, try to TOAST it
 			oslot->to_toast[max_attn] = ORIOLEDB_TO_TOAST_ON;
 			to_toastn++;
 		}
 		else
 		{
-			/*
-			 * Compression failed for STORAGE MAIN attribute. Mark it as
-			 * compression-tried for now; we may need to force out-of-line
-			 * storage below if the tuple still doesn't fit.
-			 */
+			//
+// Compression failed for STORAGE MAIN attribute. Mark it as
+// compression-tried for now; we may need to force out-of-line
+// storage below if the tuple still doesn't fit.
+//
 			Assert(att->attstorage == TYPSTORAGE_MAIN);
 			oslot->to_toast[max_attn] = ORIOLEDB_TO_TOAST_COMPRESSION_TRIED;
 			to_toastn++;
 		}
 	}
 
-	/*
-	 * If the tuple is still oversized after compression attempts, we need to
-	 * force STORAGE MAIN attributes to be stored out-of-line in the TOAST
-	 * table. Process them largest-first to minimize the number of attributes
-	 * that need out-of-line storage.
-	 */
+	//
+// If the tuple is still oversized after compression attempts, we need to
+// force STORAGE MAIN attributes to be stored out-of-line in the TOAST
+// table. Process them largest-first to minimize the number of attributes
+// that need out-of-line storage.
+//
 	while (!can_be_stored_in_index(slot, descr))
 	{
 		int			max = 0;
@@ -1401,13 +1401,13 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 			if (slot->tts_isnull[toast_attn])
 				continue;
 
-			/* Skip attributes already marked for out-of-line storage */
+			// Skip attributes already marked for out-of-line storage
 			if (oslot->to_toast[toast_attn] == ORIOLEDB_TO_TOAST_ON)
 				continue;
 
 			att = TupleDescAttr(tupdesc, toast_attn);
 
-			/* Only consider STORAGE MAIN attributes in this pass */
+			// Only consider STORAGE MAIN attributes in this pass
 			if (att->attstorage != TYPSTORAGE_MAIN)
 				continue;
 
@@ -1419,17 +1419,17 @@ tts_orioledb_toast(TupleTableSlot *slot, OTableDescr *descr)
 			}
 		}
 
-		/* No more MAIN attributes to toast - nothing more we can do */
+		// No more MAIN attributes to toast - nothing more we can do
 		if (max_attn == -1)
 			break;
 
 		oslot->to_toast[max_attn] = ORIOLEDB_TO_TOAST_ON;
 	}
 
-	/*
-	 * Reset any remaining COMPRESSION_TRIED flags to OFF. These are MAIN
-	 * attributes that were compressed or didn't need out-of-line storage.
-	 */
+	//
+// Reset any remaining COMPRESSION_TRIED flags to OFF. These are MAIN
+// attributes that were compressed or didn't need out-of-line storage.
+//
 	for (i = 0; i < descr->ntoastable; i++)
 	{
 		toast_attn = descr->toastable[i] - ctid_off;
@@ -1443,7 +1443,7 @@ tts_orioledb_form_tuple(TupleTableSlot *slot,
 						OTableDescr *descr)
 {
 	OTableSlot *oslot = (OTableSlot *) slot;
-	OTuple		tuple;			/* return tuple */
+	OTuple		tuple;			// return tuple
 	Size		len;
 	OIndexDescr *idx = GET_PRIMARY(descr);
 	TupleDesc	tupleDescriptor = idx->leafTupdesc;
@@ -1565,10 +1565,10 @@ tts_orioledb_insert_toast_values(TupleTableSlot *slot,
 
 	for (i = 0; i < tupleDesc->natts; i++)
 	{
-		/*
-		 * Only TOAST attributes explicitly marked ON. COMPRESSION_TRIED
-		 * should have been reset to OFF by tts_orioledb_toast().
-		 */
+		//
+// Only TOAST attributes explicitly marked ON. COMPRESSION_TRIED
+// should have been reset to OFF by tts_orioledb_toast().
+//
 		Assert(oslot->to_toast[i] != ORIOLEDB_TO_TOAST_COMPRESSION_TRIED);
 
 		if (oslot->to_toast[i] == ORIOLEDB_TO_TOAST_ON)
@@ -1614,10 +1614,10 @@ tts_orioledb_toast_sort_add(TupleTableSlot *slot,
 
 	for (i = 0; i < tupleDesc->natts; i++)
 	{
-		/*
-		 * Only TOAST attributes explicitly marked ON. COMPRESSION_TRIED
-		 * should have been reset to OFF by tts_orioledb_toast().
-		 */
+		//
+// Only TOAST attributes explicitly marked ON. COMPRESSION_TRIED
+// should have been reset to OFF by tts_orioledb_toast().
+//
 		Assert(oslot->to_toast[i] != ORIOLEDB_TO_TOAST_COMPRESSION_TRIED);
 
 		if (oslot->to_toast[i] == ORIOLEDB_TO_TOAST_ON)
@@ -1716,23 +1716,23 @@ tts_orioledb_update_toast_values(TupleTableSlot *oldSlot,
 		o_tuple_set_version(&primary->nonLeafSpec, &old_idx_tup,
 							o_tuple_get_version(idx_tup));
 
-		/*
-		 * old_idx_tup and idx_tup are equal using comparator, but some
-		 * collations could consider equal tuples of different sizes. E.g.
-		 * when we update tuple on logical subscriber key could be equal in a
-		 * subscriber collation, but size of old and new keys could be
-		 * different. (see PG test src/test/subscription/012_collation.pl)
-		 *
-		 * So we refrain from checking size equality here.
-		 */
+		//
+// old_idx_tup and idx_tup are equal using comparator, but some
+// collations could consider equal tuples of different sizes. E.g.
+// when we update tuple on logical subscriber key could be equal in a
+// subscriber collation, but size of old and new keys could be
+// different. (see PG test src/test/subscription/012_collation.pl)
+//
+// So we refrain from checking size equality here.
+//
 
 		Assert(old_idx_tup.formatFlags == idx_tup.formatFlags);
 
-		/*
-		 * Cannot use simple memcmp(old_idx_tup.data, idx_tup.data, ...)
-		 * because of included fields and also equality of such special values
-		 * as '0.0' and '-0.0' for float
-		 */
+		//
+// Cannot use simple memcmp(old_idx_tup.data, idx_tup.data, ...)
+// because of included fields and also equality of such special values
+// as '0.0' and '-0.0' for float
+//
 		if (old_idx_tup.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
 			natts = primary->nonLeafSpec.natts;
 		else
@@ -1785,10 +1785,10 @@ tts_orioledb_update_toast_values(TupleTableSlot *oldSlot,
 
 		if (newOSlot->to_toast)
 		{
-			/*
-			 * Only TOAST attributes explicitly marked ON. COMPRESSION_TRIED
-			 * should have been reset to OFF by tts_orioledb_toast().
-			 */
+			//
+// Only TOAST attributes explicitly marked ON. COMPRESSION_TRIED
+// should have been reset to OFF by tts_orioledb_toast().
+//
 			Assert(newOSlot->to_toast[toast_attn] != ORIOLEDB_TO_TOAST_COMPRESSION_TRIED);
 
 			if (newOSlot->to_toast[toast_attn] == ORIOLEDB_TO_TOAST_ON)
@@ -1813,12 +1813,12 @@ tts_orioledb_update_toast_values(TupleTableSlot *oldSlot,
 							   newValue,
 							   oldValue))
 		{
-			/* if it is the same toast value than nothing to do */
+			// if it is the same toast value than nothing to do
 			continue;
 		}
 		else
 		{
-			/* update value if it does not equal */
+			// update value if it does not equal
 			bool		equal;
 			int			rawSize;
 
@@ -1904,22 +1904,22 @@ tts_orioledb_update_toast_values(TupleTableSlot *oldSlot,
 	return result;
 }
 
-/*
- * tts_orioledb_modified - Check if specified attributes were modified between two tuples
- *
- * Compares the values of specific attributes between an old and new tuple slot
- * to determine if any modifications have occurred. This is primarily used during
- * UPDATE operations to distinguish between key and non-key updates.
- *
- * Parameters:
- *   oldSlot - The original tuple slot before modification
- *   newSlot - The new tuple slot with pending changes
- *   attrs   - Bitmap set indicating which attributes to check for modifications.
- *
- * Returns:
- *   true if any of the specified attributes have different values between
- *   the old and new slots, false if all specified attributes are unchanged.
- */
+//
+// tts_orioledb_modified - Check if specified attributes were modified between two tuples
+//
+// Compares the values of specific attributes between an old and new tuple slot
+// to determine if any modifications have occurred. This is primarily used during
+// UPDATE operations to distinguish between key and non-key updates.
+//
+// Parameters:
+// oldSlot - The original tuple slot before modification
+// newSlot - The new tuple slot with pending changes
+// attrs   - Bitmap set indicating which attributes to check for modifications.
+//
+// Returns:
+// true if any of the specified attributes have different values between
+// the old and new slots, false if all specified attributes are unchanged.
+//
 bool
 tts_orioledb_modified(TupleTableSlot *oldSlot,
 					  TupleTableSlot *newSlot,
@@ -1987,10 +1987,10 @@ const TupleTableSlotOps TTSOpsOrioleDB = {
 	.materialize = tts_orioledb_materialize,
 	.copyslot = tts_orioledb_copyslot,
 
-	/*
-	 * A virtual tuple table slot can not "own" a heap tuple or a minimal
-	 * tuple.
-	 */
+	//
+// A virtual tuple table slot can not "own" a heap tuple or a minimal
+// tuple.
+//
 	.get_heap_tuple = NULL,
 	.get_minimal_tuple = NULL,
 	.copy_heap_tuple = tts_orioledb_copy_heap_tuple,

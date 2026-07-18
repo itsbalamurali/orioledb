@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * bgwriter.c
- *		Routines for background writer process.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/workers/bgwriter.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// bgwriter.c
+// Routines for background writer process.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/workers/bgwriter.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -47,7 +47,7 @@ register_bgwriter(int num)
 {
 	BackgroundWorker worker;
 
-	/* Set up background worker parameters */
+	// Set up background worker parameters
 	memset(&worker, 0, sizeof(worker));
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS;
 	worker.bgw_start_time = BgWorkerStart_PostmasterStart;
@@ -74,15 +74,15 @@ bgwriter_main(Datum main_arg)
 
 	BGWriterNum = DatumGetInt32(main_arg);
 
-	/* enable timeout for relation lock */
+	// enable timeout for relation lock
 	RegisterTimeout(DEADLOCK_TIMEOUT, CheckDeadLockAlert);
 
-	/* enable relation cache invalidation (remove old OTableDescr) */
+	// enable relation cache invalidation (remove old OTableDescr)
 	RelationCacheInitialize();
 	InitCatalogCache();
 	SharedInvalBackendInit(false);
 
-	/* show the bgwriter in pg_stat_activity, used for tests */
+	// show the bgwriter in pg_stat_activity, used for tests
 	InitializeSessionUserIdStandalone();
 	pgstat_beinit();
 #if PG_VERSION_NUM >= 180000
@@ -92,14 +92,14 @@ bgwriter_main(Datum main_arg)
 	pgstat_bestart();
 #endif
 
-	/* Expose worker number to tests; ps title is unreliable under Valgrind. */
+	// Expose worker number to tests; ps title is unreliable under Valgrind.
 	pg_snprintf(appname, sizeof(appname),
 				"orioledb background writer %d", BGWriterNum);
 	pgstat_report_appname(appname);
 
 	SetProcessingMode(NormalProcessing);
 
-	/* catch SIGTERM signal for reason to not interrupt background writing */
+	// catch SIGTERM signal for reason to not interrupt background writing
 	pqsignal(SIGTERM, SignalHandlerForShutdownRequest);
 	pqsignal(SIGUSR1, procsignal_sigusr1_handler);
 	BackgroundWorkerUnblockSignals();
@@ -136,10 +136,10 @@ bgwriter_main(Datum main_arg)
 			if (ShutdownRequestPending)
 				break;
 
-			/*
-			 * Sleep until we are signaled or it's time for another
-			 * checkpoint.
-			 */
+			//
+// Sleep until we are signaled or it's time for another
+// checkpoint.
+//
 			rc = WaitLatch(MyLatch, wake_events,
 						   BgWriterDelay,
 						   WAIT_EVENT_BGWRITER_MAIN);
@@ -162,7 +162,7 @@ bgwriter_main(Datum main_arg)
 
 					while (need_eviction || need_write)
 					{
-						/* Should not run maintenance for local page pool */
+						// Should not run maintenance for local page pool
 						ppool_run_maintenance(pool, need_eviction, &ShutdownRequestPending);
 						i++;
 
@@ -200,13 +200,13 @@ bgwriter_main(Datum main_arg)
 				}
 				else
 				{
-					/*
-					 * Even when eviction is not needed, update min undo
-					 * locations to allow cleanup of undo files.  Without
-					 * this, minProcRetainLocation set during recovery may
-					 * never be advanced on a synced replica. Only first
-					 * bgwriter does this to avoid unnecessary concurrency.
-					 */
+					//
+// Even when eviction is not needed, update min undo
+// locations to allow cleanup of undo files.  Without
+// this, minProcRetainLocation set during recovery may
+// never be advanced on a synced replica. Only first
+// bgwriter does this to avoid unnecessary concurrency.
+//
 					Assert(BGWriterNum >= 0);
 
 					if (BGWriterNum == 0)

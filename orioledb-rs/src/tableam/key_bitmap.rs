@@ -1,26 +1,26 @@
-/*-------------------------------------------------------------------------
- *
- * key_bitmap.c
- *		Routines for bitmap scan of orioledb table.
- *
- *		The bitmap is a set of uint64 keys, stored densely: the key is split
- *		into a high part (the chunk, key >> OKBM_CHUNK_BITS) and a low part
- *		(OKBM_CHUNK_BITS bits).  Each chunk maps to a bitmap covering its
- *		OKBM_CHUNK_VALUES low-part offsets.  Chunks are held in an adaptive
- *		radix tree (include/lib/o_radixtree.h), which keeps them ordered so
- *		iteration and range queries are efficient.
- *
- *		Ordered seeks (o_keybitmap_range_is_valid / o_keybitmap_get_next) are
- *		served from a sorted array of chunk keys built lazily once the bitmap
- *		stops being mutated (the build phase always precedes the scan phase).
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/key_bitmap.c
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// key_bitmap.c
+// Routines for bitmap scan of orioledb table.
+//
+// The bitmap is a set of uint64 keys, stored densely: the key is split
+// into a high part (the chunk, key >> OKBM_CHUNK_BITS) and a low part
+// (OKBM_CHUNK_BITS bits).  Each chunk maps to a bitmap covering its
+// OKBM_CHUNK_VALUES low-part offsets.  Chunks are held in an adaptive
+// radix tree (include/lib/o_radixtree.h), which keeps them ordered so
+// iteration and range queries are efficient.
+//
+// Ordered seeks (o_keybitmap_range_is_valid / o_keybitmap_get_next) are
+// served from a sorted array of chunk keys built lazily once the bitmap
+// stops being mutated (the build phase always precedes the scan phase).
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/key_bitmap.c
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -47,12 +47,12 @@ typedef struct OKeyBitmapChunk
 #define RT_VALUE_TYPE OKeyBitmapChunk
 #include "lib/o_radixtree.h"
 
-/*
- * Fixed-key mode: for composite / non-int primary keys the key is an
- * order-preserving byte string of OKBM_FIXED_BYTES bytes (see
- * include/tableam/bitmap_scan.h).  These are stored, un-densified, in a
- * fixed-length-key radix tree whose value carries no information.
- */
+//
+// Fixed-key mode: for composite / non-int primary keys the key is an
+// order-preserving byte string of OKBM_FIXED_BYTES bytes (see
+// include/tableam/bitmap_scan.h).  These are stored, un-densified, in a
+// fixed-length-key radix tree whose value carries no information.
+//
 typedef struct OKbmDummy
 {
 	uint8		unused;
@@ -69,22 +69,22 @@ typedef struct OKbmDummy
 
 struct OKeyBitmap
 {
-	bool		fixed;			/* false: uint64 densified; true: fixed-key */
+	bool		fixed;			// false: uint64 densified; true: fixed-key
 
-	okbm_radix_tree *tree;		/* uint64 mode */
-	okbmf_radix_tree *ftree;	/* fixed-key mode */
+	okbm_radix_tree *tree;		// uint64 mode
+	okbmf_radix_tree *ftree;	// fixed-key mode
 
-	/* dedicated context owned by the radix tree (reset/freed by okbm*_free) */
+	// dedicated context owned by the radix tree (reset/freed by okbm*_free)
 	MemoryContext treeCxt;
-	/* context holding this struct and the seek arrays */
+	// context holding this struct and the seek arrays
 	MemoryContext cxt;
 
-	/*
-	 * Sorted key arrays, built lazily by okbm_finalize() to serve ordered
-	 * seeks.  Invalidated (finalized = false) on every mutation.  uint64 mode
-	 * stores chunk keys in chunks[]; fixed mode stores whole keys, each
-	 * OKBM_FIXED_BYTES bytes, in fkeys[].
-	 */
+	//
+// Sorted key arrays, built lazily by okbm_finalize() to serve ordered
+// seeks.  Invalidated (finalized = false) on every mutation.  uint64 mode
+// stores chunk keys in chunks[]; fixed mode stores whole keys, each
+// OKBM_FIXED_BYTES bytes, in fkeys[].
+//
 	uint64	   *chunks;
 	uint8	   *fkeys;
 	int			nchunks;
@@ -92,9 +92,9 @@ struct OKeyBitmap
 	bool		finalized;
 };
 
-/*
- * Return the first set bit offset >= minOffset within a chunk bitmap, or -1.
- */
+//
+// Return the first set bit offset >= minOffset within a chunk bitmap, or -1.
+//
 static int
 find_next_offset(const uint8 *bitmap, int minOffset)
 {
@@ -129,17 +129,17 @@ o_keybitmap_create(void)
 {
 	OKeyBitmap *bm = palloc0(sizeof(OKeyBitmap));
 
-	/* okbm_memory_usage() is part of the generated API but unused here */
+	// okbm_memory_usage() is part of the generated API but unused here
 	(void) okbm_memory_usage;
 
 	bm->cxt = CurrentMemoryContext;
 
-	/*
-	 * The radix tree owns the context it is created in: okbm_free() resets it
-	 * and deletes its child contexts.  Give it a dedicated child context so
-	 * that freeing the tree does not clobber this struct or the chunks array,
-	 * which live in bm->cxt.
-	 */
+	//
+// The radix tree owns the context it is created in: okbm_free() resets it
+// and deletes its child contexts.  Give it a dedicated child context so
+// that freeing the tree does not clobber this struct or the chunks array,
+// which live in bm->cxt.
+//
 	bm->treeCxt = AllocSetContextCreate(bm->cxt, "o_keybitmap radix tree",
 										ALLOCSET_SMALL_SIZES);
 	bm->fixed = false;
@@ -158,7 +158,7 @@ o_keybitmap_create_fixed(void)
 {
 	OKeyBitmap *bm = palloc0(sizeof(OKeyBitmap));
 
-	/* okbmf_memory_usage() is part of the generated API but unused here */
+	// okbmf_memory_usage() is part of the generated API but unused here
 	(void) okbmf_memory_usage;
 
 	bm->cxt = CurrentMemoryContext;
@@ -190,7 +190,7 @@ o_keybitmap_free(OKeyBitmap *bm)
 	pfree(bm);
 }
 
-/* --- fixed-key mode helpers --- */
+// --- fixed-key mode helpers ---
 
 static inline okbmf_key
 okbmf_mkkey(const uint8 *key)
@@ -225,12 +225,12 @@ o_keybitmap_test_key(OKeyBitmap *bm, const uint8 *key)
 	return okbmf_find(bm->ftree, k) != NULL;
 }
 
-/*
- * Insert key and report whether it was newly added.  Used as a dedup
- * test-and-set while streaming a BitmapOr of primary scans: a true return
- * means this is the first time the key is seen (emit it), false means a prior
- * branch already produced it (skip).
- */
+//
+// Insert key and report whether it was newly added.  Used as a dedup
+// test-and-set while streaming a BitmapOr of primary scans: a true return
+// means this is the first time the key is seen (emit it), false means a prior
+// branch already produced it (skip).
+//
 bool
 o_keybitmap_emit_key(OKeyBitmap *bm, const uint8 *key)
 {
@@ -279,7 +279,7 @@ o_keybitmap_test(OKeyBitmap *bm, uint64 value)
 	return (entry->bitmap[offset >> 3] & (1 << (offset & 7))) != 0;
 }
 
-/* uint64 variant of o_keybitmap_emit_key(): insert, return true if newly added. */
+// uint64 variant of o_keybitmap_emit_key(): insert, return true if newly added.
 bool
 o_keybitmap_emit(OKeyBitmap *bm, uint64 value)
 {
@@ -427,12 +427,12 @@ o_keybitmap_intersect(OKeyBitmap *a, OKeyBitmap *b)
 
 	iter = okbm_begin_iterate(a->tree);
 
-	/*
-	 * AND each of a's chunks in place with the matching chunk of b.  Chunks
-	 * that become empty (or have no counterpart in b) are collected and
-	 * removed after iteration; deleting during iteration would invalidate the
-	 * iterator.  Modifying leaf values in place is safe.
-	 */
+	//
+// AND each of a's chunks in place with the matching chunk of b.  Chunks
+// that become empty (or have no counterpart in b) are collected and
+// removed after iteration; deleting during iteration would invalidate the
+// iterator.  Modifying leaf values in place is safe.
+//
 	while ((aentry = okbm_iterate_next(iter, &chunk)) != NULL)
 	{
 		OKeyBitmapChunk *bentry = okbm_find(b->tree, chunk);
@@ -472,10 +472,10 @@ o_keybitmap_intersect(OKeyBitmap *a, OKeyBitmap *b)
 	a->finalized = false;
 }
 
-/*
- * Build the sorted array of chunk keys.  okbm iteration already yields chunks
- * in ascending order, so we just collect them.  No-op if already finalized.
- */
+//
+// Build the sorted array of chunk keys.  okbm iteration already yields chunks
+// in ascending order, so we just collect them.  No-op if already finalized.
+//
 static void
 okbm_finalize(OKeyBitmap *bm)
 {
@@ -533,7 +533,7 @@ okbm_finalize(OKeyBitmap *bm)
 	bm->finalized = true;
 }
 
-/* Index of the first chunk key >= target. */
+// Index of the first chunk key >= target.
 static int
 okbm_lower_bound(OKeyBitmap *bm, uint64 target)
 {
@@ -635,7 +635,7 @@ o_keybitmap_get_next(OKeyBitmap *bm, uint64 prev, bool *found)
 		int			startOff = (chunk == chunkPrev) ? offPrev : 0;
 		int			nextOff;
 
-		/* chunk came from bm->chunks[], so the tree always has it */
+		// chunk came from bm->chunks[], so the tree always has it
 		Assert(entry != NULL);
 		nextOff = find_next_offset(entry->bitmap, startOff);
 
@@ -650,9 +650,9 @@ o_keybitmap_get_next(OKeyBitmap *bm, uint64 prev, bool *found)
 	return 0;
 }
 
-/* --- fixed-key mode ordered seeks --- */
+// --- fixed-key mode ordered seeks ---
 
-/* Index of the first key >= target (memcmp order) in the finalized fkeys[]. */
+// Index of the first key >= target (memcmp order) in the finalized fkeys[].
 static int
 okbmf_lower_bound(OKeyBitmap *bm, const uint8 *target)
 {
@@ -687,7 +687,7 @@ o_keybitmap_range_is_valid_key(OKeyBitmap *bm, const uint8 *low, const uint8 *hi
 	if (idx >= bm->nchunks)
 		return false;
 
-	/* the first key >= low is in range iff it is < high */
+	// the first key >= low is in range iff it is < high
 	return memcmp(bm->fkeys + (Size) idx * OKBM_FIXED_BYTES, high,
 				  OKBM_FIXED_BYTES) < 0;
 }

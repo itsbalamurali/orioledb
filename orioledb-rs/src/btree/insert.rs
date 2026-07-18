@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * insert.c
- *		Routines for implementation of inserting new item into B-tree page.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/insert.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// insert.c
+// Routines for implementation of inserting new item into B-tree page.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/insert.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -32,59 +32,59 @@
 #include "miscadmin.h"
 #include "utils/memutils.h"
 
-/* In order to avoid use of the recursion in insert_leaf() we use context. */
+// In order to avoid use of the recursion in insert_leaf() we use context.
 typedef struct BTreeInsertStackItem
 {
-	/* next item in the find context. next == NULL if it's last item. */
+	// next item in the find context. next == NULL if it's last item.
 	struct BTreeInsertStackItem *next;
-	/* current find context */
+	// current find context
 	OBTreeFindPageContext *context;
-	/* if level == 0, tuple is BTreeTuple else it is BTreeKey */
+	// if level == 0, tuple is BTreeTuple else it is BTreeKey
 	OTuple		tuple;
 
-	/*
-	 * if level == 0, tupheader is BTreeLeafTuphdr else it is
-	 * BTreeNonLeafTuphdr
-	 */
+	//
+// if level == 0, tupheader is BTreeLeafTuphdr else it is
+// BTreeNonLeafTuphdr
+//
 	Pointer		tupheader;
-	/* length of the tuple */
+	// length of the tuple
 	Size		tuplen;
-	/* current level of the insert */
+	// current level of the insert
 	int			level;
-	/* blkno of the right page of incomplete split. */
+	// blkno of the right page of incomplete split.
 	OInMemoryBlkno rightBlkno;
-	/* is current item replace tuple */
+	// is current item replace tuple
 	bool		replace;
-	/* is refind_page must be called */
+	// is refind_page must be called
 	bool		refind;
 } BTreeInsertStackItem;
 
-/* Fills BTreeInsertStackItem as a downlink of current incomplete split. */
+// Fills BTreeInsertStackItem as a downlink of current incomplete split.
 static void o_btree_split_fill_downlink_item(BTreeInsertStackItem *insert_item,
 											 OInMemoryBlkno left_blkno,
 											 bool lock);
 
-/*
- * Finishes split of the rootPageBlkno page.
- * insert_item can be filled by o_btree_split_fill_downlink_item call.
- */
+//
+// Finishes split of the rootPageBlkno page.
+// insert_item can be filled by o_btree_split_fill_downlink_item call.
+//
 static OInMemoryBlkno o_btree_finish_root_split_internal(BTreeDescr *desc,
 														 OInMemoryBlkno left_blkno,
 														 BTreeInsertStackItem *insert_item);
 
-/*
- * Adds a new fix split item to insert context. It modifies an insert_item.
- */
+//
+// Adds a new fix split item to insert context. It modifies an insert_item.
+//
 static BTreeInsertStackItem *o_btree_insert_stack_push_split_item(BTreeInsertStackItem *insert_item,
 																  OInMemoryBlkno left_blkno);
 
 static void o_btree_insert_item(BTreeInsertStackItem *insert_item,
 								int reserve_kind);
 
-/*
- * Returns true if a current page is the left page of incomplete split.
- * Should be always call before insert a new tuple to page.
- */
+//
+// Returns true if a current page is the left page of incomplete split.
+// Should be always call before insert a new tuple to page.
+//
 bool
 o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 							bool *relocked)
@@ -102,7 +102,7 @@ o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 		if (O_PAGE_IS(p, BROKEN_SPLIT))
 			return true;
 
-		/* wait for split finish */
+		// wait for split finish
 		while (RightLinkIsValid(rightLink) && !O_PAGE_IS(rightP, BROKEN_SPLIT))
 		{
 			relock_page(left_blkno);
@@ -118,7 +118,7 @@ o_btree_split_is_incomplete(OInMemoryBlkno left_blkno, uint32 pageChangeCount,
 			}
 		}
 
-		/* split should be broken or ok after this */
+		// split should be broken or ok after this
 		Assert(O_PAGE_IS(rightP, BROKEN_SPLIT) || !RightLinkIsValid(rightLink));
 
 		if (O_PAGE_IS(rightP, BROKEN_SPLIT))
@@ -214,7 +214,7 @@ o_btree_finish_root_split_internal(BTreeDescr *desc,
 						PAGE_GET_LEVEL(left_page) + 1, true);
 	init_page_first_chunk(desc, p, 0);
 
-	/* restore checkpoint number and file offset for the rootPageBlkno */
+	// restore checkpoint number and file offset for the rootPageBlkno
 	left_header = (BTreePageHeader *) left_page;
 	root_header = (BTreePageHeader *) p;
 	root_header->o_header.checkpointNum = left_header->o_header.checkpointNum;
@@ -262,10 +262,10 @@ o_btree_finish_root_split_internal(BTreeDescr *desc,
 	return left_blkno;
 }
 
-/*
- * Fixes incomplete split of a non-rootPageBlkno page.
- * Left page must be locked.  Unlocks left page and all pages used internally.
- */
+//
+// Fixes incomplete split of a non-rootPageBlkno page.
+// Left page must be locked.  Unlocks left page and all pages used internally.
+//
 static void
 o_btree_fix_page_split(BTreeDescr *desc, OInMemoryBlkno left_blkno)
 {
@@ -290,10 +290,10 @@ o_btree_fix_page_split(BTreeDescr *desc, OInMemoryBlkno left_blkno)
 	page_block_reads(rightBlkno);
 	rightHeader->flags &= ~O_BTREE_FLAG_BROKEN_SPLIT;
 
-	/*
-	 * Register split.  That would put back O_BTREE_FLAG_BROKEN_SPLIT on
-	 * error.
-	 */
+	//
+// Register split.  That would put back O_BTREE_FLAG_BROKEN_SPLIT on
+// error.
+//
 	btree_register_inprogress_split(rightBlkno);
 	END_CRIT_SECTION();
 	unlock_page(rightBlkno);
@@ -314,10 +314,10 @@ o_btree_fix_page_split(BTreeDescr *desc, OInMemoryBlkno left_blkno)
 	o_btree_insert_item(&iitem, PPOOL_RESERVE_FIND);
 }
 
-/*
- * Fixes incomplete split of a page.
- * Left page must be locked. Unlocks left page and all pages used internally.
- */
+//
+// Fixes incomplete split of a page.
+// Left page must be locked. Unlocks left page and all pages used internally.
+//
 void
 o_btree_split_fix_and_unlock(BTreeDescr *descr, OInMemoryBlkno left_blkno)
 {
@@ -330,10 +330,10 @@ o_btree_split_fix_and_unlock(BTreeDescr *descr, OInMemoryBlkno left_blkno)
 		prev_context = MemoryContextSwitchTo(btree_insert_context);
 	}
 
-	/*
-	 * Root split can't be incomplete, because it's executed within a single
-	 * critical section.
-	 */
+	//
+// Root split can't be incomplete, because it's executed within a single
+// critical section.
+//
 	Assert(left_blkno != descr->rootInfo.rootPageBlkno);
 
 	o_btree_fix_page_split(descr, left_blkno);
@@ -345,10 +345,10 @@ o_btree_split_fix_and_unlock(BTreeDescr *descr, OInMemoryBlkno left_blkno)
 	}
 }
 
-/*
- * Fixes incomplete split of a page.
- * Left page must be locked. Unlocks left page and all pages used internally.
- */
+//
+// Fixes incomplete split of a page.
+// Left page must be locked. Unlocks left page and all pages used internally.
+//
 void
 o_btree_split_fix_for_right_page_and_unlock(BTreeDescr *desc, OInMemoryBlkno rightBlkno)
 {
@@ -389,13 +389,13 @@ o_btree_insert_stack_push_split_item(BTreeInsertStackItem *insert_item,
 	BTreeInsertStackItem *new_item = palloc(sizeof(BTreeInsertStackItem));
 	OInMemoryBlkno right_blkno;
 
-	/* Should not be here. */
+	// Should not be here.
 	Assert(insert_item->context->index != 0);
 
-	/*
-	 * The incomplete split found. We should fill a new insert item which will
-	 * insert downlink to parent and push it to context.
-	 */
+	//
+// The incomplete split found. We should fill a new insert item which will
+// insert downlink to parent and push it to context.
+//
 	new_item->context = palloc(sizeof(OBTreeFindPageContext));
 	*(new_item->context) = *(insert_item->context);
 	new_item->context->index--;
@@ -406,7 +406,7 @@ o_btree_insert_stack_push_split_item(BTreeInsertStackItem *insert_item,
 
 	o_btree_split_fill_downlink_item(new_item, left_blkno, true);
 
-	/* Removes broken flag and unlock page. */
+	// Removes broken flag and unlock page.
 	right_blkno = RIGHTLINK_GET_BLKNO(header->rightLink);
 	lock_page(right_blkno);
 	rightHeader = (BTreePageHeader *) O_GET_IN_MEMORY_PAGE(right_blkno);
@@ -433,10 +433,10 @@ typedef struct
 	bool		inserted;
 } TupleWaiterInfo;
 
-/*
- * Gethers information about tuples to be inserted by other processes.
- * Returns total size to be occupied by new tuples.
- */
+//
+// Gethers information about tuples to be inserted by other processes.
+// Returns total size to be occupied by new tuples.
+//
 static int
 get_tuple_waiter_infos(BTreeDescr *desc,
 					   int tupleWaiterProcnums[BTREE_PAGE_MAX_SPLIT_ITEMS],
@@ -488,29 +488,29 @@ waiter_info_cmp(const void *a, const void *b, void *arg)
 
 }
 
-/*
- * Merge inputItems (existing leaf-page items plus the inserter's new tuple)
- * with the queued waiter tuples.  Walk both sequences in sort order and
- * emit the merged result into outputItems.
- *
- * The accept/reject decision for each waiter is a single global-budget gate:
- * the entire merged byte total (including locator overhead for both halves
- * of an eventual split) must fit within the combined two-page budget
- * leftSpace + rightSpace, computed under whatever maxKeyLen the candidate
- * waiter would inflate to.  All inputItems are pre-counted into the running
- * total — the original page already accommodated them, so as long as we
- * never accept a waiter that pushes the total past the combined budget,
- * inputItems are guaranteed to fit somewhere across the two output pages
- * (no per-side bookkeeping is needed during the merge — btree_page_split_
- * location() picks the actual split point afterwards).
- *
- * If a waiter's acceptance would exceed the budget, it (and every later
- * waiter) is dropped via finished = true.  Conflicting waiters (same key
- * as an input) are silently skipped.
- *
- * Returns true if the merged set doesn't fit a single page (a split is
- * required), false otherwise.
- */
+//
+// Merge inputItems (existing leaf-page items plus the inserter's new tuple)
+// with the queued waiter tuples.  Walk both sequences in sort order and
+// emit the merged result into outputItems.
+//
+// The accept/reject decision for each waiter is a single global-budget gate:
+// the entire merged byte total (including locator overhead for both halves
+// of an eventual split) must fit within the combined two-page budget
+// leftSpace + rightSpace, computed under whatever maxKeyLen the candidate
+// waiter would inflate to.  All inputItems are pre-counted into the running
+// total — the original page already accommodated them, so as long as we
+// never accept a waiter that pushes the total past the combined budget,
+// inputItems are guaranteed to fit somewhere across the two output pages
+// (no per-side bookkeeping is needed during the merge — btree_page_split_
+// location() picks the actual split point afterwards).
+//
+// If a waiter's acceptance would exceed the budget, it (and every later
+// waiter) is dropped via finished = true.  Conflicting waiters (same key
+// as an input) are silently skipped.
+//
+// Returns true if the merged set doesn't fit a single page (a split is
+// required), false otherwise.
+//
 static bool
 merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 					BTreeSplitItems *inputItems,
@@ -528,14 +528,14 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 	int			i;
 	bool		finished = false;
 
-	/*
-	 * Stack of waiters accepted so far, in acceptance (= sort) order.  Used
-	 * by the post-pass dry-run gate to drop one waiter at a time without
-	 * re-walking the merge.  Each entry records where the waiter ended up in
-	 * outputItems[], its index in tupleWaiterInfos[], and the aligned length
-	 * of its key (so we can decide whether dropping it requires a full
-	 * maxKeyLen rescan).
-	 */
+	//
+// Stack of waiters accepted so far, in acceptance (= sort) order.  Used
+// by the post-pass dry-run gate to drop one waiter at a time without
+// re-walking the merge.  Each entry records where the waiter ended up in
+// outputItems[], its index in tupleWaiterInfos[], and the aligned length
+// of its key (so we can decide whether dropping it requires a full
+// maxKeyLen rescan).
+//
 	struct
 	{
 		int			outputPos;
@@ -549,24 +549,24 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 	outputItems->hikeysEnd = inputItems->hikeysEnd;
 	outputItems->itemsCount = 0;
 
-	/*
-	 * Pre-count every input.  After the merge runs, totalSize / totalCount
-	 * always include all inputs plus every accepted waiter, which makes the
-	 * input-fit invariant trivial: as long as the candidate total fits the
-	 * two-page budget, the inputs (a subset of total) fit by construction.
-	 */
+	//
+// Pre-count every input.  After the merge runs, totalSize / totalCount
+// always include all inputs plus every accepted waiter, which makes the
+// input-fit invariant trivial: as long as the candidate total fits the
+// two-page budget, the inputs (a subset of total) fit by construction.
+//
 	for (i = 0; i < inputItems->itemsCount; i++)
 		totalSize += inputItems->items[i].size;
 	totalCount = inputItems->itemsCount;
 
 	maxKeyLen = inputItems->maxKeyLen;
 
-	/*
-	 * The right page inherits the original page's hikey, so its budget
-	 * doesn't change as the merge progresses.  singlePageSpace is the
-	 * "no-split" budget — same formula as rightSpace, used at the end to
-	 * decide whether the merged set fits on a single page.
-	 */
+	//
+// The right page inherits the original page's hikey, so its budget
+// doesn't change as the merge progresses.  singlePageSpace is the
+// "no-split" budget — same formula as rightSpace, used at the end to
+// decide whether the merged set fits on a single page.
+//
 	rightSpace = ORIOLEDB_BLCKSZ -
 		Max(inputItems->hikeysEnd,
 			MAXALIGN(sizeof(BTreePageHeader)) + inputItems->hikeySize);
@@ -579,7 +579,7 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 		BTreePageItem item;
 		bool		isWaiter;
 
-		/* Pick the next item in sort order. */
+		// Pick the next item in sort order.
 		if (inputIndex >= inputItems->itemsCount)
 		{
 			cmp = 1;
@@ -601,7 +601,7 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 							  &tup1, BTreeKeyLeafTuple,
 							  &tup2, BTreeKeyLeafTuple);
 
-			/* Conflicting waiter is silently dropped. */
+			// Conflicting waiter is silently dropped.
 			if (cmp == 0)
 			{
 				waitersIndex++;
@@ -632,12 +632,12 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 
 			candidateTotalSize = totalSize + item.size;
 
-			/*
-			 * Global budget gate.  Allow per-page locator overhead twice —
-			 * once for each side of a split — as a conservative upper bound
-			 * on any actual split's locator cost.  If the candidate set
-			 * wouldn't fit, drop this waiter and every later one.
-			 */
+			//
+// Global budget gate.  Allow per-page locator overhead twice —
+// once for each side of a split — as a conservative upper bound
+// on any actual split's locator cost.  If the candidate set
+// wouldn't fit, drop this waiter and every later one.
+//
 			if (candidateTotalSize +
 				2 * MAXALIGN((totalCount + 1) * sizeof(LocationIndex)) >
 				newLeftSpace + rightSpace)
@@ -659,10 +659,10 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 		}
 		else
 		{
-			/*
-			 * Inputs are pre-counted into totalSize / totalCount.  Just emit
-			 * them in sort order.
-			 */
+			//
+// Inputs are pre-counted into totalSize / totalCount.  Just emit
+// them in sort order.
+//
 			outputItems->items[outputIndex++] = inputItems->items[inputIndex++];
 		}
 
@@ -671,25 +671,25 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 
 	outputItems->itemsCount = outputIndex;
 
-	/*
-	 * Re-derive maxKeyLen from items actually inserted; rejected waiters'
-	 * wider keys must not leak into outputItems->maxKeyLen.
-	 */
+	//
+// Re-derive maxKeyLen from items actually inserted; rejected waiters'
+// wider keys must not leak into outputItems->maxKeyLen.
+//
 	outputItems->maxKeyLen = inputItems->maxKeyLen;
 	for (i = 0; i < acceptedTop; i++)
 		outputItems->maxKeyLen = Max(outputItems->maxKeyLen,
 									 accepted[i].keyLen);
 
-	/*
-	 * Post-pass: the global-budget gate above is a conservative upper bound
-	 * on what fits two pages, but it does not exactly mirror
-	 * btree_page_split_location()'s loop (which is sensitive to the specific
-	 * sequence of items at the boundary).  If the merged set still doesn't
-	 * have a valid split, drop the most recently accepted waiter (pop the
-	 * stack), shift its outputItems slot out, and re-check. Repeat until the
-	 * dry-run passes — or the stack empties, in which case the inputs alone
-	 * are guaranteed to be splittable since they came from a valid page.
-	 */
+	//
+// Post-pass: the global-budget gate above is a conservative upper bound
+// on what fits two pages, but it does not exactly mirror
+// btree_page_split_location()'s loop (which is sensitive to the specific
+// sequence of items at the boundary).  If the merged set still doesn't
+// have a valid split, drop the most recently accepted waiter (pop the
+// stack), shift its outputItems slot out, and re-check. Repeat until the
+// dry-run passes — or the stack empties, in which case the inputs alone
+// are guaranteed to be splittable since they came from a valid page.
+//
 	while (totalSize +
 		   MAXALIGN(totalCount * sizeof(LocationIndex)) > singlePageSpace &&
 		   !btree_page_split_can_succeed(outputItems) &&
@@ -716,11 +716,11 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 		outputIndex--;
 		outputItems->itemsCount = outputIndex;
 
-		/*
-		 * The dropped waiter's key only mattered for outputItems->maxKeyLen
-		 * if it was the maximum; otherwise the existing max still bounds
-		 * everything that's left.
-		 */
+		//
+// The dropped waiter's key only mattered for outputItems->maxKeyLen
+// if it was the maximum; otherwise the existing max still bounds
+// everything that's left.
+//
 		if (outputItems->maxKeyLen == keyLen)
 		{
 			outputItems->maxKeyLen = inputItems->maxKeyLen;
@@ -730,11 +730,11 @@ merge_waited_tuples(BTreeDescr *desc, Page p, BTreeSplitItems *outputItems,
 		}
 	}
 
-	/*
-	 * Split is needed iff the merged set doesn't fit a single page.  When a
-	 * split is needed, the post-pass above must have driven the merged set
-	 * into a state that btree_page_split_location() can actually partition.
-	 */
+	//
+// Split is needed iff the merged set doesn't fit a single page.  When a
+// split is needed, the post-pass above must have driven the merged set
+// into a state that btree_page_split_location() can actually partition.
+//
 	{
 		bool		splitNeeded = totalSize +
 			MAXALIGN(totalCount * sizeof(LocationIndex)) > singlePageSpace;
@@ -790,31 +790,31 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 											items,
 											&split_key, &split_key_len);
 
-	/*
-	 * Make a page-level undo item if needed.
-	 *
-	 * A no-drop split is invisible to readers: it repartitions the same
-	 * tuples across two pages without removing any.  The only reason to keep
-	 * a page-level image is then to reconstruct the pre-split page structure
-	 * for a reader whose snapshot predates the split; when the page's own
-	 * pre-split undo location is already below the retain horizon (or
-	 * invalid), no such reader exists.  In that case we write no image at all
-	 * and mark both halves frozen with an invalid undo location: every reader
-	 * reads them live (a frozen csn precedes any snapshot, so the undo chain
-	 * is never walked) and per-tuple MVCC handles visibility, exactly as for
-	 * a freshly initialized page.
-	 *
-	 * If the split physically drops a tuple, we must keep a full image: a
-	 * tuple is droppable once it is finished for everybody (deleting xid <
-	 * runXmin), but that is xid-based -- an active snapshot whose csn
-	 * precedes the delete's commit still needs the tuple, and only the image
-	 * preserves it.
-	 *
-	 * A concurrent sequential scan is the other exception: it reconstructs
-	 * whole historical pages spanning the full pre-split key range through
-	 * the undo chain, so it needs a full image.  Fall back to one whenever a
-	 * seq scan is active on this tree.
-	 */
+	//
+// Make a page-level undo item if needed.
+//
+// A no-drop split is invisible to readers: it repartitions the same
+// tuples across two pages without removing any.  The only reason to keep
+// a page-level image is then to reconstruct the pre-split page structure
+// for a reader whose snapshot predates the split; when the page's own
+// pre-split undo location is already below the retain horizon (or
+// invalid), no such reader exists.  In that case we write no image at all
+// and mark both halves frozen with an invalid undo location: every reader
+// reads them live (a frozen csn precedes any snapshot, so the undo chain
+// is never walked) and per-tuple MVCC handles visibility, exactly as for
+// a freshly initialized page.
+//
+// If the split physically drops a tuple, we must keep a full image: a
+// tuple is droppable once it is finished for everybody (deleting xid <
+// runXmin), but that is xid-based -- an active snapshot whose csn
+// precedes the delete's commit still needs the tuple, and only the image
+// preserves it.
+//
+// A concurrent sequential scan is the other exception: it reconstructs
+// whole historical pages spanning the full pre-split key range through
+// the undo chain, so it needs a full image.  Fall back to one whenever a
+// seq scan is active on this tree.
+//
 	if (needsUndo)
 	{
 		BTreePageHeader *php = (BTreePageHeader *) p;
@@ -849,10 +849,10 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 		root_split_left_blkno = ppool_alloc_page(desc->ppool, reserve_kind);
 	right_blkno = ppool_alloc_page(desc->ppool, reserve_kind);
 
-	/*
-	 * Move hikeyBlkno of split.  This change is atomic, no need to bother
-	 * about change count.
-	 */
+	//
+// Move hikeyBlkno of split.  This change is atomic, no need to bother
+// about change count.
+//
 	if (checkpoint_state->stack[insert_item->level].hikeyBlkno == blkno)
 		checkpoint_state->stack[insert_item->level].hikeyBlkno = right_blkno;
 
@@ -887,7 +887,7 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 	}
 	else
 	{
-		/* node and leafs split */
+		// node and leafs split
 		btree_register_inprogress_split(right_blkno);
 		if (insert_item->level == 0)
 			pg_atomic_fetch_add_u32(&BTREE_GET_META(desc)->leafPagesNum, 1);
@@ -910,7 +910,7 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 
 	if (!next)
 	{
-		/* Split non-rootPageBlkno case. Insert a downlink. */
+		// Split non-rootPageBlkno case. Insert a downlink.
 		insert_item->replace = false;
 		insert_item->level++;
 	}
@@ -960,18 +960,18 @@ o_btree_insert_needs_page_undo(BTreeDescr *desc, Page p)
 	return needsUndo;
 }
 
-/*
- * Per-item pre-check shared by o_btree_insert_item_with_waiters()
- * branch and o_btree_multi_insert_item(): hikey gate, btree_page_search,
- * raw fit check, duplicate-at-locator probe.  Positions *loc on success
- * and on Duplicate (so the caller can read the conflicting tuple if it
- * wants); leaves it indeterminate on HikeyCrossed (no search was done)
- * and may leave it positioned-but-unfit on NoFit.
- *
- * key/keyType match how the caller addresses the new item: waiters pass
- * the leaf tuple itself with BTreeKeyLeafTuple, the multi-insert driver
- * passes the precomputed OBTreeKeyBound with BTreeKeyBound.
- */
+//
+// Per-item pre-check shared by o_btree_insert_item_with_waiters()
+// branch and o_btree_multi_insert_item(): hikey gate, btree_page_search,
+// raw fit check, duplicate-at-locator probe.  Positions *loc on success
+// and on Duplicate (so the caller can read the conflicting tuple if it
+// wants); leaves it indeterminate on HikeyCrossed (no search was done)
+// and may leave it positioned-but-unfit on NoFit.
+//
+// key/keyType match how the caller addresses the new item: waiters pass
+// the leaf tuple itself with BTreeKeyLeafTuple, the multi-insert driver
+// passes the precomputed OBTreeKeyBound with BTreeKeyBound.
+//
 static BTreeLeafProbeResult
 btree_leaf_probe_insert_slot(BTreeDescr *desc, Page p, bool rightmost,
 							 OTuple *hikey,
@@ -1001,13 +1001,13 @@ btree_leaf_probe_insert_slot(BTreeDescr *desc, Page p, bool rightmost,
 	return BTreeLeafProbeFits;
 }
 
-/*
- * Write one new leaf item at *loc.  Shared page-write body for
- * o_btree_insert_item_with_waiters() and o_btree_multi_insert_item().
- * Caller has positioned loc, made any undo record, decided that the
- * item fits, and entered the critical section.  Caller follows
- * with optional page_split_chunk_if_needed() + MARK_DIRTY.
- */
+//
+// Write one new leaf item at *loc.  Shared page-write body for
+// o_btree_insert_item_with_waiters() and o_btree_multi_insert_item().
+// Caller has positioned loc, made any undo record, decided that the
+// item fits, and entered the critical section.  Caller follows
+// with optional page_split_chunk_if_needed() + MARK_DIRTY.
+//
 static inline void
 btree_leaf_write_new_item(BTreeDescr *desc, Page p,
 						  BTreePageItemLocator *loc,
@@ -1034,25 +1034,25 @@ btree_leaf_write_new_item(BTreeDescr *desc, Page p,
 		header->chunkDesc[loc->chunkOffset].chunkKeysFixed = 0;
 }
 
-/*
- * Insert a strict prefix of items[0..nitems-1] into the leaf ctx is parked
- * on, in one lock cycle.  Returns N, the count inserted:
- *   items[0..N-1]        inserted, in order.
- *   items[N]             the item that bailed; *result says why
- *                        (HikeyCrossed / NoFit / Duplicate).
- *   items[N+1..nitems-1] untouched.
- * N == nitems means the whole batch fit; *result is left at Fits.
- *
- * The leaf is always unlocked before return.
- *
- * Caller is responsible for:
- *  - ctx points at a LEAF, locked exclusive, no incomplete split
- *  - desc->ppool->numPagesReserved[PPOOL_RESERVE_INSERT] >= 2
- *  - keys[] ascending, tuples[] are the matching leaf tuples
- *  - Reserving enough row-undo for every per-row make_undo_record
- *    plus one extra row of slack for get_undo_record's buffer-wrap retry,
- *    so no eviction happens with the leaf locked
- */
+//
+// Insert a strict prefix of items[0..nitems-1] into the leaf ctx is parked
+// on, in one lock cycle.  Returns N, the count inserted:
+// items[0..N-1]        inserted, in order.
+// items[N]             the item that bailed; *result says why
+// (HikeyCrossed / NoFit / Duplicate).
+// items[N+1..nitems-1] untouched.
+// N == nitems means the whole batch fit; *result is left at Fits.
+//
+// The leaf is always unlocked before return.
+//
+// Caller is responsible for:
+// - ctx points at a LEAF, locked exclusive, no incomplete split
+// - desc->ppool->numPagesReserved[PPOOL_RESERVE_INSERT] >= 2
+// - keys[] ascending, tuples[] are the matching leaf tuples
+// - Reserving enough row-undo for every per-row make_undo_record
+// plus one extra row of slack for get_undo_record's buffer-wrap retry,
+// so no eviction happens with the leaf locked
+//
 int
 o_btree_multi_insert_item(OBTreeFindPageContext *ctx,
 						  OTuple *tuples, LocationIndex *tuplens,
@@ -1087,10 +1087,10 @@ o_btree_multi_insert_item(OBTreeFindPageContext *ctx,
 	xactInfo = OXID_GET_XACT_INFO(OXidIsValid(opOxid) ? opOxid : BootstrapTransactionId,
 								  lockMode, false);
 
-	/*
-	 * Mirrors the needsUndo logic in o_btree_modify_internal (self-created
-	 * shortcut).
-	 */
+	//
+// Mirrors the needsUndo logic in o_btree_modify_internal (self-created
+// shortcut).
+//
 	needsUndo = desc->undoType != UndoLogNone;
 	if (!(cb && cb->needsUndoForSelfCreated) &&
 		OXidIsValid(desc->createOxid) &&
@@ -1114,20 +1114,20 @@ o_btree_multi_insert_item(OBTreeFindPageContext *ctx,
 											   keys[k], keyType, newItemSize, &loc);
 		if (*result != BTreeLeafProbeFits)
 		{
-			/*
-			 * Items are sorted: HikeyCrossed means every remaining key is
-			 * also past, so the outer driver re-finds the next leaf.  NoFit
-			 * and Duplicate are bailed-to-slow-path conditions.
-			 */
+			//
+// Items are sorted: HikeyCrossed means every remaining key is
+// also past, so the outer driver re-finds the next leaf.  NoFit
+// and Duplicate are bailed-to-slow-path conditions.
+//
 			break;
 		}
 
-		/*
-		 * Build per-row undo record + tuphdr.  Matches the non-replace branch
-		 * of o_btree_modify_add_undo_record: real undo record goes on the
-		 * undo stack via make_undo_record(), tuphdr.undoLocation in the page
-		 * only carries the command-tag for UndoLogRegular.
-		 */
+		//
+// Build per-row undo record + tuphdr.  Matches the non-replace branch
+// of o_btree_modify_add_undo_record: real undo record goes on the
+// undo stack via make_undo_record(), tuphdr.undoLocation in the page
+// only carries the command-tag for UndoLogRegular.
+//
 		if (needsUndo)
 			undoLocation = make_undo_record(desc, tuple, true,
 											BTreeOperationInsert, blkno,
@@ -1147,11 +1147,11 @@ o_btree_multi_insert_item(OBTreeFindPageContext *ctx,
 		page_split_chunk_if_needed(desc, p, &loc);
 		MARK_DIRTY(desc, blkno);
 
-		/*
-		 * Fire the post-undo hook under the page lock so the pendingSkUndoLoc
-		 * marker is installed before the next iteration advances the page --
-		 * matches the ordering in o_btree_modify_insert_update().
-		 */
+		//
+// Fire the post-undo hook under the page lock so the pendingSkUndoLoc
+// marker is installed before the next iteration advances the page --
+// matches the ordering in o_btree_modify_insert_update().
+//
 		if (cb && cb->postUndoRecorded)
 			cb->postUndoRecorded(needsUndo ? undoLocation : WaitingSkUndoLoc,
 								 cb_args ? cb_args[k] : cb->arg);
@@ -1238,12 +1238,12 @@ o_btree_insert_item_with_waiters(BTreeInsertStackItem *insert_item,
 													  (Pointer) &tuple, BTreeKeyLeafTuple,
 													  waiterInfo->item.size, &loc);
 
-				/*
-				 * Waiters arrive in arrival order, not sorted: a stray past
-				 * the hikey or a duplicate doesn't imply later waiters fail
-				 * too, so skip and keep trying.  A non-fit means the page is
-				 * out of slack for the remaining items -- abandon them.
-				 */
+				//
+// Waiters arrive in arrival order, not sorted: a stray past
+// the hikey or a duplicate doesn't imply later waiters fail
+// too, so skip and keep trying.  A non-fit means the page is
+// out of slack for the remaining items -- abandon them.
+//
 				if (result == BTreeLeafProbeHikeyCrossed ||
 					result == BTreeLeafProbeDuplicate)
 					continue;
@@ -1287,7 +1287,7 @@ o_btree_insert_item_with_waiters(BTreeInsertStackItem *insert_item,
 
 	needsUndo = o_btree_insert_needs_page_undo(desc, p);
 
-	/* Get CSN for undo item if needed */
+	// Get CSN for undo item if needed
 	if (needsUndo)
 		csn = pg_atomic_fetch_add_u64(&TRANSAM_VARIABLES->nextCommitSeqNo, 1);
 	else
@@ -1377,11 +1377,11 @@ o_btree_insert_item_no_waiters(BTreeInsertStackItem *insert_item,
 	header = (BTreePageHeader *) p;
 	newItemSize = MAXALIGN(insert_item->tuplen) + tupheaderlen;
 
-	/*
-	 * Pass the current value of nextCommitSeqNo to page_locator_fits_item().
-	 * The result could be somewhat pessimistic: it might happen that we could
-	 * actually compact more due to advance of nextCommitSeqNo.
-	 */
+	//
+// Pass the current value of nextCommitSeqNo to page_locator_fits_item().
+// The result could be somewhat pessimistic: it might happen that we could
+// actually compact more due to advance of nextCommitSeqNo.
+//
 	fit = page_locator_fits_item(desc,
 								 p,
 								 &loc,
@@ -1426,13 +1426,13 @@ o_btree_insert_item_no_waiters(BTreeInsertStackItem *insert_item,
 				PAGE_ADD_N_VACATED(p, BTreeLeafTuphdrSize + MAXALIGN(o_btree_len(desc, tuple, OTupleLength)));
 			}
 
-			/*
-			 * If new tuple is less then previous one, don't resize page item
-			 * immediately.  We want to be able to rollback this action
-			 * without page splits.
-			 *
-			 * Page compaction will re-use unoccupied page space when needed.
-			 */
+			//
+// If new tuple is less then previous one, don't resize page item
+// immediately.  We want to be able to rollback this action
+// without page splits.
+//
+// Page compaction will re-use unoccupied page space when needed.
+//
 			if (newItemSize > prevItemSize)
 			{
 				page_locator_resize_item(p, &loc, newItemSize);
@@ -1449,14 +1449,14 @@ o_btree_insert_item_no_waiters(BTreeInsertStackItem *insert_item,
 				header->prevInsertOffset = MaxOffsetNumber;
 			}
 
-			/*
-			 * We replace tuples only in leafs.  Only inserts go to the
-			 * non-leaf pages.
-			 */
+			//
+// We replace tuples only in leafs.  Only inserts go to the
+// non-leaf pages.
+//
 			Assert(insert_item->level == 0);
 		}
 
-		/* Copy new tuple and header */
+		// Copy new tuple and header
 		ptr = BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
 		memcpy(ptr, insert_item->tupheader, tupheaderlen);
 		ptr += tupheaderlen;
@@ -1484,16 +1484,16 @@ o_btree_insert_item_no_waiters(BTreeInsertStackItem *insert_item,
 		CommitSeqNo csn;
 		bool		needsUndo;
 
-		/*
-		 * No compaction should occur for bridge index: we need to keep the
-		 * entries for VACUUM.
-		 */
+		//
+// No compaction should occur for bridge index: we need to keep the
+// entries for VACUUM.
+//
 		Assert(fit == BTreeItemPageFitSplitRequired ||
 			   desc->type != oIndexBridge);
 
 		offset = BTREE_PAGE_LOCATOR_GET_OFFSET(p, &loc);
 
-		/* Get CSN for undo item if needed */
+		// Get CSN for undo item if needed
 		needsUndo = o_btree_insert_needs_page_undo(desc, p);
 		if (needsUndo)
 			csn = pg_atomic_fetch_add_u64(&TRANSAM_VARIABLES->nextCommitSeqNo, 1);
@@ -1507,12 +1507,12 @@ o_btree_insert_item_no_waiters(BTreeInsertStackItem *insert_item,
 						 insert_item->replace,
 						 csn);
 
-		/*
-		 * After make_split_items() reclaims deleted tuples, the remaining
-		 * items may fit on a single page even if page_locator_fits_item()
-		 * estimated a split was needed.  Check actual total size and do
-		 * compaction instead of split when possible.
-		 */
+		//
+// After make_split_items() reclaims deleted tuples, the remaining
+// items may fit on a single page even if page_locator_fits_item()
+// estimated a split was needed.  Check actual total size and do
+// compaction instead of split when possible.
+//
 		if (fit == BTreeItemPageFitCompactRequired ||
 			(O_PAGE_IS(p, LEAF) && split_items_fit_single_page(&items)))
 		{
@@ -1544,19 +1544,19 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 
 	Assert(insert_item != NULL);
 
-	/*--
-	 * Guarantees that we never have recursive calls of o_btree_insert_item() such
-	 * as:
-	 * o_btree_insert_item()->refind_page()->find_page()
-	 *							      ->o_btree_fix_page_split()->o_btree_insert_item()
-	 *
-	 * Reasons:
-	 *
-	 * 1. o_btree_insert_item() algorithm fixes broken splits itself for pages
-	 *    founded by refind_page().
-	 * 2. Inner call of ppool_reserve_pages(kind, 2) with a same kind is
-	 *    incorrect.
-	 */
+	// --
+// Guarantees that we never have recursive calls of o_btree_insert_item() such
+// as:
+// o_btree_insert_item()->refind_page()->find_page()
+// ->o_btree_fix_page_split()->o_btree_insert_item()
+//
+// Reasons:
+//
+// 1. o_btree_insert_item() algorithm fixes broken splits itself for pages
+// founded by refind_page().
+// 2. Inner call of ppool_reserve_pages(kind, 2) with a same kind is
+// incorrect.
+//
 	Assert(!(insert_item->context->flags & BTREE_PAGE_FIND_FIX_LEAF_SPLIT));
 
 	while (insert_item != NULL)
@@ -1579,16 +1579,16 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 			Assert(curContext->index >= 0 && curContext->index < ORIOLEDB_MAX_DEPTH);
 			blkno = curContext->items[curContext->index].blkno;
 
-			/*
-			 * it can be called only from o_btree_insert_tuple_to_leaf()
-			 * o_btree_insert_tuple_to_leaf() can be called only from
-			 * o_btree_normal_modify()
-			 */
+			//
+// it can be called only from o_btree_insert_tuple_to_leaf()
+// o_btree_insert_tuple_to_leaf() can be called only from
+// o_btree_normal_modify()
+//
 
-			/*
-			 * we already make incomplete split checks in (re)find_page()
-			 * inside o_btree_normal_modify().
-			 */
+			//
+// we already make incomplete split checks in (re)find_page()
+// inside o_btree_normal_modify().
+//
 			Assert(insert_item->refind == false);
 		}
 		else
@@ -1600,12 +1600,12 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 			{
 				OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
 
-				/*
-				 * Re-find appropriate tree page.  It might happen that parent
-				 * page is not available in context.  That may happen due to
-				 * concurrent rootPageBlkno split or page location using hint.
-				 * Then just find appropriate page from the rootPageBlkno.
-				 */
+				//
+// Re-find appropriate tree page.  It might happen that parent
+// page is not available in context.  That may happen due to
+// concurrent rootPageBlkno split or page location using hint.
+// Then just find appropriate page from the rootPageBlkno.
+//
 				BTREE_PAGE_FIND_UNSET(curContext, IMAGE);
 				if (curContext->index >= 0)
 					result = refind_page(curContext, &insert_item->tuple, kind,
@@ -1627,14 +1627,14 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 											pageChangeCount,
 											&relocked))
 			{
-				/* pushes fix split item to the insert context */
+				// pushes fix split item to the insert context
 				insert_item = o_btree_insert_stack_push_split_item(insert_item,
 																   blkno);
 				continue;
 			}
 			else if (relocked)
 			{
-				/* page is changed, we should refind current tuple */
+				// page is changed, we should refind current tuple
 				unlock_page(blkno);
 				insert_item->refind = true;
 				continue;
@@ -1646,10 +1646,10 @@ o_btree_insert_item(BTreeInsertStackItem *insert_item, int reserve_kind)
 		if (insert_item->level > 0 &&
 			page_is_under_checkpoint(desc, blkno, false))
 		{
-			/*
-			 * We change a node that is under checkpoint and must mark it as
-			 * autonomous.
-			 */
+			//
+// We change a node that is under checkpoint and must mark it as
+// autonomous.
+//
 			backend_set_autonomous_level(checkpoint_state, insert_item->level);
 		}
 

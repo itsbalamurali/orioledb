@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * headers.c
- * 		Routines for handling of S3-specific data file headers.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/headers.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// headers.c
+// Routines for handling of S3-specific data file headers.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/headers.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include <sys/stat.h>
@@ -34,13 +34,13 @@
 #define S3_HEADER_BUFFERS_PER_GROUP_NUM_BITS 2
 #define S3_HEADER_NUM_VALUES (ORIOLEDB_SEGMENT_SIZE / ORIOLEDB_S3_PART_SIZE)
 
-/*
- * Hash an S3HeaderTag using only the fields that participate in
- * S3HeaderTagsIsEqual: datoid, relnode, tablespace, checkpointNum, segNum.
- * reloid and ixType must be excluded so that every code path that
- * constructs a tag (including iterate_tablespace_files, which cannot know
- * reloid/ixType from the filename) always lands in the same hash group.
- */
+//
+// Hash an S3HeaderTag using only the fields that participate in
+// S3HeaderTagsIsEqual: datoid, relnode, tablespace, checkpointNum, segNum.
+// reloid and ixType must be excluded so that every code path that
+// constructs a tag (including iterate_tablespace_files, which cannot know
+// reloid/ixType from the filename) always lands in the same hash group.
+//
 static inline uint32
 s3_header_tag_hash(S3HeaderTag tag)
 {
@@ -391,10 +391,10 @@ load_header_buffer(S3HeaderTag tag)
 				victim = 0;
 	uint32		victimUsageCount = 0;
 
-	/* First check if required buffer is already loaded */
+	// First check if required buffer is already loaded
 	LWLockAcquire(&group->groupCtlLock, LW_EXCLUSIVE);
 
-	/* Search for victim buffer */
+	// Search for victim buffer
 	victim = 0;
 	victimUsageCount = group->buffers[0].usageCount;
 	for (i = 0; i < S3_HEADER_BUFFERS_PER_GROUP; i++)
@@ -410,10 +410,10 @@ load_header_buffer(S3HeaderTag tag)
 
 		if (S3HeaderTagsIsEqual(buffer->shadowTag, tag))
 		{
-			/*
-			 * There is an in-progress operation with required tag.  We must
-			 * wait till it's completed.
-			 */
+			//
+// There is an in-progress operation with required tag.  We must
+// wait till it's completed.
+//
 			if (LWLockAcquireOrWait(&buffer->bufferCtlLock, LW_SHARED))
 				LWLockRelease(&buffer->bufferCtlLock);
 		}
@@ -444,7 +444,7 @@ check_unlink_file(S3HeaderTag tag)
 	{
 		bool		found = false;
 
-		/* First check if required buffer is already loaded */
+		// First check if required buffer is already loaded
 		LWLockAcquire(&group->groupCtlLock, LW_EXCLUSIVE);
 		for (victim = 0; victim < S3_HEADER_BUFFERS_PER_GROUP; victim++)
 		{
@@ -463,7 +463,7 @@ check_unlink_file(S3HeaderTag tag)
 	}
 
 	Assert(victim < S3_HEADER_BUFFERS_PER_GROUP);
-	/* if added because of cppcheck */
+	// if added because of cppcheck
 	if (victim < S3_HEADER_BUFFERS_PER_GROUP)
 	{
 		LWLockAcquire(&group->buffers[victim].bufferCtlLock, LW_EXCLUSIVE);
@@ -493,7 +493,7 @@ s3_header_read_value(S3HeaderTag tag, int index)
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
-				/* check there is no read collision */
+				// check there is no read collision
 				uint32		changeCount = buffer->changeCount;
 				uint64		value;
 
@@ -513,9 +513,9 @@ s3_header_read_value(S3HeaderTag tag, int index)
 				{
 					tagMatched = true;
 
-					/*
-					 * Change count mismatch, wait new page to be loaded.
-					 */
+					//
+// Change count mismatch, wait new page to be loaded.
+//
 					if (LWLockAcquireOrWait(&buffer->bufferCtlLock, LW_SHARED))
 						LWLockRelease(&buffer->bufferCtlLock);
 					break;
@@ -546,7 +546,7 @@ s3_header_get_load_id(S3HeaderTag tag)
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
-				/* check there is no read collision */
+				// check there is no read collision
 				uint32		changeCount = buffer->changeCount;
 
 				pg_read_barrier();
@@ -586,7 +586,7 @@ s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
 
 			if (S3HeaderTagsIsEqual(buffer->tag, tag))
 			{
-				/* check there is no read collision */
+				// check there is no read collision
 				uint32		changeCount = buffer->changeCount;
 				uint64		fullValue;
 				uint64		newFullValue;
@@ -607,9 +607,9 @@ s3_header_compare_and_swap_extended(S3HeaderTag tag, int index,
 				{
 					tagMatched = true;
 
-					/*
-					 * Change count mismatch, wait new page to be loaded.
-					 */
+					//
+// Change count mismatch, wait new page to be loaded.
+//
 					if (LWLockAcquireOrWait(&buffer->bufferCtlLock, LW_SHARED))
 						LWLockRelease(&buffer->bufferCtlLock);
 					break;
@@ -656,17 +656,17 @@ s3_header_compare_and_swap(S3HeaderTag tag, int index,
 }
 
 
-/*
- * We allow only one part to be locked simultaneosly.
- */
+//
+// We allow only one part to be locked simultaneosly.
+//
 static S3HeaderTag curLockedTag = {{{InvalidOid, InvalidOid, InvalidOid},
 InvalidOid}, 0, 0};
 static int	curLockedIndex = 0;
 
-/*
- * Lock file part in S3 header.  This shouldn't let anybody to concurrently
- * evict the same file part.
- */
+//
+// Lock file part in S3 header.  This shouldn't let anybody to concurrently
+// evict the same file part.
+//
 bool
 s3_header_lock_part(S3HeaderTag tag, int index, uint32 *loadId)
 {
@@ -914,9 +914,9 @@ s3_header_mark_part_written(S3HeaderTag tag, int index)
 	}
 }
 
-/*
- * Called on write failure
- */
+//
+// Called on write failure
+//
 void
 s3_header_mark_part_not_written(S3HeaderTag tag, int index)
 {
@@ -1082,7 +1082,7 @@ iterate_files(IterateFilesCallback callback)
 		int			rllen;
 		Oid			tablespace;
 
-		/* Skip special stuff */
+		// Skip special stuff
 		if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0)
 			continue;
 

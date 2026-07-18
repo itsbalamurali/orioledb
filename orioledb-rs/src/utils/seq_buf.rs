@@ -1,27 +1,27 @@
-/*-------------------------------------------------------------------------
- *
- * seq_buf.c
- *		Routines for sequential buffered data access.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/utils/seq_buf.c
- *
- * TODO
- *	  make it lockless with state of following structure
- *		AABBCCCCDDDDDDDD
- *		^ ^	^	^
- *		| |	|   on-disk page number
- *		| |	page offset
- *		| usage count for odd page
- *		usage count for event number
- *	  It would be possible to read/write a value in one CAS and one atomic
- *	  decrement.
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// seq_buf.c
+// Routines for sequential buffered data access.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/utils/seq_buf.c
+//
+// TODO
+// make it lockless with state of following structure
+// AABBCCCCDDDDDDDD
+// ^ ^	^	^
+// | |	|   on-disk page number
+// | |	page offset
+// | usage count for odd page
+// usage count for event number
+// It would be possible to read/write a value in one CAS and one atomic
+// decrement.
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -36,29 +36,29 @@
 
 #include <unistd.h>
 
-/*
- * We does not use orioledb page header and should not
- * write it to sequence buffer files.
- */
+//
+// We does not use orioledb page header and should not
+// write it to sequence buffer files.
+//
 #define SEQBUF_ALIGN (sizeof(uint64))
 #define SEQBUF_CHUNK_SIZE (TYPEALIGN_DOWN(SEQBUF_ALIGN, \
 										  ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE))
 
-/*
- * The offset to aligned data.
- */
+//
+// The offset to aligned data.
+//
 #define SEQBUF_DATA_OFF (ORIOLEDB_BLCKSZ - SEQBUF_CHUNK_SIZE)
 
-/* we should skip orioledb page header on io operations */
+// we should skip orioledb page header on io operations
 #define SEQBUF_DATA_POS(page) ((Pointer)(page) + SEQBUF_DATA_OFF)
 
-/* offset of current sequence buffer page in file */
+// offset of current sequence buffer page in file
 #define SEQBUF_FILE_OFFSET(shared, blkno) ((off_t) SEQBUF_CHUNK_SIZE * (blkno) \
 												+ (shared)->evictOffset)
 
-/*
- * this functions returns true if success
- */
+//
+// this functions returns true if success
+//
 static bool seq_buf_tag_eq(SeqBufTag *t1, SeqBufTag *t2);
 static bool seq_buf_check_open_file(SeqBufDescPrivate *seqBufPrivate);
 static bool seq_buf_switch_page(SeqBufDescPrivate *seqBufPrivate);
@@ -67,9 +67,9 @@ static inline bool seq_buf_rw(SeqBufDescPrivate *seqBufPrivate,
 static bool seq_buf_read_pages(SeqBufDescPrivate *seqBufPrivate,
 							   SeqBufDescShared *shared, int header_off, off_t evicted_off);
 
-/*
- * Initialize sequential buffered access to given file.
- */
+//
+// Initialize sequential buffered access to given file.
+//
 bool
 init_seq_buf(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
 			 SeqBufTag *tag, bool write, bool init_shared,
@@ -149,7 +149,7 @@ get_seq_buf_filename(SeqBufTag *tag)
 		Assert(false);
 		return NULL;
 	}
-	/* this format is used by recovery_cleanup_old_files() */
+	// this format is used by recovery_cleanup_old_files()
 	result = psprintf("%s/%u-%u.%s", db_prefix, tag->key.oids.relnode,
 					  tag->num, typename);
 	pfree(db_prefix);
@@ -159,10 +159,10 @@ get_seq_buf_filename(SeqBufTag *tag)
 static bool
 seq_buf_tag_eq(SeqBufTag *t1, SeqBufTag *t2)
 {
-	/*
-	 * Tablespace is intentionally omitted: (datoid, relnode) already uniquely
-	 * identifies a btree regardless of which tablespace it lives in.
-	 */
+	//
+// Tablespace is intentionally omitted: (datoid, relnode) already uniquely
+// identifies a btree regardless of which tablespace it lives in.
+//
 	if (t1->key.oids.datoid == t2->key.oids.datoid &&
 		t1->key.oids.relnode == t2->key.oids.relnode &&
 		t1->num == t2->num &&
@@ -172,9 +172,9 @@ seq_buf_tag_eq(SeqBufTag *t1, SeqBufTag *t2)
 		return false;
 }
 
-/*
- * Open underlying file.
- */
+//
+// Open underlying file.
+//
 static bool
 seq_buf_check_open_file(SeqBufDescPrivate *seqBufPrivate)
 {
@@ -269,7 +269,7 @@ seq_buf_finish_prev_page(SeqBufDescPrivate *seqBufPrivate)
 	{
 		offset = SEQBUF_FILE_OFFSET(shared, (off_t) shared->filePageNum - 1);
 
-		/* Write previous page */
+		// Write previous page
 		if (OFileWrite(seqBufPrivate->file,
 					   SEQBUF_DATA_POS(O_GET_IN_MEMORY_PAGE(shared->pages[1 - shared->curPageNum])),
 					   SEQBUF_CHUNK_SIZE, offset, WAIT_EVENT_SLRU_WRITE) != SEQBUF_CHUNK_SIZE)
@@ -292,7 +292,7 @@ seq_buf_finish_prev_page(SeqBufDescPrivate *seqBufPrivate)
 #endif
 		if (shared->freeBytesNum > 0)
 		{
-			/* Read next page */
+			// Read next page
 			int			nbytes;
 
 			offset = SEQBUF_FILE_OFFSET(shared, (off_t) shared->filePageNum + 1);
@@ -338,12 +338,12 @@ seq_buf_finish_prev_page(SeqBufDescPrivate *seqBufPrivate)
 	return true;
 }
 
-/*
- * Switch to the next page after filePageNum.  Function returns control when
- * we have switched to the next page or other process did it instead of us.
- *
- * Private->shared should be locked. Call unlocks seqBufPrivate->shared.
- */
+//
+// Switch to the next page after filePageNum.  Function returns control when
+// we have switched to the next page or other process did it instead of us.
+//
+// Private->shared should be locked. Call unlocks seqBufPrivate->shared.
+//
 static bool
 seq_buf_switch_page(SeqBufDescPrivate *seqBufPrivate)
 {
@@ -357,17 +357,17 @@ seq_buf_switch_page(SeqBufDescPrivate *seqBufPrivate)
 		return false;
 	}
 
-	/* Check if it's already switched after given page number... */
+	// Check if it's already switched after given page number...
 	if (shared->filePageNum != filePageNum)
 	{
 		SpinLockRelease(&shared->lock);
 		return true;
 	}
 
-	/*
-	 * Check if it's already switched after waiting when previous page have
-	 * been processed
-	 */
+	//
+// Check if it's already switched after waiting when previous page have
+// been processed
+//
 	if (seq_buf_wait_prev_page(shared) &&
 		shared->filePageNum != filePageNum)
 	{
@@ -401,13 +401,13 @@ seq_buf_switch_page(SeqBufDescPrivate *seqBufPrivate)
 	shared->prevPageState = resultState;
 	SpinLockRelease(&shared->lock);
 
-	/* If even we didn't finish the next page, current page is OK. */
+	// If even we didn't finish the next page, current page is OK.
 	return true;
 }
 
-/*
- * Private function which reads/writes data from/to sequential file.
- */
+//
+// Private function which reads/writes data from/to sequential file.
+//
 static inline bool
 seq_buf_rw(SeqBufDescPrivate *seqBufPrivate, char *data, Size data_size, bool write)
 {
@@ -434,15 +434,15 @@ seq_buf_rw(SeqBufDescPrivate *seqBufPrivate, char *data, Size data_size, bool wr
 			SpinLockRelease(&shared->lock);
 			return true;
 		}
-		switched = seq_buf_switch_page(seqBufPrivate);	/* releases shared->lock */
+		switched = seq_buf_switch_page(seqBufPrivate);	// releases shared->lock
 	} while (switched);
-	return false;				/* can not switch to another page */
+	return false;				// can not switch to another page
 }
 
-/*
- * Writes uint32 offset to a sequential file.
- * Returns true if success.
- */
+//
+// Writes uint32 offset to a sequential file.
+// Returns true if success.
+//
 bool
 seq_buf_write_u32(SeqBufDescPrivate *seqBufPrivate, uint32 offset)
 {
@@ -450,10 +450,10 @@ seq_buf_write_u32(SeqBufDescPrivate *seqBufPrivate, uint32 offset)
 	return seq_buf_rw(seqBufPrivate, (char *) &offset, sizeof(uint32), true);
 }
 
-/*
- * Writes FileExtent to a sequential file.
- * Returns true if success.
- */
+//
+// Writes FileExtent to a sequential file.
+// Returns true if success.
+//
 bool
 seq_buf_write_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent extent)
 {
@@ -461,20 +461,20 @@ seq_buf_write_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent extent)
 	return seq_buf_rw(seqBufPrivate, (char *) &extent, sizeof(FileExtent), true);
 }
 
-/*
- * Reads uint32 offset from a sequential file.
- * Returns true if success.
- */
+//
+// Reads uint32 offset from a sequential file.
+// Returns true if success.
+//
 bool
 seq_buf_read_u32(SeqBufDescPrivate *seqBufPrivate, uint32 *ptr)
 {
 	return seq_buf_rw(seqBufPrivate, (char *) ptr, sizeof(uint32), false);
 }
 
-/*
- * Reads FileExtent from a sequential file.
- * Returns true if success.
- */
+//
+// Reads FileExtent from a sequential file.
+// Returns true if success.
+//
 bool
 seq_buf_read_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent *extent)
 {
@@ -482,9 +482,9 @@ seq_buf_read_file_extent(SeqBufDescPrivate *seqBufPrivate, FileExtent *extent)
 	return seq_buf_rw(seqBufPrivate, (char *) extent, sizeof(FileExtent), false);
 }
 
-/*
- * Finalize work with sequential file.
- */
+//
+// Finalize work with sequential file.
+//
 uint64
 seq_buf_finalize(SeqBufDescPrivate *seqBufPrivate)
 {
@@ -542,21 +542,21 @@ seq_buf_finalize(SeqBufDescPrivate *seqBufPrivate)
 	return result;
 }
 
-/*
- * Snapshot data that has been written to this seq_buf but is not yet visible
- * via the on-disk file -- i.e., bytes still buffered in the in-memory current
- * page.  After this call, a reader can `OFileRead` the file path to get every
- * byte committed to disk and then concatenate the returned tail bytes to see
- * the full stream of data written so far.
- *
- * Behaviour mirrors seq_buf_finalize() for the previous-page state: any
- * in-flight write is waited for, and a SeqBufPrevPageError is retried in
- * place; on a second failure we PANIC.
- *
- * `buf` must be SEQBUF_CHUNK_SIZE bytes.  Returns the number of bytes copied
- * (0 if the seq_buf is empty/uninitialised, at most SEQBUF_CHUNK_SIZE).  Only
- * valid on write-mode seq_bufs.
- */
+//
+// Snapshot data that has been written to this seq_buf but is not yet visible
+// via the on-disk file -- i.e., bytes still buffered in the in-memory current
+// page.  After this call, a reader can `OFileRead` the file path to get every
+// byte committed to disk and then concatenate the returned tail bytes to see
+// the full stream of data written so far.
+//
+// Behaviour mirrors seq_buf_finalize() for the previous-page state: any
+// in-flight write is waited for, and a SeqBufPrevPageError is retried in
+// place; on a second failure we PANIC.
+//
+// `buf` must be SEQBUF_CHUNK_SIZE bytes.  Returns the number of bytes copied
+// (0 if the seq_buf is empty/uninitialised, at most SEQBUF_CHUNK_SIZE).  Only
+// valid on write-mode seq_bufs.
+//
 Size
 seq_buf_max_pending_data_size(void)
 {
@@ -601,9 +601,9 @@ seq_buf_snapshot_pending_data(SeqBufDescPrivate *seqBufPrivate, char *buf)
 	return len;
 }
 
-/*
- * Get current offset in the file.
- */
+//
+// Get current offset in the file.
+//
 uint64
 seq_buf_get_offset(SeqBufDescPrivate *seqBufPrivate)
 {
@@ -618,9 +618,9 @@ seq_buf_get_offset(SeqBufDescPrivate *seqBufPrivate)
 	return offset;
 }
 
-/*
- * Try to replace sequential file with newer one.
- */
+//
+// Try to replace sequential file with newer one.
+//
 SeqBufReplaceResult
 seq_buf_try_replace(SeqBufDescPrivate *seqBufPrivate, SeqBufTag *tag,
 					pg_atomic_uint64 *size, Size data_size)
@@ -643,7 +643,7 @@ seq_buf_try_replace(SeqBufDescPrivate *seqBufPrivate, SeqBufTag *tag,
 
 	if (shared->tag.num >= tag->num)
 	{
-		/* Already have newer sequential file */
+		// Already have newer sequential file
 		SpinLockRelease(&shared->lock);
 		return SeqBufReplaceAlready;
 	}
@@ -678,7 +678,7 @@ seq_buf_try_replace(SeqBufDescPrivate *seqBufPrivate, SeqBufTag *tag,
 
 	shared->curPageNum = 0;
 	shared->filePageNum = 0;
-	/* reads data from tmp file, it has not header */
+	// reads data from tmp file, it has not header
 	shared->location = SEQBUF_DATA_OFF;
 	shared->evictOffset = 0;
 	shared->prevPageState = SeqBufPrevPageDone;
@@ -727,7 +727,7 @@ seq_buf_read_pages(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
 	memset(buf_first, 0xFF, ORIOLEDB_BLCKSZ);
 	memset(buf_second, 0xFF, ORIOLEDB_BLCKSZ);
 
-	/* read first page */
+	// read first page
 	should_read = len > SEQBUF_CHUNK_SIZE ? SEQBUF_CHUNK_SIZE : len;
 	nbytes = OFileRead(seqBufPrivate->file, SEQBUF_DATA_POS(buf_first), should_read, evicted_off, WAIT_EVENT_SLRU_READ);
 	if (nbytes != should_read)
@@ -742,7 +742,7 @@ seq_buf_read_pages(SeqBufDescPrivate *seqBufPrivate, SeqBufDescShared *shared,
 
 	if (len > SEQBUF_CHUNK_SIZE)
 	{
-		/* read second page */
+		// read second page
 		evicted_off += should_read;
 		should_read = len - SEQBUF_CHUNK_SIZE;
 		should_read = should_read > SEQBUF_CHUNK_SIZE ? SEQBUF_CHUNK_SIZE : should_read;

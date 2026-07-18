@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * undo.c
- *		Routines dealing with undo records of orioledb B-tree.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/undo.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// undo.c
+// Routines dealing with undo records of orioledb B-tree.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/undo.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -50,9 +50,9 @@ static void update_leaf_header_in_undo(UndoLogType undoType,
 									   BTreeLeafTuphdr *tuphdr,
 									   UndoLocation location);
 
-/*
- * Add page image to the undo log.
- */
+//
+// Add page image to the undo log.
+//
 UndoLocation
 page_add_image_to_undo(BTreeDescr *desc, Pointer p, CommitSeqNo imageCsn,
 					   OTuple *splitKey, LocationIndex splitKeyLen)
@@ -65,23 +65,23 @@ page_add_image_to_undo(BTreeDescr *desc, Pointer p, CommitSeqNo imageCsn,
 
 	Assert(desc->undoType != UndoLogNone);
 
-	/*
-	 * Differential split: when the split drops no tuple physically, the two
-	 * post-split halves are an exact partition of the original page, so each
-	 * half can be reconstructed from the newer half carried forward in the
-	 * reader's buffer.  Store only the split key plus the original page's
-	 * undo continuation instead of a full page copy.  See
-	 * get_page_from_undo().
-	 *
-	 * A differential half only ever covers a single leaf's key range, which
-	 * is all a point lookup (MVCC) needs.  A sequential scan, however,
-	 * reconstructs whole historical pages and relies on the undo image
-	 * covering the full pre-split key range; across multi-level splits a half
-	 * cannot provide that.  So fall back to a full image whenever a
-	 * sequential scan is active on this tree -- it may read this image
-	 * through the undo chain.  (Index/range scans clip per-tuple to the
-	 * current leaf and are unaffected.)
-	 */
+	//
+// Differential split: when the split drops no tuple physically, the two
+// post-split halves are an exact partition of the original page, so each
+// half can be reconstructed from the newer half carried forward in the
+// reader's buffer.  Store only the split key plus the original page's
+// undo continuation instead of a full page copy.  See
+// get_page_from_undo().
+//
+// A differential half only ever covers a single leaf's key range, which
+// is all a point lookup (MVCC) needs.  A sequential scan, however,
+// reconstructs whole historical pages and relies on the undo image
+// covering the full pre-split key range; across multi-level splits a half
+// cannot provide that.  So fall back to a full image whenever a
+// sequential scan is active on this tree -- it may read this image
+// through the undo chain.  (Index/range scans clip per-tuple to the
+// current leaf and are unaffected.)
+//
 	if (splitKey && !page_op_drops_tuple(desc, p, imageCsn) &&
 		meta_page_get_num_seq_scans(desc->rootInfo.metaPageBlkno) == 0)
 	{
@@ -139,16 +139,16 @@ page_add_image_to_undo(BTreeDescr *desc, Pointer p, CommitSeqNo imageCsn,
 	return undoLocation;
 }
 
-/*
- * Given page item modified by in-progress transaction.  Rollback changes
- * using undo chain.  Specify 'wholeChain' flag to revert all in-progress
- * changes from the chain.  Otherise, only last change item is reverted.
- *
- * Return true if page item still exists.
- *
- * 'nonLockTuphdrPtr' and 'nonLockUndoLocation' are a hint to the first
- * non-lock-only undo record in the chain.
- */
+//
+// Given page item modified by in-progress transaction.  Rollback changes
+// using undo chain.  Specify 'wholeChain' flag to revert all in-progress
+// changes from the chain.  Otherise, only last change item is reverted.
+//
+// Return true if page item still exists.
+//
+// 'nonLockTuphdrPtr' and 'nonLockUndoLocation' are a hint to the first
+// non-lock-only undo record in the chain.
+//
 bool
 page_item_rollback(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,
 				   bool wholeChain, BTreeLeafTuphdr *nonLockTuphdrPtr,
@@ -177,19 +177,19 @@ retry:
 	{
 		OTuple		prev_tuple;
 
-		/*
-		 * Revert deletion.  Assuming tuple is deleted, we shouldn't have any
-		 * row-level lock on this tuple.
-		 */
+		//
+// Revert deletion.  Assuming tuple is deleted, we shouldn't have any
+// row-level lock on this tuple.
+//
 		Assert(!UndoLocationIsValid(nonLockUndoLocation));
 
-		/*
-		 * Bridge index: the "revert insertion" branch below marks the tuple
-		 * deleted in place without touching tuphdr->undoLocation (which still
-		 * carries the INSERT's InvalidUndoLocation | command sentinel).  If a
-		 * later rollback re-enters here on the same tuple, there is no chain
-		 * to follow -- the rollback was already applied.
-		 */
+		//
+// Bridge index: the "revert insertion" branch below marks the tuple
+// deleted in place without touching tuphdr->undoLocation (which still
+// carries the INSERT's InvalidUndoLocation | command sentinel).  If a
+// later rollback re-enters here on the same tuple, there is no chain
+// to follow -- the rollback was already applied.
+//
 		if (desc->type == oIndexBridge &&
 			!UndoLocationIsValid(tuphdr->undoLocation))
 			return true;
@@ -199,7 +199,7 @@ retry:
 
 		get_prev_leaf_header_from_undo(desc->undoType, tuphdr, true);
 		BTREE_PAGE_READ_TUPLE(prev_tuple, p, locator);
-		/* Bridge index deleted tuples not treated as vacated */
+		// Bridge index deleted tuples not treated as vacated
 		if (desc->type != oIndexBridge)
 		{
 			PAGE_SUB_N_VACATED(p,
@@ -216,11 +216,11 @@ retry:
 	}
 	else if (UndoLocationIsValid(nonLockTuphdrPtr->undoLocation))
 	{
-		/*
-		 * Current tuple is not deleted.  And there is a pointer to previous
-		 * version in chain.  This must be update (or insert to previously
-		 * deleted tuple).
-		 */
+		//
+// Current tuple is not deleted.  And there is a pointer to previous
+// version in chain.  This must be update (or insert to previously
+// deleted tuple).
+//
 		OTuple		tuple;
 		int			prev_tuplen,
 					tuplen,
@@ -271,11 +271,11 @@ retry:
 
 		BTREE_PAGE_SET_ITEM_FLAGS(p, locator, tuple.formatFlags);
 
-		/* Follow the row-level undo chain if needed */
+		// Follow the row-level undo chain if needed
 		if ((UndoLocationIsValid(nonLockUndoLocation) ||
 			 !XACT_INFO_IS_FINISHED(prev_header.xactInfo)) && wholeChain)
 		{
-			/* Find the next item in the chain */
+			// Find the next item in the chain
 			nonLockUndoLocation = find_non_lock_only_undo_record(desc->undoType,
 																 nonLockTuphdrPtr);
 			if (XACT_INFO_IS_FINISHED(nonLockTuphdrPtr->xactInfo))
@@ -289,18 +289,18 @@ retry:
 	{
 		OTuple		prev_tuple;
 
-		/*
-		 * Revert insertion of new tuple.  Assuming insertion is in-progress,
-		 * we shouldn't have any row-level lock on this tuple.
-		 */
+		//
+// Revert insertion of new tuple.  Assuming insertion is in-progress,
+// we shouldn't have any row-level lock on this tuple.
+//
 		Assert(!UndoLocationIsValid(nonLockUndoLocation));
 
 		if (desc->type == oIndexBridge)
 		{
-			/*
-			 * A special case for bridge index: we must keep entries for
-			 * VACUUM purposes.  Just mark tuple as deleted.
-			 */
+			//
+// A special case for bridge index: we must keep entries for
+// VACUUM purposes.  Just mark tuple as deleted.
+//
 			tuphdr->deleted = BTreeLeafTupleDeleted;
 			return true;
 		}
@@ -356,9 +356,9 @@ undo_record_key_stopevent_params(BTreeOperationType action,
 	return res;
 }
 
-/*
- * Make undo record associated with give tuple and operation.
- */
+//
+// Make undo record associated with give tuple and operation.
+//
 UndoLocation
 make_undo_record(BTreeDescr *desc, OTuple tuple, bool is_tuple,
 				 BTreeOperationType action, OInMemoryBlkno blkno,
@@ -437,20 +437,20 @@ make_undo_record(BTreeDescr *desc, OTuple tuple, bool is_tuple,
 	return undoLocation;
 }
 
-/*
- * Create an undo record for a tuple insert on behalf of a waiting process
- * (group insert optimization).  Called by the lock holder after it decides
- * to insert the waiter's tuple into the page.
- *
- * The undo record is allocated from the current process's undo space (via
- * get_undo_record on our undoType), but then linked into the *waiter's*
- * undo stack via add_new_undo_stack_item_to_process().  The waiter's
- * autonomousNestingLevel (captured when it queued) is used to select the
- * correct undo stack slot.
- *
- * The waiter process is blocked on a semaphore in lock_page_with_tuple()
- * throughout this operation, so its shared state is stable.
- */
+//
+// Create an undo record for a tuple insert on behalf of a waiting process
+// (group insert optimization).  Called by the lock holder after it decides
+// to insert the waiter's tuple into the page.
+//
+// The undo record is allocated from the current process's undo space (via
+// get_undo_record on our undoType), but then linked into the *waiter's*
+// undo stack via add_new_undo_stack_item_to_process().  The waiter's
+// autonomousNestingLevel (captured when it queued) is used to select the
+// correct undo stack slot.
+//
+// The waiter process is blocked on a semaphore in lock_page_with_tuple()
+// throughout this operation, so its shared state is stable.
+//
 void
 make_waiter_undo_record(BTreeDescr *desc, OInMemoryBlkno blkno, int pgprocno,
 						OPageWaiterShmemState *lockerState)
@@ -509,9 +509,9 @@ get_tree_descr(ORelOids oids, OIndexType type)
 	}
 }
 
-/*
- * Callback for aborting B-tree record modification.
- */
+//
+// Callback for aborting B-tree record modification.
+//
 void
 modify_undo_callback(UndoLogType undoType, UndoLocation location,
 					 UndoStackItem *baseItem, OXid oxid,
@@ -561,10 +561,10 @@ modify_undo_callback(UndoLogType undoType, UndoLocation location,
 	o_unset_syscache_hooks();
 	if (findResult == OFindPageResultFailure)
 	{
-		/*
-		 * BTree can be already deleted and cleaned by
-		 * btree_relnode_undo_callback().
-		 */
+		//
+// BTree can be already deleted and cleaned by
+// btree_relnode_undo_callback().
+//
 		return;
 	}
 	Assert(findResult == OFindPageResultSuccess);
@@ -585,10 +585,10 @@ modify_undo_callback(UndoLogType undoType, UndoLocation location,
 
 	if (cmp != 0)
 	{
-		/*
-		 * We can't find the required key.  This might happen if operation was
-		 * already "undone" earlier.
-		 */
+		//
+// We can't find the required key.  This might happen if operation was
+// already "undone" earlier.
+//
 		unlock_page(blkno);
 		return;
 	}
@@ -599,19 +599,19 @@ modify_undo_callback(UndoLogType undoType, UndoLocation location,
 
 	if (!XACT_INFO_OXID_EQ(nonLockTupHdr.xactInfo, oxid))
 	{
-		/*
-		 * The key is found, but it doesn't belong to our transaction.  Again,
-		 * this might happen if operation was already "undone" earlier.
-		 */
+		//
+// The key is found, but it doesn't belong to our transaction.  Again,
+// this might happen if operation was already "undone" earlier.
+//
 		unlock_page(blkno);
 		return;
 	}
 
 	page_block_reads(blkno);
 
-	/*
-	 * Check that undo chain item matches to the tuple item.
-	 */
+	//
+// Check that undo chain item matches to the tuple item.
+//
 	if (nonLockTupHdr.undoLocation == location + offsetof(BTreeModifyUndoStackItem, tuphdr) ||
 		(!UndoLocationIsValid(nonLockTupHdr.undoLocation) && item->action == BTreeOperationInsert))
 	{
@@ -622,16 +622,16 @@ modify_undo_callback(UndoLogType undoType, UndoLocation location,
 	MARK_DIRTY(desc, blkno);
 	if (blkno != desc->rootInfo.rootPageBlkno && is_page_too_sparse(desc, p))
 	{
-		/* We can try to merge this page */
+		// We can try to merge this page
 		btree_try_merge_and_unlock(context.desc, blkno, true, true);
 	}
 	else
 		unlock_page(blkno);
 }
 
-/*
- * Callback for aborting B-tree tuple lock.
- */
+//
+// Callback for aborting B-tree tuple lock.
+//
 void
 lock_undo_callback(UndoLogType undoType, UndoLocation location,
 				   UndoStackItem *baseItem, OXid oxid,
@@ -677,10 +677,10 @@ lock_undo_callback(UndoLogType undoType, UndoLocation location,
 
 	if (findResult == OFindPageResultFailure)
 	{
-		/*
-		 * BTree can be already deleted and cleaned by
-		 * btree_relnode_undo_callback().
-		 */
+		//
+// BTree can be already deleted and cleaned by
+// btree_relnode_undo_callback().
+//
 		return;
 	}
 	Assert(findResult == OFindPageResultSuccess);
@@ -701,7 +701,7 @@ lock_undo_callback(UndoLogType undoType, UndoLocation location,
 
 	if (cmp != 0)
 	{
-		/* Row already gone. Nothing to do. */
+		// Row already gone. Nothing to do.
 		unlock_page(blkno);
 		return;
 	}
@@ -716,11 +716,11 @@ lock_undo_callback(UndoLogType undoType, UndoLocation location,
 		UndoLocation undoLocation = tuphdr.undoLocation;
 		BTreeLeafTuphdr prev_tuphdr = tuphdr;
 
-		/*
-		 * A concurrent transaction may have committed and released its undo
-		 * while we are walking the chain.  Treat this the same as reaching a
-		 * committed record — stop walking.
-		 */
+		//
+// A concurrent transaction may have committed and released its undo
+// while we are walking the chain.  Treat this the same as reaching a
+// committed record — stop walking.
+//
 		if (!get_prev_leaf_header_from_undo_if_exists(desc->undoType, &prev_tuphdr))
 			break;
 
@@ -919,10 +919,10 @@ btree_relnode_undo_callback(UndoLogType undoType, UndoLocation location,
 	bool		doCleanup;
 	bool		cleanupFiles = true;
 
-	/*
-	 * Fsync new files on precommit, before the commit WAL record is written,
-	 * to guarantee durability in case of a crash between WAL write and fsync.
-	 */
+	//
+// Fsync new files on precommit, before the commit WAL record is written,
+// to guarantee durability in case of a crash between WAL write and fsync.
+//
 	if (stage == OUndoCallbackStagePreCommit)
 	{
 		if (OidIsValid(relnode_item->newRelnode) && relnode_item->fsync)
@@ -1012,9 +1012,9 @@ btree_relnode_undo_callback(UndoLogType undoType, UndoLocation location,
 	}
 }
 
-/*
- * oldTrees and newTrees should be allocated in CurTransactionContext.
- */
+//
+// oldTrees and newTrees should be allocated in CurTransactionContext.
+//
 static inline void
 add_undo_relnode(ORelOids oldOids, OIndexKey *oldTrees, int oldNumTrees,
 				 ORelOids newOids, OIndexKey *newTrees, int newNumTrees,
@@ -1025,10 +1025,10 @@ add_undo_relnode(ORelOids oldOids, OIndexKey *oldTrees, int oldNumTrees,
 	RelnodeUndoStackItem *item;
 	int			stepItemsCapacity = (O_MAX_UNDO_RECORD_SIZE - offsetof(RelnodeUndoStackItem, trees)) / sizeof(OIndexKey);
 
-	/*
-	 * This might happen before we accessed oxid.  So, ensure we've assigned
-	 * it.
-	 */
+	//
+// This might happen before we accessed oxid.  So, ensure we've assigned
+// it.
+//
 	(void) get_current_oxid();
 
 	oxid_needs_wal_flush = true;
@@ -1137,17 +1137,17 @@ read_hikey_from_undo(UndoLogType undoType, UndoLocation location,
 	*loc = ((BTreePageHeader *) dest)->hikeysEnd;
 }
 
-/*
- * Reconstruct a pre-merge half from a differential merge image.
- *
- * On entry `dest` holds the merged page (the newer page the undo chain walk
- * carried forward); it is the exact union of the pre-merge left and right
- * pages (the differential image is only written when the merge dropped no
- * tuple).  We pick the half the caller needs (by `kind`/`key`, exactly like
- * the full-merge case), trim `dest` to that half at the boundary key, and
- * synthesize its header so the undo chain continues into that half's own
- * pre-merge history.
- */
+//
+// Reconstruct a pre-merge half from a differential merge image.
+//
+// On entry `dest` holds the merged page (the newer page the undo chain walk
+// carried forward); it is the exact union of the pre-merge left and right
+// pages (the differential image is only written when the merge dropped no
+// tuple).  We pick the half the caller needs (by `kind`/`key`, exactly like
+// the full-merge case), trim `dest` to that half at the boundary key, and
+// synthesize its header so the undo chain continues into that half's own
+// pre-merge history.
+//
 static void
 reconstruct_merge_diff_half(BTreeDescr *desc, UndoLocation undoLocation,
 							Pointer key, BTreeKeyType kind, Pointer dest,
@@ -1174,7 +1174,7 @@ reconstruct_merge_diff_half(BTreeDescr *desc, UndoLocation undoLocation,
 	boundary.tuple.formatFlags = mdHeader.boundaryFlags;
 	boundary.tuple.data = boundary.fixedData;
 
-	/* Choose the half exactly as the full-merge path does. */
+	// Choose the half exactly as the full-merge path does.
 	switch (kind)
 	{
 		case BTreeKeyNone:
@@ -1196,10 +1196,10 @@ reconstruct_merge_diff_half(BTreeDescr *desc, UndoLocation undoLocation,
 			}
 	}
 
-	/*
-	 * Capture the merged page hikey before reorg overwrites it.  The right
-	 * half inherits it; the left half's hikey is the boundary key.
-	 */
+	//
+// Capture the merged page hikey before reorg overwrites it.  The right
+// half inherits it; the left half's hikey is the boundary key.
+//
 	if (!O_PAGE_IS(dest, RIGHTMOST))
 	{
 		OTuple		mhi;
@@ -1211,7 +1211,7 @@ reconstruct_merge_diff_half(BTreeDescr *desc, UndoLocation undoLocation,
 	else
 		O_TUPLE_SET_NULL(rightHikey.tuple);
 
-	/* Collect the items of the requested half (M is sorted by key). */
+	// Collect the items of the requested half (M is sorted by key).
 	BTREE_PAGE_FOREACH_ITEMS(dest, &loc)
 	{
 		OTuple		tup;
@@ -1264,29 +1264,29 @@ reconstruct_merge_diff_half(BTreeDescr *desc, UndoLocation undoLocation,
 		copy_fixed_key(desc, lokey, boundary.tuple);
 }
 
-/*
- * Reconstruct a pre-split half from a differential split image.
- *
- * On entry `dest` holds the post-split half the undo-chain walk carried forward
- * (the left half [lo, splitKey) or the right half [splitKey, hi)); since the
- * split dropped no tuple, that half is exactly the corresponding slice of the
- * original page, so we keep `dest` as-is and only rewire its header to continue
- * the chain into the original page's pre-split history.
- *
- * If that older history is a wider image (covering the original page's full
- * range), the existing lokey/hikey machinery clips it back to this half: we set
- * lokey to the split key on the right side (so a reader positions at splitKey),
- * exactly as the full-image split path does, and the merge loop bounds the
- * upper end by the leaf hikey.
- *
- * The two halves carry the same undo location, so is_left/is_right must
- * distinguish them: the per-half image location O_UNDO_GET_IMAGE_LOCATION()
- * is used by the iterator's step-left/right shortcut as an identity token to
- * detect a single historical page spanning several current leaves.  Unlike a
- * full split image (which returns the same wide page for both halves), each
- * differential half is distinct, so they must yield distinct tokens or the
- * iterator wrongly dedups one half against the other.
- */
+//
+// Reconstruct a pre-split half from a differential split image.
+//
+// On entry `dest` holds the post-split half the undo-chain walk carried forward
+// (the left half [lo, splitKey) or the right half [splitKey, hi)); since the
+// split dropped no tuple, that half is exactly the corresponding slice of the
+// original page, so we keep `dest` as-is and only rewire its header to continue
+// the chain into the original page's pre-split history.
+//
+// If that older history is a wider image (covering the original page's full
+// range), the existing lokey/hikey machinery clips it back to this half: we set
+// lokey to the split key on the right side (so a reader positions at splitKey),
+// exactly as the full-image split path does, and the merge loop bounds the
+// upper end by the leaf hikey.
+//
+// The two halves carry the same undo location, so is_left/is_right must
+// distinguish them: the per-half image location O_UNDO_GET_IMAGE_LOCATION()
+// is used by the iterator's step-left/right shortcut as an identity token to
+// detect a single historical page spanning several current leaves.  Unlike a
+// full split image (which returns the same wide page for both halves), each
+// differential half is distinct, so they must yield distinct tokens or the
+// iterator wrongly dedups one half against the other.
+//
 static void
 reconstruct_split_diff(BTreeDescr *desc, UndoLocation undoLocation,
 					   Pointer dest, bool *is_left, bool *is_right,
@@ -1306,11 +1306,11 @@ reconstruct_split_diff(BTreeDescr *desc, UndoLocation undoLocation,
 	splitKey.tuple.formatFlags = sdHeader.splitKeyFlags;
 	splitKey.tuple.data = splitKey.fixedData;
 
-	/*
-	 * Determine which half `dest` is from its own hikey: the left half's
-	 * hikey is exactly the split key; the right half's hikey is the original
-	 * page's (larger) hikey, or it is rightmost.
-	 */
+	//
+// Determine which half `dest` is from its own hikey: the left half's
+// hikey is exactly the split key; the right half's hikey is the original
+// page's (larger) hikey, or it is rightmost.
+//
 	if (O_PAGE_IS(dest, RIGHTMOST))
 		rightHalf = true;
 	else
@@ -1327,13 +1327,13 @@ reconstruct_split_diff(BTreeDescr *desc, UndoLocation undoLocation,
 	if (is_right != NULL)
 		*is_right = rightHalf;
 
-	/*
-	 * The right half's low boundary is the split key.  Report it through both
-	 * lokey (find / iterator path) and page_lokey (seq scan path) so a wider,
-	 * older image down the chain is clipped to this half.  The left half
-	 * starts at the original page's own low boundary, which the caller
-	 * already tracks.
-	 */
+	//
+// The right half's low boundary is the split key.  Report it through both
+// lokey (find / iterator path) and page_lokey (seq scan path) so a wider,
+// older image down the chain is clipped to this half.  The left half
+// starts at the original page's own low boundary, which the caller
+// already tracks.
+//
 	if (rightHalf)
 	{
 		if (lokey != NULL)
@@ -1342,26 +1342,26 @@ reconstruct_split_diff(BTreeDescr *desc, UndoLocation undoLocation,
 			copy_fixed_key(desc, page_lokey, splitKey.tuple);
 	}
 
-	/* Continue the chain into the original page's pre-split history. */
+	// Continue the chain into the original page's pre-split history.
 	header->csn = sdHeader.origCsn;
 	header->undoLocation = sdHeader.origUndoLoc;
 }
 
-/*
- * Finds page image in undoLocation.
- */
+//
+// Finds page image in undoLocation.
+//
 void
 get_page_from_undo(BTreeDescr *desc, UndoLocation undoLocation, Pointer key,
 				   BTreeKeyType kind, Pointer dest,
 				   bool *is_left, bool *is_right, OFixedKey *lokey,
 				   OFixedKey *page_lokey, OTuple *page_hikey)
 {
-	/*
-	 * Read enough bytes to cover the peek header and (if this is a full
-	 * Split) its splitKeyFlags/splitKeyLen.  Compact/Merge/diff records are
-	 * all at least this long, so a single read works regardless of type; diff
-	 * types read their own larger headers in the reconstructor.
-	 */
+	//
+// Read enough bytes to cover the peek header and (if this is a full
+// Split) its splitKeyFlags/splitKeyLen.  Compact/Merge/diff records are
+// all at least this long, so a single read works regardless of type; diff
+// types read their own larger headers in the reconstructor.
+//
 	UndoPageImageSplitHeader header = {UndoPageImageInvalid, 0, 0};
 	int			cmp,
 				cmp_expected;
@@ -1394,7 +1394,7 @@ get_page_from_undo(BTreeDescr *desc, UndoLocation undoLocation, Pointer key,
 	if (is_right != NULL)
 		*is_right = false;
 
-	/* there is only one page, no need to choose */
+	// there is only one page, no need to choose
 	if (header.type == UndoPageImageSplit ||
 		header.type == UndoPageImageCompact)
 	{
@@ -1435,10 +1435,10 @@ get_page_from_undo(BTreeDescr *desc, UndoLocation undoLocation, Pointer key,
 
 	right_loc = left_loc + ORIOLEDB_BLCKSZ;
 
-	/*
-	 * It's dual undo log page image. We should make decision which page (left
-	 * or right) should be returned.
-	 */
+	//
+// It's dual undo log page image. We should make decision which page (left
+// or right) should be returned.
+//
 	Assert(header.type == UndoPageImageMerge);
 	switch (kind)
 	{
@@ -1491,18 +1491,18 @@ get_page_from_undo(BTreeDescr *desc, UndoLocation undoLocation, Pointer key,
 	}
 }
 
-/*
- * Returns true if a merge or split would physically drop at least one tuple
- * from the given page (a finished+deleted tuple whose deletion is visible to
- * everybody as of imageCsn).  Mirrors the leaf drop condition in merge_pages()
- * and make_split_items().
- *
- * When nothing is dropped, the post-op page(s) are an exact partition of the
- * pre-op page(s), so a differential image (boundary/split key only) is
- * sufficient: the pre-op page can be reconstructed from the newer page(s)
- * carried forward.  When a tuple is dropped, an old snapshot may still need it,
- * so we must fall back to a full page image.
- */
+//
+// Returns true if a merge or split would physically drop at least one tuple
+// from the given page (a finished+deleted tuple whose deletion is visible to
+// everybody as of imageCsn).  Mirrors the leaf drop condition in merge_pages()
+// and make_split_items().
+//
+// When nothing is dropped, the post-op page(s) are an exact partition of the
+// pre-op page(s), so a differential image (boundary/split key only) is
+// sufficient: the pre-op page can be reconstructed from the newer page(s)
+// carried forward.  When a tuple is dropped, an old snapshot may still need it,
+// so we must fall back to a full page image.
+//
 bool
 page_op_drops_tuple(BTreeDescr *desc, Pointer p, CommitSeqNo imageCsn)
 {
@@ -1526,14 +1526,14 @@ page_op_drops_tuple(BTreeDescr *desc, Pointer p, CommitSeqNo imageCsn)
 	return false;
 }
 
-/*
- * Copy images of the left and the right pages into undo log.
- *
- * When the merge drops no tuple, write a compact differential image
- * (UndoPageImageMergeDiff) holding just the boundary key and per-half undo
- * continuation, instead of two full page copies.  get_page_from_undo()
- * reconstructs the requested half by trimming the merged page.
- */
+//
+// Copy images of the left and the right pages into undo log.
+//
+// When the merge drops no tuple, write a compact differential image
+// (UndoPageImageMergeDiff) holding just the boundary key and per-half undo
+// continuation, instead of two full page copies.  get_page_from_undo()
+// reconstructs the requested half by trimming the merged page.
+//
 UndoLocation
 make_merge_undo_image(BTreeDescr *desc, Pointer left,
 					  Pointer right, CommitSeqNo imageCsn)
@@ -1548,17 +1548,17 @@ make_merge_undo_image(BTreeDescr *desc, Pointer left,
 	LocationIndex boundaryLen;
 
 	Assert(O_PAGE_IS(left, LEAF) && O_PAGE_IS(right, LEAF));
-	/* Left always has a right sibling here, so it is never rightmost. */
+	// Left always has a right sibling here, so it is never rightmost.
 	Assert(!O_PAGE_IS(left, RIGHTMOST));
 	Assert(undoType != UndoLogNone);
 
 	if (page_op_drops_tuple(desc, left, imageCsn) ||
 		page_op_drops_tuple(desc, right, imageCsn))
 	{
-		/*
-		 * Full two-page image required: an old snapshot may need a dropped
-		 * tuple.
-		 */
+		//
+// Full two-page image required: an old snapshot may need a dropped
+// tuple.
+//
 		UndoPageImageHeader *header;
 
 		undo_rec = get_undo_record(undoType, &undoLocation,
@@ -1575,7 +1575,7 @@ make_merge_undo_image(BTreeDescr *desc, Pointer left,
 		return undoLocation;
 	}
 
-	/* Differential image: boundary key is the left page's hikey. */
+	// Differential image: boundary key is the left page's hikey.
 	BTREE_PAGE_GET_HIKEY(boundary, left);
 	boundaryLen = BTREE_PAGE_GET_HIKEY_SIZE(left);
 
@@ -1597,9 +1597,9 @@ make_merge_undo_image(BTreeDescr *desc, Pointer left,
 	return undoLocation;
 }
 
-/*
- * Clean `chainHasLocks` flag on given and previous undo locations.
- */
+//
+// Clean `chainHasLocks` flag on given and previous undo locations.
+//
 static void
 clean_chain_has_locks_flag(UndoLogType undoType, UndoLocation location,
 						   BTreeLeafTuphdr *pageTuphdr, OInMemoryBlkno blkno)
@@ -1612,10 +1612,10 @@ clean_chain_has_locks_flag(UndoLogType undoType, UndoLocation location,
 	else
 		retainedUndoLocation = pg_atomic_read_u64(&get_undo_meta_by_type(undoType)->checkpointRetainStartLocation);
 
-	/*
-	 * Invalid location means that we should update starting from the
-	 * pageTuphdr. Clean `chainHasLocks` flag there if needed.
-	 */
+	//
+// Invalid location means that we should update starting from the
+// pageTuphdr. Clean `chainHasLocks` flag there if needed.
+//
 	if (!UndoLocationIsValid(location) || location < retainedUndoLocation)
 	{
 		if (!pageTuphdr->chainHasLocks)
@@ -1627,9 +1627,9 @@ clean_chain_has_locks_flag(UndoLogType undoType, UndoLocation location,
 		location = pageTuphdr->undoLocation;
 	}
 
-	/*
-	 * Iteratively clean `chainHasLocks` flag in the rest of chain.
-	 */
+	//
+// Iteratively clean `chainHasLocks` flag in the rest of chain.
+//
 	while (UndoLocationIsValid(location) && location >= retainedUndoLocation)
 	{
 		if (!undo_read_if_exists(undoType, location, sizeof(tuphdr), (Pointer) &tuphdr))
@@ -1647,19 +1647,19 @@ clean_chain_has_locks_flag(UndoLogType undoType, UndoLocation location,
 }
 
 
-/*
- * Check for row-level lock conflict
- *
- * Returns true if lock conflict.  On lock conflict places the conflicting undo
- * record info *conflictTuphdr.
- *
- * Otherwise, places the first csn undo record info *conflictTuphdr.
- * If there is no such undo records, then *conflictTuphdr is set to
- * *pageTuphdr.
- *
- * Lock-only undo records from committed and aborted transactions are removed.
- * Own lock-only undo records of the same or weaker level are removed.
- */
+//
+// Check for row-level lock conflict
+//
+// Returns true if lock conflict.  On lock conflict places the conflicting undo
+// record info *conflictTuphdr.
+//
+// Otherwise, places the first csn undo record info *conflictTuphdr.
+// If there is no such undo records, then *conflictTuphdr is set to
+// *pageTuphdr.
+//
+// Lock-only undo records from committed and aborted transactions are removed.
+// Own lock-only undo records of the same or weaker level are removed.
+//
 bool
 row_lock_conflicts(BTreeLeafTuphdr *pageTuphdr,
 				   BTreeLeafTuphdr *conflictTuphdr,
@@ -1715,7 +1715,7 @@ row_lock_conflicts(BTreeLeafTuphdr *pageTuphdr,
 
 			if (oxid == my_oxid)
 			{
-				/* Check if there are redundant row-level locks */
+				// Check if there are redundant row-level locks
 				if (xactMode <= mode &&
 					(!UndoLocationIsValid(savepointUndoLocation) ||
 					 (UndoLocationIsValid(undoLocation) &&
@@ -1730,11 +1730,11 @@ row_lock_conflicts(BTreeLeafTuphdr *pageTuphdr,
 			{
 				CommitSeqNo csn;
 
-				/*
-				 * Row-level locks make sense only for in-progress
-				 * transactions. We delete RLL for both committed and aborted
-				 * transactions.
-				 */
+				//
+// Row-level locks make sense only for in-progress
+// transactions. We delete RLL for both committed and aborted
+// transactions.
+//
 				csn = oxid_get_csn(oxid, false);
 				if (COMMITSEQNO_IS_ABORTED(csn) ||
 					COMMITSEQNO_IS_NORMAL(csn) ||
@@ -1777,7 +1777,7 @@ row_lock_conflicts(BTreeLeafTuphdr *pageTuphdr,
 			prev_tuphdr = curTuphdr;
 			if (!get_prev_leaf_header_from_undo_if_exists(undoType, &prev_tuphdr))
 			{
-				/* Undo gone — skip deletion, treat as end of chain */
+				// Undo gone — skip deletion, treat as end of chain
 				goto next_record;
 			}
 			if (!UndoLocationIsValid(curUndoLocation))
@@ -1789,10 +1789,10 @@ row_lock_conflicts(BTreeLeafTuphdr *pageTuphdr,
 			}
 			else
 			{
-				/*
-				 * Update chainHasLocks flag of the next undo records if
-				 * needed.
-				 */
+				//
+// Update chainHasLocks flag of the next undo records if
+// needed.
+//
 				if (XACT_INFO_IS_LOCK_ONLY(curTuphdr.xactInfo) &&
 					!curTuphdr.chainHasLocks)
 				{
@@ -1817,10 +1817,10 @@ next_record:
 		if (!UndoLocationIsValid(undoLocation) ||
 			undoLocation < retainedUndoLocation)
 		{
-			/*
-			 * We have reached the end of "in-progress" undo chain.  Fix tail
-			 * "chainHasLocks" flag if needed.
-			 */
+			//
+// We have reached the end of "in-progress" undo chain.  Fix tail
+// "chainHasLocks" flag if needed.
+//
 			if (curTuphdr.chainHasLocks)
 			{
 				clean_chain_has_locks_flag(undoType,
@@ -1840,18 +1840,18 @@ next_record:
 
 		if (!delete_record)
 		{
-			/*
-			 * Update previous location of lock-only record.
-			 */
+			//
+// Update previous location of lock-only record.
+//
 			if (XACT_INFO_IS_LOCK_ONLY(xactInfo))
 				lastLockOnlyUndoLocation = undoLocation;
 
 			prevChainHasLocks = curTuphdr.chainHasLocks;
 
-			/*
-			 * A concurrent commit may have released the undo.  Treat as end
-			 * of chain.
-			 */
+			//
+// A concurrent commit may have released the undo.  Treat as end
+// of chain.
+//
 			if (!get_prev_leaf_header_from_undo_if_exists(undoType, &curTuphdr))
 			{
 				if (!result)
@@ -1883,10 +1883,10 @@ next_record:
 			!curTuphdr.chainHasLocks &&
 			!XACT_INFO_IS_LOCK_ONLY(xactInfo))
 		{
-			/*
-			 * We have reached the end of "in-progress" undo chain.  Fix tail
-			 * "chainHasLocks" flag if needed.
-			 */
+			//
+// We have reached the end of "in-progress" undo chain.  Fix tail
+// "chainHasLocks" flag if needed.
+//
 			clean_chain_has_locks_flag(undoType,
 									   lastLockOnlyUndoLocation,
 									   pageTuphdr,
@@ -1910,9 +1910,9 @@ next_record:
 	return result;
 }
 
-/*
- * Remove redudant row-level locks.
- */
+//
+// Remove redudant row-level locks.
+//
 void
 remove_redundant_row_locks(BTreeLeafTuphdr *pageTuphdr,
 						   BTreeLeafTuphdr *conflictTuphdrPtr,
@@ -1936,10 +1936,10 @@ remove_redundant_row_locks(BTreeLeafTuphdr *pageTuphdr,
 		   undoLocation >= retainedUndoLocation &&
 		   UndoLocationIsValid(undoLocation))
 	{
-		/*
-		 * A concurrent commit may have released the undo.  Treat as end of
-		 * chain.
-		 */
+		//
+// A concurrent commit may have released the undo.  Treat as end of
+// chain.
+//
 		if (!get_prev_leaf_header_from_undo_if_exists(undoType, &tuphdr))
 			break;
 
@@ -1971,10 +1971,10 @@ remove_redundant_row_locks(BTreeLeafTuphdr *pageTuphdr,
 				}
 				else
 				{
-					/*
-					 * Update chainHasLocks flag of the next undo records if
-					 * needed.
-					 */
+					//
+// Update chainHasLocks flag of the next undo records if
+// needed.
+//
 					if (XACT_INFO_IS_LOCK_ONLY(xactInfo) && !chainHasLocks)
 					{
 						clean_chain_has_locks_flag(undoType,
@@ -1988,9 +1988,9 @@ remove_redundant_row_locks(BTreeLeafTuphdr *pageTuphdr,
 			}
 		}
 
-		/*
-		 * Update last location of lock-only record.
-		 */
+		//
+// Update last location of lock-only record.
+//
 		if (XACT_INFO_IS_LOCK_ONLY(xactInfo))
 			lastLockOnlyUndoLocation = prevUndoLoc;
 
@@ -2003,10 +2003,10 @@ remove_redundant_row_locks(BTreeLeafTuphdr *pageTuphdr,
 	}
 }
 
-/*
- * Finds first non-lock-only undo record and returns pointer to it.  Returns
- * NULL if such record is not found.
- */
+//
+// Finds first non-lock-only undo record and returns pointer to it.  Returns
+// NULL if such record is not found.
+//
 UndoLocation
 find_non_lock_only_undo_record(UndoLogType undoType, BTreeLeafTuphdr *tuphdr)
 {
@@ -2050,11 +2050,11 @@ get_prev_leaf_header_from_undo(UndoLogType undoType,
 	}
 }
 
-/*
- * Like get_prev_leaf_header_from_undo(), but tolerates a concurrently
- * cleaned undo record.  Returns false if the undo record no longer exists
- * (treat the chain end as if the transaction committed).
- */
+//
+// Like get_prev_leaf_header_from_undo(), but tolerates a concurrently
+// cleaned undo record.  Returns false if the undo record no longer exists
+// (treat the chain end as if the transaction committed).
+//
 static bool
 get_prev_leaf_header_from_undo_if_exists(UndoLogType undoType,
 										 BTreeLeafTuphdr *tuphdr)
@@ -2140,10 +2140,10 @@ update_leaf_header_in_undo(UndoLogType undoType,
 			   (Pointer) tuphdr);
 }
 
-/*
- * Like update_leaf_header_in_undo(), but tolerates a concurrently cleaned
- * undo record.  Returns false without writing if the undo is gone.
- */
+//
+// Like update_leaf_header_in_undo(), but tolerates a concurrently cleaned
+// undo record.  Returns false without writing if the undo is gone.
+//
 static bool
 update_leaf_header_in_undo_if_exists(UndoLogType undoType,
 									 BTreeLeafTuphdr *tuphdr,

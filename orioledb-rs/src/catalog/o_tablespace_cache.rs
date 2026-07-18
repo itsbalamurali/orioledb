@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * o_tablespace_cache.c
- * 		Routines to get tablespace path for relnode
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_tablespace_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_tablespace_cache.c
+// Routines to get tablespace path for relnode
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_tablespace_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -25,7 +25,7 @@
 #include "recovery/recovery.h"
 #include "utils/syscache.h"
 
-/* Silent cppcheck */
+// Silent cppcheck
 #ifndef TABLESPACE_VERSION_DIRECTORY
 #define TABLESPACE_VERSION_DIRECTORY
 #endif
@@ -39,10 +39,10 @@ o_get_prefixes_for_tablespace(Oid datoid, Oid tablespace,
 	text	   *path;
 	char	   *path_str;
 
-	/*
-	 * Treat InvalidOid as the default tablespace.  System trees and trees
-	 * whose tablespace has not been set yet use tablespace = 0.
-	 */
+	//
+// Treat InvalidOid as the default tablespace.  System trees and trees
+// whose tablespace has not been set yet use tablespace = 0.
+//
 	if (!OidIsValid(tablespace))
 		tablespace = DEFAULTTABLESPACE_OID;
 	path_datum = DirectFunctionCall1(pg_tablespace_location, ObjectIdGetDatum(tablespace));

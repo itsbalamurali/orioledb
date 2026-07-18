@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * wal.c
- *		Routines dealing with WAL for orioledb.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/recovery/wal.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// wal.c
+// Routines dealing with WAL for orioledb.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/recovery/wal.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -65,10 +65,10 @@ add_modify_wal_record(uint8 rec_type, BTreeDescr *desc,
 	add_modify_wal_record_extended(rec_type, desc, tuple, length, nulltup, 0, relreplident, version, base_version);
 }
 
-/*
- * Extended version of add_modify_wal_record for WAL records that can accommodate two tuples.
- * This is used for UPDATE/DELETE with REPLICA IDENTITY FULL and for REINSERT
- */
+//
+// Extended version of add_modify_wal_record for WAL records that can accommodate two tuples.
+// This is used for UPDATE/DELETE with REPLICA IDENTITY FULL and for REINSERT
+//
 static void
 add_modify_wal_record_extended(uint8 rec_type, BTreeDescr *desc,
 							   OTuple tuple, OffsetNumber length, OTuple tuple2, OffsetNumber length2, char relreplident, uint32 version, uint32 base_version)
@@ -80,7 +80,7 @@ add_modify_wal_record_extended(uint8 rec_type, BTreeDescr *desc,
 
 	elog(DEBUG4, "[%s] rec_type %d oids [ %u %u %u ]", __func__, rec_type, oids.datoid, oids.reloid, oids.relnode);
 
-	/* Do not write WAL during recovery */
+	// Do not write WAL during recovery
 	if (OXidIsValid(recovery_oxid))
 		return;
 
@@ -142,7 +142,7 @@ add_bridge_erase_wal_record(BTreeDescr *desc, ItemPointer iptr, uint32 version, 
 	OIndexType	type = desc->type;
 	WALRecBridgeErase *rec;
 
-	/* Do not write WAL during recovery */
+	// Do not write WAL during recovery
 	if (OXidIsValid(recovery_oxid))
 		return;
 
@@ -178,9 +178,9 @@ add_bridge_erase_wal_record(BTreeDescr *desc, ItemPointer iptr, uint32 version, 
 	local_wal.buffer_offset += sizeof(*rec);
 }
 
-/*
- * Adds the record to the local_wal.buffer.
- */
+//
+// Adds the record to the local_wal.buffer.
+//
 static inline void
 add_local_modify(uint8 record_type, OTuple record1, OffsetNumber length1, OTuple record2, OffsetNumber length2)
 {
@@ -189,7 +189,7 @@ add_local_modify(uint8 record_type, OTuple record1, OffsetNumber length1, OTuple
 
 	if (!O_TUPLE_IS_NULL(record2))
 	{
-		/* Two-tuple modify record */
+		// Two-tuple modify record
 		WALRecModify2 *wal_rec;
 
 		Assert(length2);
@@ -209,7 +209,7 @@ add_local_modify(uint8 record_type, OTuple record1, OffsetNumber length1, OTuple
 	}
 	else
 	{
-		/* One-tuple modify record */
+		// One-tuple modify record
 		WALRecModify1 *wal_rec;
 
 		Assert(local_wal.buffer_offset + sizeof(*wal_rec) + length1 + XID_RESERVED_LENGTH <= LOCAL_WAL_BUFFER_SIZE);
@@ -276,10 +276,10 @@ wal_joint_commit(OXid oxid, TransactionId logicalXid, TransactionId xid,
 	walPos = flush_local_wal(!subTransaction, false);
 	local_wal.has_material_changes = false;
 
-	/*
-	 * Don't need to flush local WAL, because we only commit if builtin
-	 * transaction commits.
-	 */
+	//
+// Don't need to flush local WAL, because we only commit if builtin
+// transaction commits.
+//
 	return walPos;
 }
 
@@ -323,24 +323,24 @@ wal_rollback(OXid oxid, TransactionId logicalXid, bool isAutonomous)
 		XLogFlush(wait_pos);
 }
 
-/*
- * Emit a stand-alone WAL_REC_ROLLBACK on behalf of an in-flight oxid that
- * recovery_finish() aborted in memory after end-of-redo.
- *
- * Streaming standbys eagerly apply each modify record marked
- * COMMITSEQNO_INPROGRESS and rely on a later WAL_REC_COMMIT/ROLLBACK to
- * resolve the verdict.  The primary's normal abort path (wal_rollback) gates
- * on local_wal.has_material_changes — but the startup process that runs
- * recovery_finish() never wrote those records into its own local_wal buffer
- * (the original primary did, before it crashed), so wal_rollback() would
- * silently no-op.  Without an explicit ROLLBACK marker on the wire, the
- * standby holds the oxid INPROGRESS forever and livelocks on the next
- * conflicting modify (orioledb/orioledb#876).
- *
- * Must be called after LocalSetXLogInsertAllowed() — i.e. from the
- * after_checkpoint_cleanup_hook with flags=0, not from inside rm_cleanup
- * itself, which still runs with XLogInsertAllowed() == false.
- */
+//
+// Emit a stand-alone WAL_REC_ROLLBACK on behalf of an in-flight oxid that
+// recovery_finish() aborted in memory after end-of-redo.
+//
+// Streaming standbys eagerly apply each modify record marked
+// COMMITSEQNO_INPROGRESS and rely on a later WAL_REC_COMMIT/ROLLBACK to
+// resolve the verdict.  The primary's normal abort path (wal_rollback) gates
+// on local_wal.has_material_changes — but the startup process that runs
+// recovery_finish() never wrote those records into its own local_wal buffer
+// (the original primary did, before it crashed), so wal_rollback() would
+// silently no-op.  Without an explicit ROLLBACK marker on the wire, the
+// standby holds the oxid INPROGRESS forever and livelocks on the next
+// conflicting modify (orioledb/orioledb#876).
+//
+// Must be called after LocalSetXLogInsertAllowed() — i.e. from the
+// after_checkpoint_cleanup_hook with flags=0, not from inside rm_cleanup
+// itself, which still runs with XLogInsertAllowed() == false.
+//
 void
 wal_emit_recovery_finish_rollback(OXid oxid, TransactionId logicalXid)
 {
@@ -424,9 +424,9 @@ add_joint_commit_wal_record(TransactionId xid, OXid xmin)
 	local_wal.contains_switch_xid = false;
 }
 
-/*
- * Returns size of a new record.
- */
+//
+// Returns size of a new record.
+//
 static void
 add_xid_wal_record(OXid oxid, TransactionId logicalXid)
 {
@@ -497,7 +497,7 @@ add_rel_wal_record(ORelOids oids, OIndexType type, uint32 version, uint32 base_v
 	memcpy(rec->reloid, &oids.reloid, sizeof(Oid));
 	memcpy(rec->relnode, &oids.relnode, sizeof(Oid));
 
-	/* Since ORIOLEDB_WAL_VERSION = 17 */
+	// Since ORIOLEDB_WAL_VERSION = 17
 	runXmin = pg_atomic_read_u64(&xid_meta->runXmin);
 	memcpy(rec->xmin, &runXmin, sizeof(runXmin));
 
@@ -660,10 +660,10 @@ add_rollback_to_savepoint_wal_record(SubTransactionId parentSubid)
 
 	flush_local_wal(false, false);
 
-	/*
-	 * Force adding xid record on future changes going after this rollback to
-	 * sp, this is necessary for correct xids restoring in logical decoder
-	 */
+	//
+// Force adding xid record on future changes going after this rollback to
+// sp, this is necessary for correct xids restoring in logical decoder
+//
 	local_wal.contains_xid = false;
 }
 
@@ -683,9 +683,9 @@ reset_local_wal_buffer(void)
 	ORelOidsSetInvalid(local_wal.oids);
 }
 
-/*
- * Returns end position of a new WAL container.
- */
+//
+// Returns end position of a new WAL container.
+//
 XLogRecPtr
 flush_local_wal(bool isCommit, bool withXactTime)
 {
@@ -695,20 +695,20 @@ flush_local_wal(bool isCommit, bool withXactTime)
 	Assert(!is_recovery_process());
 	Assert(length > 0);
 
-	/*
-	 * Put the xlog location of our commit record to the shared memory.  This
-	 * will help concurrent checkpointer to wait till we do
-	 * write_to_xids_queue().
-	 */
+	//
+// Put the xlog location of our commit record to the shared memory.  This
+// will help concurrent checkpointer to wait till we do
+// write_to_xids_queue().
+//
 	if (isCommit)
 		pg_atomic_write_u64(&GET_CUR_PROCDATA()->commitInProgressXlogLocation, OWalTmpCommitPos);
 
-	/*
-	 * The buffer already holds a finish record (COMMIT/ROLLBACK/JOINT_COMMIT)
-	 * at this point, it's too late to append another ROLLBACK in case of
-	 * error. Mirror RecordTransactionCommit() and escalate any failure to
-	 * PANIC.
-	 */
+	//
+// The buffer already holds a finish record (COMMIT/ROLLBACK/JOINT_COMMIT)
+// at this point, it's too late to append another ROLLBACK in case of
+// error. Mirror RecordTransactionCommit() and escalate any failure to
+// PANIC.
+//
 	START_CRIT_SECTION();
 
 	location = log_logical_wal_container(local_wal.buffer, length, withXactTime);
@@ -785,9 +785,9 @@ log_logical_wal_container(Pointer ptr, int length, bool withXactTime)
 	return XLogInsert(ORIOLEDB_RMGR_ID, ORIOLEDB_XLOG_CONTAINER);
 }
 
-/*
- * Makes WAL insert record.
- */
+//
+// Makes WAL insert record.
+//
 void
 o_wal_insert(BTreeDescr *desc, OTuple tuple, char relreplident, uint32 version)
 {
@@ -803,15 +803,15 @@ o_wal_insert(BTreeDescr *desc, OTuple tuple, char relreplident, uint32 version)
 	wal_record = recovery_rec_insert(desc, tuple, &call_pfree, &size);
 	Assert(desc->type != oIndexToast);
 	add_modify_wal_record(WAL_REC_INSERT, desc, wal_record, size, relreplident,
-						  version, O_TABLE_INVALID_VERSION	/* Asserted no base
-						    * version for non TOAST */ );
+						  version, O_TABLE_INVALID_VERSION	// Asserted no base
+// version for non TOAST );
 	if (call_pfree)
 		pfree(wal_record.data);
 }
 
-/*
- * Makes WAL update record.
- */
+//
+// Makes WAL update record.
+//
 void
 o_wal_update(BTreeDescr *desc, OTuple tuple, OTuple oldtuple, char relreplident, uint32 version)
 {
@@ -830,23 +830,23 @@ o_wal_update(BTreeDescr *desc, OTuple tuple, OTuple oldtuple, char relreplident,
 	wal_record1 = recovery_rec_update(desc, tuple, &call_pfree1, &size1);
 	Assert(desc->type != oIndexToast);
 
-	/*
-	 * For REPLICA_IDENTITY_FULL include new and old tuples into
-	 * WAL_REC_UPDATE
-	 */
+	//
+// For REPLICA_IDENTITY_FULL include new and old tuples into
+// WAL_REC_UPDATE
+//
 	if (relreplident != REPLICA_IDENTITY_FULL)
 	{
 		add_modify_wal_record(WAL_REC_UPDATE, desc, wal_record1, size1, relreplident,
-							  version, O_TABLE_INVALID_VERSION	/* Asserted no base
-							    * version for non TOAST */ );
+							  version, O_TABLE_INVALID_VERSION	// Asserted no base
+// version for non TOAST );
 	}
 	else
 	{
 		Assert(!O_TUPLE_IS_NULL(oldtuple));
 		wal_record2 = recovery_rec_update(desc, oldtuple, &call_pfree2, &size2);
 		add_modify_wal_record_extended(WAL_REC_UPDATE, desc, wal_record1, size1, wal_record2, size2, relreplident,
-									   version, O_TABLE_INVALID_VERSION /* Asserted no base
-									     * version for non TOAST */ );
+									   version, O_TABLE_INVALID_VERSION // Asserted no base
+// version for non TOAST );
 		if (call_pfree2)
 			pfree(wal_record2.data);
 	}
@@ -855,9 +855,9 @@ o_wal_update(BTreeDescr *desc, OTuple tuple, OTuple oldtuple, char relreplident,
 		pfree(wal_record1.data);
 }
 
-/*
- * Makes WAL delete record.
- */
+//
+// Makes WAL delete record.
+//
 void
 o_wal_delete(BTreeDescr *desc, OTuple tuple, char relreplident, uint32 version)
 {
@@ -873,16 +873,16 @@ o_wal_delete(BTreeDescr *desc, OTuple tuple, char relreplident, uint32 version)
 	wal_record = recovery_rec_delete(desc, tuple, &call_pfree, &size, relreplident);
 	Assert(desc->type != oIndexToast);
 	add_modify_wal_record(WAL_REC_DELETE, desc, wal_record, size, relreplident,
-						  version, O_TABLE_INVALID_VERSION	/* Asserted no base
-						    * version for non TOAST */ );
+						  version, O_TABLE_INVALID_VERSION	// Asserted no base
+// version for non TOAST );
 
 	if (call_pfree)
 		pfree(wal_record.data);
 }
 
-/*
- * Makes WAL delete+insert record.
- */
+//
+// Makes WAL delete+insert record.
+//
 void
 o_wal_reinsert(BTreeDescr *desc, OTuple oldtuple, OTuple newtuple, char relreplident, uint32 version)
 {
@@ -900,8 +900,8 @@ o_wal_reinsert(BTreeDescr *desc, OTuple oldtuple, OTuple newtuple, char relrepli
 	newrecord = recovery_rec_insert(desc, newtuple, &new_call_pfree, &newsize);
 	Assert(desc->type != oIndexToast);
 	add_modify_wal_record_extended(WAL_REC_REINSERT, desc, newrecord, newsize, oldrecord, oldsize, relreplident,
-								   version, O_TABLE_INVALID_VERSION /* Asserted no base
-								     * version for non TOAST */ );
+								   version, O_TABLE_INVALID_VERSION // Asserted no base
+// version for non TOAST );
 	if (old_call_pfree)
 	{
 		pfree(oldrecord.data);
@@ -912,7 +912,7 @@ o_wal_reinsert(BTreeDescr *desc, OTuple oldtuple, OTuple newtuple, char relrepli
 	}
 }
 
-/* Could be used only for system trees and bridge trees that are not replicated logically */
+// Could be used only for system trees and bridge trees that are not replicated logically
 void
 o_wal_delete_key(BTreeDescr *desc, OTuple key, bool is_bridge_index, uint32 version)
 {
@@ -925,8 +925,8 @@ o_wal_delete_key(BTreeDescr *desc, OTuple key, bool is_bridge_index, uint32 vers
 	wal_record = recovery_rec_delete_key(desc, key, &call_pfree, &size);
 	Assert(desc->type != oIndexToast);
 	add_modify_wal_record(WAL_REC_DELETE, desc, wal_record, size, REPLICA_IDENTITY_DEFAULT,
-						  version, O_TABLE_INVALID_VERSION	/* Asserted no base
-						    * version for non TOAST */ );
+						  version, O_TABLE_INVALID_VERSION	// Asserted no base
+// version for non TOAST );
 
 	if (call_pfree)
 		pfree(wal_record.data);

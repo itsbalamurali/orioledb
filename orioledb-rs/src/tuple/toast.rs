@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * toast.c
- * 		Routines for orioledb TOAST implementation
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tuple/toast.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// toast.c
+// Routines for orioledb TOAST implementation
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tuple/toast.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -47,33 +47,33 @@ typedef struct
 {
 	OIndexDescr *pk;
 	OIndexDescr *toast;
-	uint32		version;		/* base table version */
+	uint32		version;		// base table version
 } OTableToastArg;
 
 #define GET_BTREE_VERSION(api, arg) (api->getBTreeVersion ? api->getBTreeVersion(arg) : O_TABLE_INVALID_VERSION)
 #define GET_BASE_BTREE_VERSION(api, arg) (api->getBaseBTreeVersion ? api->getBaseBTreeVersion(arg) : O_TABLE_INVALID_VERSION)
 
-/*
- * Help functions.
- */
-/* creates table tuple which can be stored in TOAST BTree */
+//
+// Help functions.
+//
+// creates table tuple which can be stored in TOAST BTree
 static OTuple o_create_toast_tuple(OToastKey tkey,
 								   Pointer data, Size data_length,
 								   OTableToastArg *arg);
 
-/* creates index tuple which can be stored in TOAST BTree */
+// creates index tuple which can be stored in TOAST BTree
 static OTuple o_create_toast_key(OToastKey tkey, OTableToastArg *arg);
 
-/*
- * prints TOAST table tuple (is_tuple = true)
- * or TOAST index tuple (is_tuple = false
- */
+//
+// prints TOAST table tuple (is_tuple = true)
+// or TOAST index tuple (is_tuple = false
+//
 static void toast_tuple_print(TupleDesc tupDesc, OTupleFixedFormatSpec *spec,
 							  FmgrInfo *outputFns, StringInfo buf, OTuple tup,
 							  Datum *values, bool *nulls, bool is_tuple,
 							  bool printRowVersion);
 
-/* No existing callers */
+// No existing callers
 void
 o_toast_init_tupdescs(OIndexDescr *toast, TupleDesc ix_primary)
 {
@@ -83,23 +83,23 @@ o_toast_init_tupdescs(OIndexDescr *toast, TupleDesc ix_primary)
 	toast->leafTupdesc = CreateTemplateTupleDesc(pidx_natts + TOAST_LEAF_FIELDS_NUM);
 	toast->nonLeafTupdesc = CreateTemplateTupleDesc(pidx_natts + TOAST_NON_LEAF_FIELDS_NUM);
 
-	/* copies entries from primary index TupleDesc */
+	// copies entries from primary index TupleDesc
 	for (i = 0; i < pidx_natts; i++)
 	{
 		TupleDescCopyEntry(toast->leafTupdesc, i + 1, ix_primary, i + 1);
 		TupleDescCopyEntry(toast->nonLeafTupdesc, i + 1, ix_primary, i + 1);
 	}
 
-	/*
-	 * adds new entries
-	 */
-	/* attribute number */
+	//
+// adds new entries
+//
+	// attribute number
 	o_tables_tupdesc_init_builtin(toast->leafTupdesc, pidx_natts + ATTN_POS, "attnum", INT2OID);
 	o_tables_tupdesc_init_builtin(toast->nonLeafTupdesc, pidx_natts + ATTN_POS, "attnum", INT2OID);
-	/* chunk number */
+	// chunk number
 	o_tables_tupdesc_init_builtin(toast->leafTupdesc, pidx_natts + CHUNKN_POS, "chunknum", INT4OID);
 	o_tables_tupdesc_init_builtin(toast->nonLeafTupdesc, pidx_natts + CHUNKN_POS, "chunknum", INT4OID);
-	/* data only in leaf tuples */
+	// data only in leaf tuples
 	o_tables_tupdesc_init_builtin(toast->leafTupdesc, pidx_natts + DATA_POS, "data", BYTEAOID);
 }
 
@@ -163,11 +163,11 @@ o_toast_cmp(BTreeDescr *desc,
 	{
 		bool		null;
 
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 		attnum1 = DatumGetInt16(o_fastgetattr(pk1, pkAttnum + ATTN_POS, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null));
 		Assert(!null);
 
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 		chunknum1 = DatumGetInt32(o_fastgetattr(pk1, pkAttnum + CHUNKN_POS, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null));
 		Assert(!null);
 	}
@@ -181,11 +181,11 @@ o_toast_cmp(BTreeDescr *desc,
 	{
 		bool		null;
 
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 		attnum2 = DatumGetInt16(o_fastgetattr(pk2, pkAttnum + ATTN_POS, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null));
 		Assert(!null);
 
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 		chunknum2 = DatumGetInt32(o_fastgetattr(pk2, pkAttnum + CHUNKN_POS, toastd->nonLeafTupdesc, &toastd->nonLeafSpec, &null));
 		Assert(!null);
 	}
@@ -493,15 +493,15 @@ generic_toast_insert_optional_wal(ToastAPI *api, void *key, Pointer data,
 }
 
 
-/*
- * Insert TOAST data with optional WAL logging.
- *
- * NB: Each chunk is inserted individually into the system tree.  Typically,
- * the atomicity is guaranteed by a snapshot.  But with a concurrent reader
- * with COMMITSEQNO_IN_PROGRESS/COMMITSEQNO_NON_DELETED can observe a
- * partially written set of chunks (e.g. chunk 0 present, chunk 1 not yet
- * inserted).
- */
+//
+// Insert TOAST data with optional WAL logging.
+//
+// NB: Each chunk is inserted individually into the system tree.  Typically,
+// the atomicity is guaranteed by a snapshot.  But with a concurrent reader
+// with COMMITSEQNO_IN_PROGRESS/COMMITSEQNO_NON_DELETED can observe a
+// partially written set of chunks (e.g. chunk 0 present, chunk 1 not yet
+// inserted).
+//
 bool
 generic_toast_insert(ToastAPI *api, void *key, Pointer data, Size data_size,
 					 OXid oxid, CommitSeqNo csn, void *arg)
@@ -641,9 +641,9 @@ generic_toast_update_optional_wal(ToastAPI *api, void *key, Pointer data,
 		data_size -= length;
 	}
 
-	/*
-	 * There might be tailing tuples.  We need to delete them.
-	 */
+	//
+// There might be tailing tuples.  We need to delete them.
+//
 	api->updateKey(key, chunknum, arg);
 	(void) generic_toast_delete_optional_wal(api, key, oxid, csn, arg, wal);
 
@@ -688,7 +688,7 @@ generic_toast_delete_optional_wal(ToastAPI *api, void *key, OXid oxid,
 
 		tuple = o_btree_iterator_fetch(it, NULL, nextKey, BTreeKeyBound, false, &hint);
 
-		/* if tuple not found */
+		// if tuple not found
 		if (O_TUPLE_IS_NULL(tuple))
 			break;
 
@@ -775,7 +775,7 @@ generic_toast_get(ToastAPI *api, void *key, Size data_size,
 
 		tup = o_btree_iterator_fetch(it, NULL, nextKey, BTreeKeyBound, false, NULL);
 
-		/* if tuple not found */
+		// if tuple not found
 		if (O_TUPLE_IS_NULL(tup))
 			break;
 
@@ -783,7 +783,7 @@ generic_toast_get(ToastAPI *api, void *key, Size data_size,
 
 		if (actual_size + iter_data_size > data_size)
 		{
-			/* avoid memcpy to unallocated memory */
+			// avoid memcpy to unallocated memory
 			actual_size += iter_data_size;
 			break;
 		}
@@ -812,10 +812,10 @@ generic_toast_get(ToastAPI *api, void *key, Size data_size,
 	return data;
 }
 
-/*
- * Common code for
- * generic_toast_get_any_with_callback and generic_toast_get_any_with_key
- */
+//
+// Common code for
+// generic_toast_get_any_with_callback and generic_toast_get_any_with_key
+//
 static Pointer
 generic_toast_get_any_common(ToastAPI *api,
 							 Pointer key,
@@ -839,7 +839,7 @@ generic_toast_get_any_common(ToastAPI *api,
 
 		tuple = o_btree_iterator_fetch(it, NULL, nextKey, BTreeKeyBound, false, NULL);
 
-		/* if tuple not found */
+		// if tuple not found
 		if (O_TUPLE_IS_NULL(tuple))
 			break;
 
@@ -867,15 +867,15 @@ generic_toast_get_any_common(ToastAPI *api,
 	return str.data;
 }
 
-/*
- * Queries TOAST chunks by `key`, assembles result and returns it.  The size
- * of result is set to `*data_size`.  If `fetchCallback` and `callback_arg`
- * are provided, then they are passed to the iterator and, in turn, to
- * o_find_tuple_version().
- *
- * The result is allocated in the current memory context.  It's caller's
- * responsibility to free it.
- */
+//
+// Queries TOAST chunks by `key`, assembles result and returns it.  The size
+// of result is set to `*data_size`.  If `fetchCallback` and `callback_arg`
+// are provided, then they are passed to the iterator and, in turn, to
+// o_find_tuple_version().
+//
+// The result is allocated in the current memory context.  It's caller's
+// responsibility to free it.
+//
 Pointer
 generic_toast_get_any_with_callback(ToastAPI *api, Pointer key,
 									Size *data_size, OSnapshot *o_snapshot,
@@ -900,14 +900,14 @@ generic_toast_get_any_with_callback(ToastAPI *api, Pointer key,
 	return data;
 }
 
-/*
- * Queries TOAST chunks by `key`, assembles the result, and returns it.
- * The size of the result is set to `*data_size`.  If `found_key` is not NULL,
- * then the copy of a key from the first chunk is returned as `*found_key`.
- *
- * Both result and `*found_key` are allocated in the current memory context.
- * It's the caller's responsibility to free them.
- */
+//
+// Queries TOAST chunks by `key`, assembles the result, and returns it.
+// The size of the result is set to `*data_size`.  If `found_key` is not NULL,
+// then the copy of a key from the first chunk is returned as `*found_key`.
+//
+// Both result and `*found_key` are allocated in the current memory context.
+// It's the caller's responsibility to free them.
+//
 Pointer
 generic_toast_get_any_with_key(ToastAPI *api, void *key, Size *data_size,
 							   OSnapshot *o_snapshot, void *arg, Pointer *found_key)
@@ -929,13 +929,13 @@ generic_toast_get_any_with_key(ToastAPI *api, void *key, Size *data_size,
 	return data;
 }
 
-/*
- * Queries TOAST chunks by `key`, assembles the result, and returns it.
- * The size of the result is set to `*data_size`.
- *
- * The result is allocated in the current memory context.  It's the caller's
- * responsibility to free it.
- */
+//
+// Queries TOAST chunks by `key`, assembles the result, and returns it.
+// The size of the result is set to `*data_size`.
+//
+// The result is allocated in the current memory context.  It's the caller's
+// responsibility to free it.
+//
 Pointer
 generic_toast_get_any(ToastAPI *api, void *key, Size *data_size,
 					  OSnapshot *o_snapshot, void *arg)
@@ -1105,13 +1105,13 @@ o_toast_equal(BTreeDescr *primary, Datum left, Datum right)
 	if (!VARATT_IS_EXTERNAL_ORIOLEDB(left) ||
 		!VARATT_IS_EXTERNAL_ORIOLEDB(right))
 	{
-		/* left or right is not orioledb TOAST value */
+		// left or right is not orioledb TOAST value
 		return false;
 	}
 
 	if (left == right)
 	{
-		/* easy case: it's same pointers */
+		// easy case: it's same pointers
 		return true;
 	}
 
@@ -1126,7 +1126,7 @@ o_toast_equal(BTreeDescr *primary, Datum left, Datum right)
 		left_ote.relid != right_ote.relid ||
 		left_ote.relnode != right_ote.relnode)
 	{
-		/* values are not from the same index */
+		// values are not from the same index
 		return false;
 	}
 
@@ -1134,18 +1134,18 @@ o_toast_equal(BTreeDescr *primary, Datum left, Datum right)
 		left_ote.toasted_size != right_ote.toasted_size ||
 		left_ote.data_size != right_ote.data_size)
 	{
-		/* sizes are not equal */
+		// sizes are not equal
 		return false;
 	}
 
 	if (left_ote.attnum != right_ote.attnum ||
 		left_ote.csn != right_ote.csn)
 	{
-		/* it's a different attribute */
+		// it's a different attribute
 		return false;
 	}
 
-	/* now we can make final check: compare primary keys */
+	// now we can make final check: compare primary keys
 	if (left_ote.formatFlags != right_ote.formatFlags)
 		return false;
 

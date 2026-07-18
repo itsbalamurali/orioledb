@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_amproc_cache.c
- *		Routines for orioledb amproc cache.
- *
- * amproc_cache is tree that contains cached metadata from pg_amproc.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_amproc_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_amproc_cache.c
+// Routines for orioledb amproc cache.
+//
+// amproc_cache is tree that contains cached metadata from pg_amproc.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_amproc_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -41,9 +41,9 @@ static OSysCacheFuncs amproc_cache_funcs =
 	.fill_entry = o_amproc_cache_fill_entry
 };
 
-/*
- * Initializes the type sys cache memory.
- */
+//
+// Initializes the type sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(amproc_cache)
 {
 	Oid			keytypes[] = {OIDOID, OIDOID, OIDOID, INT2OID};
@@ -80,7 +80,7 @@ o_amproc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	amprocform = (Form_pg_amproc) GETSTRUCT(amproctup);
 
 	prev_context = MemoryContextSwitchTo(amproc_cache->mcxt);
-	if (o_amproc != NULL)		/* Existed o_amproc updated */
+	if (o_amproc != NULL)		// Existed o_amproc updated
 	{
 		Assert(false);
 	}
@@ -127,9 +127,9 @@ o_amproc_cache_search_htup(TupleDesc tupdesc, Oid amprocfamily,
 	return result;
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_amproc_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 						 OTuple tup, Pointer arg)

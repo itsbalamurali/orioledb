@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- * o_range_cache.c
- *		Routines for orioledb range sys cache.
- *
- * range_cache is tree that contains cached range metadata from pg_type.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_range_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_range_cache.c
+// Routines for orioledb range sys cache.
+//
+// range_cache is tree that contains cached range metadata from pg_type.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_range_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -50,9 +50,9 @@ static OSysCacheFuncs range_cache_funcs =
 	.fill_entry = o_range_cache_fill_entry
 };
 
-/*
- * Initializes the range sys cache memory.
- */
+//
+// Initializes the range sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(range_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -100,9 +100,9 @@ o_range_cache_free_entry(Pointer entry)
 	pfree(entry);
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_range_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 						OTuple tup, Pointer arg)

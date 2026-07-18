@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * planner.c
- * 		Routines for query processing.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/utils/planner.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// planner.c
+// Routines for query processing.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/utils/planner.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -66,9 +66,9 @@ static bool plan_tree_walker(Plan *plan, WalkerFunc walker, void *context);
 
 #define pg_analyze_and_rewrite_params pg_analyze_and_rewrite_withcb
 
- /*
-  * error context callback to let us supply a call-stack traceback
-  */
+ //
+// error context callback to let us supply a call-stack traceback
+//
 static void
 sql_validate_error_callback(void *arg)
 {
@@ -77,7 +77,7 @@ sql_validate_error_callback(void *arg)
 
 	callback_arg = (validate_error_callback_arg *) arg;
 
-	/* If it's a syntax error, convert to internal syntax error report */
+	// If it's a syntax error, convert to internal syntax error report
 	syntaxerrposition = geterrposition();
 	if (syntaxerrposition > 0)
 	{
@@ -108,10 +108,10 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 
 	procedureStruct = (Form_pg_proc) GETSTRUCT(procedureTuple);
 
-	/*
-	 * Make a temporary memory context, so that we don't leak all the stuff
-	 * that parsing might create.
-	 */
+	//
+// Make a temporary memory context, so that we don't leak all the stuff
+// that parsing might create.
+//
 	mycxt = AllocSetContextCreate(CurrentMemoryContext,
 								  "inline_function",
 								  ALLOCSET_DEFAULT_SIZES);
@@ -127,13 +127,13 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 		}
 	}
 
-	/*
-	 * Setup error traceback support for ereport(). This is so that we can
-	 * finger the function that bad information came from.
-	 */
+	//
+// Setup error traceback support for ereport(). This is so that we can
+// finger the function that bad information came from.
+//
 	callback_arg.proname = NameStr(procedureStruct->proname);
 
-	/* Fetch the function body */
+	// Fetch the function body
 	proc_body = SysCacheGetAttr(PROCOID, procedureTuple, Anum_pg_proc_prosrc,
 								&isNull);
 	if (isNull)
@@ -145,7 +145,7 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 	sqlerrcontext.previous = error_context_stack;
 	error_context_stack = &sqlerrcontext;
 
-	/* If we have prosqlbody, pay attention to that not prosrc */
+	// If we have prosqlbody, pay attention to that not prosrc
 	proc_body = SysCacheGetAttr(PROCOID, procedureTuple,
 								Anum_pg_proc_prosqlbody, &isNull);
 	if (!isNull)
@@ -202,14 +202,14 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 	}
 
 
-	/*
-	 * The single command must be a simple "SELECT expression".
-	 *
-	 * Note: if you change the tests involved in this, see also plpgsql's
-	 * exec_simple_check_plan().  That generally needs to have the same idea
-	 * of what's a "simple expression", so that inlining a function that
-	 * previously wasn't inlined won't change plpgsql's conclusion.
-	 */
+	//
+// The single command must be a simple "SELECT expression".
+//
+// Note: if you change the tests involved in this, see also plpgsql's
+// exec_simple_check_plan().  That generally needs to have the same idea
+// of what's a "simple expression", so that inlining a function that
+// previously wasn't inlined won't change plpgsql's conclusion.
+//
 	if (!haspolyarg)
 	{
 		Oid			rettype;
@@ -237,10 +237,10 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 				new_query->commandType = CMD_SELECT;
 				new_query->canSetTag = true;
 
-				/*
-				 * We need a moderately realistic colnames list for the
-				 * subquery RTE
-				 */
+				//
+// We need a moderately realistic colnames list for the
+// subquery RTE
+//
 				colnames = NIL;
 				foreach(lc3, query->targetList)
 				{
@@ -297,25 +297,25 @@ o_wrap_top_funcexpr(Node *node)
 	return (Node *) &named_arg;
 }
 
-/*
- *	o_process_functions_in_node -
- *	  apply checker() to each function OID contained in given expression node
- *
- * Returns true if the checker() function does; for nodes representing more
- * than one function call, returns true if the checker() function does so
- * for any of those functions.  Returns false if node does not invoke any
- * SQL-visible function.  Caller must not pass node == NULL.
- *
- * This function examines only the given node; it does not recurse into any
- * sub-expressions.  Callers typically prefer to keep control of the recursion
- * for themselves, in case additional checks should be made, or because they
- * have special rules about which parts of the tree need to be visited.
- *
- * Note: we ignore MinMaxExpr, SQLValueFunction, XmlExpr, CoerceToDomain,
- * and NextValueExpr nodes, because they do not contain SQL function OIDs.
- * However, they can invoke SQL-visible functions, so callers should take
- * thought about how to treat them.
- */
+//
+// o_process_functions_in_node -
+// apply checker() to each function OID contained in given expression node
+//
+// Returns true if the checker() function does; for nodes representing more
+// than one function call, returns true if the checker() function does so
+// for any of those functions.  Returns false if node does not invoke any
+// SQL-visible function.  Caller must not pass node == NULL.
+//
+// This function examines only the given node; it does not recurse into any
+// sub-expressions.  Callers typically prefer to keep control of the recursion
+// for themselves, in case additional checks should be made, or because they
+// have special rules about which parts of the tree need to be visited.
+//
+// Note: we ignore MinMaxExpr, SQLValueFunction, XmlExpr, CoerceToDomain,
+// and NextValueExpr nodes, because they do not contain SQL function OIDs.
+// However, they can invoke SQL-visible functions, so callers should take
+// thought about how to treat them.
+//
 static void
 o_process_functions_in_node(Node *node,
 							void (*func_walker) (Oid functionId,
@@ -364,12 +364,12 @@ o_process_functions_in_node(Node *node,
 			}
 			break;
 		case T_OpExpr:
-		case T_DistinctExpr:	/* struct-equivalent to OpExpr */
-		case T_NullIfExpr:		/* struct-equivalent to OpExpr */
+		case T_DistinctExpr:	// struct-equivalent to OpExpr
+		case T_NullIfExpr:		// struct-equivalent to OpExpr
 			{
 				OpExpr	   *expr = (OpExpr *) node;
 
-				/* Set opfuncid if it wasn't set already */
+				// Set opfuncid if it wasn't set already
 				set_opfuncid(expr);
 
 				functionId = expr->opfuncid;
@@ -398,7 +398,7 @@ o_process_functions_in_node(Node *node,
 				Oid			typioparam;
 				bool		typisvarlena;
 
-				/* check the result type's input function */
+				// check the result type's input function
 				getTypeInputInfo(expr->resulttype,
 								 &iofunc, &typioparam);
 
@@ -408,7 +408,7 @@ o_process_functions_in_node(Node *node,
 
 				func_walker(functionId, inputcollid, args, context);
 
-				/* check the input type's output function */
+				// check the input type's output function
 				getTypeOutputInfo(exprType((Node *) expr->arg),
 								  &iofunc, &typisvarlena);
 
@@ -434,7 +434,7 @@ o_process_functions_in_node(Node *node,
 				{
 					functionId = get_opcode(lfirst_oid(opid));
 					inputcollid = lfirst_oid(collid);
-					/* cppcheck-suppress unknownEvaluationOrder */
+					// cppcheck-suppress unknownEvaluationOrder
 					args = list_make2(lfirst(larg),
 									  lfirst(rarg));
 
@@ -505,7 +505,7 @@ validate_function(Node *node, void *context)
 	}
 	o_process_functions_in_node(node, validate_function_walker, context);
 
-	/* Recurse to check arguments */
+	// Recurse to check arguments
 	if (IsA(node, Query))
 	{
 		Query	   *query = (Query *) node;
@@ -566,8 +566,8 @@ o_validate_function_by_oid(Oid procoid, char *hint_msg)
 	fexpr->funcresulttype = procedureStruct->prorettype;
 	fexpr->funcretset = procedureStruct->proretset;
 	fexpr->funcvariadic = procedureStruct->provariadic;
-	fexpr->funcformat = COERCE_EXPLICIT_CALL;	/* doesn't matter */
-	fexpr->funccollid = InvalidOid; /* doesn't matter */
+	fexpr->funcformat = COERCE_EXPLICIT_CALL;	// doesn't matter
+	fexpr->funccollid = InvalidOid; // doesn't matter
 	fexpr->inputcollid = InvalidOid;
 	fexpr->args = NIL;
 	fexpr->location = -1;
@@ -683,12 +683,12 @@ o_collect_function(Node *node, void *context)
 												cur_lsn, NULL);
 					o_operator_cache_add_if_needed(datoid, eq_opr, cur_lsn, NULL);
 
-					/*
-					 * Search pg_amop to see if the target operator is
-					 * registered as the "=" operator of any hash opfamily. If
-					 * the operator is registered in multiple opfamilies,
-					 * assume we can use any one.
-					 */
+					//
+// Search pg_amop to see if the target operator is
+// registered as the "=" operator of any hash opfamily. If
+// the operator is registered in multiple opfamilies,
+// assume we can use any one.
+//
 					catlist = SearchSysCacheList1(AMOPOPID,
 												  ObjectIdGetDatum(eq_opr));
 
@@ -710,11 +710,11 @@ o_collect_function(Node *node, void *context)
 						{
 							Oid			result;
 
-							/*
-							 * Get the matching support function(s).  Failure
-							 * probably shouldn't happen --- it implies a
-							 * bogus opfamily --- but continue looking if so.
-							 */
+							//
+// Get the matching support function(s).  Failure
+// probably shouldn't happen --- it implies a
+// bogus opfamily --- but continue looking if so.
+//
 							result = get_opfamily_proc(aform->amopfamily,
 													   aform->amoplefttype,
 													   aform->amoplefttype,
@@ -731,10 +731,10 @@ o_collect_function(Node *node, void *context)
 														 HASHSTANDARD_PROC,
 														 cur_lsn, NULL);
 
-							/*
-							 * Only one lookup needed if given operator is
-							 * single-type
-							 */
+							//
+// Only one lookup needed if given operator is
+// single-type
+//
 							if (aform->amoplefttype == aform->amoprighttype)
 								break;
 							result = get_opfamily_proc(aform->amopfamily,
@@ -832,7 +832,7 @@ o_collect_function(Node *node, void *context)
 			break;
 	}
 
-	/* Recurse to check arguments */
+	// Recurse to check arguments
 	if (IsA(node, Query))
 		(void) query_tree_walker((Query *) node, o_collect_function,
 								 context, 0);
@@ -906,8 +906,8 @@ o_collect_function_by_oid(Oid procoid, Oid inputcollid, List **processed)
 	fexpr->funcresulttype = procedureStruct->prorettype;
 	fexpr->funcretset = procedureStruct->proretset;
 	fexpr->funcvariadic = procedureStruct->provariadic;
-	fexpr->funcformat = COERCE_EXPLICIT_CALL;	/* doesn't matter */
-	fexpr->funccollid = InvalidOid; /* doesn't matter */
+	fexpr->funcformat = COERCE_EXPLICIT_CALL;	// doesn't matter
+	fexpr->funccollid = InvalidOid; // doesn't matter
 	fexpr->inputcollid = inputcollid;
 	fexpr->args = NIL;
 	fexpr->location = -1;
@@ -938,7 +938,7 @@ o_collect_op_by_oid(Oid opoid)
 	op_expr->opretset = get_func_retset(opStruct->oprcode);
 	op_expr->opcollid = InvalidOid;
 	op_expr->inputcollid = InvalidOid;
-	op_expr->args = NIL;		/* TODO: Add normal arg processing when needed */
+	op_expr->args = NIL;		// TODO: Add normal arg processing when needed
 	op_expr->location = -1;
 	expression_tree_walker(o_wrap_top_funcexpr((Node *) op_expr),
 						   o_collect_function, &processed);
@@ -955,7 +955,7 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 	if (plan == NULL)
 		return NULL;
 
-	/* Guard against stack overflow due to overly complex plan trees */
+	// Guard against stack overflow due to overly complex plan trees
 	check_stack_depth();
 
 	if (expression_tree_walker((Node *) plan->targetlist,
@@ -965,14 +965,14 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 							   walker, context))
 		return true;
 
-	/* lefttree */
+	// lefttree
 	if (outerPlan(plan))
 	{
 		if (walker((Node *) outerPlan(plan), context))
 			return true;
 	}
 
-	/* righttree */
+	// righttree
 	if (innerPlan(plan))
 	{
 		if (walker((Node *) innerPlan(plan), context))
@@ -981,9 +981,9 @@ plan_tree_walker(Plan *plan, WalkerFunc walker, void *context)
 
 	switch (nodeTag(plan))
 	{
-			/*
-			 * control nodes
-			 */
+			//
+// control nodes
+//
 		case T_Result:
 			{
 				Result	   *result = (Result *) plan;
@@ -1370,7 +1370,7 @@ plannedstatement_tree_walker(PlannedStmt *pstmt,
 	ListCell   *lc;
 	ProjectSet *project_set;
 
-	/* Guard against stack overflow due to overly complex plan trees */
+	// Guard against stack overflow due to overly complex plan trees
 	check_stack_depth();
 
 	project_set = makeNode(ProjectSet);
@@ -1378,7 +1378,7 @@ plannedstatement_tree_walker(PlannedStmt *pstmt,
 
 	plan_tree_walker((Plan *) project_set, walker, context);
 
-	/* subPlan-s */
+	// subPlan-s
 	foreach(lc, pstmt->subplans)
 	{
 		Plan	   *sp = (Plan *) lfirst(lc);

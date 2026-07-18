@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * stopevent.c
- *     Auxiliary infrastructure for automated testing of concurrency issues.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *   contrib/orioledb/src/utils/stopevent.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// stopevent.c
+// Auxiliary infrastructure for automated testing of concurrency issues.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/utils/stopevent.c
+//
+// -------------------------------------------------------------------------
+//
 #include "c.h"
 #include "postgres.h"
 
@@ -177,7 +177,7 @@ pg_stopevents(PG_FUNCTION_ARGS)
 	AttrNumber	attnum;
 	int			i;
 
-	/* The tupdesc and tuplestore must be created in ecxt_per_query_memory */
+	// The tupdesc and tuplestore must be created in ecxt_per_query_memory
 	oldcontext = MemoryContextSwitchTo(rsinfo->econtext->ecxt_per_query_memory);
 
 	tupdesc = CreateTemplateTupleDesc(3);
@@ -240,7 +240,7 @@ pg_stopevents(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-/* No existing callers */
+// No existing callers
 bool
 pid_is_waiting_for_stopevent(int pid)
 {
@@ -286,13 +286,13 @@ make_process_params(void)
 
 	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
 
-	/*
-	 * MyBEEntry is only set up by pgstat, which is skipped by background
-	 * workers registered without BGWORKER_BACKEND_DATABASE_CONNECTION (such
-	 * as the orioledb recovery workers).  Fall back to the
-	 * postmaster-supplied MyBackendType global so stopevent conditions can
-	 * still filter on backendType for those workers.
-	 */
+	//
+// MyBEEntry is only set up by pgstat, which is skipped by background
+// workers registered without BGWORKER_BACKEND_DATABASE_CONNECTION (such
+// as the orioledb recovery workers).  Fall back to the
+// postmaster-supplied MyBackendType global so stopevent conditions can
+// still filter on backendType for those workers.
+//
 	bt = MyBEEntry ? MyBEEntry->st_backendType : MyBackendType;
 
 	if (bt == B_BG_WORKER)

@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * modify.c
- *		Routines for OrioleDB B-tree modification.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/modify.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// modify.c
+// Routines for OrioleDB B-tree modification.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/modify.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -34,9 +34,9 @@
 
 #define IsRelationTree(desc) (ORelOidsIsValid(desc->oids) && !IS_SYS_TREE_OIDS(desc->oids))
 
-/*
- * Context for o_btree_modify_internal()
- */
+//
+// Context for o_btree_modify_internal()
+//
 typedef struct
 {
 	OBTreeFindPageContext *pageFindContext;
@@ -102,10 +102,10 @@ static OBTreeModifyResult o_btree_normal_modify(BTreeDescr *desc,
 												BTreeLeafTupleDeletedStatus deleted,
 												BTreeModifyCallbackInfo *callbackInfo);
 
-/*
- * Perform modification of btree leaf tuple, when page is alredy located
- * and locked, all reservations are done.
- */
+//
+// Perform modification of btree leaf tuple, when page is alredy located
+// and locked, all reservations are done.
+//
 static OBTreeModifyResult
 o_btree_modify_internal(OBTreeFindPageContext *pageFindContext,
 						BTreeOperationType action,
@@ -153,7 +153,7 @@ o_btree_modify_internal(OBTreeFindPageContext *pageFindContext,
 	context.pagesAreReserved = (action != BTreeOperationDelete);
 	context.undoIsReserved = (desc->undoType != UndoLogNone);
 
-	/* Undo should be reserved for transactional operations */
+	// Undo should be reserved for transactional operations
 	Assert(OXidIsValid(opOxid) == context.undoIsReserved);
 
 retry:
@@ -182,7 +182,7 @@ retry:
 	Assert(tuphdr != NULL);
 	context.cmp = o_btree_cmp(desc, key, keyType, &curTuple, BTreeKeyLeafTuple);
 
-	/* Trees without undo cannot have row locks */
+	// Trees without undo cannot have row locks
 	if (desc->undoType == UndoLogNone)
 	{
 		context.conflictTupHdr = *tuphdr;
@@ -207,13 +207,13 @@ retry:
 
 	if (tuphdr->deleted == BTreeLeafTupleNonDeleted)
 	{
-		/* Existing (non-deleted) tuple is found */
+		// Existing (non-deleted) tuple is found
 		OBTreeModifyCallbackAction cbAction = OBTreeCallbackActionDoNothing;
 		RowLockMode prev_lock_mode = context.lockMode;
 
-		/*
-		 * We should have set conflictTupHdr in the (cmp == 0) branch above.
-		 */
+		//
+// We should have set conflictTupHdr in the (cmp == 0) branch above.
+//
 		if (callbackInfo->modifyCallback)
 		{
 			BTreeLocationHint cbHint;
@@ -289,9 +289,9 @@ retry:
 	}
 	else if (tuphdr->deleted != BTreeLeafTupleNonDeleted)
 	{
-		/*
-		 * We should have set conflictTupHdr in the (cmp == 0) branch above.
-		 */
+		//
+// We should have set conflictTupHdr in the (cmp == 0) branch above.
+//
 
 		if (action == BTreeOperationInsert && callbackInfo->modifyDeletedCallback)
 		{
@@ -322,22 +322,22 @@ retry:
 			Assert(cbAction == OBTreeCallbackActionUpdate);
 		}
 
-		/*
-		 * Deleted tuple found, we only can handle insert at this point. This
-		 * insert essentially becomes update.
-		 */
+		//
+// Deleted tuple found, we only can handle insert at this point. This
+// insert essentially becomes update.
+//
 		if (action == BTreeOperationInsert)
 		{
-			/*
-			 * There is no anything to undo for UndoLogNone trees so just
-			 * proceed with replacing while page still locked
-			 */
+			//
+// There is no anything to undo for UndoLogNone trees so just
+// proceed with replacing while page still locked
+//
 			if (!context.needsUndo && desc->undoType != UndoLogNone)
 			{
-				/*
-				 * If we don't need undo, just revert the deletion and then
-				 * continue with normal insert (with undo).
-				 */
+				//
+// If we don't need undo, just revert the deletion and then
+// continue with normal insert (with undo).
+//
 				(void) o_btree_modify_item_rollback(&context);
 				context.needsUndo = true;
 			}
@@ -405,10 +405,10 @@ wait_for_tuple(BTreeDescr *desc, OTuple tuple, OXid oxid,
 {
 	uint32		hash;
 
-	/*
-	 * Acquire the lock, if necessary (but skip it when we're requesting a
-	 * lock and already have one; avoids deadlock).
-	 */
+	//
+// Acquire the lock, if necessary (but skip it when we're requesting a
+// lock and already have one; avoids deadlock).
+//
 	if (*hwLockMode == NoLock && lockStatus == BTreeModifyNoLock)
 	{
 		hash = o_btree_hash(desc, tuple, BTreeKeyLeafTuple);
@@ -471,10 +471,10 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 			{
 				if (XACT_INFO_GET_LOCK_MODE(xactInfo) > context->lockMode)
 				{
-					/*
-					 * Upgrade our lock mode if we're going to replace our own
-					 * undo item.
-					 */
+					//
+// Upgrade our lock mode if we're going to replace our own
+// undo item.
+//
 					Assert(OXidIsValid(context->opOxid));
 					context->lockMode = XACT_INFO_GET_LOCK_MODE(xactInfo);
 					context->leafTuphdr.xactInfo = OXID_GET_XACT_INFO(context->opOxid,
@@ -488,13 +488,13 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 		{
 			CommitSeqNo csn;
 
-			/*
-			 * Test hook: parks the backend here, with the leaf-page-content
-			 * lock held, so a concurrent aborter that has stamped the
-			 * COMMITTING bit on its oxid can deadlock with our oxid_get_csn()
-			 * spin (the page-lock vs. apply_undo_stack() cycle described in
-			 * undo_xact_callback's XACT_EVENT_ABORT block).
-			 */
+			//
+// Test hook: parks the backend here, with the leaf-page-content
+// lock held, so a concurrent aborter that has stamped the
+// COMMITTING bit on its oxid can deadlock with our oxid_get_csn()
+// spin (the page-lock vs. apply_undo_stack() cycle described in
+// undo_xact_callback's XACT_EVENT_ABORT block).
+//
 			STOPEVENT(STOPEVENT_BEFORE_MODIFY_OXID_GET_CSN, NULL);
 
 			csn = oxid_get_csn(oxid, false);
@@ -503,22 +503,22 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 													 COMMITSEQNO_IS_NORMAL(csn) ||
 													 COMMITSEQNO_IS_FROZEN(csn)))
 			{
-				/*
-				 * Normally row_lock_conflicts() should have lock-only records
-				 * of committed and aborted transactions already removed from
-				 * the undo chain.  But if locker transaction commit or abort
-				 * concurrently, then retry.
-				 */
+				//
+// Normally row_lock_conflicts() should have lock-only records
+// of committed and aborted transactions already removed from
+// the undo chain.  But if locker transaction commit or abort
+// concurrently, then retry.
+//
 				return ConflictResolutionRetry;
 			}
 
 			if (COMMITSEQNO_IS_ABORTED(csn))
 			{
-				/*
-				 * Transaction changes should be undone by the transaction
-				 * owner.  But we rollback those changes ourself instead of
-				 * waiting.
-				 */
+				//
+// Transaction changes should be undone by the transaction
+// owner.  But we rollback those changes ourself instead of
+// waiting.
+//
 				START_CRIT_SECTION();
 				page_block_reads(blkno);
 				if (!page_item_rollback(desc, page, loc, true,
@@ -530,11 +530,11 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 			}
 			else if (COMMITSEQNO_IS_NORMAL(csn) || COMMITSEQNO_IS_FROZEN(csn))
 			{
-				/*
-				 * Check for serialization conflicts.
-				 *
-				 * TODO: check for such conflicts in page-level undo as well.
-				 */
+				//
+// Check for serialization conflicts.
+//
+// TODO: check for such conflicts in page-level undo as well.
+//
 				if (csn >= context->opCsn && IsolationUsesXactSnapshot() &&
 					IsRelationTree(desc))
 				{
@@ -545,10 +545,10 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 			}
 			else
 			{
-				/*
-				 * Conflicting transaction is in-progress.  If the callback is
-				 * provided, ask it what to do.  Just wait otherwise.
-				 */
+				//
+// Conflicting transaction is in-progress.  If the callback is
+// provided, ask it what to do.  Just wait otherwise.
+//
 				OBTreeWaitCallbackAction cbAction = OBTreeCallbackActionXidWait;
 				OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
 
@@ -595,17 +595,17 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 				return ConflictResolutionRetry;
 			}
 
-			/* Update tuple and header pointer after page_item_rollback() */
+			// Update tuple and header pointer after page_item_rollback()
 			BTREE_PAGE_READ_LEAF_ITEM(tuphdr, curTuple, page, loc);
 		}
 	}
 	else if (IsolationUsesXactSnapshot() && IsRelationTree(desc))
 	{
-		/*
-		 * Check for serialization conflicts.
-		 *
-		 * TODO: check for such conflicts in page-level undo as well.
-		 */
+		//
+// Check for serialization conflicts.
+//
+// TODO: check for such conflicts in page-level undo as well.
+//
 		CommitSeqNo csn = XACT_INFO_MAP_CSN(context->conflictTupHdr.xactInfo);
 
 		if (csn >= context->opCsn)
@@ -622,9 +622,9 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 		}
 	}
 
-	/*
-	 * Remove redundant row-level locks if any.
-	 */
+	//
+// Remove redundant row-level locks if any.
+//
 	if (haveRedundantRowLocks &&
 		!(context->action == BTreeOperationLock &&
 		  context->lockStatus == BTreeModifySameOrStrongerLock))
@@ -645,13 +645,13 @@ o_btree_modify_handle_conflicts(BTreeModifyInternalContext *context)
 static OBTreeModifyResult
 o_btree_modify_handle_tuple_not_found(BTreeModifyInternalContext *context)
 {
-	/*
-	 * Matching tuple is not found.
-	 *
-	 * Ideally, for IsolationUsesXactSnapshot() we should also check
-	 * page-level undo for conflicting tuples.  But it's not implemented so
-	 * far.
-	 */
+	//
+// Matching tuple is not found.
+//
+// Ideally, for IsolationUsesXactSnapshot() we should also check
+// page-level undo for conflicting tuples.  But it's not implemented so
+// far.
+//
 	if (context->action == BTreeOperationUpdate ||
 		context->action == BTreeOperationDelete ||
 		context->action == BTreeOperationLock)
@@ -724,11 +724,11 @@ o_btree_modify_insert_update(BTreeModifyInternalContext *context)
 				leafTuphdr->undoLocation |= current_command_get_undo_location();
 		}
 
-		/*
-		 * Self-created shortcut: no undo record was made.  Fire the post-undo
-		 * hook with WaitingSkUndoLoc so the table AM can install a "wait for
-		 * me" marker before this page lock drops.
-		 */
+		//
+// Self-created shortcut: no undo record was made.  Fire the post-undo
+// hook with WaitingSkUndoLoc so the table AM can install a "wait for
+// me" marker before this page lock drops.
+//
 		if (context->callbackInfo && context->callbackInfo->postUndoRecorded)
 			context->callbackInfo->postUndoRecorded(WaitingSkUndoLoc,
 													context->callbackInfo->arg);
@@ -742,7 +742,7 @@ o_btree_modify_insert_update(BTreeModifyInternalContext *context)
 	tuplen = o_btree_len(desc, context->tuple, OTupleLength);
 	Assert(tuplen <= O_BTREE_MAX_TUPLE_SIZE);
 
-	/* no more sense in that */
+	// no more sense in that
 	BTREE_PAGE_FIND_UNSET(pageFindContext, FIX_LEAF_SPLIT);
 	o_btree_insert_tuple_to_leaf(pageFindContext,
 								 context->tuple, tuplen,
@@ -768,7 +768,7 @@ o_btree_modify_add_undo_record(BTreeModifyInternalContext *context)
 
 	if (context->replace)
 	{
-		/* Make undo item and connect it with page tuple */
+		// Make undo item and connect it with page tuple
 		OTuple		curTuple;
 		BTreeLeafTuphdr *tuphdr;
 
@@ -784,7 +784,7 @@ o_btree_modify_add_undo_record(BTreeModifyInternalContext *context)
 	}
 	else
 	{
-		/* Still need the undo item to deal with transaction rollback */
+		// Still need the undo item to deal with transaction rollback
 		undoLocation = make_undo_record(desc, context->tuple, true,
 										BTreeOperationInsert, blkno,
 										O_PAGE_GET_CHANGE_COUNT(page),
@@ -796,11 +796,11 @@ o_btree_modify_add_undo_record(BTreeModifyInternalContext *context)
 		}
 	}
 
-	/*
-	 * Fire post-undo hook with the freshly created undo location, while the
-	 * leaf page is still locked.  Used by the table AM to install the
-	 * PK-applied/SK-pending marker before unlock.
-	 */
+	//
+// Fire post-undo hook with the freshly created undo location, while the
+// leaf page is still locked.  Used by the table AM to install the
+// PK-applied/SK-pending marker before unlock.
+//
 	if (context->callbackInfo && context->callbackInfo->postUndoRecorded)
 		context->callbackInfo->postUndoRecorded(undoLocation,
 												context->callbackInfo->arg);
@@ -840,17 +840,17 @@ o_btree_modify_delete(BTreeModifyInternalContext *context)
 
 		if (!stillExists)
 		{
-			/* Already deleted */
+			// Already deleted
 			unlock_release(context, true);
 
 			return OBTreeModifyResultDeleted;
 		}
 		else
 		{
-			/*
-			 * We rollback our own changes to the version existed before.
-			 * Thus, we need an undo record to modify it.
-			 */
+			//
+// We rollback our own changes to the version existed before.
+// Thus, we need an undo record to modify it.
+//
 			context->needsUndo = true;
 		}
 	}
@@ -876,11 +876,11 @@ o_btree_modify_delete(BTreeModifyInternalContext *context)
 										BTreeOperationDelete, blkno,
 										pageChangeCount, tuphdr);
 
-		/*
-		 * Fire post-undo hook with the freshly created undo location, while
-		 * the leaf page is still locked.  Used by the table AM to install the
-		 * PK-applied/SK-pending marker before unlock.
-		 */
+		//
+// Fire post-undo hook with the freshly created undo location, while
+// the leaf page is still locked.  Used by the table AM to install the
+// PK-applied/SK-pending marker before unlock.
+//
 		if (context->callbackInfo && context->callbackInfo->postUndoRecorded)
 			context->callbackInfo->postUndoRecorded(undoLocation,
 													context->callbackInfo->arg);
@@ -902,7 +902,7 @@ o_btree_modify_delete(BTreeModifyInternalContext *context)
 	else
 		tuphdr->deleted = context->leafTuphdr.deleted;
 
-	/* Bridge index deleted tuples not treated as vacated */
+	// Bridge index deleted tuples not treated as vacated
 	if (desc->type != oIndexBridge)
 		PAGE_ADD_N_VACATED(page,
 						   BTreeLeafTuphdrSize +
@@ -1041,7 +1041,7 @@ o_btree_normal_modify(BTreeDescr *desc, BTreeOperationType action,
 		params = prepare_modify_start_params(desc);
 	STOPEVENT(STOPEVENT_MODIFY_START, params);
 
-	/* No no key is separately given, use the tuple itself */
+	// No no key is separately given, use the tuple itself
 	if (key == NULL)
 	{
 		key = (Pointer) &tuple;
@@ -1187,11 +1187,11 @@ slowpath_unique_check(BTreeDescr *desc, OBTreeFindPageContext *pageFindContext,
 
 		(void) find_right_page(pageFindContext, &hikey_buf);
 
-		/*
-		 * Due to concurrent merges, some tuples might be lower than the
-		 * unique key.  So, we can't just start from the beginning, but have
-		 * to find the right position on the page.
-		 */
+		//
+// Due to concurrent merges, some tuples might be lower than the
+// unique key.  So, we can't just start from the beginning, but have
+// to find the right position on the page.
+//
 		btree_page_search(desc, p, key, BTreeKeyUniqueLowerBound,
 						  NULL, &pageFindContext->items[pageFindContext->index].locator);
 	}
@@ -1272,24 +1272,24 @@ retry:
 
 	uniqueLock = &unique_locks[o_btree_unique_hash(desc, tuple) % num_unique_locks].lock;
 
-	/*---
-	 * We can do fast path unique check if we know that the required key range
-	 * resides the single page, and we managed to take a unique lwlock
-	 * simultaneusly.
-	 *
-	 * It might seem that we don't need unique lwlock as soon as we see all the
-	 * key range in the locked page.  However, consider the following example.
-	 *
-	 * s1: Unique lwlock acquire
-	 * s1: Slow path check
-	 * Page merge
-	 * s2: Fast patch check
-	 * s2: Insert
-	 * s1: Insert
-	 *
-	 * Due to page merge, we might end up with double insert.  This even fast
-	 * path check requires unique lwlock.
-	 */
+	// ---
+// We can do fast path unique check if we know that the required key range
+// resides the single page, and we managed to take a unique lwlock
+// simultaneusly.
+//
+// It might seem that we don't need unique lwlock as soon as we see all the
+// key range in the locked page.  However, consider the following example.
+//
+// s1: Unique lwlock acquire
+// s1: Slow path check
+// Page merge
+// s2: Fast patch check
+// s2: Insert
+// s1: Insert
+//
+// Due to page merge, we might end up with double insert.  This even fast
+// path check requires unique lwlock.
+//
 	if (fastpath && LWLockConditionalAcquire(uniqueLock, LW_EXCLUSIVE))
 	{
 		OTupleXactInfo xactInfo;
@@ -1315,10 +1315,10 @@ retry:
 															xactInfo, tuphdr->undoLocation,
 															&lockMode, &cbHint, callbackInfo->arg);
 
-					/*
-					 * We could support other callback actions, but it's not
-					 * yet needed.
-					 */
+					//
+// We could support other callback actions, but it's not
+// yet needed.
+//
 					Assert(cbAction == OBTreeCallbackActionDoNothing);
 				}
 				if (checkUnique == UNIQUE_CHECK_YES)
@@ -1373,11 +1373,11 @@ retry:
 
 		if (refind)
 		{
-			/*
-			 * We've to find approprivate offset for the new tuple.  It should
-			 * be within the page, but can not match current offset, because
-			 * we've searched for BTreeUniqueMinBound.
-			 */
+			//
+// We've to find approprivate offset for the new tuple.  It should
+// be within the page, but can not match current offset, because
+// we've searched for BTreeUniqueMinBound.
+//
 			btree_page_search(desc, p, key, BTreeKeyBound,
 							  NULL, &pageFindContext.items[pageFindContext.index].locator);
 		}
@@ -1387,9 +1387,9 @@ retry:
 		OTupleXactInfo xactInfo;
 		bool		refind = false;
 
-		/*
-		 * Evade deadlock: unlock the page before taking an unique lwlock.
-		 */
+		//
+// Evade deadlock: unlock the page before taking an unique lwlock.
+//
 		unlock_page(blkno);
 
 		LWLockAcquire(uniqueLock, LW_EXCLUSIVE);
@@ -1415,10 +1415,10 @@ retry:
 															xactInfo, tuphdr->undoLocation,
 															&lockMode, &cbHint, callbackInfo->arg);
 
-					/*
-					 * We could support other callback actions, but it's not
-					 * yet needed.
-					 */
+					//
+// We could support other callback actions, but it's not
+// yet needed.
+//
 					Assert(cbAction == OBTreeCallbackActionDoNothing);
 				}
 				LWLockRelease(uniqueLock);
@@ -1561,7 +1561,7 @@ o_btree_autonomous_insert(BTreeDescr *desc, OTuple tuple)
 										   RowLockUpdate,
 										   NULL, BTreeLeafTupleNonDeleted,
 										   &nullCallbackInfo);
-			/* no version is necessary here for system trees other than OTable */
+			// no version is necessary here for system trees other than OTable
 			if (result == OBTreeModifyResultInserted)
 				o_wal_insert(desc, tuple, REPLICA_IDENTITY_DEFAULT, O_TABLE_INVALID_VERSION);
 		}
@@ -1610,7 +1610,7 @@ o_btree_autonomous_delete(BTreeDescr *desc, OTuple key, BTreeKeyType keyType,
 										   hint, BTreeLeafTupleNonDeleted,
 										   &nullCallbackInfo);
 			Assert(IS_SYS_TREE_OIDS(desc->oids));
-			/* no version is necessary here for system trees other than OTable */
+			// no version is necessary here for system trees other than OTable
 			if (result == OBTreeModifyResultDeleted)
 			{
 				if (keyType == BTreeKeyLeafTuple)

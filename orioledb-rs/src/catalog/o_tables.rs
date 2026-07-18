@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * o_tables.c
- * 		Routines for orioledb tables system tree.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_tables.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_tables.c
+// Routines for orioledb tables system tree.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_tables.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -64,11 +64,11 @@
 #include "utils/ruleutils.h"
 #include "utils/syscache.h"
 
-/*
- * Relation locks from recovery workers may conflict with PostgreSQL WAL locks
- * that leads to deadlocks. We need to have own relation locks for
- * checkpoint process to avoid this.
- */
+//
+// Relation locks from recovery workers may conflict with PostgreSQL WAL locks
+// that leads to deadlocks. We need to have own relation locks for
+// checkpoint process to avoid this.
+//
 #define CHECKPOINT_LOCK_BIT ((uint32) 1 << (32 - 1))
 
 PG_FUNCTION_INFO_V1(orioledb_table_description);
@@ -280,10 +280,10 @@ oTablesFetchCallback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
 			return OTupleFetchNotMatch;
 	}
 
-	/*
-	 * Return current tuple with unmatched key to iterator immediately to
-	 * finish the scan.
-	 */
+	//
+// Return current tuple with unmatched key to iterator immediately to
+// finish the scan.
+//
 	return OTupleFetchMatch;
 }
 
@@ -339,7 +339,7 @@ o_tables_foreach_oids(OTablesOidsCallback callback,
 		pfree(tuple.data);
 		btree_iterator_free(it);
 
-		oids.relnode += 1;		/* go to the next oid */
+		oids.relnode += 1;		// go to the next oid
 		chunk_key.oids = oids;
 		chunk_key.chunknum = 0;
 
@@ -351,9 +351,9 @@ o_tables_foreach_oids(OTablesOidsCallback callback,
 	btree_iterator_free(it);
 }
 
-/*
- * It can be much more efficient.
- */
+//
+// It can be much more efficient.
+//
 static void
 o_tables_foreach(OTablesCallback callback,
 				 OSnapshot *oSnapshot,
@@ -446,7 +446,7 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 	}
 	MemoryContextSwitchTo(old_mcxt);
 
-	/* Must get indclass the hard way */
+	// Must get indclass the hard way
 	datum = SysCacheGetAttr(INDEXRELID, index_rel->rd_indextuple,
 							Anum_pg_index_indclass, &isnull);
 	Assert(!isnull);
@@ -462,12 +462,12 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 		ix_field = &index->fields[keyno];
 		if (AttributeNumberIsValid(attnum))
 		{
-			/* Field validation performed in o_validate_index_elements */
+			// Field validation performed in o_validate_index_elements
 			ix_field->attnum = attnum - 1;
 		}
 		else
 		{
-			/* Expressional index */
+			// Expressional index
 			Node	   *indexkey;
 			HeapTuple	tuple;
 			Form_pg_type typeTup;
@@ -478,18 +478,18 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 			index_expr_elem = lnext(index_rel->rd_indexprs, index_expr_elem);
 			exprField = &index->exprfields[ix_exprfield_num++];
 
-			/*
-			 * Lookup the expression type in pg_type for the type length etc.
-			 */
+			//
+// Lookup the expression type in pg_type for the type length etc.
+//
 			field_typeid = exprType(indexkey);
 			tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(field_typeid));
 			if (!HeapTupleIsValid(tuple))
 				elog(ERROR, "cache lookup failed for type %u", field_typeid);
 			typeTup = (Form_pg_type) GETSTRUCT(tuple);
 
-			/*
-			 * Assign some of the attributes values. Leave the rest.
-			 */
+			//
+// Assign some of the attributes values. Leave the rest.
+//
 			namestrcpy(&(exprField->name),
 					   o_deparse_expression(nodeToString(indexkey),
 											o_table->oids.reloid));
@@ -505,15 +505,15 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 
 			ReleaseSysCache(tuple);
 
-			/*
-			 * Make sure the expression yields a type that's safe to store in
-			 * an index.  We need this defense because we have index opclasses
-			 * for pseudo-types such as "record", and the actually stored type
-			 * had better be safe; eg, a named composite type is okay, an
-			 * anonymous record type is not.  The test is the same as for
-			 * whether a table column is of a safe type (which is why we
-			 * needn't check for the non-expression case).
-			 */
+			//
+// Make sure the expression yields a type that's safe to store in
+// an index.  We need this defense because we have index opclasses
+// for pseudo-types such as "record", and the actually stored type
+// had better be safe; eg, a named composite type is okay, an
+// anonymous record type is not.  The test is the same as for
+// whether a table column is of a safe type (which is why we
+// needn't check for the non-expression case).
+//
 			CheckAttributeType("EXPR_FIELD",
 							   exprField->typid, exprField->collation,
 							   NIL, 0);
@@ -554,10 +554,10 @@ o_table_fill_index(OTable *o_table, OIndexNumber ix_num, Relation index_rel)
 			}
 			else
 			{
-				/*
-				 * Included columns have no collation, no opclass and no
-				 * ordering options.
-				 */
+				//
+// Included columns have no collation, no opclass and no
+// ordering options.
+//
 				ix_field->collation = InvalidOid;
 				ix_field->opclass = InvalidOid;
 				ix_field->ordering = SORTBY_DEFAULT;
@@ -786,7 +786,7 @@ o_table_tableam_create(ORelOids oids, TupleDesc tupdesc, char relpersistence,
 
 	o_table = palloc0(sizeof(OTable));
 	o_table->nfields = tupdesc->natts;
-	o_table->primary_init_nfields = o_table->nfields + 1;	/* + ctid field */
+	o_table->primary_init_nfields = o_table->nfields + 1;	// + ctid field
 	o_table->fields = palloc0(o_table->nfields * sizeof(OTableField));
 	o_table->oids = oids;
 	o_table->tablespace = tablespace;
@@ -811,10 +811,10 @@ o_table_tableam_create(ORelOids oids, TupleDesc tupdesc, char relpersistence,
 	o_table->fillfactor = fillfactor;
 	o_table->persistence = relpersistence;
 	o_table->data_version = ORIOLEDB_SYS_TREE_VERSION;
-	/* No index incarnations yet for a freshly created table. */
-	o_table->toast_ixversion = O_TABLE_INVALID_VERSION; /* uninitialized */
-	o_table->primary_ixversion = O_TABLE_INVALID_VERSION;	/* uninitialized */
-	o_table->bridge_ixversion = O_TABLE_INVALID_VERSION;	/* uninitialized */
+	// No index incarnations yet for a freshly created table.
+	o_table->toast_ixversion = O_TABLE_INVALID_VERSION; // uninitialized
+	o_table->primary_ixversion = O_TABLE_INVALID_VERSION;	// uninitialized
+	o_table->bridge_ixversion = O_TABLE_INVALID_VERSION;	// uninitialized
 	o_table->index_bridging = bridging;
 
 	for (i = 0; i < tupdesc->natts; i++)
@@ -851,22 +851,22 @@ o_tables_get_builtin_field(Oid type)
 			return &builtin_fields[i];
 		}
 	}
-	Assert(false);				/* shouldn't get there */
+	Assert(false);				// shouldn't get there
 	return NULL;
 }
 
-/*
- * We hold data of some types itself because they used inside o_tables.
- */
+//
+// We hold data of some types itself because they used inside o_tables.
+//
 void
 o_tables_tupdesc_init_builtin(TupleDesc desc, AttrNumber att_num, char *name, Oid type)
 {
 	o_table_tupdesc_init_entry(desc, att_num, name, o_tables_get_builtin_field(type));
 }
 
-/*
- * Returns tuple descriptor made from array
- */
+//
+// Returns tuple descriptor made from array
+//
 TupleDesc
 o_table_fields_make_tupdesc(OTableField *fields, int nfields)
 {
@@ -941,19 +941,19 @@ o_table_tupdesc(OTable *o_table)
 		tupdesc->tdtypeid = get_rel_type_id(o_table->oids.reloid);
 	else if (OidIsValid(o_table->oids.reloid))
 
-		/*
-		 * During recovery there is no active transaction, so we can't call
-		 * get_rel_type_id().  Set tdtypeid to the reloid directly as a proxy
-		 * to ensure it is not left as RECORDOID.  Any non-RECORDOID value is
-		 * sufficient because the sole consumer of tdtypeid in the orioledb
-		 * slot code (tts_orioledb_getsomeattrs) only checks whether it equals
-		 * RECORDOID to decide if the tuple is stored in index column order.
-		 * Table leaf tuples are always stored in table column order, so
-		 * index_order must be false; leaving tdtypeid as RECORDOID would
-		 * incorrectly flip index_order to true for tables where all columns
-		 * happen to form the primary key, causing attribute-position
-		 * scrambling and B-tree corruption on the replica.
-		 */
+		//
+// During recovery there is no active transaction, so we can't call
+// get_rel_type_id().  Set tdtypeid to the reloid directly as a proxy
+// to ensure it is not left as RECORDOID.  Any non-RECORDOID value is
+// sufficient because the sole consumer of tdtypeid in the orioledb
+// slot code (tts_orioledb_getsomeattrs) only checks whether it equals
+// RECORDOID to decide if the tuple is stored in index column order.
+// Table leaf tuples are always stored in table column order, so
+// index_order must be false; leaving tdtypeid as RECORDOID would
+// incorrectly flip index_order to true for tables where all columns
+// happen to form the primary key, causing attribute-position
+// scrambling and B-tree corruption on the replica.
+//
 		tupdesc->tdtypeid = o_table->oids.reloid;
 	return tupdesc;
 }
@@ -1003,7 +1003,7 @@ o_table_make_index_oids_keys(OTable *table, int *num)
 	keys = (OTableIndexOidsKey *) palloc(sizeof(OTableIndexOidsKey) *
 										 (table->nindices + 3));
 
-	/* ctid primary index if needed */
+	// ctid primary index if needed
 	if (table->nindices == 0 ||
 		table->indices[PrimaryIndexNumber].type != oIndexPrimary)
 	{
@@ -1039,11 +1039,11 @@ o_table_make_index_oids_keys(OTable *table, int *num)
 	return keys;
 }
 
-/*
- * Returns array of OIndexKey for each table index (including TOAST).
- *
- * Array is allocated in CurTransactionContext.
- */
+//
+// Returns array of OIndexKey for each table index (including TOAST).
+//
+// Array is allocated in CurTransactionContext.
+//
 OIndexKey *
 o_table_make_index_keys(OTable *table, int *num)
 {
@@ -1075,7 +1075,7 @@ o_table_make_index_keys(OTable *table, int *num)
 		trees_num++;
 	}
 
-	/* ctid primary index if needed */
+	// ctid primary index if needed
 	if (table->nindices == 0 ||
 		table->indices[PrimaryIndexNumber].type != oIndexPrimary)
 	{
@@ -1088,9 +1088,9 @@ o_table_make_index_keys(OTable *table, int *num)
 	return trees;
 }
 
-/*
- * Updates SYS_TREES_O_INDICES.
- */
+//
+// Updates SYS_TREES_O_INDICES.
+//
 static void
 o_tables_oids_indexes(OTable *old_table, OTable *new_table,
 					  OXid oxid, CommitSeqNo csn)
@@ -1397,13 +1397,13 @@ o_tables_add(OTable *table, OXid oxid, CommitSeqNo csn)
 	return result;
 }
 
-/*
- * Same as o_tables_get, if version not NULL find o_tables with passed version.
- *
- * If deserialization fails due to truncated toast data (missing chunks from a
- * concurrent write), retries with exponential backoff up to
- * O_DESERIALIZE_MAX_RETRIES times before reporting an error.
- */
+//
+// Same as o_tables_get, if version not NULL find o_tables with passed version.
+//
+// If deserialization fails due to truncated toast data (missing chunks from a
+// concurrent write), retries with exponential backoff up to
+// O_DESERIALIZE_MAX_RETRIES times before reporting an error.
+//
 OTable *
 o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 {
@@ -1445,7 +1445,7 @@ o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 			return oTable;
 		}
 
-		/* Truncated data — concurrent chunk write in progress, retry */
+		// Truncated data — concurrent chunk write in progress, retry
 		pfree(found_key);
 
 		if (retry >= O_DESERIALIZE_MAX_RETRIES ||
@@ -1460,25 +1460,25 @@ o_tables_get_extended(ORelOids oids, OTableFetchContext ctx)
 	}
 }
 
-/*
- * Find OTable by its oids
- */
+//
+// Find OTable by its oids
+//
 OTable *
 o_tables_get(ORelOids oids)
 {
 	return o_tables_get_extended(oids, default_table_fetch_context);
 }
 
-/*
- * Find OTable by tree oids
- */
+//
+// Find OTable by tree oids
+//
 OTable *
 o_tables_get_by_tree(ORelOids oids, OIndexType type)
 {
 	ORelOids	tableOids;
 	bool		result;
 
-	/* See if it's index oid first */
+	// See if it's index oid first
 	result = o_indices_find_table_oids(oids, type, &o_in_progress_snapshot,
 									   &tableOids);
 	if (!result)
@@ -1487,7 +1487,7 @@ o_tables_get_by_tree(ORelOids oids, OIndexType type)
 	return o_tables_get(tableOids);
 }
 
-/* Returns number of OrioleDB tables in the database */
+// Returns number of OrioleDB tables in the database
 int
 o_tables_num(Oid datoid)
 {
@@ -1551,10 +1551,10 @@ o_tables_update(OTable *table, OXid oxid, CommitSeqNo csn)
 void
 o_tables_after_update(OTable *o_table, OXid oxid, CommitSeqNo csn)
 {
-	/*
-	 * @NOTE o_indices_update(o_table, PrimaryIndexNumber, oxid, csn); moved
-	 * out from here
-	 */
+	//
+// @NOTE o_indices_update(o_table, PrimaryIndexNumber, oxid, csn); moved
+// out from here
+//
 
 	if (o_table->has_primary)
 	{
@@ -1788,7 +1788,7 @@ orioledb_table_oids(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -1877,7 +1877,7 @@ o_tables_num_callback(ORelOids oids, void *arg)
 		num_arg->result++;
 }
 
-/* No existing callers */
+// No existing callers
 OTableField *
 o_table_field_by_name(OTable *table, const char *name)
 {
@@ -1894,35 +1894,35 @@ o_table_field_by_name(OTable *table, const char *name)
 		return NULL;
 }
 
-/*
- * Copy of TupleDescInitEntry() without SysCache usage.
- */
+//
+// Copy of TupleDescInitEntry() without SysCache usage.
+//
 static void
 o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, char *name,
 						   OTableField *field)
 {
 	Form_pg_attribute att;
 
-	/*
-	 * sanity checks
-	 */
+	//
+// sanity checks
+//
 	Assert(PointerIsValid(desc));
 	Assert(att_num >= 1);
 	Assert(att_num <= desc->natts);
 	Assert(field != NULL);
 
-	/*
-	 * initialize the attribute fields
-	 */
+	//
+// initialize the attribute fields
+//
 	att = TupleDescAttr(desc, att_num - 1);
 
-	att->attrelid = 0;			/* dummy value */
+	att->attrelid = 0;			// dummy value
 
-	/*
-	 * Note: name can be NULL, because the planner doesn't always fill in
-	 * valid resname values in targetlists, particularly for resjunk
-	 * attributes. Also, do nothing if caller wants to re-use the old attname.
-	 */
+	//
+// Note: name can be NULL, because the planner doesn't always fill in
+// valid resname values in targetlists, particularly for resjunk
+// attributes. Also, do nothing if caller wants to re-use the old attname.
+//
 	if (name == NULL)
 		MemSet(NameStr(att->attname), 0, NAMEDATALEN);
 	else if (name != NameStr(att->attname))
@@ -1948,7 +1948,7 @@ o_table_tupdesc_init_entry(TupleDesc desc, AttrNumber att_num, char *name,
 	att->attislocal = true;
 	att->attinhcount = 0;
 
-	/* attacl, attoptions and attfdwoptions are not present in tupledescs */
+	// attacl, attoptions and attfdwoptions are not present in tupledescs
 	att->atttypid = field->typid;
 	att->attlen = field->typlen;
 	att->attbyval = field->byval;
@@ -2027,7 +2027,7 @@ serialize_o_table(OTable *o_table, int *size)
 		appendBinaryStringInfo(&str, (Pointer) &o_table->missing[i].am_present,
 							   sizeof(bool));
 		buf = palloc(field_size);
-		buf_start = buf;		/* copied because datumSerialize moves buf ptr */
+		buf_start = buf;		// copied because datumSerialize moves buf ptr
 		datumSerialize(o_table->missing[i].am_value,
 					   !o_table->missing[i].am_present,
 					   o_table->fields[i].byval,
@@ -2042,9 +2042,9 @@ serialize_o_table(OTable *o_table, int *size)
 	return str.data;
 }
 
-/*
- * Returns false if the data is truncated (missing toast chunks).
- */
+//
+// Returns false if the data is truncated (missing toast chunks).
+//
 static bool
 deserialize_o_table_index(OTableIndex *o_table_index, Pointer *ptr,
 						  Pointer data, Size length, uint16 data_version)
@@ -2129,11 +2129,11 @@ deserialize_o_table_index(OTableIndex *o_table_index, Pointer *ptr,
 	return true;
 }
 
-/*
- * A truncation-tolerant version of datumRestore().  Returns false if there
- * isn't enough data remaining in the buffer to read the full datum, so the
- * caller can bail out gracefully instead of crashing.
- */
+//
+// A truncation-tolerant version of datumRestore().  Returns false if there
+// isn't enough data remaining in the buffer to read the full datum, so the
+// caller can bail out gracefully instead of crashing.
+//
 static bool
 datumRestoreSafe(char **start_address, bool *isnull, Datum *result,
 				 Pointer data, Size length)
@@ -2142,14 +2142,14 @@ datumRestoreSafe(char **start_address, bool *isnull, Datum *result,
 	void	   *d;
 	char	   *ptr = *start_address;
 
-	/* Need at least sizeof(int) for the header word. */
+	// Need at least sizeof(int) for the header word.
 	if ((ptr - data) + (int) sizeof(int) > length)
 		return false;
 
 	memcpy(&header, ptr, sizeof(int));
 	ptr += sizeof(int);
 
-	/* NULL datum. */
+	// NULL datum.
 	if (header == -2)
 	{
 		*isnull = true;
@@ -2160,7 +2160,7 @@ datumRestoreSafe(char **start_address, bool *isnull, Datum *result,
 
 	*isnull = false;
 
-	/* Pass-by-value datum. */
+	// Pass-by-value datum.
 	if (header == -1)
 	{
 		Datum		val;
@@ -2175,7 +2175,7 @@ datumRestoreSafe(char **start_address, bool *isnull, Datum *result,
 		return true;
 	}
 
-	/* Pass-by-reference: header is the byte count. */
+	// Pass-by-reference: header is the byte count.
 	Assert(header > 0);
 	if ((ptr - data) + header > length)
 		return false;
@@ -2188,10 +2188,10 @@ datumRestoreSafe(char **start_address, bool *isnull, Datum *result,
 	return true;
 }
 
-/*
- * Deserialize OTable from toast data.  Returns NULL if the data is truncated
- * (e.g. due to missing toast chunks from a concurrent write race condition).
- */
+//
+// Deserialize OTable from toast data.  Returns NULL if the data is truncated
+// (e.g. due to missing toast chunks from a concurrent write race condition).
+//
 OTable *
 deserialize_o_table(Pointer data, Size length)
 {
@@ -2294,13 +2294,13 @@ o_tables_drop_columns_with_type_callback(OTable *o_table, void *arg)
 	bool		updated = false;
 	OTablesDropAllWithTypeArg *drop_arg = (OTablesDropAllWithTypeArg *) arg;
 
-	/* Ignore search for rows of own class in table and base types */
+	// Ignore search for rows of own class in table and base types
 	if (drop_arg->type_data->typtype == TYPTYPE_BASE ||
 		(drop_arg->type_data->typtype == TYPTYPE_COMPOSITE &&
 		 drop_arg->type_data->typrelid == o_table->oids.reloid))
 		return;
 
-	/* Drop columns containing type */
+	// Drop columns containing type
 	for (i = 0; i < o_table->nfields; i++)
 	{
 		OTableField *o_field = &o_table->fields[i];
@@ -2320,9 +2320,9 @@ o_tables_drop_columns_with_type_callback(OTable *o_table, void *arg)
 	}
 }
 
-/*
- * Drops all columns of a specific type
- */
+//
+// Drops all columns of a specific type
+//
 void
 o_tables_drop_columns_by_type(OXid oxid, CommitSeqNo csn, Oid type_oid)
 {
@@ -2363,7 +2363,7 @@ o_table_fill_oids(OTable *oTable, Relation rel, const RelFileNode *newrnode, boo
 	}
 	else
 	{
-		/* Parent partition can't have toast_oids */
+		// Parent partition can't have toast_oids
 		ORelOidsSetInvalid(oTable->toast_oids);
 	}
 	if (oTable->index_bridging)
@@ -2376,11 +2376,11 @@ o_table_fill_oids(OTable *oTable, Relation rel, const RelFileNode *newrnode, boo
 
 	for (i = 0; i < oTable->nindices; i++)
 	{
-		/*
-		 * There is a memmove in drop_primary_index, and also when dropping
-		 * pkey for partition tables it calls this function after removing
-		 * index from system catalogs
-		 */
+		//
+// There is a memmove in drop_primary_index, and also when dropping
+// pkey for partition tables it calls this function after removing
+// index from system catalogs
+//
 		if (!drop_pkey || oTable->indices[i].type != oIndexPrimary)
 		{
 			indexRel = relation_open(oTable->indices[i].oids.reloid, AccessShareLock);
@@ -2400,7 +2400,7 @@ o_tables_meta_lock(void)
 		Assert(!LWLockHeldByMe(&checkpoint_state->oTablesMetaLock));
 		LWLockAcquire(&checkpoint_state->oTablesMetaLock, LW_SHARED);
 
-		/* Make sure we've acquired oxid */
+		// Make sure we've acquired oxid
 		(void) get_current_oxid();
 		add_o_tables_meta_lock_wal_record();
 	}
@@ -2425,10 +2425,10 @@ o_tables_meta_lock_no_wal(void)
 	}
 }
 
-/*
- * Release oTablesMetaLock and WAL-log the information required to replay
- * DDL changes.
- */
+//
+// Release oTablesMetaLock and WAL-log the information required to replay
+// DDL changes.
+//
 void
 o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 {

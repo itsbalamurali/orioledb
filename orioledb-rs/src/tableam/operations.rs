@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * operations.c
- *		Implementation of table-level operations
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/operations.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// operations.c
+// Implementation of table-level operations
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/operations.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -57,23 +57,23 @@ static void set_pending_sk_marker_from_modify_arg(UndoLocation pkUndoLoc,
 												  void *arg);
 static int	o_exclusion_cmp(OIndexDescr *id, OBTreeKeyBound *key1, OTuple *tuple2);
 
-/*
- * Set ODBProcData.pendingSkUndoLoc to mark the PK-applied/SK-pending
- * window so that any checkpointer scan in between sees this row's
- * undo location.  Fires STOPEVENT_SK_MODIFY_PENDING immediately after,
- * which deterministic tests use to interleave a CHECKPOINT in the
- * window.  No-op when the PK btree does not produce a regular undo
- * entry (toast/sys trees, in-progress reads, etc.).
- *
- * Used both by the normal DML path and by recovery workers replaying
- * WAL on the replica, so a restartpoint observes the same window.
- */
-/*
- * Convenience postUndoRecorded callbacks that extract the OTableDescr from
- * whatever arg shape the caller is already passing to the other callbacks
- * in BTreeModifyCallbackInfo.  Each call site picks the variant that
- * matches its `arg`.
- */
+//
+// Set ODBProcData.pendingSkUndoLoc to mark the PK-applied/SK-pending
+// window so that any checkpointer scan in between sees this row's
+// undo location.  Fires STOPEVENT_SK_MODIFY_PENDING immediately after,
+// which deterministic tests use to interleave a CHECKPOINT in the
+// window.  No-op when the PK btree does not produce a regular undo
+// entry (toast/sys trees, in-progress reads, etc.).
+//
+// Used both by the normal DML path and by recovery workers replaying
+// WAL on the replica, so a restartpoint observes the same window.
+//
+//
+// Convenience postUndoRecorded callbacks that extract the OTableDescr from
+// whatever arg shape the caller is already passing to the other callbacks
+// in BTreeModifyCallbackInfo.  Each call site picks the variant that
+// matches its `arg`.
+//
 static void
 set_pending_sk_marker_from_slot(UndoLocation pkUndoLoc, void *arg)
 {
@@ -92,34 +92,34 @@ set_pending_sk_marker(OTableDescr *descr, UndoLocation pkUndoLoc)
 	if (GET_PRIMARY(descr)->desc.undoType != UndoLogRegular)
 		return;
 
-	/*
-	 * No secondary index, no PK/SK desynchronisation risk -- skip the marker
-	 * entirely.  This also avoids leaking a WaitingSkUndoLoc sentinel from
-	 * code paths that call table_tuple_insert() without later invoking
-	 * table_tuple_complete_modification() (CREATE TABLE AS, REFRESH MAT VIEW,
-	 * COPY into a fresh table without SK, ...).
-	 */
+	//
+// No secondary index, no PK/SK desynchronisation risk -- skip the marker
+// entirely.  This also avoids leaking a WaitingSkUndoLoc sentinel from
+// code paths that call table_tuple_insert() without later invoking
+// table_tuple_complete_modification() (CREATE TABLE AS, REFRESH MAT VIEW,
+// COPY into a fresh table without SK, ...).
+//
 	if (descr->nIndices < 2)
 		return;
 
-	/*
-	 * Two acceptable inputs: a real undo location (regular path) or the
-	 * WaitingSkUndoLoc sentinel that the PK btree_modify produced for a
-	 * self-created table.  Anything else means the PK modification didn't
-	 * happen or didn't produce trackable state.
-	 */
+	//
+// Two acceptable inputs: a real undo location (regular path) or the
+// WaitingSkUndoLoc sentinel that the PK btree_modify produced for a
+// self-created table.  Anything else means the PK modification didn't
+// happen or didn't produce trackable state.
+//
 	if (!UndoLocationIsValid(pkUndoLoc) && pkUndoLoc != WaitingSkUndoLoc)
 		return;
 
 	pg_atomic_write_u64(&GET_CUR_PROCDATA()->pendingSkUndoLoc, pkUndoLoc);
 }
 
-/*
- * Fire STOPEVENT_SK_MODIFY_PENDING after o_btree_modify has returned, so
- * deterministic tests can park here OUTSIDE any page lock.  No-op when the
- * marker was not actually installed for this proc (e.g. PK btree had no
- * undo, table has no SK, or the modify did not happen).
- */
+//
+// Fire STOPEVENT_SK_MODIFY_PENDING after o_btree_modify has returned, so
+// deterministic tests can park here OUTSIDE any page lock.  No-op when the
+// marker was not actually installed for this proc (e.g. PK btree had no
+// undo, table has no SK, or the modify did not happen).
+//
 void
 fire_sk_modify_pending_stopevent(OTableDescr *descr)
 {
@@ -260,14 +260,14 @@ static inline bool is_keys_eq(OIndexDescr *id, OBTreeKeyBound *k1, OBTreeKeyBoun
 static void o_report_duplicate(Relation rel, OIndexDescr *id,
 							   TupleTableSlot *slot);
 
-/*
- * If we're inside a logical replication apply (or tablesync) worker, bump
- * pg_stat_subscription_stats.confl_* the same way upstream's
- * CheckAndReportConflict path does for heap tables.  Without this the
- * counter stays at 0 because orioledb's tuple_insert raises the unique
- * violation directly, bypassing ExecInsertIndexTuples and
- * CheckAndReportConflict.
- */
+//
+// If we're inside a logical replication apply (or tablesync) worker, bump
+// pg_stat_subscription_stats.confl_* the same way upstream's
+// CheckAndReportConflict path does for heap tables.  Without this the
+// counter stays at 0 because orioledb's tuple_insert raises the unique
+// violation directly, bypassing ExecInsertIndexTuples and
+// CheckAndReportConflict.
+//
 #if PG_VERSION_NUM >= 180000
 static inline void
 o_report_apply_conflict(ConflictType type)
@@ -397,10 +397,10 @@ delete_old_bridge_index_ctid(OTableDescr *descr, Relation relation,
 		keyTuple.formatFlags = O_TUPLE_FLAGS_FIXED_FORMAT;
 		keyTuple.data = (Pointer) &bridge_oslot->bridge_ctid;
 
-		/*
-		 * o_wal_delete_key can be used as long as bridge index can't have
-		 * replica identity
-		 */
+		//
+// o_wal_delete_key can be used as long as bridge index can't have
+// replica identity
+//
 		o_wal_delete_key(&descr->bridge->desc, keyTuple, true, descr->version);
 		flush_local_wal(false, false);
 	}
@@ -441,11 +441,11 @@ o_tbl_insert(OTableDescr *descr, Relation relation,
 		slot = descr->newTuple;
 	}
 
-	/*
-	 * Wire .arg only after the slot may have been swapped to descr->newTuple
-	 * above -- both o_insert_callback and the post-undo hook read
-	 * ((OTableSlot *) arg)->descr, which is only valid on an orioledb slot.
-	 */
+	//
+// Wire .arg only after the slot may have been swapped to descr->newTuple
+// above -- both o_insert_callback and the post-undo hook read
+// ((OTableSlot *) arg)->descr, which is only valid on an orioledb slot.
+//
 	callbackInfo.arg = slot;
 
 	if (GET_PRIMARY(descr)->primaryIsCtid)
@@ -471,12 +471,12 @@ o_tbl_insert(OTableDescr *descr, Relation relation,
 									   oxid, csn, &callbackInfo,
 									   UNIQUE_CHECK_YES) == OBTreeModifyResultInserted);
 
-	/*
-	 * The marker (if any) was already installed under page lock by the
-	 * postUndoRecorded hook; here we just fire the stopevent outside of any
-	 * page lock so deterministic tests can park here without blocking
-	 * concurrent backends on the same leaf.
-	 */
+	//
+// The marker (if any) was already installed under page lock by the
+// postUndoRecorded hook; here we just fire the stopevent outside of any
+// page lock so deterministic tests can park here without blocking
+// concurrent backends on the same leaf.
+//
 	fire_sk_modify_pending_stopevent(descr);
 	if (!mres.success)
 	{
@@ -494,7 +494,7 @@ o_tbl_insert(OTableDescr *descr, Relation relation,
 
 	o_toast_insert_values(relation, descr, slot, oxid, csn);
 
-	/* Tuple might be changed in the callback */
+	// Tuple might be changed in the callback
 	tup = tts_orioledb_form_tuple(slot, descr);
 
 	if (primary->desc.storageType == BTreeStoragePersistence)
@@ -503,11 +503,11 @@ o_tbl_insert(OTableDescr *descr, Relation relation,
 	return slot;
 }
 
-/*
- * Comparator for qsort_arg'ing the permutation array idx[] used by
- * o_tbl_multi_insert when input keys are not monotone.  Sorts indices
- * by the key bound they refer to.
- */
+//
+// Comparator for qsort_arg'ing the permutation array idx[] used by
+// o_tbl_multi_insert when input keys are not monotone.  Sorts indices
+// by the key bound they refer to.
+//
 typedef struct MultiInsertSortCtx
 {
 	BTreeDescr *desc;
@@ -526,39 +526,39 @@ multi_insert_sort_cmp(const void *a, const void *b, void *arg)
 					   (Pointer) &cx->keys[ib], BTreeKeyBound);
 }
 
-/*
- * Multi-row insert with same-leaf batching for the primary index.
- *
- * Phase 1: per-slot primary tuple, key bound, ctid + bridge ctid, in-row
- *          TOAST.
- *
- * Phase 2: optimistically assume keys[] are monotone and just verify with
- *          an O(n) scan; the common cases (CTID-PK by construction,
- *          ordered explicit-PK COPY) hit this fast path and reuse the
- *          original arrays in place.  Only if the check fails do we fall
- *          back to building an idx[] permutation, qsort_arg-ing by key,
- *          and materializing sorted views of tuples / tuplens / keyptrs /
- *          cb_args.  The caller's slots[] stays in arrival order so
- *          copyfrom.c's linenos[] indexing remains valid.  Sorting is
- *          required because the leaf probe detects "key past this leaf's
- *          hikey" but not "key before this leaf's lokey", so non-monotone
- *          input could corrupt downlinks.
- *
- * Phase 3: stream sorted keys through primary leaves, holding each leaf's
- *          lwlock for as many adjacent keys as fit
- *          (o_btree_multi_insert_item).  Each iteration tops up row-undo
- *          for the upcoming batch, capped at 2 * O_MAX_UNDO_RECORD_SIZE
- *          so max_procs concurrent multi_inserts can't outrun the row
- *          buffer; larger inputs split across iterations.  HikeyCrossed
- *          re-finds the next leaf; NoFit / Duplicate slow-paths one row
- *          via o_tbl_index_insert and resumes.
- *
- * Phase 4: per-slot TOAST values insert + WAL.
- *
- * Slots that aren't already orioledb-typed share a single descr->newTuple
- * scratch slot and can't be batched -- in that case fall back to per-row
- * o_tbl_insert before doing any work.
- */
+//
+// Multi-row insert with same-leaf batching for the primary index.
+//
+// Phase 1: per-slot primary tuple, key bound, ctid + bridge ctid, in-row
+// TOAST.
+//
+// Phase 2: optimistically assume keys[] are monotone and just verify with
+// an O(n) scan; the common cases (CTID-PK by construction,
+// ordered explicit-PK COPY) hit this fast path and reuse the
+// original arrays in place.  Only if the check fails do we fall
+// back to building an idx[] permutation, qsort_arg-ing by key,
+// and materializing sorted views of tuples / tuplens / keyptrs /
+// cb_args.  The caller's slots[] stays in arrival order so
+// copyfrom.c's linenos[] indexing remains valid.  Sorting is
+// required because the leaf probe detects "key past this leaf's
+// hikey" but not "key before this leaf's lokey", so non-monotone
+// input could corrupt downlinks.
+//
+// Phase 3: stream sorted keys through primary leaves, holding each leaf's
+// lwlock for as many adjacent keys as fit
+// (o_btree_multi_insert_item).  Each iteration tops up row-undo
+// for the upcoming batch, capped at 2 * O_MAX_UNDO_RECORD_SIZE
+// so max_procs concurrent multi_inserts can't outrun the row
+// buffer; larger inputs split across iterations.  HikeyCrossed
+// re-finds the next leaf; NoFit / Duplicate slow-paths one row
+// via o_tbl_index_insert and resumes.
+//
+// Phase 4: per-slot TOAST values insert + WAL.
+//
+// Slots that aren't already orioledb-typed share a single descr->newTuple
+// scratch slot and can't be batched -- in that case fall back to per-row
+// o_tbl_insert before doing any work.
+//
 void
 o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 				   TupleTableSlot **slots, int ntuples,
@@ -588,10 +588,10 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 
 	o_btree_load_shmem(pdesc);
 
-	/*
-	 * Non-orioledb slots share descr->newTuple; can't hold N independent
-	 * pre-formed tuples across Phase 3.  Fall back to per-row.
-	 */
+	//
+// Non-orioledb slots share descr->newTuple; can't hold N independent
+// pre-formed tuples across Phase 3.  Fall back to per-row.
+//
 	for (i = 0; i < ntuples; i++)
 	{
 		TupleTableSlot *slot = slots[i];
@@ -611,7 +611,7 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 	keys = (OBTreeKeyBound *) palloc(sizeof(OBTreeKeyBound) * ntuples);
 	keyptrs = (Pointer *) palloc(sizeof(Pointer) * ntuples);
 
-	/* Phase 1: per-slot prep (ctid, bridge, toast, form, key bound). */
+	// Phase 1: per-slot prep (ctid, bridge, toast, form, key bound).
 	for (i = 0; i < ntuples; i++)
 	{
 		TupleTableSlot *slot = slots[i];
@@ -637,22 +637,22 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 		keyptrs[i] = (Pointer) &keys[i];
 	}
 
-	/*
-	 * Phase 2: the batch helper assumes keys[] ascend (its probe detects
-	 * "past hikey" but not "before lokey" -- lokey lives in the parent, not
-	 * the leaf, so a key < lokey would silently corrupt the downlink
-	 * invariant).  CTID-PK input is monotone by construction (Phase 1's
-	 * btree_ctid_get_and_inc); explicit-PK COPY may arrive unsorted.
-	 *
-	 * Optimistically assume monotone and just verify with an O(n) scan; the
-	 * common cases pass and Phase 3 consumes the original arrays in place. On
-	 * the first out-of-order pair fall back to sorting: build an idx[]
-	 * permutation, qsort it by key, and materialise sorted views of the
-	 * parallel arrays.  slots[] itself stays in arrival order so the caller's
-	 * linenos[] indexing (copyfrom.c) remains correct; the sorted view's
-	 * cb_args[] and the post-insert bookkeeping resolve back to the original
-	 * slot via idx[].
-	 */
+	//
+// Phase 2: the batch helper assumes keys[] ascend (its probe detects
+// "past hikey" but not "before lokey" -- lokey lives in the parent, not
+// the leaf, so a key < lokey would silently corrupt the downlink
+// invariant).  CTID-PK input is monotone by construction (Phase 1's
+// btree_ctid_get_and_inc); explicit-PK COPY may arrive unsorted.
+//
+// Optimistically assume monotone and just verify with an O(n) scan; the
+// common cases pass and Phase 3 consumes the original arrays in place. On
+// the first out-of-order pair fall back to sorting: build an idx[]
+// permutation, qsort it by key, and materialise sorted views of the
+// parallel arrays.  slots[] itself stays in arrival order so the caller's
+// linenos[] indexing (copyfrom.c) remains correct; the sorted view's
+// cb_args[] and the post-insert bookkeeping resolve back to the original
+// slot via idx[].
+//
 	{
 		OTuple	   *use_tuples = tuples;
 		LocationIndex *use_tuplens = tuplens;
@@ -702,7 +702,7 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 			use_cb_args = sorted_cb_args;
 		}
 
-		/* Phase 3: drain into primary leaves. */
+		// Phase 3: drain into primary leaves.
 		init_page_find_context(&ctx, pdesc, COMMITSEQNO_INPROGRESS,
 							   BTREE_PAGE_FIND_MODIFY | BTREE_PAGE_FIND_FIX_LEAF_SPLIT);
 
@@ -722,13 +722,13 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 				Size		need = MAXIMUM_ALIGNOF;
 				Size		maxrow = 0;
 
-				/*
-				 * Bound the batch by the per-backend row-undo share the
-				 * circular buffer is sized for (see undo_shmem_needs); larger
-				 * inputs are processed in successive chunks.  The trailing
-				 * maxrow slot absorbs the one extra `size` that
-				 * get_undo_record may consume on a buffer-wrap retry.
-				 */
+				//
+// Bound the batch by the per-backend row-undo share the
+// circular buffer is sized for (see undo_shmem_needs); larger
+// inputs are processed in successive chunks.  The trailing
+// maxrow slot absorbs the one extra `size` that
+// get_undo_record may consume on a buffer-wrap retry.
+//
 				for (k = 0; k < remaining; k++)
 				{
 					Size		one = MAXALIGN(sizeof(BTreeModifyUndoStackItem) + use_tuplens[i + k]);
@@ -769,21 +769,21 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 			if (i >= ntuples)
 				break;
 
-			/*
-			 * HikeyCrossed -> re-find the next leaf; Fits with i < ntuples
-			 * means the helper exited because the per-batch undo cap was
-			 * reached, not because of a bail condition -- just re-reserve and
-			 * continue.  Slow path runs only on NoFit / Duplicate.
-			 */
+			//
+// HikeyCrossed -> re-find the next leaf; Fits with i < ntuples
+// means the helper exited because the per-batch undo cap was
+// reached, not because of a bail condition -- just re-reserve and
+// continue.  Slow path runs only on NoFit / Duplicate.
+//
 			if (result == BTreeLeafProbeHikeyCrossed ||
 				result == BTreeLeafProbeFits)
 				continue;
 
-			/*
-			 * Slow path for one item.  Resolve back to the original slot so
-			 * o_report_duplicate and the post-undo callback see the row the
-			 * caller submitted, not the sorted-position alias.
-			 */
+			//
+// Slow path for one item.  Resolve back to the original slot so
+// o_report_duplicate and the post-undo callback see the row the
+// caller submitted, not the sorted-position alias.
+//
 			orig = idx ? idx[i] : i;
 			callbackInfo.arg = slots[orig];
 			if (o_tbl_index_insert(descr, primary, &tuples[orig], slots[orig],
@@ -802,15 +802,15 @@ o_tbl_multi_insert(OTableDescr *descr, Relation relation,
 		}
 	}
 
-	/*
-	 * Release any reservation still held (idempotent if the last iteration
-	 * slow-pathed and the modify already released).
-	 */
+	//
+// Release any reservation still held (idempotent if the last iteration
+// slow-pathed and the modify already released).
+//
 	if (pdesc->undoType != UndoLogNone)
 		release_undo_size(pdesc->undoType);
 	ppool_release_reserved(pdesc->ppool, PPOOL_RESERVE_INSERT_MASK);
 
-	/* Phase 4: per-slot TOAST values + WAL. */
+	// Phase 4: per-slot TOAST values + WAL.
 	for (i = 0; i < ntuples; i++)
 	{
 		TupleTableSlot *slot = slots[i];
@@ -847,7 +847,7 @@ tuple_lock_mode_to_row_lock_mode(LockTupleMode mode)
 			elog(ERROR, "Unknown lock mode: %u", mode);
 			break;
 	}
-	return RowLockUpdate;		/* keep compiler quiet */
+	return RowLockUpdate;		// keep compiler quiet
 }
 
 OBTreeModifyResult
@@ -973,7 +973,7 @@ o_exclusion_cmp(OIndexDescr *id, OBTreeKeyBound *key1, OTuple *tuple2)
 	tupdesc = id->leafTupdesc;
 	spec = &id->leafSpec;
 
-	Assert(id->nKeyFields > 0); /* for clang-analyzer */
+	Assert(id->nKeyFields > 0); // for clang-analyzer
 	for (i = 0; i < id->nKeyFields; i++)
 	{
 		uint8		flags = key1->keys[i].flags;
@@ -1004,7 +1004,7 @@ exclusion_fill_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bou
 	slot_getsomeattrs(slot, idx->maxTableAttnum - ctid_off);
 
 	bound->nkeys = idx->nonLeafTupdesc->natts;
-	Assert(bound->nkeys > 0);	/* for clang-analyzer */
+	Assert(bound->nkeys > 0);	// for clang-analyzer
 	for (i = 0; i < bound->nkeys; i++)
 	{
 		Datum		value;
@@ -1203,15 +1203,15 @@ o_tbl_insert_with_arbiter(Relation rel,
 					TransactionId xmin;
 					bool		isnull;
 
-					/* Determine lock mode to use */
+					// Determine lock mode to use
 					lockmode = ExecUpdateLockMode(estate, resultRelInfo);
 
-					/*
-					 * Lock tuple for update.  Don't follow updates when tuple
-					 * cannot be locked without doing so.  A row locking
-					 * conflict here means our previous conclusion that the
-					 * tuple is conclusively committed is not true anymore.
-					 */
+					//
+// Lock tuple for update.  Don't follow updates when tuple
+// cannot be locked without doing so.  A row locking
+// conflict here means our previous conclusion that the
+// tuple is conclusively committed is not true anymore.
+//
 					test = table_tuple_lock(rel, conflictRowid,
 											estate->es_snapshot,
 											lockedSlot, estate->es_output_cid,
@@ -1220,31 +1220,31 @@ o_tbl_insert_with_arbiter(Relation rel,
 					switch (test)
 					{
 						case TM_Ok:
-							/* success! */
+							// success!
 							break;
 
 						case TM_Invisible:
 
-							/*
-							 * This can occur when a just inserted tuple is
-							 * updated again in the same command. E.g. because
-							 * multiple rows with the same conflicting key
-							 * values are inserted.
-							 *
-							 * This is somewhat similar to the ExecUpdate()
-							 * TM_SelfModified case.  We do not want to
-							 * proceed because it would lead to the same row
-							 * being updated a second time in some unspecified
-							 * order, and in contrast to plain UPDATEs there's
-							 * no historical behavior to break.
-							 *
-							 * It is the user's responsibility to prevent this
-							 * situation from occurring.  These problems are
-							 * why the SQL standard similarly specifies that
-							 * for SQL MERGE, an exception must be raised in
-							 * the event of an attempt to update the same row
-							 * twice.
-							 */
+							//
+// This can occur when a just inserted tuple is
+// updated again in the same command. E.g. because
+// multiple rows with the same conflicting key
+// values are inserted.
+//
+// This is somewhat similar to the ExecUpdate()
+// TM_SelfModified case.  We do not want to
+// proceed because it would lead to the same row
+// being updated a second time in some unspecified
+// order, and in contrast to plain UPDATEs there's
+// no historical behavior to break.
+//
+// It is the user's responsibility to prevent this
+// situation from occurring.  These problems are
+// why the SQL standard similarly specifies that
+// for SQL MERGE, an exception must be raised in
+// the event of an attempt to update the same row
+// twice.
+//
 							xminDatum = slot_getsysattr(lockedSlot,
 														MinTransactionIdAttributeNumber,
 														&isnull);
@@ -1254,23 +1254,23 @@ o_tbl_insert_with_arbiter(Relation rel,
 							if (TransactionIdIsCurrentTransactionId(xmin))
 								ereport(ERROR,
 										(errcode(ERRCODE_CARDINALITY_VIOLATION),
-								/* translator: %s is a SQL command name */
+								// translator: %s is a SQL command name
 										 errmsg("%s command cannot affect row a second time",
 												"ON CONFLICT DO UPDATE"),
 										 errhint("Ensure that no rows proposed for insertion within the same command have duplicate constrained values.")));
 
-							/* This shouldn't happen */
+							// This shouldn't happen
 							elog(ERROR, "attempted to lock invisible tuple");
 							break;
 
 						case TM_SelfModified:
 
-							/*
-							 * This state should never be reached. As a dirty
-							 * snapshot is used to find conflicting tuples,
-							 * speculative insertion wouldn't have seen this
-							 * row to conflict with.
-							 */
+							//
+// This state should never be reached. As a dirty
+// snapshot is used to find conflicting tuples,
+// speculative insertion wouldn't have seen this
+// row to conflict with.
+//
 							elog(ERROR, "unexpected self-updated tuple");
 							break;
 
@@ -1280,24 +1280,24 @@ o_tbl_insert_with_arbiter(Relation rel,
 										(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 										 errmsg("could not serialize access due to concurrent update")));
 
-							/*
-							 * As long as we don't support an UPDATE of INSERT
-							 * ON CONFLICT for a partitioned table we
-							 * shouldn't reach to a case where tuple to be
-							 * lock is moved to another partition due to
-							 * concurrent update of the partition key.
-							 */
+							//
+// As long as we don't support an UPDATE of INSERT
+// ON CONFLICT for a partitioned table we
+// shouldn't reach to a case where tuple to be
+// lock is moved to another partition due to
+// concurrent update of the partition key.
+//
 							Assert(!ItemPointerIndicatesMovedPartitions(&tmfd.ctid));
 
-							/*
-							 * Tell caller to try again from the very start.
-							 *
-							 * It does not make sense to use the usual
-							 * EvalPlanQual() style loop here, as the new
-							 * version of the row might not conflict anymore,
-							 * or the conflicting tuple has actually been
-							 * deleted.
-							 */
+							//
+// Tell caller to try again from the very start.
+//
+// It does not make sense to use the usual
+// EvalPlanQual() style loop here, as the new
+// version of the row might not conflict anymore,
+// or the conflicting tuple has actually been
+// deleted.
+//
 							ExecClearTuple(lockedSlot);
 							return NULL;
 
@@ -1307,7 +1307,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 										(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 										 errmsg("could not serialize access due to concurrent delete")));
 
-							/* see TM_Updated case */
+							// see TM_Updated case
 							Assert(!ItemPointerIndicatesMovedPartitions(&tmfd.ctid));
 							ExecClearTuple(lockedSlot);
 							return NULL;
@@ -1316,32 +1316,32 @@ o_tbl_insert_with_arbiter(Relation rel,
 							elog(ERROR, "unrecognized table_tuple_lock status: %u", test);
 					}
 
-					/* Success, the tuple is locked. */
+					// Success, the tuple is locked.
 
-					/*
-					 * Verify that the tuple is visible to our MVCC snapshot
-					 * if the current isolation level mandates that.
-					 *
-					 * It's not sufficient to rely on the check within
-					 * ExecUpdate() as e.g. CONFLICT ... WHERE clause may
-					 * prevent us from reaching that.
-					 *
-					 * This means we only ever continue when a new command in
-					 * the current transaction could see the row, even though
-					 * in READ COMMITTED mode the tuple will not be visible
-					 * according to the current statement's snapshot.  This is
-					 * in line with the way UPDATE deals with newer tuple
-					 * versions.
-					 */
-					/* ExecCheckTupleVisible(estate, rel, lockedSlot); */
+					//
+// Verify that the tuple is visible to our MVCC snapshot
+// if the current isolation level mandates that.
+//
+// It's not sufficient to rely on the check within
+// ExecUpdate() as e.g. CONFLICT ... WHERE clause may
+// prevent us from reaching that.
+//
+// This means we only ever continue when a new command in
+// the current transaction could see the row, even though
+// in READ COMMITTED mode the tuple will not be visible
+// according to the current statement's snapshot.  This is
+// in line with the way UPDATE deals with newer tuple
+// versions.
+//
+					// ExecCheckTupleVisible(estate, rel, lockedSlot);
 					return NULL;
 				}
 				else
 				{
-					/*
-					 * ExecCheckTIDVisible(estate, rel, &conflictTid,
-					 * tempSlot);
-					 */
+					//
+// ExecCheckTIDVisible(estate, rel, &conflictTid,
+// tempSlot);
+//
 					return NULL;
 				}
 			}
@@ -1421,14 +1421,14 @@ o_tbl_insert_with_arbiter(Relation rel,
 			}
 		}
 
-		/* Successful insert case */
+		// Successful insert case
 		if (success)
 		{
 			OIndexDescr *primary = GET_PRIMARY(descr);
 
 			pgstat_count_heap_insert(rel, 1);
 
-			/* all inserts are OK */
+			// all inserts are OK
 			tts_orioledb_insert_toast_values(slot, descr, oxid, csn);
 
 			tup = tts_orioledb_form_tuple(slot, descr);
@@ -1438,7 +1438,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 			return slot;
 		}
 
-		/* Conflict on non-arbiter index case */
+		// Conflict on non-arbiter index case
 		if (!success && !specConflict && !OXidIsValid(ioc_arg.conflictOxid) &&
 			arbiterIndexes != NIL &&
 			!list_member_oid(arbiterIndexes, descr->indices[failedIndexNumber]->oids.reloid))
@@ -1446,7 +1446,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 			o_report_duplicate(rel, descr->indices[failedIndexNumber], slot);
 		}
 
-		/* Successful lock case */
+		// Successful lock case
 		if (!specConflict && ioc_arg.conflictIxNum == PrimaryIndexNumber)
 		{
 			Assert(failedIndexNumber == PrimaryIndexNumber);
@@ -1462,7 +1462,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_CARDINALITY_VIOLATION),
-					/* translator: %s is a SQL command name */
+					// translator: %s is a SQL command name
 							 errmsg("%s command cannot affect row a second time",
 									"ON CONFLICT DO UPDATE"),
 							 errhint("Ensure that no rows proposed for insertion within the same command have duplicate constrained values.")));
@@ -1472,15 +1472,15 @@ o_tbl_insert_with_arbiter(Relation rel,
 			return NULL;
 		}
 
-		/* Failed to insert.  Rollback the changes we managed to make. */
+		// Failed to insert.  Rollback the changes we managed to make.
 		release_undo_size(UndoLogRegular);
 		apply_undo_stack(UndoLogRegular, oxid, &undoStackLocations, true);
 		oxid_notify_all();
 
-		/* Conflish with running oxid case */
+		// Conflish with running oxid case
 		if (OXidIsValid(ioc_arg.conflictOxid))
 		{
-			/* helps avoid deadlocks */
+			// helps avoid deadlocks
 			(void) wait_for_oxid(ioc_arg.conflictOxid, false);
 			continue;
 		}
@@ -1505,11 +1505,11 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 			if (!specConflict)
 			{
-				/*
-				 * HACK: we save index tuple to slot during
-				 * o_insert_with_arbiter_modify_callback, but lockedSlot is
-				 * for table tuple here
-				 */
+				//
+// HACK: we save index tuple to slot during
+// o_insert_with_arbiter_modify_callback, but lockedSlot is
+// for table tuple here
+//
 				saved_td = lockedSlot->tts_tupleDescriptor;
 				lockedSlot->tts_tupleDescriptor = conflict_td->leafTupdesc;
 				fill_pkey_bound(lockedSlot, conflict_td, &key);
@@ -1537,7 +1537,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_CARDINALITY_VIOLATION),
-				/* translator: %s is a SQL command name */
+				// translator: %s is a SQL command name
 						 errmsg("%s command cannot affect row a second time",
 								"ON CONFLICT DO UPDATE"),
 						 errhint("Ensure that no rows proposed for insertion within the same command have duplicate constrained values.")));
@@ -1545,7 +1545,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 
 			if (lockResult == OBTreeModifyResultNotFound)
 			{
-				/* concurrent modify happens */
+				// concurrent modify happens
 				csn = save_csn;
 				continue;
 			}
@@ -1565,7 +1565,7 @@ o_tbl_insert_with_arbiter(Relation rel,
 							  (Pointer) &key, BTreeKeyUniqueLowerBound,
 							  (Pointer) &key2, BTreeKeyUniqueLowerBound) != 0)
 				{
-					/* secondary key on primary tuple has been updated */
+					// secondary key on primary tuple has been updated
 					release_undo_size(UndoLogRegular);
 					apply_undo_stack(UndoLogRegular, oxid, &undoStackLocations, true);
 					oxid_notify_all();
@@ -1628,8 +1628,8 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 		Bitmapset  *changed_attrs = NULL;
 
 		was_saving = o_start_saving_inval_messages();
-		/* not using simple reindex_relation here anymore, */
-		/* because we hold a lock on relation already */
+		// not using simple reindex_relation here anymore,
+		// because we hold a lock on relation already
 		indexIds = RelationGetIndexList(rel);
 
 		oldSlot = arg->scanSlot;
@@ -1651,14 +1651,14 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 
 		if (oldSlot->tts_nvalid < newSlot->tts_nvalid)
 		{
-			/*
-			 * This possible during update of rows that have nulls at the end.
-			 * And during ExecModifyTable in ExecGetUpdateNewTuple it calls
-			 * getsomeattrs with natts excluding last null values
-			 */
+			//
+// This possible during update of rows that have nulls at the end.
+// And during ExecModifyTable in ExecGetUpdateNewTuple it calls
+// getsomeattrs with natts excluding last null values
+//
 			for (attnum = oldSlot->tts_nvalid; attnum < oldSlot->tts_tupleDescriptor->natts; attnum++)
 			{
-				 /* Assuming that tts_isnull big enough */ ;
+				 // Assuming that tts_isnull big enough ;
 				oldSlot->tts_isnull[attnum] = true;
 				changed_attrs = bms_add_member(changed_attrs, attnum);
 			}
@@ -1694,10 +1694,10 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 						econtext = GetPerTupleExprContext(estate);
 						econtext->ecxt_scantuple = newSlot;
 
-						/*
-						 * Skip this index-update if the predicate isn't
-						 * satisfied
-						 */
+						//
+// Skip this index-update if the predicate isn't
+// satisfied
+//
 						if (!ExecQual(predicate, econtext))
 						{
 							FreeExecutorState(estate);
@@ -1713,8 +1713,8 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 					}
 					else
 					{
-						Assert(false);	/* Expression indices not implemented
-										 * yet. */
+						Assert(false);	// Expression indices not implemented
+// yet.
 					}
 
 					if (touched_indices)
@@ -1800,13 +1800,13 @@ o_tbl_update(OTableDescr *descr, TupleTableSlot *slot,
 					o_apply_new_bridge_index_ctid(descr, rel, slot, csn, false);
 			}
 
-			/* reinsert TOAST value */
+			// reinsert TOAST value
 			mres.failedIxNum = TOASTIndexNumber;
-			/* insert new value in TOAST table */
+			// insert new value in TOAST table
 			mres.success = tts_orioledb_insert_toast_values(slot, descr, oxid, csn);
 			if (mres.success)
 			{
-				/* remove old value from TOAST table */
+				// remove old value from TOAST table
 				mres.success = tts_orioledb_remove_toast_values(oldSlot, descr, oxid, csn);
 			}
 
@@ -1881,7 +1881,7 @@ o_tbl_delete(Relation rel, OTableDescr *descr, OBTreeKeyBound *primary_key,
 			if (descr->bridge)
 				delete_old_bridge_index_ctid(descr, rel, &oslot->bridge_ctid, csn);
 
-			/* if tuple has been deleted from index trees, remove TOAST values */
+			// if tuple has been deleted from index trees, remove TOAST values
 			if (!tts_orioledb_remove_toast_values(result.oldTuple, descr, oxid, csn))
 			{
 				result.success = false;
@@ -1909,11 +1909,11 @@ o_is_index_predicate_satisfied(OIndexDescr *idx, TupleTableSlot *slot,
 {
 	bool		result = true;
 
-	/* Check for partial index */
+	// Check for partial index
 	if (idx->predicate != NIL)
 	{
 		econtext->ecxt_scantuple = slot;
-		/* Skip this index-update if the predicate isn't satisfied */
+		// Skip this index-update if the predicate isn't satisfied
 		if (!ExecQual(idx->predicate_state, econtext))
 			result = false;
 	}
@@ -1921,7 +1921,7 @@ o_is_index_predicate_satisfied(OIndexDescr *idx, TupleTableSlot *slot,
 }
 
 
-/* fills key bound from tuple or index tuple that belongs to current BTree */
+// fills key bound from tuple or index tuple that belongs to current BTree
 static void
 fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bound)
 {
@@ -1931,7 +1931,7 @@ fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bound)
 	slot_getallattrs(slot);
 
 	bound->nkeys = idx->nonLeafTupdesc->natts;
-	Assert(bound->nkeys > 0);	/* for clang-analyzer */
+	Assert(bound->nkeys > 0);	// for clang-analyzer
 	for (i = 0; i < bound->nkeys; i++)
 	{
 		Datum		value;
@@ -1942,10 +1942,10 @@ fill_key_bound(TupleTableSlot *slot, OIndexDescr *idx, OBTreeKeyBound *bound)
 
 		if (typid == TIDOID)
 		{
-			/*
-			 * TODO: Do more complex check here, because it ignores ctid when
-			 * bridging enabled
-			 */
+			//
+// TODO: Do more complex check here, because it ignores ctid when
+// bridging enabled
+//
 			if (idx->bridging &&
 				(idx->desc.type == oIndexPrimary || idx->desc.type == oIndexBridge))
 			{
@@ -2046,7 +2046,7 @@ o_update_secondary_index(OIndexDescr *id,
 	return res;
 }
 
-/* returns TupleTableSlot of old tuple as OTableModifyResul.result */
+// returns TupleTableSlot of old tuple as OTableModifyResul.result
 static OTableModifyResult
 o_tbl_indices_overwrite(OTableDescr *descr,
 						OBTreeKeyBound *oldPkey,
@@ -2104,7 +2104,7 @@ o_tbl_indices_overwrite(OTableDescr *descr,
 	else if (modify_result == OBTreeModifyResultFound ||
 			 modify_result == OBTreeModifyResultNotFound)
 	{
-		/* primary key or condition was changed by concurrent transaction */
+		// primary key or condition was changed by concurrent transaction
 		result.success = true;
 		result.oldTuple = NULL;
 		result.action = BTreeOperationUpdate;
@@ -2242,7 +2242,7 @@ o_tbl_index_delete(OIndexDescr *id, OIndexNumber ix_num, TupleTableSlot *slot,
 	return result;
 }
 
-/* Returns TupleTableSlot of old tuple as OTableModifyResult.result */
+// Returns TupleTableSlot of old tuple as OTableModifyResult.result
 static OTableModifyResult
 o_tbl_indices_delete(OTableDescr *descr, OBTreeKeyBound *key,
 					 OXid oxid, CommitSeqNo csn, BTreeLocationHint *hint,
@@ -2401,7 +2401,7 @@ o_check_tbl_update_mres(OTableModifyResult mres,
 		{
 			case BTreeOperationUpdate:
 				if (mres.failedIxNum == PrimaryIndexNumber)
-					break;		/* it is ok */
+					break;		// it is ok
 				ereport(ERROR,
 						(errcode(ERRCODE_INTERNAL_ERROR),
 						 errmsg("unable to remove tuple from secondary index in \"%s\"",
@@ -2468,7 +2468,7 @@ o_check_tbl_delete_mres(OTableModifyResult mres,
 	}
 }
 
-/* returns true if tuple was changed by concurrent transaction. */
+// returns true if tuple was changed by concurrent transaction.
 static inline bool
 o_callback_is_modified(OXid oxid, CommitSeqNo csn, OTupleXactInfo xactInfo)
 {
@@ -2586,7 +2586,7 @@ o_insert_with_arbiter_modify_callback(BTreeDescr *descr,
 
 		modified = o_callback_is_modified(ioc_arg->oxid, ioc_arg->csn, xactInfo);
 
-		/* Updates current csn */
+		// Updates current csn
 		if (XACT_INFO_IS_FINISHED(xactInfo))
 		{
 			ioc_arg->csn = modified ? (XACT_INFO_MAP_CSN(xactInfo) + 1) : ioc_arg->csn;
@@ -2821,7 +2821,7 @@ o_lock_wait_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("could not obtain lock on row in relation \"%s\"",
 							RelationGetRelationName(o_arg->rel))));
-			/* cppcheck-suppress missingReturn */
+			// cppcheck-suppress missingReturn
 			break;
 		default:
 			elog(ERROR, "Unknown wait policy: %u", o_arg->waitPolicy);
@@ -2852,10 +2852,10 @@ o_lock_modify_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
 
 	if (XACT_INFO_IS_FINISHED(xactInfo))
 	{
-		/*
-		 * modified here means that tuple was modified, but current lock is
-		 * weaker so it uses original tuple
-		 */
+		//
+// modified here means that tuple was modified, but current lock is
+// weaker so it uses original tuple
+//
 		if (o_arg->modified)
 		{
 			CommitSeqNo csn = XACT_INFO_MAP_CSN(xactInfo);
@@ -2916,9 +2916,9 @@ o_lock_deleted_callback(BTreeDescr *descr,
 	return OBTreeCallbackActionDoNothing;
 }
 
-/*
- * Check if two keys are binary equal.
- */
+//
+// Check if two keys are binary equal.
+//
 static inline bool
 is_keys_eq(OIndexDescr *id, OBTreeKeyBound *k1, OBTreeKeyBound *k2)
 {
@@ -3028,9 +3028,9 @@ o_truncate_table(ORelOids oids, bool missingOK)
 		o_tables_rel_lock_extended(&trees[i].oids, AccessExclusiveLock, true);
 		cleanup_btree(trees[i], true, !is_temp);
 		o_invalidate_oids(trees[i].oids);
-/*		if (is_recovery_process())
-			o_invalidate_descrs(trees[i].datoid, trees[i].reloid,
-								trees[i].relnode);*/
+// if (is_recovery_process())
+// o_invalidate_descrs(trees[i].datoid, trees[i].reloid,
+// trees[i].relnode);
 		if (ORelOidsIsEqual(oids, trees[i].oids))
 			invalidatedTable = true;
 		o_tables_rel_unlock_extended(&trees[i].oids, AccessExclusiveLock, false);
@@ -3043,8 +3043,8 @@ o_truncate_table(ORelOids oids, bool missingOK)
 
 		cleanup_btree(key, true, !is_temp);
 		o_invalidate_oids(oids);
-/*		if (is_recovery_process())
-			o_invalidate_descrs(oids.datoid, oids.reloid, oids.relnode);*/
+// if (is_recovery_process())
+// o_invalidate_descrs(oids.datoid, oids.reloid, oids.relnode);
 	}
 
 	o_tables_rel_unlock(&oids, AccessExclusiveLock);

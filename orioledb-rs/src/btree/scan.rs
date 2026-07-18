@@ -1,47 +1,47 @@
-/*-------------------------------------------------------------------------
- *
- * scan.c
- *		Routines for sequential scan of orioledb B-tree
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/scan.c
- *
- * ALGORITHM
- *
- *		The big picture algorithm of sequential scan is following.
- *		1. Scan all the internal pages with level == 1. The total amount of
- *		   internal pages are expected to be small. So, it should be OK to
- *		   scan them in logical order.
- *		   1.1. Immediately scan children's leaves and return their contents.
- *		   1.2. Edge cases are handled using iterators. They are expected to
- *		   be very rare.
- *		   1.3. Collect on-disk downlinks into an array together with CSN at
- *		   the moment of the corresponding internal page read.
- *		2. Ascending sort array of downlinks providing as sequential access
- *		   pattern as possible.
- *		3. Scan sorted downlink and apply the corresponding CSN.
- *
- * PARALLEL SCAN
- *
- *		The parallel sequential scan is implemented as follows.
- *		1. The scan leader creates a shared DSM array for on-disk downlinks,
- *		   initially sized to TREE_NUM_LEAF_PAGES.
- *		2. Two internal page images (level == 1) are kept in shared memory.
- *		3. Workers are iterating the downlinks of these pages in parallel
- *		   one by one.  On-disk downlinks are written directly to the shared
- *		   DSM array.  If the array is full, it is reallocated under lock.
- *		4. Once the internal page is finished, one worker loads the next page in
- *		   its place.  Other workers continue to process the downlink of the
- *		   remaining page.
- *		5. Once internal page processing is finished, one worker sorts the
- *		   shared on-disk downlinks array under lock.
- *		6. Workers process on-disk downlinks in parallel one by one.
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// scan.c
+// Routines for sequential scan of orioledb B-tree
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/scan.c
+//
+// ALGORITHM
+//
+// The big picture algorithm of sequential scan is following.
+// 1. Scan all the internal pages with level == 1. The total amount of
+// internal pages are expected to be small. So, it should be OK to
+// scan them in logical order.
+// 1.1. Immediately scan children's leaves and return their contents.
+// 1.2. Edge cases are handled using iterators. They are expected to
+// be very rare.
+// 1.3. Collect on-disk downlinks into an array together with CSN at
+// the moment of the corresponding internal page read.
+// 2. Ascending sort array of downlinks providing as sequential access
+// pattern as possible.
+// 3. Scan sorted downlink and apply the corresponding CSN.
+//
+// PARALLEL SCAN
+//
+// The parallel sequential scan is implemented as follows.
+// 1. The scan leader creates a shared DSM array for on-disk downlinks,
+// initially sized to TREE_NUM_LEAF_PAGES.
+// 2. Two internal page images (level == 1) are kept in shared memory.
+// 3. Workers are iterating the downlinks of these pages in parallel
+// one by one.  On-disk downlinks are written directly to the shared
+// DSM array.  If the array is full, it is reallocated under lock.
+// 4. Once the internal page is finished, one worker loads the next page in
+// its place.  Other workers continue to process the downlink of the
+// remaining page.
+// 5. Once internal page processing is finished, one worker sorts the
+// shared on-disk downlinks array under lock.
+// 6. Workers process on-disk downlinks in parallel one by one.
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -85,57 +85,57 @@ struct BTreeSeqScan
 	char		leafImg[ORIOLEDB_BLCKSZ];
 	char		histImg[ORIOLEDB_BLCKSZ];
 
-	/*
-	 * FETCH-mode partial reads for bitmap scans.  When `fetch` is set (bitmap
-	 * callbacks present and non-parallel scan) the in-memory leaf page is
-	 * read partially into leafImg: only the chunks actually visited by the
-	 * bitmap's key-driven iteration are materialized from the live shared
-	 * page via `leafPartial`.  `leafPartialFailed` is raised when a chunk
-	 * load detects a concurrent modification; the caller then falls back to
-	 * an iterator over the current key range.  Parallel scans keep whole-page
-	 * IMAGE reads (they share the page image through DSM, which a partial
-	 * image can't back), and pages carrying historical/undo data are fully
-	 * materialized (IMAGE).
-	 */
+	//
+// FETCH-mode partial reads for bitmap scans.  When `fetch` is set (bitmap
+// callbacks present and non-parallel scan) the in-memory leaf page is
+// read partially into leafImg: only the chunks actually visited by the
+// bitmap's key-driven iteration are materialized from the live shared
+// page via `leafPartial`.  `leafPartialFailed` is raised when a chunk
+// load detects a concurrent modification; the caller then falls back to
+// an iterator over the current key range.  Parallel scans keep whole-page
+// IMAGE reads (they share the page image through DSM, which a partial
+// image can't back), and pages carrying historical/undo data are fully
+// materialized (IMAGE).
+//
 	bool		fetch;
 	PartialPageState leafPartial;
 	bool		leafPartialFailed;
 
-	/*
-	 * FETCH-mode partial read of the level-1 internal page.  When `fetch` is
-	 * set the internal page is read partially into scan->context.img via
-	 * scan->context.partial (find_page FETCH mode): only the hikeys chunk
-	 * plus the chunks holding downlinks the bitmap walk actually visits are
-	 * materialized.  The bitmap-driven walk skips whole chunks of downlinks
-	 * via their chunk hikeys (get_next_downlink ->
-	 * internal_skip_to_next_key), exactly mirroring the leaf's
-	 * adjust_location_with_next_key(). intPartialFailed is raised when an
-	 * on-demand chunk load loses the race with a concurrent page
-	 * modification; load_next_internal_page then re-reads the whole page
-	 * (IMAGE) and the walk continues on the full image.
-	 */
+	//
+// FETCH-mode partial read of the level-1 internal page.  When `fetch` is
+// set the internal page is read partially into scan->context.img via
+// scan->context.partial (find_page FETCH mode): only the hikeys chunk
+// plus the chunks holding downlinks the bitmap walk actually visits are
+// materialized.  The bitmap-driven walk skips whole chunks of downlinks
+// via their chunk hikeys (get_next_downlink ->
+// internal_skip_to_next_key), exactly mirroring the leaf's
+// adjust_location_with_next_key(). intPartialFailed is raised when an
+// on-demand chunk load loses the race with a concurrent page
+// modification; load_next_internal_page then re-reads the whole page
+// (IMAGE) and the walk continues on the full image.
+//
 	bool		intPartialFailed;
 
-	/*
-	 * High key of the last downlink get_next_downlink() returned (the low
-	 * bound of where the walk should resume).  When an on-demand
-	 * internal-chunk load fails mid-walk, get_next_downlink() re-reads the
-	 * internal page whole (IMAGE) by descending to this key, so
-	 * already-returned downlinks are not revisited.  haveIntResumeKey is
-	 * false before the first downlink of a scan.
-	 */
+	//
+// High key of the last downlink get_next_downlink() returned (the low
+// bound of where the walk should resume).  When an on-demand
+// internal-chunk load fails mid-walk, get_next_downlink() re-reads the
+// internal page whole (IMAGE) by descending to this key, so
+// already-returned downlinks are not revisited.  haveIntResumeKey is
+// false before the first downlink of a scan.
+//
 	bool		haveIntResumeKey;
 	OFixedKey	intResumeKey;
 
-	/*
-	 * Key of the last leaf tuple emitted from the current partially-read leaf
-	 * (valid only while haveLastLeafKey).  When a partial chunk load loses
-	 * the race with a concurrent modification after some tuples of the leaf
-	 * were already emitted, the fallback iterator must resume strictly after
-	 * this key rather than re-read the whole leaf range (which would emit
-	 * those tuples a second time).  iterSkipKey asks the iterator to drop a
-	 * leading tuple that is <= this key (the resume point is inclusive).
-	 */
+	//
+// Key of the last leaf tuple emitted from the current partially-read leaf
+// (valid only while haveLastLeafKey).  When a partial chunk load loses
+// the race with a concurrent modification after some tuples of the leaf
+// were already emitted, the fallback iterator must resume strictly after
+// this key rather than re-read the whole leaf range (which would emit
+// those tuples a second time).  iterSkipKey asks the iterator to drop a
+// leading tuple that is <= this key (the resume point is inclusive).
+//
 	bool		haveLastLeafKey;
 	OFixedKey	lastLeafKey;
 	bool		iterSkipKey;
@@ -150,9 +150,9 @@ struct BTreeSeqScan
 
 	BTreePageItemLocator intLoc;
 
-	/*
-	 * The page offset we started with according to `prevHikey`;
-	 */
+	//
+// The page offset we started with according to `prevHikey`;
+//
 	OffsetNumber intStartOffset;
 
 	BTreePageItemLocator leafLoc;
@@ -164,19 +164,19 @@ struct BTreeSeqScan
 	MemoryContext mctx;
 
 	BTreeSeqScanDiskDownlink *diskDownlinks;
-	int64		downlinksCount; /* Used only for serial scan */
+	int64		downlinksCount; // Used only for serial scan
 	int64		downlinkIndex;
 	int64		allocatedDownlinks;
 
 	BTreeIterator *iter;
 	OTuple		iterEnd;
 
-	/*
-	 * Number of the last completed checkpoint when scan was started.  We need
-	 * on-disk pages of this checkpoint to be not overridden until scan
-	 * finishes.  This means we shouldn't start using free blocks of later
-	 * checkpoints before this scan is finished.
-	 */
+	//
+// Number of the last completed checkpoint when scan was started.  We need
+// on-disk pages of this checkpoint to be not overridden until scan
+// finishes.  This means we shouldn't start using free blocks of later
+// checkpoints before this scan is finished.
+//
 	uint32		checkpointNumber;
 
 	BTreeMetaPage *metaPageBlkno;
@@ -191,17 +191,17 @@ struct BTreeSeqScan
 
 	BTreeSeqScanCallbacks *cb;
 	void	   *arg;
-	bool		isSingleLeafPage;	/* Scan couldn't read first internal page */
+	bool		isSingleLeafPage;	// Scan couldn't read first internal page
 	OFixedKey	keyRangeLow,
 				keyRangeHigh;
 	bool		firstPageIsLoaded;
 
-	/* Private parallel worker info in a backend */
+	// Private parallel worker info in a backend
 	ParallelOScanDesc poscan;
 	int			workerNumber;
 	dsm_segment *dsmSeg;
 
-	/* Ensures scan cleanup on transaction abort or resource owner release */
+	// Ensures scan cleanup on transaction abort or resource owner release
 	ResourceOwner resowner;
 };
 
@@ -212,16 +212,16 @@ static void get_next_key(BTreeSeqScan *scan, BTreePageItemLocator *intLoc, OFixe
 static void ResourceOwnerRememberBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan);
 static void ResourceOwnerForgetBTreeSeqScan(ResourceOwner owner, BTreeSeqScan *scan);
 
-/*
- * Resource owner integration for BTreeSeqScan.
- *
- * Previously seq_scans_cleanup() only ran after transaction finish, so seq
- * scans were not released correctly on subtransaction finish, release of
- * prepared statements, etc.  Binding seq scans to ResourceOwner solves this.
- *
- * PG >= 17 uses custom ResourceOwner resources.  PG 16 uses a release
- * callback.
- */
+//
+// Resource owner integration for BTreeSeqScan.
+//
+// Previously seq_scans_cleanup() only ran after transaction finish, so seq
+// scans were not released correctly on subtransaction finish, release of
+// prepared statements, etc.  Binding seq scans to ResourceOwner solves this.
+//
+// PG >= 17 uses custom ResourceOwner resources.  PG 16 uses a release
+// callback.
+//
 #if PG_VERSION_NUM >= 170000
 static void ResOwnerReleaseBTreeSeqScan(Datum res);
 static char *ResOwnerPrintBTreeSeqScan(Datum res);
@@ -262,20 +262,20 @@ btree_scan_init_shmem(Pointer ptr, bool found)
 }
 
 
-/*
- * Materialize the data chunk that `loc` points into for a partially-read leaf
- * image (bitmap FETCH scan).
- *
- * For a whole-page image -- every non-fetch scan, the historical image, and any
- * leaf we fully materialized because it carried undo -- leafPartial.isPartial
- * is false and this is a no-op.  Otherwise it copies the chunk from the live
- * shared page (rechecking the page change count); the chunk boundaries live in
- * the hikeys chunk, which o_btree_try_read_page already loaded, so the
- * locator's item offset is preserved.  A concurrent modification raises
- * scan->leafPartialFailed and returns false, and the caller must abandon the
- * partial image and re-read the current key range through an iterator (the
- * bitmap fetch layer rechecks each tuple, so over-reading the range is safe).
- */
+//
+// Materialize the data chunk that `loc` points into for a partially-read leaf
+// image (bitmap FETCH scan).
+//
+// For a whole-page image -- every non-fetch scan, the historical image, and any
+// leaf we fully materialized because it carried undo -- leafPartial.isPartial
+// is false and this is a no-op.  Otherwise it copies the chunk from the live
+// shared page (rechecking the page change count); the chunk boundaries live in
+// the hikeys chunk, which o_btree_try_read_page already loaded, so the
+// locator's item offset is preserved.  A concurrent modification raises
+// scan->leafPartialFailed and returns false, and the caller must abandon the
+// partial image and re-read the current key range through an iterator (the
+// bitmap fetch layer rechecks each tuple, so over-reading the range is safe).
+//
 static inline bool
 seq_leaf_partial_ensure(BTreeSeqScan *scan, Page p, BTreePageItemLocator *loc)
 {
@@ -290,12 +290,12 @@ seq_leaf_partial_ensure(BTreeSeqScan *scan, Page p, BTreePageItemLocator *loc)
 	return true;
 }
 
-/*
- * Materialize the hikeys chunk of the partially-read internal page (bitmap
- * FETCH scan).  The chunk-descriptor array and the chunk hikeys used to skip
- * downlinks live in it.  No-op for a whole-page image.  Sets
- * scan->intPartialFailed and returns false on a concurrent modification.
- */
+//
+// Materialize the hikeys chunk of the partially-read internal page (bitmap
+// FETCH scan).  The chunk-descriptor array and the chunk hikeys used to skip
+// downlinks live in it.  No-op for a whole-page image.  Sets
+// scan->intPartialFailed and returns false on a concurrent modification.
+//
 static inline bool
 seq_int_partial_ensure_hikeys(BTreeSeqScan *scan)
 {
@@ -311,12 +311,12 @@ seq_int_partial_ensure_hikeys(BTreeSeqScan *scan)
 	return true;
 }
 
-/*
- * Materialize the data chunk that `loc` points into for the partially-read
- * internal page in scan->context.img.  No-op for a whole-page image (every
- * parallel scan and any page re-read in IMAGE mode after a partial failure).
- * Sets scan->intPartialFailed and returns false on a concurrent modification.
- */
+//
+// Materialize the data chunk that `loc` points into for the partially-read
+// internal page in scan->context.img.  No-op for a whole-page image (every
+// parallel scan and any page re-read in IMAGE mode after a partial failure).
+// Sets scan->intPartialFailed and returns false on a concurrent modification.
+//
 static inline bool
 seq_int_partial_ensure(BTreeSeqScan *scan, BTreePageItemLocator *loc)
 {
@@ -352,12 +352,12 @@ load_first_historical_page(BTreeSeqScan *scan)
 		O_TUPLE_SET_NULL(hikey.tuple);
 	O_TUPLE_SET_NULL(lokey.tuple);
 
-	/*
-	 * Seed histImg with the live page: differential page-level undo images
-	 * (UndoPageImage*Diff) reconstruct the historical page by transforming
-	 * the newer page in place, so the chain walk must start from the live
-	 * page.
-	 */
+	//
+// Seed histImg with the live page: differential page-level undo images
+// (UndoPageImage*Diff) reconstruct the historical page by transforming
+// the newer page in place, so the chain walk must start from the live
+// page.
+//
 	memcpy(scan->histImg, scan->leafImg, ORIOLEDB_BLCKSZ);
 
 	while (COMMITSEQNO_IS_NORMAL(header->csn) &&
@@ -416,13 +416,13 @@ load_next_historical_page(BTreeSeqScan *scan)
 
 	copy_fixed_hikey(scan->desc, &prevHikey, scan->histImg);
 
-	/*
-	 * Re-seed histImg with the live page before reconstructing the next
-	 * historical sub-page.  Differential undo images transform the page in
-	 * place, so each reconstruction must restart from the live (merged) page
-	 * rather than the previous sub-page left in histImg.  prevHikey above was
-	 * captured from that previous sub-page first.
-	 */
+	//
+// Re-seed histImg with the live page before reconstructing the next
+// historical sub-page.  Differential undo images transform the page in
+// place, so each reconstruction must restart from the live (merged) page
+// rather than the previous sub-page left in histImg.  prevHikey above was
+// captured from that previous sub-page first.
+//
 	memcpy(scan->histImg, scan->leafImg, ORIOLEDB_BLCKSZ);
 
 	while (COMMITSEQNO_IS_NORMAL(header->csn) &&
@@ -463,12 +463,12 @@ btree_lokey_stopevent_params(BTreeDescr *desc, OTuple lokey,
 	return res;
 }
 
-/*
- * Loads next internal page and. Outputs page, start locator and offset.
- *
- * In case of parallel scan the caller should hold a lock preventing the other workers from modifying
- * a page in a shared state and updating prevHikey.
- */
+//
+// Loads next internal page and. Outputs page, start locator and offset.
+//
+// In case of parallel scan the caller should hold a lock preventing the other workers from modifying
+// a page in a shared state and updating prevHikey.
+//
 static bool
 load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
 						Page page,
@@ -483,17 +483,17 @@ load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
 	CHECK_FOR_INTERRUPTS();
 	elog(DEBUG3, "load_next_internal_page");
 
-	/*
-	 * A non-parallel bitmap (FETCH) scan reads the level-1 internal page
-	 * partially: find_page() in FETCH mode leaves it in scan->context.img
-	 * with scan->context.partial tracking the loaded chunks, and the
-	 * bitmap-driven walk below skips whole chunks of downlinks it does not
-	 * need.  Parallel scans (page != NULL) share the whole page through DSM,
-	 * and a page whose partial read lost a race (intPartialFailed) is re-read
-	 * whole; both use IMAGE.  The retry loop below re-reads whole if
-	 * materializing the hikeys chunk (needed to iterate/skip) loses a race
-	 * after the partial read.
-	 */
+	//
+// A non-parallel bitmap (FETCH) scan reads the level-1 internal page
+// partially: find_page() in FETCH mode leaves it in scan->context.img
+// with scan->context.partial tracking the loaded chunks, and the
+// bitmap-driven walk below skips whole chunks of downlinks it does not
+// need.  Parallel scans (page != NULL) share the whole page through DSM,
+// and a page whose partial read lost a race (intPartialFailed) is re-read
+// whole; both use IMAGE.  The retry loop below re-reads whole if
+// materializing the hikeys chunk (needed to iterate/skip) loses a race
+// after the partial read.
+//
 	while (true)
 	{
 		bool		useFetch = scan->fetch && !page && !scan->intPartialFailed;
@@ -524,26 +524,26 @@ load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
 
 		if (scan->context.partial.isPartial)
 		{
-			/*
-			 * find_page() returns a page below targetLevel when the tree is
-			 * shallower than requested (a single leaf, no level-1 page).  The
-			 * level-0 branch below copies the whole page into leafImg, so
-			 * re-read it in IMAGE mode.  (The fixed page header is
-			 * materialized by the partial read, so PAGE_GET_LEVEL is valid
-			 * here.)
-			 */
+			//
+// find_page() returns a page below targetLevel when the tree is
+// shallower than requested (a single leaf, no level-1 page).  The
+// level-0 branch below copies the whole page into leafImg, so
+// re-read it in IMAGE mode.  (The fixed page header is
+// materialized by the partial read, so PAGE_GET_LEVEL is valid
+// here.)
+//
 			if (PAGE_GET_LEVEL(scan->context.img) != 1)
 			{
 				scan->intPartialFailed = true;
 				continue;
 			}
 
-			/*
-			 * A partial read needs the hikeys chunk materialized before we
-			 * touch item offsets, iterate, or skip.  If that loses a race
-			 * with a concurrent modification, fall back to a whole-page IMAGE
-			 * read.
-			 */
+			//
+// A partial read needs the hikeys chunk materialized before we
+// touch item offsets, iterate, or skip.  If that loses a race
+// with a concurrent modification, fall back to a whole-page IMAGE
+// read.
+//
 			if (!seq_int_partial_ensure_hikeys(scan))
 			{
 				Assert(scan->intPartialFailed);
@@ -553,14 +553,14 @@ load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
 		break;
 	}
 
-	/*
-	 * The page is now consistently loaded (partially in FETCH, whole after an
-	 * IMAGE fallback).  Clear the failure latch so the next page can be tried
-	 * partially again.
-	 */
+	//
+// The page is now consistently loaded (partially in FETCH, whole after an
+// IMAGE fallback).  Clear the failure latch so the next page can be tried
+// partially again.
+//
 	scan->intPartialFailed = false;
 
-	/* In case of parallel scan copy page image into shared state */
+	// In case of parallel scan copy page image into shared state
 	if (page)
 	{
 		Assert(scan->poscan);
@@ -576,22 +576,22 @@ load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
 
 	if (PAGE_GET_LEVEL(page) == 1)
 	{
-		/*
-		 * Check if the left bound of the found keyrange corresponds to the
-		 * previous hikey.  Otherwise, use iterator to correct the situation.
-		 */
+		//
+// Check if the left bound of the found keyrange corresponds to the
+// previous hikey.  Otherwise, use iterator to correct the situation.
+//
 		*intLoc = scan->context.items[scan->context.index].locator;
 		*startOffset = BTREE_PAGE_LOCATOR_GET_OFFSET(page, intLoc);
 		if (isBitmapJump)
 		{
-			/*
-			 * A bitmap page skip is a fresh descent straight to the wanted
-			 * key, so there is no continuity with a previous page to verify
-			 * (and hence no iterator to build).  find_page() landed on the
-			 * downlink covering the key; record the page's low key as
-			 * prevHikey so get_current_downlink_key() derives the first
-			 * downlink's low bound from it.
-			 */
+			//
+// A bitmap page skip is a fresh descent straight to the wanted
+// key, so there is no continuity with a previous page to verify
+// (and hence no iterator to build).  find_page() landed on the
+// downlink covering the key; record the page's low key as
+// prevHikey so get_current_downlink_key() derives the first
+// downlink's low bound from it.
+//
 			if (O_TUPLE_IS_NULL(scan->context.lokey.tuple))
 				clear_fixed_key(&scan->prevHikey);
 			else
@@ -624,7 +624,7 @@ load_next_internal_page(BTreeSeqScan *scan, OTuple prevHikey,
 	{
 		Assert(PAGE_GET_LEVEL(page) == 0);
 		memcpy(scan->leafImg, page, ORIOLEDB_BLCKSZ);
-		/* A whole-page leaf: no partial-read state must leak into it. */
+		// A whole-page leaf: no partial-read state must leak into it.
 		scan->leafPartial.isPartial = false;
 		scan->haveLastLeafKey = false;
 		BTREE_PAGE_LOCATOR_FIRST(scan->leafImg, &scan->leafLoc);
@@ -645,7 +645,7 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 
 	if (!poscan)
 	{
-		/* Non-parallel: use local array */
+		// Non-parallel: use local array
 		if (scan->downlinksCount >= scan->allocatedDownlinks)
 		{
 			scan->allocatedDownlinks *= 2;
@@ -658,7 +658,7 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 	}
 	else
 	{
-		/* Parallel: write directly to shared DSM array */
+		// Parallel: write directly to shared DSM array
 		while (true)
 		{
 			uint64		index;
@@ -666,7 +666,7 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 
 			LWLockAcquire(&poscan->downlinksPublish, LW_SHARED);
 
-			/* Re-attach to DSM if it was reallocated */
+			// Re-attach to DSM if it was reallocated
 			if (scan->dsmSeg == NULL ||
 				dsm_segment_handle(scan->dsmSeg) != poscan->dsmHandle)
 			{
@@ -686,13 +686,13 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 				return;
 			}
 
-			/* Over capacity: undo increment, grow under exclusive lock */
+			// Over capacity: undo increment, grow under exclusive lock
 			pg_atomic_fetch_sub_u64(&poscan->downlinksCount, 1);
 			LWLockRelease(&poscan->downlinksPublish);
 
 			LWLockAcquire(&poscan->downlinksPublish, LW_EXCLUSIVE);
 
-			/* Re-check: another worker may have already grown it */
+			// Re-check: another worker may have already grown it
 			if (poscan->dsmAllocated <= (uint64) index)
 			{
 				dsm_segment *newSeg;
@@ -723,7 +723,7 @@ add_on_disk_downlink(BTreeSeqScan *scan, uint64 downlink, CommitSeqNo csn)
 			}
 
 			LWLockRelease(&poscan->downlinksPublish);
-			/* Retry the insert */
+			// Retry the insert
 		}
 	}
 }
@@ -751,7 +751,7 @@ switch_to_disk_scan(BTreeSeqScan *scan)
 	BTREE_PAGE_LOCATOR_SET_INVALID(&scan->leafLoc);
 	if (!poscan)
 	{
-		/* Serial scan */
+		// Serial scan
 		qsort(scan->diskDownlinks,
 			  scan->downlinksCount,
 			  sizeof(scan->diskDownlinks[0]),
@@ -759,32 +759,32 @@ switch_to_disk_scan(BTreeSeqScan *scan)
 	}
 	else
 	{
-		/* Parallel scan */
+		// Parallel scan
 
-		/*
-		 * Wait for any in-flight add_on_disk_downlink() calls to complete. A
-		 * worker that already got a disk downlink from get_next_downlink()
-		 * but hasn't finished writing it yet will have incremented
-		 * downlinksWritersInProgress.
-		 */
+		//
+// Wait for any in-flight add_on_disk_downlink() calls to complete. A
+// worker that already got a disk downlink from get_next_downlink()
+// but hasn't finished writing it yet will have incremented
+// downlinksWritersInProgress.
+//
 		while (pg_atomic_read_u32(&poscan->downlinksWritersInProgress) > 0)
 		{
 			pg_usleep(10L);
 			CHECK_FOR_INTERRUPTS();
 		}
 
-		/*
-		 * First worker to grab the exclusive lock sorts the shared downlinks
-		 * array.  Other workers wait on the lock and then see the sorted
-		 * flag.
-		 */
+		//
+// First worker to grab the exclusive lock sorts the shared downlinks
+// array.  Other workers wait on the lock and then see the sorted
+// flag.
+//
 		LWLockAcquire(&poscan->downlinksPublish, LW_EXCLUSIVE);
 
 		if (!(poscan->flags & O_PARALLEL_DOWNLINKS_SORTED))
 		{
 			uint64		count = pg_atomic_read_u64(&poscan->downlinksCount);
 
-			/* Re-attach to DSM if it was reallocated */
+			// Re-attach to DSM if it was reallocated
 			if (scan->dsmSeg == NULL ||
 				dsm_segment_handle(scan->dsmSeg) != poscan->dsmHandle)
 			{
@@ -806,7 +806,7 @@ switch_to_disk_scan(BTreeSeqScan *scan)
 
 		LWLockRelease(&poscan->downlinksPublish);
 
-		/* Ensure attached to current DSM for disk scan phase */
+		// Ensure attached to current DSM for disk scan phase
 		if (poscan->dsmHandle &&
 			(scan->dsmSeg == NULL ||
 			 dsm_segment_handle(scan->dsmSeg) != poscan->dsmHandle))
@@ -818,11 +818,11 @@ switch_to_disk_scan(BTreeSeqScan *scan)
 	}
 }
 
-/*
- * Make an interator to read the key range from `startKey` to the next
- * downlink or hikey of internal page hikey if we're considering the last
- * downlink.
- */
+//
+// Make an interator to read the key range from `startKey` to the next
+// downlink or hikey of internal page hikey if we're considering the last
+// downlink.
+//
 static void
 scan_make_iterator(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRangeHigh)
 {
@@ -841,17 +841,17 @@ scan_make_iterator(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRangeHigh)
 	scan->haveHistImg = false;
 	scan->iterEnd = keyRangeHigh;
 
-	/*
-	 * The iterator produces tuples directly; the partial leaf image (if any)
-	 * is abandoned, so make on-demand chunk loads inert until the next leaf
-	 * read.
-	 */
+	//
+// The iterator produces tuples directly; the partial leaf image (if any)
+// is abandoned, so make on-demand chunk loads inert until the next leaf
+// read.
+//
 	scan->leafPartial.isPartial = false;
 	scan->leafPartialFailed = false;
 	scan->haveLastLeafKey = false;
 }
 
-/* Output item downlink and key using provided page and current locator */
+// Output item downlink and key using provided page and current locator
 static void
 get_current_downlink_key(BTreeSeqScan *scan,
 						 BTreePageItemLocator *loc,
@@ -864,11 +864,11 @@ get_current_downlink_key(BTreeSeqScan *scan,
 	BTreeNonLeafTuphdr *tuphdr;
 	OTuple		tuple;
 
-	/*
-	 * Partial FETCH read of the internal page: materialize the chunk holding
-	 * this downlink before reading it.  On a concurrent modification bail
-	 * with intPartialFailed set; get_next_downlink() re-reads the page whole.
-	 */
+	//
+// Partial FETCH read of the internal page: materialize the chunk holding
+// this downlink before reading it.  On a concurrent modification bail
+// with intPartialFailed set; get_next_downlink() re-reads the page whole.
+//
 	if (!seq_int_partial_ensure(scan, loc))
 	{
 		*downlink = 0;
@@ -893,27 +893,27 @@ get_current_downlink_key(BTreeSeqScan *scan,
 	}
 	else
 	{
-		/*
-		 * It might happen that due to concurrent page merge, we're visiting
-		 * the leftmost page the second time.  In this case, prevHiKey is not
-		 * NULL, so there is no assertion here.
-		 */
+		//
+// It might happen that due to concurrent page merge, we're visiting
+// the leftmost page the second time.  In this case, prevHiKey is not
+// NULL, so there is no assertion here.
+//
 		clear_fixed_key(curKey);
 	}
 }
 
-/* Output next key and locator on a provided internal page */
+// Output next key and locator on a provided internal page
 static void
 get_next_key(BTreeSeqScan *scan, BTreePageItemLocator *intLoc, OFixedKey *nextKey, Page page)
 {
 	BTREE_PAGE_LOCATOR_NEXT(page, intLoc);
 	if (BTREE_PAGE_LOCATOR_IS_VALID(page, intLoc))
 	{
-		/*
-		 * The chunk-descriptor array in the (loaded) hikeys chunk lets
-		 * BTREE_PAGE_LOCATOR_NEXT step across a chunk boundary without the
-		 * data chunk; materialize the landed chunk before reading its key.
-		 */
+		//
+// The chunk-descriptor array in the (loaded) hikeys chunk lets
+// BTREE_PAGE_LOCATOR_NEXT step across a chunk boundary without the
+// data chunk; materialize the landed chunk before reading its key.
+//
 		if (!seq_int_partial_ensure(scan, intLoc))
 		{
 			clear_fixed_key(nextKey);
@@ -927,40 +927,40 @@ get_next_key(BTreeSeqScan *scan, BTreePageItemLocator *intLoc, OFixedKey *nextKe
 		clear_fixed_key(nextKey);
 }
 
-/*
- * Bitmap FETCH within-page skip.  On entry scan->intLoc points at the downlink
- * immediately following the one just returned (its low bound is `boundary`).
- * Advance scan->intLoc to the downlink covering the next bitmap key at or after
- * `boundary`, skipping whole chunks of unwanted downlinks -- btree_page_search()
- * jumps via the chunk hikeys and materializes only the target chunk, so the
- * skipped chunks are never copied out of the shared page.  Mirrors the leaf's
- * adjust_location_with_next_key().
- *
- * Leaves scan->intLoc invalid (caller loads/descends to the next page) when the
- * next wanted key is beyond this page's hikey or the bitmap is exhausted.  On a
- * concurrent modification sets scan->intPartialFailed and returns; scan->intLoc
- * is then unusable and the next get_next_downlink() call re-reads the page whole
- * before touching it.
- */
+//
+// Bitmap FETCH within-page skip.  On entry scan->intLoc points at the downlink
+// immediately following the one just returned (its low bound is `boundary`).
+// Advance scan->intLoc to the downlink covering the next bitmap key at or after
+// `boundary`, skipping whole chunks of unwanted downlinks -- btree_page_search()
+// jumps via the chunk hikeys and materializes only the target chunk, so the
+// skipped chunks are never copied out of the shared page.  Mirrors the leaf's
+// adjust_location_with_next_key().
+//
+// Leaves scan->intLoc invalid (caller loads/descends to the next page) when the
+// next wanted key is beyond this page's hikey or the bitmap is exhausted.  On a
+// concurrent modification sets scan->intPartialFailed and returns; scan->intLoc
+// is then unusable and the next get_next_downlink() call re-reads the page whole
+// before touching it.
+//
 static void
 internal_skip_to_next_key(BTreeSeqScan *scan, Page page,
 						  BTreePageItemLocator *intLoc, OTuple boundary)
 {
 	OFixedKey	probe;
 
-	/* A leftmost gap has no key to probe with; fall back to sequential. */
+	// A leftmost gap has no key to probe with; fall back to sequential.
 	if (O_TUPLE_IS_NULL(boundary))
 		return;
 
 	copy_fixed_key(scan->desc, &probe, boundary);
 	if (!scan->cb->getNextKey(&probe, BTreeKeyNonLeafKey, true, scan->arg))
 	{
-		/* Nothing left in the bitmap anywhere. */
+		// Nothing left in the bitmap anywhere.
 		BTREE_PAGE_LOCATOR_SET_INVALID(intLoc);
 		return;
 	}
 
-	/* Beyond this page: let the caller descend to the covering page. */
+	// Beyond this page: let the caller descend to the covering page.
 	if (!O_PAGE_IS(page, RIGHTMOST))
 	{
 		OFixedKey	hikey;
@@ -974,13 +974,13 @@ internal_skip_to_next_key(BTreeSeqScan *scan, Page page,
 		}
 	}
 
-	/*
-	 * Within this page: position intLoc on the downlink covering the key.
-	 * btree_page_search() lands one past the covering downlink (on the first
-	 * separator strictly greater than the key), so step back and materialize
-	 * the landed chunk -- exactly as page_find_downlink() does during
-	 * descent.
-	 */
+	//
+// Within this page: position intLoc on the downlink covering the key.
+// btree_page_search() lands one past the covering downlink (on the first
+// separator strictly greater than the key), so step back and materialize
+// the landed chunk -- exactly as page_find_downlink() does during
+// descent.
+//
 	if (!btree_page_search(scan->desc, page, (Pointer) &probe.tuple,
 						   BTreeKeyNonLeafKey, &scan->context.partial, intLoc))
 	{
@@ -994,17 +994,17 @@ internal_skip_to_next_key(BTreeSeqScan *scan, Page page,
 		scan->intPartialFailed = true;
 }
 
-/*
- * Gets the next downlink with it's keyrange (low and high keys of the
- * keyrange).
- *
- * Returns true on success.  False result can be caused by one of three reasons:
- * 1) The rightmost internal page is processed;
- * 2) There is just single leaf page in the tree (and it's loaded into
- *    scan->context.img);
- * 3) There is scan->iter to be processed before we can get downlinks from the
- *    current internal page.
- */
+//
+// Gets the next downlink with it's keyrange (low and high keys of the
+// keyrange).
+//
+// Returns true on success.  False result can be caused by one of three reasons:
+// 1) The rightmost internal page is processed;
+// 2) There is just single leaf page in the tree (and it's loaded into
+// scan->context.img);
+// 3) There is scan->iter to be processed before we can get downlinks from the
+// current internal page.
+//
 static bool
 get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 				  OFixedKey *keyRangeLow, OFixedKey *keyRangeHigh)
@@ -1013,25 +1013,25 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 
 	if (!poscan)
 	{
-		/* Non-parallel case */
+		// Non-parallel case
 		bool		pageIsLoaded = scan->firstPageIsLoaded;
 		bool		prevIsLeftmostOrNone = true;
 
 		while (true)
 		{
 
-			/* Try to load next internal page if needed */
+			// Try to load next internal page if needed
 			if (!pageIsLoaded)
 			{
-				/*
-				 * A bitmap scan can skip whole internal pages that hold no
-				 * wanted keys: ask the callback for the next needed key at or
-				 * after the finished page's hikey and descend straight to the
-				 * page covering it, instead of stepping to the immediate next
-				 * page.  The landed downlink is fed to the same in-memory /
-				 * on-disk handling below, so the per-leaf FETCH walk still
-				 * applies.
-				 */
+				//
+// A bitmap scan can skip whole internal pages that hold no
+// wanted keys: ask the callback for the next needed key at or
+// after the finished page's hikey and descend straight to the
+// page covering it, instead of stepping to the immediate next
+// page.  The landed downlink is fed to the same in-memory /
+// on-disk handling below, so the per-leaf FETCH walk still
+// applies.
+//
 				if (scan->cb && scan->cb->getNextKey)
 				{
 					OFixedKey	jumpKey;
@@ -1044,7 +1044,7 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 					if (!scan->cb->getNextKey(&jumpKey, BTreeKeyNonLeafKey,
 											  true, scan->arg))
 					{
-						/* Nothing left in the bitmap. */
+						// Nothing left in the bitmap.
 						clear_fixed_key(keyRangeLow);
 						clear_fixed_key(keyRangeHigh);
 						return false;
@@ -1057,14 +1057,14 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 												 true,
 												 true))
 					{
-						/* Single leaf page (tree has no internal level). */
+						// Single leaf page (tree has no internal level).
 						scan->isSingleLeafPage = true;
 						clear_fixed_key(keyRangeLow);
 						clear_fixed_key(keyRangeHigh);
 						return false;
 					}
 
-					/* A jump is a fresh descent; it never builds an iterator. */
+					// A jump is a fresh descent; it never builds an iterator.
 					Assert(!scan->iter);
 				}
 				else
@@ -1084,7 +1084,7 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 												 prevIsLeftmostOrNone,
 												 false))
 					{
-						/* first page only */
+						// first page only
 						Assert(O_PAGE_IS(scan->context.img, LEFTMOST));
 						scan->isSingleLeafPage = true;
 						clear_fixed_key(keyRangeLow);
@@ -1097,14 +1097,14 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 				}
 			}
 
-			/*
-			 * A prior call's within-page skip lost the race with a concurrent
-			 * modification after it had already returned its downlink,
-			 * leaving scan->intLoc unusable.  Re-read the internal page whole
-			 * (IMAGE) by descending to the resume boundary before touching
-			 * it; load_next_internal_page() clears intPartialFailed and lands
-			 * scan->intLoc on the downlink covering intResumeKey.
-			 */
+			//
+// A prior call's within-page skip lost the race with a concurrent
+// modification after it had already returned its downlink,
+// leaving scan->intLoc unusable.  Re-read the internal page whole
+// (IMAGE) by descending to the resume boundary before touching
+// it; load_next_internal_page() clears intPartialFailed and lands
+// scan->intLoc on the downlink covering intResumeKey.
+//
 			if (pageIsLoaded && scan->intPartialFailed)
 			{
 				OTuple		resumeKey;
@@ -1132,21 +1132,21 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 										 scan->prevHikey.tuple, keyRangeLow,
 										 downlink, scan->context.img);
 
-				/*
-				 * construct fixed hikey of internal item and get next
-				 * internal locator
-				 */
+				//
+// construct fixed hikey of internal item and get next
+// internal locator
+//
 				if (!scan->intPartialFailed)
 					get_next_key(scan, &scan->intLoc, keyRangeHigh, scan->context.img);
 
 				if (scan->intPartialFailed)
 				{
-					/*
-					 * A partial chunk load for the current downlink lost the
-					 * race.  Re-read the page whole from the resume boundary
-					 * and recompute this downlink (it has not been returned
-					 * yet).
-					 */
+					//
+// A partial chunk load for the current downlink lost the
+// race.  Re-read the page whole from the resume boundary
+// and recompute this downlink (it has not been returned
+// yet).
+//
 					OTuple		resumeKey;
 
 					if (scan->haveIntResumeKey)
@@ -1167,18 +1167,18 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 					continue;
 				}
 
-				/* Remember where the walk resumes (this downlink's high key). */
+				// Remember where the walk resumes (this downlink's high key).
 				scan->haveIntResumeKey = !O_TUPLE_IS_NULL(keyRangeHigh->tuple);
 				if (scan->haveIntResumeKey)
 					copy_fixed_key(scan->desc, &scan->intResumeKey,
 								   keyRangeHigh->tuple);
 
-				/*
-				 * Bitmap-driven within-page skip: advance scan->intLoc
-				 * straight to the downlink covering the next wanted key,
-				 * skipping whole chunks of downlinks the bitmap does not
-				 * need.
-				 */
+				//
+// Bitmap-driven within-page skip: advance scan->intLoc
+// straight to the downlink covering the next wanted key,
+// skipping whole chunks of downlinks the bitmap does not
+// need.
+//
 				if (scan->fetch && scan->cb && scan->cb->getNextKey &&
 					BTREE_PAGE_LOCATOR_IS_VALID(scan->context.img, &scan->intLoc))
 					internal_skip_to_next_key(scan, scan->context.img,
@@ -1195,7 +1195,7 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 	}
 	else
 	{
-		/* Parallel case */
+		// Parallel case
 		while (true)
 		{
 			BTreeIntPageParallelData *curPage;
@@ -1305,24 +1305,24 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 
 			BTREE_PAGE_OFFSET_GET_LOCATOR(curPage->img, curPage->offset, &loc);
 
-			if (BTREE_PAGE_LOCATOR_IS_VALID(curPage->img, &loc))	/* inside int page */
+			if (BTREE_PAGE_LOCATOR_IS_VALID(curPage->img, &loc))	// inside int page
 			{
 				get_current_downlink_key(scan, &loc, curPage->startOffset,
 										 fixed_shmem_key_get_tuple(&curPage->prevHikey),
 										 keyRangeLow, downlink, curPage->img);
-				/* Get next internal page locator and next internal item hikey */
+				// Get next internal page locator and next internal item hikey
 				get_next_key(scan, &loc, keyRangeHigh, curPage->img);
 
-				/* Push next internal item page offset into shared state */
+				// Push next internal item page offset into shared state
 				curPage->offset = BTREE_PAGE_LOCATOR_GET_OFFSET(curPage->img, &loc);
 				scan->context.imgReadCsn = curPage->imgReadCsn;
 
-				/*
-				 * Become the shared downlink writer. This is to be cleared by
-				 * the caller: immediately for in-memory and in IO downlinks,
-				 * after downlink is written to shared DSM array for disk
-				 * downlinks.
-				 */
+				//
+// Become the shared downlink writer. This is to be cleared by
+// the caller: immediately for in-memory and in IO downlinks,
+// after downlink is written to shared DSM array for disk
+// downlinks.
+//
 				pg_atomic_fetch_add_u32(&poscan->downlinksWritersInProgress, 1);
 
 				SpinLockRelease(&poscan->intpageAccess);
@@ -1338,13 +1338,13 @@ get_next_downlink(BTreeSeqScan *scan, uint64 *downlink,
 	}
 }
 
-/*
- * Checks if loaded leaf page matches downlink of internal page.  Makes iterator
- * to read the considered key range if check failed.
- *
- * Hikey of leaf page should match to next downlink or internal page hikey if
- * we're considering the last downlink.
- */
+//
+// Checks if loaded leaf page matches downlink of internal page.  Makes iterator
+// to read the considered key range if check failed.
+//
+// Hikey of leaf page should match to next downlink or internal page hikey if
+// we're considering the last downlink.
+//
 static void
 check_in_memory_leaf_page(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRangeHigh)
 {
@@ -1379,12 +1379,12 @@ check_in_memory_leaf_page(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRang
 }
 
 
-/*
- * Interates the internal page till we either:
- *  - Successfully read the next in-memory leaf page;
- *  - Made an iterator to read key range, which belongs to current downlink;
- *  - Reached the end of internal page.
- */
+//
+// Interates the internal page till we either:
+// - Successfully read the next in-memory leaf page;
+// - Made an iterator to read key range, which belongs to current downlink;
+// - Reached the end of internal page.
+//
 static bool
 iterate_internal_page(BTreeSeqScan *scan)
 {
@@ -1431,12 +1431,12 @@ iterate_internal_page(BTreeSeqScan *scan)
 
 				if (scan->fetch)
 				{
-					/*
-					 * Read the leaf partially: only the chunks the bitmap's
-					 * key-driven walk actually visits are copied from the
-					 * live shared page (on demand, via
-					 * seq_leaf_partial_ensure).
-					 */
+					//
+// Read the leaf partially: only the chunks the bitmap's
+// key-driven walk actually visits are copied from the
+// live shared page (on demand, via
+// seq_leaf_partial_ensure).
+//
 					scan->leafPartial.isPartial = true;
 					scan->leafPartial.hikeysChunkIsLoaded = false;
 					memset(scan->leafPartial.chunkIsLoaded, 0,
@@ -1463,18 +1463,18 @@ iterate_internal_page(BTreeSeqScan *scan)
 					if (scan->iter)
 						return true;
 
-					/*
-					 * A leaf carrying historical/undo data is read whole: the
-					 * historical merge in btree_seq_scan_getnext_internal()
-					 * and load_first_historical_page() walk leaf items
-					 * directly and seed histImg with the full page.
-					 * o_btree_try_read_page() already materialized the page
-					 * for its own undo replay when imgReadCsn required it;
-					 * materialize explicitly against the scan snapshot too so
-					 * a partial image never reaches those paths.  A
-					 * concurrent change during materialization falls back to
-					 * an iterator over the current key range.
-					 */
+					//
+// A leaf carrying historical/undo data is read whole: the
+// historical merge in btree_seq_scan_getnext_internal()
+// and load_first_historical_page() walk leaf items
+// directly and seed histImg with the full page.
+// o_btree_try_read_page() already materialized the page
+// for its own undo replay when imgReadCsn required it;
+// materialize explicitly against the scan snapshot too so
+// a partial image never reaches those paths.  A
+// concurrent change during materialization falls back to
+// an iterator over the current key range.
+//
 					if (leafPartial && scan->leafPartial.isPartial &&
 						COMMITSEQNO_IS_NORMAL(scan->oSnapshot.csn) &&
 						((BTreePageHeader *) scan->leafImg)->csn >= scan->oSnapshot.csn)
@@ -1504,10 +1504,10 @@ iterate_internal_page(BTreeSeqScan *scan)
 			}
 			else if (DOWNLINK_IS_IN_IO(downlink))
 			{
-				/*
-				 * Downlink has currently IO in-progress.  Wait for IO
-				 * completion and refind this downlink.
-				 */
+				//
+// Downlink has currently IO in-progress.  Wait for IO
+// completion and refind this downlink.
+//
 				int			ionum = DOWNLINK_GET_IO_LOCKNUM(downlink);
 
 				if (scan->poscan)
@@ -1582,12 +1582,12 @@ load_next_disk_leaf_page(BTreeSeqScan *scan)
 	if (!success)
 		elog(ERROR, "can not read leaf page from disk");
 
-	/*
-	 * A disk leaf is read whole into the private leafImg, so any partial-read
-	 * state left over from a previous in-memory leaf must not leak into it
-	 * (it would make seq_leaf_partial_ensure() re-read chunks from a stale
-	 * source).
-	 */
+	//
+// A disk leaf is read whole into the private leafImg, so any partial-read
+// state left over from a previous in-memory leaf must not leak into it
+// (it would make seq_leaf_partial_ensure() re-read chunks from a stale
+// source).
+//
 	scan->leafPartial.isPartial = false;
 	scan->haveLastLeafKey = false;
 
@@ -1623,11 +1623,11 @@ init_checkpoit_number(BTreeSeqScan *scan)
 
 	START_CRIT_SECTION();
 
-	/*
-	 * Get the checkpoint number for the scan.  There is race condition with
-	 * concurrent switching tree to the next checkpoint.  So, we have to
-	 * workaround this with recheck-retry loop,
-	 */
+	//
+// Get the checkpoint number for the scan.  There is race condition with
+// concurrent switching tree to the next checkpoint.  So, we have to
+// workaround this with recheck-retry loop,
+//
 	checkpointNumberBefore = get_cur_checkpoint_number(&desc->oids,
 													   desc->type,
 													   &checkpointConcurrent);
@@ -1658,13 +1658,13 @@ init_btree_seq_scan(BTreeSeqScan *scan)
 
 	if (poscan)
 	{
-		/*
-		 * Scan worker numbers are assigned by the order of workers init of
-		 * local seqscan. In case of call seqscan in an index build worker,
-		 * the numbers of scan workers, and who is a scan leader is not
-		 * related to index build leader (who merges workers sort results
-		 * after all workers completed their scans).
-		 */
+		//
+// Scan worker numbers are assigned by the order of workers init of
+// local seqscan. In case of call seqscan in an index build worker,
+// the numbers of scan workers, and who is a scan leader is not
+// related to index build leader (who merges workers sort results
+// after all workers completed their scans).
+//
 		SpinLockAcquire(&poscan->workerStart);
 #ifdef USE_ASSERT_CHECKING
 		for (scan->workerNumber = 0; poscan->worker_active[scan->workerNumber] == true; scan->workerNumber++)
@@ -1677,7 +1677,7 @@ init_btree_seq_scan(BTreeSeqScan *scan)
 		scan->workerNumber = poscan->nworkers;
 		poscan->nworkers++;
 #endif
-		/* Scan leader */
+		// Scan leader
 		if (scan->workerNumber == 0)
 		{
 			uint32		numLeafPages;
@@ -1687,11 +1687,11 @@ init_btree_seq_scan(BTreeSeqScan *scan)
 			poscan->flags |= O_PARALLEL_LEADER_STARTED;
 			init_checkpoit_number(scan);
 
-			/*
-			 * Create a shared DSM segment for on-disk downlinks upfront,
-			 * sized to hold as many downlinks as there are leaf pages in the
-			 * tree.
-			 */
+			//
+// Create a shared DSM segment for on-disk downlinks upfront,
+// sized to hold as many downlinks as there are leaf pages in the
+// tree.
+//
 			numLeafPages = TREE_NUM_LEAF_PAGES(desc);
 			if (numLeafPages < 16)
 				numLeafPages = 16;
@@ -1711,7 +1711,7 @@ init_btree_seq_scan(BTreeSeqScan *scan)
 		}
 		SpinLockRelease(&poscan->workerStart);
 
-		/* Non-leader workers: wait for DSM creation and attach */
+		// Non-leader workers: wait for DSM creation and attach
 		Assert(scan->workerNumber >= 0);
 		if (scan->workerNumber > 0)
 		{
@@ -1792,11 +1792,11 @@ make_btree_seq_scan_internal(BTreeDescr *desc, OSnapshot *oSnapshot,
 	scan->cb = cb;
 	scan->arg = arg;
 
-	/*
-	 * A bitmap scan (callbacks with getNextKey) that isn't parallel drives a
-	 * key-directed walk of each leaf, so we can read leaves partially.  See
-	 * the comment on BTreeSeqScan.fetch.
-	 */
+	//
+// A bitmap scan (callbacks with getNextKey) that isn't parallel drives a
+// key-directed walk of each leaf, so we can read leaves partially.  See
+// the comment on BTreeSeqScan.fetch.
+//
 	scan->fetch = (cb != NULL && cb->getNextKey != NULL && poscan == NULL);
 	scan->leafPartial.isPartial = false;
 	scan->leafPartial.src = NULL;
@@ -1865,11 +1865,11 @@ btree_seq_scan_get_tuple_from_iterator(BTreeSeqScan *scan,
 											NULL, BTreeKeyNone,
 											false, hint);
 
-		/*
-		 * When a partial-read fallback resumed the scan at (inclusive) the
-		 * last already-emitted key, drop that leading duplicate so count/rows
-		 * aren't doubled.
-		 */
+		//
+// When a partial-read fallback resumed the scan at (inclusive) the
+// last already-emitted key, drop that leading duplicate so count/rows
+// aren't doubled.
+//
 		if (scan->iterSkipKey && !O_TUPLE_IS_NULL(result) &&
 			o_btree_cmp(scan->desc, &result, BTreeKeyLeafTuple,
 						&scan->iterSkipKeyVal.tuple, BTreeKeyNonLeafKey) <= 0)
@@ -1931,12 +1931,12 @@ adjust_location_with_next_key(BTreeSeqScan *scan,
 
 	while (BTREE_PAGE_LOCATOR_IS_VALID(p, loc))
 	{
-		/*
-		 * The chunk-skip loop above navigates via chunk hikeys (in the loaded
-		 * hikeys chunk), and BTREE_PAGE_LOCATOR_NEXT below can step across a
-		 * chunk boundary when nextKey falls in the gap between a chunk's last
-		 * item and its hikey; materialize the current chunk before reading.
-		 */
+		//
+// The chunk-skip loop above navigates via chunk hikeys (in the loaded
+// hikeys chunk), and BTREE_PAGE_LOCATOR_NEXT below can step across a
+// chunk boundary when nextKey falls in the gap between a chunk's last
+// item and its hikey; materialize the current chunk before reading.
+//
 		if (!seq_leaf_partial_ensure(scan, p, loc))
 			return false;
 		BTREE_PAGE_READ_LEAF_TUPLE(key, p, loc);
@@ -2150,16 +2150,16 @@ btree_seq_scan_getnext_internal(BTreeSeqScan *scan, MemoryContext mctx,
 		{
 			OTuple		resumeLow;
 
-			/*
-			 * A partial leaf chunk load lost its race with a concurrent page
-			 * modification.  Abandon the partial image and re-read the rest
-			 * of the current downlink's key range through an iterator; the
-			 * bitmap fetch layer rechecks every tuple, so over-reading is
-			 * safe as long as we don't re-emit tuples already returned.  If
-			 * we already emitted tuples from this leaf, resume from the last
-			 * of them (inclusive) and let the iterator drop that leading
-			 * duplicate; otherwise re-read the whole range.
-			 */
+			//
+// A partial leaf chunk load lost its race with a concurrent page
+// modification.  Abandon the partial image and re-read the rest
+// of the current downlink's key range through an iterator; the
+// bitmap fetch layer rechecks every tuple, so over-reading is
+// safe as long as we don't re-emit tuples already returned.  If
+// we already emitted tuples from this leaf, resume from the last
+// of them (inclusive) and let the iterator drop that leading
+// duplicate; otherwise re-read the whole range.
+//
 			scan->leafPartialFailed = false;
 			if (scan->haveLastLeafKey)
 			{
@@ -2209,14 +2209,14 @@ btree_seq_scan_getnext_internal(BTreeSeqScan *scan, MemoryContext mctx,
 			continue;
 		}
 
-		/*
-		 * While reading a leaf partially, remember the key we're about to
-		 * process so a later partial-read failure can resume just after it
-		 * instead of re-reading (and re-emitting) the whole leaf.
-		 * scan->nextKey is the bitmap key positioned by apply_next_key(),
-		 * i.e. the key of the tuple at leafLoc, already in the non-leaf key
-		 * form comparisons use.
-		 */
+		//
+// While reading a leaf partially, remember the key we're about to
+// process so a later partial-read failure can resume just after it
+// instead of re-reading (and re-emitting) the whole leaf.
+// scan->nextKey is the bitmap key positioned by apply_next_key(),
+// i.e. the key of the tuple at leafLoc, already in the non-leaf key
+// form comparisons use.
+//
 		if (scan->leafPartial.isPartial && !O_TUPLE_IS_NULL(scan->nextKey.tuple))
 		{
 			copy_fixed_key(scan->desc, &scan->lastLeafKey, scan->nextKey.tuple);
@@ -2240,7 +2240,7 @@ btree_seq_scan_getnext_internal(BTreeSeqScan *scan, MemoryContext mctx,
 		}
 	}
 
-	/* keep compiler quiet */
+	// keep compiler quiet
 	O_TUPLE_SET_NULL(tuple);
 	return tuple;
 }
@@ -2384,11 +2384,11 @@ btree_seq_scan_getnext_raw(BTreeSeqScan *scan, MemoryContext mctx,
 	return tuple;
 }
 
-/*
- * Internal cleanup for a sequential scan: decrements the numSeqScans counter
- * and completes deferred meta page free if this was the last scan.  Called
- * from both the normal free path and the resource owner release callback.
- */
+//
+// Internal cleanup for a sequential scan: decrements the numSeqScans counter
+// and completes deferred meta page free if this was the last scan.  Called
+// from both the normal free path and the resource owner release callback.
+//
 static void
 free_btree_seq_scan_internal(BTreeSeqScan *scan, bool fromResowner)
 {
@@ -2408,7 +2408,7 @@ free_btree_seq_scan_internal(BTreeSeqScan *scan, bool fromResowner)
 
 		(void) pg_atomic_fetch_sub_u32(&metaPage->numSeqScans[scan->checkpointNumber % NUM_SEQ_SCANS_ARRAY_SIZE], 1);
 
-		/* Complete deferred meta page free if this was the last scan. */
+		// Complete deferred meta page free if this was the last scan.
 		if (metaPage->toBeFreedOnSeqScanRelease && meta_page_get_num_seq_scans(desc->rootInfo.metaPageBlkno) == 0)
 			ppool_free_page(desc->ppool, desc->rootInfo.metaPageBlkno, false);
 
@@ -2417,12 +2417,12 @@ free_btree_seq_scan_internal(BTreeSeqScan *scan, bool fromResowner)
 
 	if (scan->dsmSeg)
 	{
-		/*
-		 * Skip dsm_detach when called from ResourceOwner release: the DSM
-		 * segment is also registered as a resource and will be detached by
-		 * ResourceOwner independently.  Calling dsm_detach here would attempt
-		 * ResourceOwnerForget on a DSM that may have already been released.
-		 */
+		//
+// Skip dsm_detach when called from ResourceOwner release: the DSM
+// segment is also registered as a resource and will be detached by
+// ResourceOwner independently.  Calling dsm_detach here would attempt
+// ResourceOwnerForget on a DSM that may have already been released.
+//
 		if (!fromResowner)
 			dsm_detach(scan->dsmSeg);
 		scan->dsmSeg = NULL;
@@ -2459,11 +2459,11 @@ free_btree_seq_scan(BTreeSeqScan *scan)
 	free_btree_seq_scan_internal(scan, false);
 }
 
-/*
- * Error cleanup for sequential scans.  No scans survives the error, but they
- * aren't cleaned up individually.  Thus, we have to walk through all the scans
- * and revert changes made to the metaPageBlkno->numSeqScans.
- */
+//
+// Error cleanup for sequential scans.  No scans survives the error, but they
+// aren't cleaned up individually.  Thus, we have to walk through all the scans
+// and revert changes made to the metaPageBlkno->numSeqScans.
+//
 void
 seq_scans_cleanup(void)
 {
@@ -2477,10 +2477,10 @@ seq_scans_cleanup(void)
 	END_CRIT_SECTION();
 }
 
-/*
- * Return the total number of active sequential scans across all checkpoint
- * number slots for the given meta page.
- */
+//
+// Return the total number of active sequential scans across all checkpoint
+// number slots for the given meta page.
+//
 int
 meta_page_get_num_seq_scans(OInMemoryBlkno metaPageBlkno)
 {
@@ -2528,12 +2528,12 @@ ResOwnerPrintBTreeSeqScan(Datum res)
 
 #else
 
-/*
- * PG16 lacks the per-owner ResourceOwnerRemember API, so we fall back to
- * RegisterResourceReleaseCallback.  The callback fires for every
- * ResourceOwner release, so it filters by scan->resowner to only free the
- * scan when its own binding owner is being released.
- */
+//
+// PG16 lacks the per-owner ResourceOwnerRemember API, so we fall back to
+// RegisterResourceReleaseCallback.  The callback fires for every
+// ResourceOwner release, so it filters by scan->resowner to only free the
+// scan when its own binding owner is being released.
+//
 static void
 ResOwnerReleaseBTreeSeqScanCallback(ResourceReleasePhase phase,
 									bool isCommit, bool isTopLevel, void *arg)
@@ -2545,15 +2545,15 @@ ResOwnerReleaseBTreeSeqScanCallback(ResourceReleasePhase phase,
 	if (scan->resowner != CurrentResourceOwner)
 		return;
 
-	/*
-	 * Unregister this callback before letting free_btree_seq_scan_internal
-	 * clear scan->resowner.  The scan itself is not pfreed here (fromResowner
-	 * skips dlist_delete/pfree and leaves cleanup to seq_scans_cleanup), and
-	 * that later pfree would leave a dangling arg pointer in the global
-	 * callback list if we did not drop the entry now.  Self-removal during
-	 * the release walk is safe: resowner.c captures the next pointer before
-	 * invoking each callback.
-	 */
+	//
+// Unregister this callback before letting free_btree_seq_scan_internal
+// clear scan->resowner.  The scan itself is not pfreed here (fromResowner
+// skips dlist_delete/pfree and leaves cleanup to seq_scans_cleanup), and
+// that later pfree would leave a dangling arg pointer in the global
+// callback list if we did not drop the entry now.  Self-removal during
+// the release walk is safe: resowner.c captures the next pointer before
+// invoking each callback.
+//
 	UnregisterResourceReleaseCallback(ResOwnerReleaseBTreeSeqScanCallback,
 									  scan);
 	scan->resowner = NULL;

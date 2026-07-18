@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * page_contents.c
- *		Low-level routines for working with b-tree page contents.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/page_contents.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// page_contents.c
+// Low-level routines for working with b-tree page contents.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/page_contents.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -35,10 +35,10 @@
 
 static void clear_fixed_tuple(OFixedTuple *dst);
 
-/*
- * Navigates and reads the page image from undo log according to `key` of
- * `keyType` and `csn`.  Saves lokey of the page to lokey if *lokey != NULL.
- */
+//
+// Navigates and reads the page image from undo log according to `key` of
+// `keyType` and `csn`.  Saves lokey of the page to lokey if *lokey != NULL.
+//
 UndoLocation
 read_page_from_undo(BTreeDescr *desc, Page img, UndoLocation undo_loc,
 					CommitSeqNo csn, void *key, BTreeKeyType keyType,
@@ -54,7 +54,7 @@ read_page_from_undo(BTreeDescr *desc, Page img, UndoLocation undo_loc,
 
 	while (true)
 	{
-		/* Read page image from page-level undo item */
+		// Read page image from page-level undo item
 		get_page_from_undo(desc, undo_loc, key, keyType, img,
 						   &is_left, NULL, lokey, NULL, NULL);
 
@@ -62,10 +62,10 @@ read_page_from_undo(BTreeDescr *desc, Page img, UndoLocation undo_loc,
 		page_csn = header->csn;
 		rec_undo_location = header->undoLocation;
 
-		/* Page-level undo item should be retained */
+		// Page-level undo item should be retained
 		Assert(UNDO_REC_EXISTS(undoType, undo_loc));
 
-		/* Continue traversing undo chain if needed */
+		// Continue traversing undo chain if needed
 		if (COMMITSEQNO_IS_NORMAL(page_csn) && page_csn >= csn)
 		{
 			undo_loc = rec_undo_location;
@@ -77,15 +77,15 @@ read_page_from_undo(BTreeDescr *desc, Page img, UndoLocation undo_loc,
 		}
 	}
 
-	/* Page-level undo item should be retained */
+	// Page-level undo item should be retained
 	Assert(UNDO_REC_EXISTS(undoType, undo_loc));
 
 	return O_UNDO_GET_IMAGE_LOCATION(undo_loc, is_left);
 }
 
-/*
- * Try to copy consistent image of page with page number = blkno to dest.
- */
+//
+// Try to copy consistent image of page with page number = blkno to dest.
+//
 static inline ReadPageResult
 try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 			  Page dest, PartialPageState *partial, bool loadHikeysChunk,
@@ -128,15 +128,15 @@ try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 
 #ifdef USE_ASSERT_CHECKING
 
-	/*
-	 * Read the page's owning tree oids inside the same barrier-protected
-	 * window as the copy.  If the state checks below confirm the page did not
-	 * change under us, these oids describe the page we copied and its
-	 * physical identity must match the tree we descended -- otherwise we
-	 * followed a downlink onto a page that belongs to a different tree (a
-	 * reused/evicted page).  Validated by the Assert() after all the regular
-	 * checks pass.
-	 */
+	//
+// Read the page's owning tree oids inside the same barrier-protected
+// window as the copy.  If the state checks below confirm the page did not
+// change under us, these oids describe the page we copied and its
+// physical identity must match the tree we descended -- otherwise we
+// followed a downlink onto a page that belongs to a different tree (a
+// reused/evicted page).  Validated by the Assert() after all the regular
+// checks pass.
+//
 	pageOids = O_GET_IN_MEMORY_PAGEDESC(blkno)->oids;
 #endif
 
@@ -155,18 +155,18 @@ try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 
 	Assert(hiKeysEndOK);
 
-	/*
-	 * A shared-pool page must physically belong to the tree we descended.
-	 * Compare only the physical identity (datoid + relnode): reloid is the
-	 * logical catalog OID stamped into the descriptor at page creation and
-	 * can legitimately drift from desc->oids.reloid after DDL that keeps the
-	 * same relfilenode (e.g. ALTER TYPE), so it is excluded.  Local-pool
-	 * (temp) pages are skipped: they use a private oid scheme and a
-	 * per-backend slot can be reused across the temp relation's own indexes,
-	 * so their descriptor oids need not match.  The cross-tree reuse this
-	 * guards against (a stale downlink onto an evicted-and-reused page, e.g.
-	 * on a hot standby) is a shared-pool concern.
-	 */
+	//
+// A shared-pool page must physically belong to the tree we descended.
+// Compare only the physical identity (datoid + relnode): reloid is the
+// logical catalog OID stamped into the descriptor at page creation and
+// can legitimately drift from desc->oids.reloid after DDL that keeps the
+// same relfilenode (e.g. ALTER TYPE), so it is excluded.  Local-pool
+// (temp) pages are skipped: they use a private oid scheme and a
+// per-backend slot can be reused across the temp relation's own indexes,
+// so their descriptor oids need not match.  The cross-tree reuse this
+// guards against (a stale downlink onto an evicted-and-reused page, e.g.
+// on a hot standby) is a shared-pool concern.
+//
 	Assert(O_PAGE_IS_LOCAL(blkno) ||
 		   (pageOids.datoid == desc->oids.datoid &&
 			pageOids.relnode == desc->oids.relnode));
@@ -177,9 +177,9 @@ try_copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 	return ReadPageResultOK;
 }
 
-/*
- * Copy consistent image of page with page number = blkno to dest.
- */
+//
+// Copy consistent image of page with page number = blkno to dest.
+//
 static inline bool
 copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 		  Page dest, PartialPageState *partial, bool loadHikeysChunk,
@@ -200,11 +200,11 @@ copy_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount,
 	}
 }
 
-/*
- * Read in-memory page number `blkno` into `img`.  Check expected
- * `pageChangeCount`.  Lookup for undo page according to `csn` when `key` of
- * `keyType`.
- */
+//
+// Read in-memory page number `blkno` into `img`.  Check expected
+// `pageChangeCount`.  Lookup for undo page according to `csn` when `key` of
+// `keyType`.
+//
 bool
 o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
 				  uint32 pageChangeCount, Page img,
@@ -219,12 +219,12 @@ o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 	Assert(pageChangeCount != InvalidOPageChangeCount);
 
-	/*
-	 * For local pool pages, the slot may have been reclaimed by a reentrant
-	 * eviction that ran between the caller capturing this downlink and now.
-	 * Treat a NULL slot as a read failure so the caller can refetch the
-	 * downlink from the parent (which now points to disk).
-	 */
+	//
+// For local pool pages, the slot may have been reclaimed by a reentrant
+// eviction that ran between the caller capturing this downlink and now.
+// Treat a NULL slot as a read failure so the caller can refetch the
+// downlink from the parent (which now points to disk).
+//
 	if (O_PAGE_IS_LOCAL(blkno) &&
 		local_ppool_pages[blkno & O_BLKNO_MASK] == NULL)
 		return false;
@@ -235,34 +235,34 @@ o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 	EA_READ_INC(blkno);
 
-	/*---
-	 * Check if we need to load page image from undo?
-	 *
-	 * We do this check without holding a page lock or even usage of state
-	 * protocol.  Istead we ensure correctenss of this check in a following
-	 * way.
-	 *
-	 * 1. We read csn before undo location (ensured with memory barriers).
-	 *    We write csn after undo location (also ensured with memory barriers).
-	 *    Thus, undo location we read is probably more recent than csn.  That could
-	 *    lead to traverse of extra step of undo chain, which is not a problem.
-	 *    Also that could lead to miss the need of reading undo, but that would
-	 *    be catched by subsequent check.
-	 * 2. We check page change count after reading csn and undo location.  That
-	 *    ensures page wasn't reused for something while reading csn and undo
-	 *    location.  Note, that there is at least one memory barrier between
-	 *    increasing page change count and reusing the page during page unlock.
-	 */
+	// ---
+// Check if we need to load page image from undo?
+//
+// We do this check without holding a page lock or even usage of state
+// protocol.  Istead we ensure correctenss of this check in a following
+// way.
+//
+// 1. We read csn before undo location (ensured with memory barriers).
+// We write csn after undo location (also ensured with memory barriers).
+// Thus, undo location we read is probably more recent than csn.  That could
+// lead to traverse of extra step of undo chain, which is not a problem.
+// Also that could lead to miss the need of reading undo, but that would
+// be catched by subsequent check.
+// 2. We check page change count after reading csn and undo location.  That
+// ensures page wasn't reused for something while reading csn and undo
+// location.  Note, that there is at least one memory barrier between
+// increasing page change count and reusing the page during page unlock.
+//
 
-	/*
-	 * Always copy the live page into img first, then -- if it is too new for
-	 * our snapshot -- walk the page-level undo chain transforming img in
-	 * place.  Differential undo images (UndoPageImage*Diff) do not store page
-	 * bytes; they reconstruct the historical page from the newer image
-	 * already sitting in img.  So img must hold the live page before the
-	 * chain walk, which is why the former "read undo without copying" fast
-	 * path is gone.
-	 */
+	//
+// Always copy the live page into img first, then -- if it is too new for
+// our snapshot -- walk the page-level undo chain transforming img in
+// place.  Differential undo images (UndoPageImage*Diff) do not store page
+// bytes; they reconstruct the historical page from the newer image
+// already sitting in img.  So img must hold the live page before the
+// chain walk, which is why the former "read undo without copying" fast
+// path is gone.
+//
 	if (!copy_page(desc, blkno, pageChangeCount, img, partial,
 				   loadHikeysChunk, readCsn))
 		return false;
@@ -272,13 +272,13 @@ o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
 	{
 		UndoLocation pageUndoLoc;
 
-		/*
-		 * Differential page-level undo images reconstruct the historical page
-		 * in place from the live page in img, so they need every chunk
-		 * present. Fully materialize a partially-loaded page before walking
-		 * the chain; if the source page changed mid-load, report failure so
-		 * the caller refetches the downlink.
-		 */
+		//
+// Differential page-level undo images reconstruct the historical page
+// in place from the live page in img, so they need every chunk
+// present. Fully materialize a partially-loaded page before walking
+// the chain; if the source page changed mid-load, report failure so
+// the caller refetches the downlink.
+//
 		if (partial && partial->isPartial &&
 			!partial_load_full_page(partial, img))
 			return false;
@@ -302,9 +302,9 @@ o_btree_read_page(BTreeDescr *desc, OInMemoryBlkno blkno,
 	return true;
 }
 
-/*
- * Try to read page with concurrent changes.  Returns true on success.
- */
+//
+// Try to read page with concurrent changes.  Returns true on success.
+//
 ReadPageResult
 o_btree_try_read_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeCount, Page img,
 					  CommitSeqNo csn, Pointer key, BTreeKeyType keyType,
@@ -318,12 +318,12 @@ o_btree_try_read_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeC
 
 	Assert(pageChangeCount != InvalidOPageChangeCount);
 
-	/*
-	 * For local pool pages, the slot may have been reclaimed by a reentrant
-	 * eviction that ran between the caller capturing this downlink and now.
-	 * Treat a NULL slot as a read failure so the caller can refetch the
-	 * downlink from the parent (which now points to disk).
-	 */
+	//
+// For local pool pages, the slot may have been reclaimed by a reentrant
+// eviction that ran between the caller capturing this downlink and now.
+// Treat a NULL slot as a read failure so the caller can refetch the
+// downlink from the parent (which now points to disk).
+//
 	if (O_PAGE_IS_LOCAL(blkno) &&
 		local_ppool_pages[blkno & O_BLKNO_MASK] == NULL)
 		return ReadPageResultFailed;
@@ -334,12 +334,12 @@ o_btree_try_read_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeC
 
 	EA_READ_INC(blkno);
 
-	/*
-	 * Copy the live page into img first; differential page-level undo images
-	 * reconstruct the historical page from the newer page already in img, so
-	 * the page must be present before walking the undo chain (see
-	 * o_btree_read_page()).
-	 */
+	//
+// Copy the live page into img first; differential page-level undo images
+// reconstruct the historical page from the newer page already in img, so
+// the page must be present before walking the undo chain (see
+// o_btree_read_page()).
+//
 	result = try_copy_page(desc, blkno, pageChangeCount, img, partial,
 						   loadHikeysChunk, readCsn);
 	if (result != ReadPageResultOK)
@@ -348,7 +348,7 @@ o_btree_try_read_page(BTreeDescr *desc, OInMemoryBlkno blkno, uint32 pageChangeC
 	header = (BTreePageHeader *) img;
 	if (read_undo && COMMITSEQNO_IS_NORMAL(csn) && header->csn >= csn)
 	{
-		/* See o_btree_read_page(): differential undo images need a full page. */
+		// See o_btree_read_page(): differential undo images need a full page.
 		if (partial && partial->isPartial &&
 			!partial_load_full_page(partial, img))
 			return ReadPageResultFailed;
@@ -458,9 +458,9 @@ init_meta_page(OInMemoryBlkno blkno, uint32 leafPagesNum)
 	metaPage->toBeFreedOnSeqScanRelease = false;
 }
 
-/*
- * Estimate vacated space in the page after item replace on the given offset.
- */
+//
+// Estimate vacated space in the page after item replace on the given offset.
+//
 LocationIndex
 page_get_vacated_skip_item(BTreeDescr *desc, Page p, CommitSeqNo csn,
 						   LocationIndex offset)
@@ -497,9 +497,9 @@ page_get_vacated_skip_item(BTreeDescr *desc, Page p, CommitSeqNo csn,
 	return vacatedBytes;
 }
 
-/*
- * Estimate vacated space in the page.
- */
+//
+// Estimate vacated space in the page.
+//
 LocationIndex
 page_get_vacated_space(BTreeDescr *desc, Page p, CommitSeqNo csn)
 {
@@ -539,10 +539,10 @@ put_page_image(OInMemoryBlkno blkno, Page img)
 		   ORIOLEDB_BLCKSZ - skipSize);
 }
 
-/*
- * Calculates number of vacated bytes for leaf pages and number of
- * disk downlinks for non-leaf pages.
- */
+//
+// Calculates number of vacated bytes for leaf pages and number of
+// disk downlinks for non-leaf pages.
+//
 void
 o_btree_page_calculate_statistics(BTreeDescr *desc, Pointer p)
 {
@@ -552,7 +552,7 @@ o_btree_page_calculate_statistics(BTreeDescr *desc, Pointer p)
 	{
 		int			nVacated = 0;
 
-		/* Bridge tuples not treated as vacated */
+		// Bridge tuples not treated as vacated
 		if (desc->type == oIndexBridge)
 			return;
 
@@ -821,7 +821,7 @@ page_resize_hikey(Page p, LocationIndex newHikeySize)
 	dataLocation = SHORT_GET_LOCATION(header->chunkDesc[0].shortLocation);
 	if (hikeyLocation + newHikeySize <= dataLocation)
 	{
-		/* Fits */
+		// Fits
 		header->hikeysEnd = hikeyLocation + newHikeySize;
 		return;
 	}

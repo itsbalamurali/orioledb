@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * io.c
- *		Routines for orioledb B-tree disk IO.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/io.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// io.c
+// Routines for orioledb B-tree disk IO.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/io.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include <fcntl.h>
@@ -201,7 +201,7 @@ typedef struct
 	FileHashKey key;
 	File		file;
 	uint32		loadId;
-	char		status;			/* for simplehash use */
+	char		status;			// for simplehash use
 } FileHashElement;
 
 #define SH_PREFIX s3Files
@@ -306,10 +306,10 @@ btree_open_smgr_file(BTreeDescr *desc, uint32 num, uint32 chkpNum,
 		{
 			int			i = desc->smgr.array.filesAllocated;
 
-			/*
-			 * btree_open_smgr should have been called before, so
-			 * filesAllocated should be greater than 0
-			 */
+			//
+// btree_open_smgr should have been called before, so
+// filesAllocated should be greater than 0
+//
 			Assert(desc->smgr.array.filesAllocated > 0);
 
 			while (num >= desc->smgr.array.filesAllocated)
@@ -792,11 +792,11 @@ btree_smgr_sync(BTreeDescr *desc, uint32 chkpNum, off_t length)
 	}
 }
 
-/*
- * Punch a hole in a raw OS file descriptor. Logs a WARNING on failure and
- * returns; callers don't need to handle the return value because the data
- * is being discarded either way.
- */
+//
+// Punch a hole in a raw OS file descriptor. Logs a WARNING on failure and
+// returns; callers don't need to handle the return value because the data
+// is being discarded either way.
+//
 void
 punch_fd_hole(int fd, off_t offset, off_t length, const char *fileName)
 {
@@ -881,9 +881,9 @@ init_btree_io_lwlocks(void)
 	io_locks = GetNamedLWLockTranche("orioledb_btree_io");
 }
 
-/*
- * Assign number of IO operation to particular (blkno; offnum) pair.
- */
+//
+// Assign number of IO operation to particular (blkno; offnum) pair.
+//
 int
 assign_io_num(OInMemoryBlkno blkno, OffsetNumber offnum)
 {
@@ -909,9 +909,9 @@ assign_io_num(OInMemoryBlkno blkno, OffsetNumber offnum)
 	return locknum;
 }
 
-/*
- * Wait until particular IO operation is completed.
- */
+//
+// Wait until particular IO operation is completed.
+//
 void
 wait_for_io_completion(int ionum)
 {
@@ -919,19 +919,19 @@ wait_for_io_completion(int ionum)
 	LWLockRelease(&io_locks[ionum].lock);
 }
 
-/*
- * Report given IO operation to be finished.
- */
+//
+// Report given IO operation to be finished.
+//
 void
 unlock_io(int ionum)
 {
 	LWLockRelease(&io_locks[ionum].lock);
 }
 
-/*
- * Get next disk free offset for uncompressed on disk B-tree.
- * Returns InvalidFileExtentOff if fails.
- */
+//
+// Get next disk free offset for uncompressed on disk B-tree.
+// Returns InvalidFileExtentOff if fails.
+//
 static uint64
 get_free_disk_offset(BTreeDescr *desc)
 {
@@ -944,10 +944,10 @@ get_free_disk_offset(BTreeDescr *desc)
 
 	Assert(!orioledb_s3_mode);
 
-	/*
-	 * Switch to the next sequential buffer with free blocks numbers in
-	 * needed.
-	 */
+	//
+// Switch to the next sequential buffer with free blocks numbers in
+// needed.
+//
 	numFreeBlocks = pg_atomic_read_u64(&metaPage->numFreeBlocks);
 	free_buf_num = metaPage->freeBuf.tag.num;
 	while (numFreeBlocks == 0 &&
@@ -998,16 +998,16 @@ get_free_disk_offset(BTreeDescr *desc)
 		{
 			return InvalidFileExtentOff;
 		}
-		/* SeqBufReplaceAlready requires no action, just retry if needed */
+		// SeqBufReplaceAlready requires no action, just retry if needed
 
 		numFreeBlocks = pg_atomic_read_u64(&metaPage->numFreeBlocks);
 		free_buf_num = metaPage->freeBuf.tag.num;
 	}
 
-	/*
-	 * Try to get free block number from the buffer.  If not success, then
-	 * extend the file.
-	 */
+	//
+// Try to get free block number from the buffer.  If not success, then
+// extend the file.
+//
 	LWLockAcquire(metaLock, LW_SHARED);
 	gotBlock = false;
 	while (numFreeBlocks > 0)
@@ -1054,11 +1054,11 @@ get_free_disk_offset(BTreeDescr *desc)
 	return result;
 }
 
-/*
- * Fills free file extent for B-tree.
- *
- * FileExtentIsValid(extent) == false if fails.
- */
+//
+// Fills free file extent for B-tree.
+//
+// FileExtentIsValid(extent) == false if fails.
+//
 static bool
 get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
 					 off_t page_size, FileExtent *extent)
@@ -1085,12 +1085,12 @@ get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
 		return FileExtentIsValid(*extent);
 	}
 
-	/*
-	 * User temporary trees maintain a pure backend-local free space map.
-	 * Serve the allocation from that list first, falling back to extending
-	 * the data file.  This avoids any dependency on checkpoint-tagged seq
-	 * bufs.
-	 */
+	//
+// User temporary trees maintain a pure backend-local free space map.
+// Serve the allocation from that list first, falling back to extending
+// the data file.  This avoids any dependency on checkpoint-tagged seq
+// bufs.
+//
 	if (btree_desc_is_local_temp(desc))
 	{
 		BTreeMetaPage *metaPage = BTREE_GET_META(desc);
@@ -1116,7 +1116,7 @@ get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
 	}
 	else
 	{
-		/* Try to add free extents if we didn't manage to do after checkpoint */
+		// Try to add free extents if we didn't manage to do after checkpoint
 		add_free_extents_from_tmp(desc, remove_old_checkpoint_files);
 		*extent = get_extent(desc, FileExtentLen(page_size));
 	}
@@ -1124,11 +1124,11 @@ get_free_disk_extent(BTreeDescr *desc, uint32 chkpNum,
 	return FileExtentIsValid(*extent);
 }
 
-/*
- * Fills free file extent for B-tree under copy blkno lock.
- *
- * FileExtentIsValid(extent) == false if fails.
- */
+//
+// Fills free file extent for B-tree under copy blkno lock.
+//
+// FileExtentIsValid(extent) == false if fails.
+//
 static bool
 get_free_disk_extent_copy_blkno(BTreeDescr *desc, off_t page_size,
 								FileExtent *extent, uint32 checkpoint_number)
@@ -1149,13 +1149,13 @@ get_free_disk_extent_copy_blkno(BTreeDescr *desc, off_t page_size,
 		checkpoint_state->relnode == desc->oids.relnode &&
 		checkpoint_state->curKeyType != CurKeyFinished)
 	{
-		/*
-		 * We're writing to the next checkpoint, while current checkpoint is
-		 * concurrently taking.  So, indicate this page is free in the
-		 * checkpoint currently taking.  We have to take a lock in order to be
-		 * sure that checkpoint map file will be finishing concurrently.
-		 * Otherwise we might loose this block number.
-		 */
+		//
+// We're writing to the next checkpoint, while current checkpoint is
+// concurrently taking.  So, indicate this page is free in the
+// checkpoint currently taking.  We have to take a lock in order to be
+// sure that checkpoint map file will be finishing concurrently.
+// Otherwise we might loose this block number.
+//
 		int			prev_chkp_index = (checkpoint_number - 1) % 2;
 		bool		success;
 
@@ -1185,7 +1185,7 @@ get_free_disk_extent_copy_blkno(BTreeDescr *desc, off_t page_size,
 
 #ifdef IS_DEV
 
-/* Functions for eviction_page_checkpoint_numbers test included under IS_DEV */
+// Functions for eviction_page_checkpoint_numbers test included under IS_DEV
 PG_FUNCTION_INFO_V1(reset_read_page_checkpoint_stats);
 PG_FUNCTION_INFO_V1(fetch_read_page_checkpoint_stats);
 
@@ -1214,11 +1214,11 @@ fetch_read_page_checkpoint_stats(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
-/* Store checkpoint statistics for page reads for eviction_page_checkpoint_numbers test */
+// Store checkpoint statistics for page reads for eviction_page_checkpoint_numbers test
 static void
 store_read_page_checkpoint_stats(uint32 checkpointNum)
 {
-	/* Remember for checkpoint read test only */
+	// Remember for checkpoint read test only
 	max_read_page_checkpoint = Max(max_read_page_checkpoint, checkpointNum);
 	min_read_page_checkpoint = Min(min_read_page_checkpoint, checkpointNum);
 	elog(DEBUG1, "Remember read_page_checkpoin: min %u max %u", min_read_page_checkpoint, max_read_page_checkpoint);
@@ -1226,13 +1226,13 @@ store_read_page_checkpoint_stats(uint32 checkpointNum)
 
 #endif
 
-/*
- * Now we have only one page version (1). When we have
- * different versions we'll need to bump
- * ORIOLEDB_PAGE_VERSION and implement on-the-fly conversion
- * function from all previous page versions to use _after_
- * decompression.
- */
+//
+// Now we have only one page version (1). When we have
+// different versions we'll need to bump
+// ORIOLEDB_PAGE_VERSION and implement on-the-fly conversion
+// function from all previous page versions to use _after_
+// decompression.
+//
 static bool
 check_orioledb_page_version(OrioleDBOndiskPageHeader ondisk_page_header)
 {
@@ -1249,13 +1249,13 @@ convert_orioledb_page_version(Pointer img)
 	elog(FATAL, "Page version conversion is not implemented");
 }
 
-/*
- * Now we have only one compresss version (1). When we have
- * different versions we'll need to bump
- * ORIOLEDB_COMPRESS_VERSION and add other variants of
- * decompress function from all previous page versions in
- * this function
- */
+//
+// Now we have only one compresss version (1). When we have
+// different versions we'll need to bump
+// ORIOLEDB_COMPRESS_VERSION and add other variants of
+// decompress function from all previous page versions in
+// this function
+//
 static bool
 check_orioledb_compress_version(OrioleDBOndiskPageHeader ondisk_page_header)
 {
@@ -1265,10 +1265,10 @@ check_orioledb_compress_version(OrioleDBOndiskPageHeader ondisk_page_header)
 	return false;
 }
 
-/*
- * Reads a page from disk to the img from a valid downlink. It's fills an empty
- * array of offsets for the page.
- */
+//
+// Reads a page from disk to the img from a valid downlink. It's fills an empty
+// array of offsets for the page.
+//
 bool
 read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 					FileExtent *extent)
@@ -1296,7 +1296,7 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 
 	if (!OCompressIsValid(desc->compress))
 	{
-		/* easy case, read page from uncompressed index */
+		// easy case, read page from uncompressed index
 		Assert(len == 1);
 
 		if (use_device)
@@ -1338,11 +1338,11 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 			o_decompress_page(buf + O_PAGE_HEADER_SIZE, ondisk_page_header.compress_page_size, img);
 			elog(DEBUG1, "Read disk page: checkpoint %u size %d", ondisk_page_header.checkpointNum, ondisk_page_header.compress_page_size);
 
-			/*
-			 * Decompressed page has its own OrioleDBPageHeader with the same
-			 * checkpointNum as is external OrioleDBOndiskPageHeader. It is
-			 * redundant and unused, just check it.
-			 */
+			//
+// Decompressed page has its own OrioleDBPageHeader with the same
+// checkpointNum as is external OrioleDBOndiskPageHeader. It is
+// redundant and unused, just check it.
+//
 			Assert(((BTreePageHeader *) img)->o_header.checkpointNum == ondisk_page_header.checkpointNum);
 		}
 		else
@@ -1350,7 +1350,7 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 			byte_offset = (off_t) offset * (off_t) ORIOLEDB_COMP_BLCKSZ;
 			read_size = O_PAGE_HEADER_SIZE;
 
-			/* details about written image parts are in write_page_to_disk */
+			// details about written image parts are in write_page_to_disk
 			err = btree_smgr_read(desc, (Pointer) &ondisk_page_header, chkpNum, read_size, byte_offset) != read_size;
 			byte_offset += read_size;
 
@@ -1367,34 +1367,34 @@ read_page_from_disk(BTreeDescr *desc, Pointer img, uint64 downlink,
 		}
 	}
 
-	/*
-	 * At this point, page is fully read and decompressed. Do conversion of
-	 * needed data from OrioleDBOndiskPageHeader to OrioleDBPageHeader. Do
-	 * conversion of page version (not implemented yet);
-	 */
+	//
+// At this point, page is fully read and decompressed. Do conversion of
+// needed data from OrioleDBOndiskPageHeader to OrioleDBPageHeader. Do
+// conversion of page version (not implemented yet);
+//
 	Assert(!err);
 
 	if (needs_page_version_convert)
 		convert_orioledb_page_version(img);
 
-	/*
-	 * Convert needed data from OrioleDBOndiskPageHeader to
-	 * OrioleDBPageHeader. Erase what's unused to be safe.
-	 */
+	//
+// Convert needed data from OrioleDBOndiskPageHeader to
+// OrioleDBPageHeader. Erase what's unused to be safe.
+//
 	memset(img, 0, O_PAGE_HEADER_SIZE);
 	((BTreePageHeader *) img)->o_header.checkpointNum = ondisk_page_header.checkpointNum;
 
 #ifdef IS_DEV
-	/* For eviction/page checkpoint number test */
+	// For eviction/page checkpoint number test
 	store_read_page_checkpoint_stats(((BTreePageHeader *) img)->o_header.checkpointNum);
 #endif
 
 	return true;
 }
 
-/*
- * Writes a page to the disk. An array of file offsets must be valid.
- */
+//
+// Writes a page to the disk. An array of file offsets must be valid.
+//
 static bool
 write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 				   Pointer page, off_t page_size)
@@ -1420,9 +1420,9 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 	{
 		OrioleDBOndiskPageHeader *ondisk_page_header;
 
-		/*
-		 * Easy case, write whole page to uncompressed index.
-		 */
+		//
+// Easy case, write whole page to uncompressed index.
+//
 		Assert(extent->len == 1);
 		Assert(page_size == ORIOLEDB_BLCKSZ);
 
@@ -1448,13 +1448,13 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 
 		byte_offset *= (off_t) ORIOLEDB_COMP_BLCKSZ;
 
-		/*
-		 * overflow protection
-		 */
+		//
+// overflow protection
+//
 		Assert(sizeof(((OrioleDBOndiskPageHeader *) 0)->compress_page_size) == sizeof(uint16));
 		Assert(ORIOLEDB_BLCKSZ < UINT16_MAX);
 
-		/* Write header first */
+		// Write header first
 		ondisk_page_header.compress_page_size = page_size;
 		ondisk_page_header.checkpointNum = curChkpNum;
 		ondisk_page_header.compress_version = ORIOLEDB_COMPRESS_VERSION;
@@ -1467,22 +1467,22 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 		if (err)
 			return false;
 
-		/* Write everything left except header, which is already written */
+		// Write everything left except header, which is already written
 		if (page_size != ORIOLEDB_BLCKSZ)
 		{
-			/*
-			 * Compressed chunks don't have external header, just make up for
-			 * length
-			 */
+			//
+// Compressed chunks don't have external header, just make up for
+// length
+//
 			write_size = extent->len * ORIOLEDB_COMP_BLCKSZ - O_PAGE_HEADER_SIZE;
 			err = btree_smgr_write(desc, page, chkpNum, write_size, byte_offset) != write_size;
 		}
 		else
 		{
-			/*
-			 * For non-compresses page cut already written header and make up
-			 * for length
-			 */
+			//
+// For non-compresses page cut already written header and make up
+// for length
+//
 			page += O_PAGE_HEADER_SIZE;
 			write_size = ORIOLEDB_BLCKSZ - O_PAGE_HEADER_SIZE;
 			err = btree_smgr_write(desc, page, chkpNum, write_size, byte_offset) != write_size;
@@ -1495,10 +1495,10 @@ write_page_to_disk(BTreeDescr *desc, FileExtent *extent, uint32 curChkpNum,
 	return !err;
 }
 
-/*
- * Load the page where context is pointing from disk to memory, assuming parent
- * page is locked.
- */
+//
+// Load the page where context is pointing from disk to memory, assuming parent
+// page is locked.
+//
 void
 load_page(OBTreeFindPageContext *context)
 {
@@ -1533,7 +1533,7 @@ load_page(OBTreeFindPageContext *context)
 
 	ionum = assign_io_num(parent_blkno, BTREE_PAGE_LOCATOR_GET_OFFSET(parent_page, parent_loc));
 
-	/* Modify parent downlink: indicate that IO is in-progress */
+	// Modify parent downlink: indicate that IO is in-progress
 	page_block_reads(parent_blkno);
 	int_hdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(parent_page, parent_loc);
 	Assert(DOWNLINK_IS_ON_DISK(int_hdr->downlink));
@@ -1555,7 +1555,7 @@ load_page(OBTreeFindPageContext *context)
 
 	unlock_page(parent_blkno);
 
-	/* Prepare new page metaPage-data */
+	// Prepare new page metaPage-data
 	ppool_reserve_pages(desc->ppool, PPOOL_RESERVE_FIND, 1);
 	blkno = ppool_alloc_page(desc->ppool, PPOOL_RESERVE_FIND);
 	lock_page(blkno);
@@ -1567,7 +1567,7 @@ load_page(OBTreeFindPageContext *context)
 
 	page_desc->flags = 0;
 
-	/* Read page data and put it to the page */
+	// Read page data and put it to the page
 	if (!read_page_from_disk(desc, buf, downlink, &page_desc->fileExtent))
 	{
 		int_hdr->downlink = downlink;
@@ -1585,15 +1585,15 @@ load_page(OBTreeFindPageContext *context)
 	put_page_image(blkno, buf);
 	ppool_ucm_init(desc->ppool, blkno);
 
-	/*
-	 * Stamp the page's identity from the descriptor of the tree we are
-	 * descending, not from the parent's page descriptor: the parent was
-	 * unlocked above and may have been evicted/reused (potentially by the
-	 * reentrant eviction inside ppool_alloc_page() just above), in which case
-	 * its page descriptor's oids would be invalid (0,0,0) or belong to
-	 * another tree.  The loaded page belongs to desc, so use desc's oids/type
-	 * -- which is exactly what init_new_btree_page() does.
-	 */
+	//
+// Stamp the page's identity from the descriptor of the tree we are
+// descending, not from the parent's page descriptor: the parent was
+// unlocked above and may have been evicted/reused (potentially by the
+// reentrant eviction inside ppool_alloc_page() just above), in which case
+// its page descriptor's oids would be invalid (0,0,0) or belong to
+// another tree.  The loaded page belongs to desc, so use desc's oids/type
+// -- which is exactly what init_new_btree_page() does.
+//
 	page_desc->type = desc->type;
 	page_desc->oids = desc->oids;
 
@@ -1604,10 +1604,10 @@ load_page(OBTreeFindPageContext *context)
 	{
 		BTreePageItemLocator loc;
 
-		/*
-		 * In S3 mode schedule load of all the page children for faster
-		 * warmup.
-		 */
+		//
+// In S3 mode schedule load of all the page children for faster
+// warmup.
+//
 		BTREE_PAGE_FOREACH_ITEMS(page, &loc)
 		{
 			BTreeNonLeafTuphdr *tupHdr;
@@ -1629,7 +1629,7 @@ load_page(OBTreeFindPageContext *context)
 		STOPEVENT(STOPEVENT_LOAD_PAGE_REFIND, params);
 	}
 
-	/* re-find parent page (it might be changed due to concurrent operations) */
+	// re-find parent page (it might be changed due to concurrent operations)
 	csn = context->csn;
 	was_modify = BTREE_PAGE_FIND_IS(context, MODIFY);
 	was_image = BTREE_PAGE_FIND_IS(context, IMAGE);
@@ -1691,7 +1691,7 @@ load_page(OBTreeFindPageContext *context)
 		Assert(result == OFindPageResultSuccess);
 	}
 
-	/* restore context state */
+	// restore context state
 	context->csn = csn;
 	if (!was_modify)
 	{
@@ -1711,7 +1711,7 @@ load_page(OBTreeFindPageContext *context)
 	parent_loc = &context->items[context_index].locator;
 	parent_change_count = context->items[context_index].pageChangeCount;
 
-	/* Replace parent downlink with orioledb downlink */
+	// Replace parent downlink with orioledb downlink
 	page_block_reads(parent_blkno);
 	parent_page = O_GET_IN_MEMORY_PAGE(parent_blkno);
 	int_hdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(parent_page, parent_loc);
@@ -1721,9 +1721,9 @@ load_page(OBTreeFindPageContext *context)
 	unlock_io(ionum);
 }
 
-/*
- * Returns pointer to writable image. It compresses page if needed.
- */
+//
+// Returns pointer to writable image. It compresses page if needed.
+//
 static inline Pointer
 get_write_img(BTreeDescr *desc, Page page, size_t *size)
 {
@@ -1734,9 +1734,9 @@ get_write_img(BTreeDescr *desc, Page page, size_t *size)
 		result = o_compress_page(page, size, desc->compress);
 		if (*size > (ORIOLEDB_BLCKSZ - ORIOLEDB_COMP_BLCKSZ - O_PAGE_HEADER_SIZE))
 		{
-			/*
-			 * No sense to write compressed page
-			 */
+			//
+// No sense to write compressed page
+//
 			result = page;
 			*size = ORIOLEDB_BLCKSZ;
 		}
@@ -1767,9 +1767,9 @@ prewrite_image_check(Page p)
 }
 #endif
 
-/*
- * Returns downlink to the page or InvalidDiskDownlink if fails.
- */
+//
+// Returns downlink to the page or InvalidDiskDownlink if fails.
+//
 uint64
 perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 				Page img, uint32 checkpoint_number, bool copy_blkno,
@@ -1793,15 +1793,15 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 	less_num = header->o_header.checkpointNum < checkpoint_number;
 	if (less_num)
 	{
-		/*
-		 * Page wasn't yet written during given checkpoint, so we have to
-		 * relocate it in order to implement copy-on-write checkpointing.
-		 */
+		//
+// Page wasn't yet written during given checkpoint, so we have to
+// relocate it in order to implement copy-on-write checkpointing.
+//
 		if ((uintptr_t) page != (uintptr_t) img)
 		{
-			/*
-			 * we need to update the written checkpoint number for the img too
-			 */
+			//
+// we need to update the written checkpoint number for the img too
+//
 			header = (BTreePageHeader *) img;
 			header->o_header.checkpointNum = checkpoint_number;
 			header = (BTreePageHeader *) page;
@@ -1815,9 +1815,9 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 	write_img = get_write_img(desc, img, &write_size);
 
-	/*
-	 * Determine the file position to write this page.
-	 */
+	//
+// Determine the file position to write this page.
+//
 	chkp_index = checkpoint_number % 2;
 	if (orioledb_s3_mode)
 	{
@@ -1830,7 +1830,7 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 		{
 			if (!OCompressIsValid(desc->compress))
 			{
-				/* easy case: no compression */
+				// easy case: no compression
 				*dirty_parent = false;
 			}
 			else
@@ -1857,22 +1857,22 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 	}
 	else if (less_num)
 	{
-		/*
-		 * Page wasn't yet written during given checkpoint, so we have to
-		 * relocate it in order to implement copy-on-write checkpointing.
-		 */
+		//
+// Page wasn't yet written during given checkpoint, so we have to
+// relocate it in order to implement copy-on-write checkpointing.
+//
 
 		if (FileExtentIsValid(page_desc->fileExtent))
 		{
 #ifdef USE_ASSERT_CHECKING
 
-			/*
-			 * Shared seq_bufs should be initialized by checkpointer.  User
-			 * temporary trees keep their own backend-local free space map and
-			 * do not use these shared buffers at all; system trees that
-			 * happen to be BTreeStorageTemporary still share a pool and only
-			 * skip the nextChkp assertion (no .map file).
-			 */
+			//
+// Shared seq_bufs should be initialized by checkpointer.  User
+// temporary trees keep their own backend-local free space map and
+// do not use these shared buffers at all; system trees that
+// happen to be BTreeStorageTemporary still share a pool and only
+// skip the nextChkp assertion (no .map file).
+//
 			if (!btree_desc_is_local_temp(desc))
 			{
 				if (desc->storageType != BTreeStorageTemporary)
@@ -1889,7 +1889,7 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 			free_extent_for_checkpoint(desc, &page_desc->fileExtent, checkpoint_number);
 		}
 
-		/* Get free disk page to locate new page image */
+		// Get free disk page to locate new page image
 		if (copy_blkno)
 		{
 			err = !get_free_disk_extent_copy_blkno(desc, write_size,
@@ -1905,14 +1905,14 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 	}
 	else
 	{
-		/*
-		 * Has been already written during given checkpoint, so rewrite page
-		 * in-place.
-		 */
+		//
+// Has been already written during given checkpoint, so rewrite page
+// in-place.
+//
 		Assert(FileExtentIsValid(page_desc->fileExtent));
 		if (!OCompressIsValid(desc->compress))
 		{
-			/* easy case: no compression */
+			// easy case: no compression
 			*dirty_parent = false;
 		}
 		else
@@ -1920,14 +1920,14 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 			uint16		old_len = page_desc->fileExtent.len,
 						new_len = FileExtentLen(write_size);
 
-			/*
-			 * check: is current image take as much space as previous written
-			 * page?
-			 */
+			//
+// check: is current image take as much space as previous written
+// page?
+//
 			if (old_len < new_len)
 			{
 				free_extent_for_checkpoint(desc, &page_desc->fileExtent, checkpoint_number);
-				/* allocate more file blocks */
+				// allocate more file blocks
 				if (copy_blkno)
 				{
 					err = !get_free_disk_extent_copy_blkno(desc, write_size,
@@ -1942,9 +1942,9 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 			}
 			else if (old_len > new_len)
 			{
-				/*
-				 * free space
-				 */
+				//
+// free space
+//
 				FileExtent	free_extent;
 
 				free_extent.len = page_desc->fileExtent.len - new_len;
@@ -1986,11 +1986,11 @@ perform_page_io(BTreeDescr *desc, OInMemoryBlkno blkno,
 	return MAKE_ON_DISK_DOWNLINK(page_desc->fileExtent);
 }
 
-/*
- * Performs page write for autonomous checkpoint images.
- *
- * Returns downlink to the page.
- */
+//
+// Performs page write for autonomous checkpoint images.
+//
+// Returns downlink to the page.
+//
 uint64
 perform_page_io_autonomous(BTreeDescr *desc, uint32 chkpNum, Page img, FileExtent *extent)
 {
@@ -2041,11 +2041,11 @@ perform_page_io_autonomous(BTreeDescr *desc, uint32 chkpNum, Page img, FileExten
 	return MAKE_ON_DISK_DOWNLINK(*extent);
 }
 
-/*
- * Performs page write for tree build.
- *
- * Returns downlink to the page.
- */
+//
+// Performs page write for tree build.
+//
+// Returns downlink to the page.
+//
 uint64
 perform_page_io_build(BTreeDescr *desc, Page img,
 					  FileExtent *extent, BTreeMetaPage *metaPage)
@@ -2129,9 +2129,9 @@ perform_page_io_build(BTreeDescr *desc, Page img,
 	return MAKE_ON_DISK_DOWNLINK(*extent);
 }
 
-/*
- * Prepare internal page for writing to disk.
- */
+//
+// Prepare internal page for writing to disk.
+//
 static bool
 prepare_non_leaf_page(Page p)
 {
@@ -2152,17 +2152,17 @@ prepare_non_leaf_page(Page p)
 			if (!try_lock_page(child))
 				return false;
 
-			/*
-			 * It's worth less to write non-leaf page, if it's going to anyway
-			 * become dirty after writing of child.
-			 */
+			//
+// It's worth less to write non-leaf page, if it's going to anyway
+// become dirty after writing of child.
+//
 			if (IS_DIRTY(child) || desc->ionum >= 0)
 			{
 				unlock_page(child);
 				return false;
 			}
 
-			/* XXX: should we also consider checkpoint number of child page? */
+			// XXX: should we also consider checkpoint number of child page?
 			Assert(FileExtentIsValid(desc->fileExtent));
 			tuphdr->downlink = MAKE_ON_DISK_DOWNLINK(desc->fileExtent);
 			unlock_page(child);
@@ -2173,9 +2173,9 @@ prepare_non_leaf_page(Page p)
 	return true;
 }
 
-/*
- * Evict the page, assuming target page and its parent are locked.
- */
+//
+// Evict the page, assuming target page and its parent are locked.
+//
 static void
 write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 		   uint32 checkpoint_number,
@@ -2193,7 +2193,7 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 	OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 	bool		is_root = desc->rootInfo.rootPageBlkno == blkno;
 
-	/* rootPageBlkno can not be evicted here */
+	// rootPageBlkno can not be evicted here
 	Assert(!evict || !is_root);
 	Assert(OInMemoryBlknoIsValid(desc->rootInfo.rootPageBlkno));
 	Assert(page_is_locked(blkno) || O_PAGE_IS_LOCAL(blkno));
@@ -2210,16 +2210,16 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 
 		ionum = assign_io_num(parent_blkno, BTREE_PAGE_LOCATOR_GET_OFFSET(parent_page, parent_loc));
 
-		/* Prepare to modify downlink in parent page */
+		// Prepare to modify downlink in parent page
 		page_block_reads(parent_blkno);
 		int_hdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(parent_page, parent_loc);
 	}
 	else
 	{
-		/*
-		 * Root page still need ionum to prevent changing of checkpoint
-		 * number.
-		 */
+		//
+// Root page still need ionum to prevent changing of checkpoint
+// number.
+//
 		ionum = assign_io_num(blkno, MaxOffsetNumber);
 	}
 
@@ -2227,15 +2227,15 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 	{
 		Assert(evict);
 
-		/*
-		 * Easy case: page isn't dirty and doesn't need to be written to the
-		 * disk.  Then we just have to change downlink in the parent.
-		 */
+		//
+// Easy case: page isn't dirty and doesn't need to be written to the
+// disk.  Then we just have to change downlink in the parent.
+//
 		Assert(FileExtentIsValid(page_desc->fileExtent));
 		int_hdr->downlink = MAKE_ON_DISK_DOWNLINK(page_desc->fileExtent);
 		PAGE_INC_N_ONDISK(parent_page);
 
-		/* Concurrent readers should give up when we release the lock... */
+		// Concurrent readers should give up when we release the lock...
 		O_PAGE_CHANGE_COUNT_INC(p);
 		unlock_page(blkno);
 		unlock_io(ionum);
@@ -2246,20 +2246,20 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 					old_downlink = 0;
 		bool		dirty_parent;
 
-		/* Mark parent downlink as IO in-progress. */
+		// Mark parent downlink as IO in-progress.
 		if (evict)
 		{
 			old_downlink = int_hdr->downlink;
 			int_hdr->downlink = MAKE_IO_DOWNLINK(ionum);
 			O_PAGE_CHANGE_COUNT_INC(p);
 		}
-		/* Caller (walk_page()) ensured that there is no IO in progress */
+		// Caller (walk_page()) ensured that there is no IO in progress
 		Assert(page_desc->ionum < 0);
 		page_desc->ionum = ionum;
 		if (!is_root)
 			unlock_page(parent_blkno);
 
-		/* Perform actual IO */
+		// Perform actual IO
 		if (evict)
 		{
 			unlock_page(blkno);
@@ -2269,12 +2269,12 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 			if (DiskDownlinkIsValid(new_downlink))
 				writeback_put_extent(&io_writeback, desc, new_downlink);
 
-			/* Page is not dirty anymore */
+			// Page is not dirty anymore
 			CLEAN_DIRTY(desc->ppool, blkno);
 		}
 		else
 		{
-			/* Non-leaf pages are already copied by caller */
+			// Non-leaf pages are already copied by caller
 			if (O_PAGE_IS(p, LEAF))
 				memcpy(img, p, ORIOLEDB_BLCKSZ);
 
@@ -2294,7 +2294,7 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 			if (DiskDownlinkIsValid(new_downlink))
 				writeback_put_extent(&io_writeback, desc, new_downlink);
 
-			/* Clean dirty only if there are no concurrent writes */
+			// Clean dirty only if there are no concurrent writes
 			lock_page(blkno);
 			if (!IS_DIRTY_CONCURRENT(blkno))
 				CLEAN_DIRTY(desc->ppool, blkno);
@@ -2320,7 +2320,7 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 		{
 			OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
 
-			/* Refind parent */
+			// Refind parent
 			BTREE_PAGE_FIND_SET(context, DOWNLINK_LOCATION);
 			if (O_PAGE_IS(p, RIGHTMOST))
 			{
@@ -2346,14 +2346,14 @@ write_page(OBTreeFindPageContext *context, OInMemoryBlkno blkno, Page img,
 			parent_loc = &context->items[context_index].locator;
 			parent_change_count = context->items[context_index].pageChangeCount;
 
-			/* Replace parent downlink with on-disk link */
+			// Replace parent downlink with on-disk link
 			parent_page = O_GET_IN_MEMORY_PAGE(parent_blkno);
 			page_block_reads(parent_blkno);
 			int_hdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(parent_page, parent_loc);
 
 			if (!DiskDownlinkIsValid(new_downlink))
 			{
-				/* error happens on write, rollback changes in shared memory */
+				// error happens on write, rollback changes in shared memory
 				if (evict)
 					int_hdr->downlink = old_downlink;
 				page_desc->ionum = -1;
@@ -2397,7 +2397,7 @@ btree_finalize_private_seq_bufs(BTreeDescr *desc, EvictedTreeData *evicted_data)
 		   desc->storageType == BTreeStoragePersistence ||
 		   desc->storageType == BTreeStorageUnlogged);
 
-	/* we must not evict BTree under checkpoint */
+	// we must not evict BTree under checkpoint
 
 	if (desc->storageType == BTreeStoragePersistence || desc->storageType == BTreeStorageUnlogged)
 	{
@@ -2431,14 +2431,14 @@ btree_finalize_private_seq_bufs(BTreeDescr *desc, EvictedTreeData *evicted_data)
 		FREE_PAGE_IF_VALID(desc->ppool, desc->freeBuf.shared->pages[1]);
 	}
 
-	/*
-	 * We must always finalize seq bufs (not just close them) to save the
-	 * correct offset into evicted data.  On restore, init_seq_buf() uses a
-	 * non-NULL evicted pointer to skip the skip_len reservation (e.g.
-	 * CheckpointFileHeader).  If the offset is left at 0, the header space
-	 * won't be reserved, and seq_buf_finalize() at checkpoint time will
-	 * return a size smaller than sizeof(CheckpointFileHeader).
-	 */
+	//
+// We must always finalize seq bufs (not just close them) to save the
+// correct offset into evicted data.  On restore, init_seq_buf() uses a
+// non-NULL evicted pointer to skip the skip_len reservation (e.g.
+// CheckpointFileHeader).  If the offset is left at 0, the header space
+// won't be reserved, and seq_buf_finalize() at checkpoint time will
+// return a size smaller than sizeof(CheckpointFileHeader).
+//
 	if (desc->storageType == BTreeStoragePersistence || desc->storageType == BTreeStorageUnlogged)
 	{
 		evicted_data->nextChkp.tag = desc->nextChkp[chkp_index].shared->tag;
@@ -2460,9 +2460,9 @@ btree_finalize_private_seq_bufs(BTreeDescr *desc, EvictedTreeData *evicted_data)
 	}
 }
 
-/*
- * Evict the tree, assuming rootPageBlkno page is locked.
- */
+//
+// Evict the tree, assuming rootPageBlkno page is locked.
+//
 static bool
 evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 {
@@ -2484,10 +2484,10 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc) &&
 		   (O_PAGE_STATE_IS_LOCKED(pg_atomic_read_u64(&(O_PAGE_HEADER(rootPageBlkno)->state))) || O_PAGE_IS_LOCAL(root_blkno)));
 
-	/*
-	 * Try to acquire oSharedRootInfoInsertLocks early to avoid deadlocks. If
-	 * we can't get it, bail out — the page will be evicted later.
-	 */
+	//
+// Try to acquire oSharedRootInfoInsertLocks early to avoid deadlocks. If
+// we can't get it, bail out — the page will be evicted later.
+//
 	evict_key.datoid = desc->oids.datoid;
 	evict_key.relnode = desc->oids.relnode;
 	evict_lockNo = tag_hash(&evict_key, sizeof(evict_key)) % SHARED_ROOT_INFO_INSERT_NUM_LOCKS;
@@ -2498,11 +2498,11 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 		return false;
 	}
 
-	/*
-	 * Additional protection: don't evict the tree root page if the resource
-	 * owner hasn't released its seq scans yet.  According to the locks they
-	 * must be already finished, but not yet released from shmem.
-	 */
+	//
+// Additional protection: don't evict the tree root page if the resource
+// owner hasn't released its seq scans yet.  According to the locks they
+// must be already finished, but not yet released from shmem.
+//
 	if (meta_page_get_num_seq_scans(desc->rootInfo.metaPageBlkno) != 0)
 	{
 		LWLockRelease(&checkpoint_state->oSharedRootInfoInsertLocks[evict_lockNo]);
@@ -2510,7 +2510,7 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 		return false;
 	}
 
-	/* we check it before */
+	// we check it before
 	Assert(!RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(rootPageBlkno)));
 	if (orioledb_s3_mode)
 	{
@@ -2519,17 +2519,17 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 
 	was_dirty = IS_DIRTY(root_blkno);
 
-	/*
-	 * Checking FileExtentIsValid() is essential for just created temporary
-	 * trees which aren't dirty, but don't have fileExtent initialized.
-	 */
+	//
+// Checking FileExtentIsValid() is essential for just created temporary
+// trees which aren't dirty, but don't have fileExtent initialized.
+//
 	if (was_dirty || !FileExtentIsValid(root_desc->fileExtent))
 	{
 		bool		not_used;
 
 		CLEAN_DIRTY(desc->ppool, root_blkno);
 
-		/* Code above ensured there is no IO in progress */
+		// Code above ensured there is no IO in progress
 		Assert(root_desc->ionum < 0);
 		root_desc->ionum = assign_io_num(root_blkno, InvalidOffsetNumber);
 		memcpy(img, rootPageBlkno, ORIOLEDB_BLCKSZ);
@@ -2588,9 +2588,9 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 
 	notModified = (!metaPage->dirtyFlag1 && !metaPage->dirtyFlag2);
 
-	/*
-	 * Free all private seq buf pages and get their offsets
-	 */
+	//
+// Free all private seq buf pages and get their offsets
+//
 	if (!orioledb_s3_mode || desc->storageType == BTreeStorageTemporary)
 		btree_finalize_private_seq_bufs(desc, &evicted_tree_data);
 
@@ -2601,16 +2601,16 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 
 	perform_writeback(&io_writeback);
 
-	/*
-	 * Check if we can skip the evicted data if tree has no modification after
-	 * writing the last *.map file.
-	 *
-	 * For compressed trees we must always store evicted data.  Otherwise, on
-	 * reload was_evicted will be false and o_tree_init_free_extents() will
-	 * try to re-insert free extents that are already present in the in-memory
-	 * system trees (they are not cleaned up on eviction), causing assertion
-	 * failures in free_extent().
-	 */
+	//
+// Check if we can skip the evicted data if tree has no modification after
+// writing the last *.map file.
+//
+// For compressed trees we must always store evicted data.  Otherwise, on
+// reload was_evicted will be false and o_tree_init_free_extents() will
+// try to re-insert free extents that are already present in the in-memory
+// system trees (they are not cleaned up on eviction), causing assertion
+// failures in free_extent().
+//
 	if (desc->storageType != BTreeStoragePersistence || !notModified ||
 		OCompressIsValid(desc->compress))
 		insert_evicted_data(&evicted_tree_data);
@@ -2619,10 +2619,10 @@ evict_btree(BTreeDescr *desc, uint32 checkpoint_number)
 		 desc->oids.datoid, desc->oids.relnode,
 		 chkpNum, notModified);
 
-	/*
-	 * Shared descr drops to signalize other backends that tree is evicted.
-	 * Backends and workers can create a new SharedRootInfo* after this.
-	 */
+	//
+// Shared descr drops to signalize other backends that tree is evicted.
+// Backends and workers can create a new SharedRootInfo* after this.
+//
 	o_drop_shared_root_info(desc->oids.datoid, desc->oids.relnode);
 
 	LWLockRelease(&checkpoint_state->oSharedRootInfoInsertLocks[evict_lockNo]);
@@ -2640,7 +2640,7 @@ index_oids_get_btree_descr(ORelOids oids, OIndexType type)
 	BTreeDescr *desc;
 	bool		nested;
 
-	/* Check is this table is visible for us */
+	// Check is this table is visible for us
 	indexDescr = o_fetch_index_descr(oids, type, false, &nested);
 
 	if (indexDescr == NULL)
@@ -2663,11 +2663,11 @@ typedef struct
 	ORelOids	tableOids;
 } EvictBtreeLocksState;
 
-/*
- * Acquire all the locks required to completely evict the tree.  We need to
- * take both regular and checkpointer locks.  Also, for PK we need to lock
- * the table as well, because a concurrent seq scan can lock only the table.
- */
+//
+// Acquire all the locks required to completely evict the tree.  We need to
+// take both regular and checkpointer locks.  Also, for PK we need to lock
+// the table as well, because a concurrent seq scan can lock only the table.
+//
 static BTreeDescr *
 get_evict_btree_locks(OInMemoryBlkno blkno, ORelOids oids, OIndexType type,
 					  EvictBtreeLocksState *state)
@@ -2701,10 +2701,10 @@ get_evict_btree_locks(OInMemoryBlkno blkno, ORelOids oids, OIndexType type,
 	id = (OIndexDescr *) desc->arg;
 	state->tableOids = id->tableOids;
 
-	/*
-	 * if primary index is ctid, then we don't need to lock the table, because
-	 * ctid is the table itself
-	 */
+	//
+// if primary index is ctid, then we don't need to lock the table, because
+// ctid is the table itself
+//
 	if (id->primaryIsCtid)
 		return desc;
 
@@ -2742,13 +2742,13 @@ release_evict_btree_locks(ORelOids oids, EvictBtreeLocksState *state)
 		o_tables_rel_unlock_extended(&state->tableOids, AccessExclusiveLock, true);
 }
 
-/*
- * Pre-lock checks for walk_page().  Validates page state and resolves the
- * btree descriptor before the page lock is acquired.
- *
- * Returns the BTreeDescr pointer on success (caller should proceed to lock),
- * or NULL if the page should be skipped.  Sets *oids as a side effect.
- */
+//
+// Pre-lock checks for walk_page().  Validates page state and resolves the
+// btree descriptor before the page lock is acquired.
+//
+// Returns the BTreeDescr pointer on success (caller should proceed to lock),
+// or NULL if the page should be skipped.  Sets *oids as a side effect.
+//
 static BTreeDescr *
 walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 						OrioleDBPageDesc *page_desc, Page p,
@@ -2759,13 +2759,13 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 	if (!ORelOidsIsValid(page_desc->oids) || page_desc->type == oIndexInvalid)
 		return NULL;
 
-	/*
-	 * Read field2 directly rather than via PAGE_GET_N_ONDISK(): we don't hold
-	 * the page lock here, so a concurrent leaf/non-leaf transition could fire
-	 * the macro's debug assert even though the outer flag check just passed.
-	 * The result of this comparison is racy by design and gets re-validated
-	 * once the page is locked.
-	 */
+	//
+// Read field2 directly rather than via PAGE_GET_N_ONDISK(): we don't hold
+// the page lock here, so a concurrent leaf/non-leaf transition could fire
+// the macro's debug assert even though the outer flag check just passed.
+// The result of this comparison is racy by design and gets re-validated
+// once the page is locked.
+//
 	if (!O_PAGE_IS(p, LEAF) && evict &&
 		((BTreePageHeader *) p)->field2 != BTREE_PAGE_ITEMS_COUNT(p))
 		return NULL;
@@ -2773,14 +2773,14 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 	if (!evict && !IS_DIRTY(blkno))
 		return NULL;
 
-	/* Important to access the shared memory once */
+	// Important to access the shared memory once
 	*oids = *((volatile ORelOids *) &page_desc->oids);
 
-	/*
-	 * index_oids_get_btree_descr() might imply page eviction.  We shouldn't
-	 * do this while holding a page lock.  So, we need to do this before
-	 * locking the page.
-	 */
+	//
+// index_oids_get_btree_descr() might imply page eviction.  We shouldn't
+// do this while holding a page lock.  So, we need to do this before
+// locking the page.
+//
 	if (IS_SYS_TREE_OIDS(*oids))
 	{
 		if (sys_tree_get_storage_type(oids->relnode) != BTreeStorageInMemory)
@@ -2790,7 +2790,7 @@ walk_page_prelock_check(OInMemoryBlkno blkno, bool evict,
 	}
 	else
 	{
-		/* Check is this index is visible for us */
+		// Check is this index is visible for us
 		desc = index_oids_get_btree_descr(*oids, page_desc->type);
 
 		if (desc == NULL)
@@ -2807,17 +2807,17 @@ typedef enum WalkPageCheckResult
 	WalkPageCheckWaitIO
 } WalkPageCheckResult;
 
-/*
- * Locked-page validity checks for walk_page().  Must be called with the page
- * lock held.
- *
- * Returns WalkPageCheckPassed if all checks pass (page remains locked).
- * Returns WalkPageCheckFailed if a check fails (page is unlocked).
- * Returns WalkPageCheckWaitIO if IO is in progress (page is unlocked,
- *         *ionum is set for the caller to wait on).
- *
- * When !evict, also prepares the non-leaf page image into img.
- */
+//
+// Locked-page validity checks for walk_page().  Must be called with the page
+// lock held.
+//
+// Returns WalkPageCheckPassed if all checks pass (page remains locked).
+// Returns WalkPageCheckFailed if a check fails (page is unlocked).
+// Returns WalkPageCheckWaitIO if IO is in progress (page is unlocked,
+// *ionum is set for the caller to wait on).
+//
+// When !evict, also prepares the non-leaf page image into img.
+//
 static WalkPageCheckResult
 walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
 					   OrioleDBPageDesc *page_desc, Page p,
@@ -2843,7 +2843,7 @@ walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
 		return WalkPageCheckFailed;
 	}
 
-	/* On concurrent IO, unlock and let the caller decide to wait or skip */
+	// On concurrent IO, unlock and let the caller decide to wait or skip
 	*ionum = page_desc->ionum;
 	if (*ionum >= 0)
 	{
@@ -2876,12 +2876,12 @@ walk_page_check_locked(OInMemoryBlkno blkno, bool evict,
 	return WalkPageCheckPassed;
 }
 
-/*
- * Handle root page eviction in walk_page().  Called with the page lock held.
- * Manages all lock/unlock internally, including the two-pass protocol:
- * release page lock, acquire evict btree locks, re-lock and re-validate.
- * Guarantees release_evict_btree_locks() is called after get_evict_btree_locks().
- */
+//
+// Handle root page eviction in walk_page().  Called with the page lock held.
+// Manages all lock/unlock internally, including the two-pass protocol:
+// release page lock, acquire evict btree locks, re-lock and re-validate.
+// Guarantees release_evict_btree_locks() is called after get_evict_btree_locks().
+//
 static OWalkPageResult
 walk_page_evict_root(BTreeDescr *desc, OInMemoryBlkno blkno,
 					 OrioleDBPageDesc *page_desc, Page p,
@@ -2899,7 +2899,7 @@ walk_page_evict_root(BTreeDescr *desc, OInMemoryBlkno blkno,
 		return OWalkPageSkipped;
 	}
 
-	/* Release page lock before acquiring evict btree locks */
+	// Release page lock before acquiring evict btree locks
 	unlock_page(blkno);
 
 	memset(&locksState, 0, sizeof(locksState));
@@ -2912,10 +2912,10 @@ walk_page_evict_root(BTreeDescr *desc, OInMemoryBlkno blkno,
 		return OWalkPageSkipped;
 	}
 
-	/*
-	 * Re-lock the page and re-validate all checks after acquiring evict btree
-	 * locks.
-	 */
+	//
+// Re-lock the page and re-validate all checks after acquiring evict btree
+// locks.
+//
 	if (!try_lock_page(blkno))
 	{
 		release_evict_btree_locks(oids, &locksState);
@@ -2958,12 +2958,12 @@ walk_page_evict_root(BTreeDescr *desc, OInMemoryBlkno blkno,
 	return result ? OWalkPageEvicted : OWalkPageSkipped;
 }
 
-/*
- * Examine single page and evict it if possible.
- *
- * Note that here we skip seq buf pages, as we will evict them together with the
- * tree in evict_btree() when we evict the root page.
- */
+//
+// Examine single page and evict it if possible.
+//
+// Note that here we skip seq buf pages, as we will evict them together with the
+// tree in evict_btree() when we evict the root page.
+//
 OWalkPageResult
 walk_page(OInMemoryBlkno blkno, bool evict)
 {
@@ -3003,14 +3003,14 @@ retry:
 	if (checkResult == WalkPageCheckFailed)
 		return OWalkPageSkipped;
 
-	/* Try to merge sparse page instead of eviction */
+	// Try to merge sparse page instead of eviction
 	if (!merge_tried && is_page_too_sparse(desc, p))
 	{
 		bool		result;
 
 		result = btree_try_merge_and_unlock(desc, blkno, true, false);
 
-		/* Merge shouldn't leave us with locked pages. */
+		// Merge shouldn't leave us with locked pages.
 		Assert(!have_locked_pages());
 
 		if (result)
@@ -3028,7 +3028,7 @@ retry:
 	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc));
 	is_root = desc->rootInfo.rootPageBlkno == blkno;
 
-	/* If page is rootPageBlkno, we don't need to search parent page. */
+	// If page is rootPageBlkno, we don't need to search parent page.
 	context.desc = desc;
 	context.index = 0;
 	if (!is_root)
@@ -3065,10 +3065,10 @@ retry:
 		if (!DOWNLINK_IS_IN_MEMORY(int_hdr->downlink) ||
 			DOWNLINK_GET_IN_MEMORY_BLKNO(int_hdr->downlink) != blkno)
 		{
-			/*
-			 * We didn't find downlink pointing to this page.  This could
-			 * happened because of concurrent split.  Give up then...
-			 */
+			//
+// We didn't find downlink pointing to this page.  This could
+// happened because of concurrent split.  Give up then...
+//
 			unlock_page(blkno);
 			unlock_page(context.items[context.index].blkno);
 			return OWalkPageSkipped;
@@ -3104,10 +3104,10 @@ retry:
 	return evict ? OWalkPageEvicted : OWalkPageWritten;
 }
 
-/*
- * Recursively write pages in the tree. Stop reqursion if we reach maxLevel,
- * when it has non-negtive value. To write all pages, set maxLevel to -1.
- */
+//
+// Recursively write pages in the tree. Stop reqursion if we reach maxLevel,
+// when it has non-negtive value. To write all pages, set maxLevel to -1.
+//
 static bool
 write_tree_pages_recursive(UndoLogType undoType,
 						   OInMemoryBlkno blkno, uint32 loadId,
@@ -3127,11 +3127,11 @@ write_tree_pages_recursive(UndoLogType undoType,
 	lock_page(blkno);
 	p = O_GET_IN_MEMORY_PAGE(blkno);
 
-	/*
-	 * For local pool pages, the slot may have been reclaimed by a reentrant
-	 * eviction triggered while we were processing a sibling downlink
-	 * collected earlier.  Treat a NULL slot as a missing page.
-	 */
+	//
+// For local pool pages, the slot may have been reclaimed by a reentrant
+// eviction triggered while we were processing a sibling downlink
+// collected earlier.  Treat a NULL slot as a missing page.
+//
 	if (O_PAGE_IS_LOCAL(blkno) && p == NULL)
 	{
 		unlock_page(blkno);
@@ -3273,10 +3273,10 @@ tree_offsets_cmp(const void *a, const void *b)
 		return val1.fileExtent.off < val2.fileExtent.off ? -1 : 1;
 	else if (val1.fileExtent.len != val2.fileExtent.len)
 	{
-		/*
-		 * an extent with bigger length will be placed first, it helps to
-		 * simplify process this case in perform_writeback()
-		 */
+		//
+// an extent with bigger length will be placed first, it helps to
+// simplify process this case in perform_writeback()
+//
 		return val1.fileExtent.len > val2.fileExtent.len ? -1 : 1;
 	}
 
@@ -3368,7 +3368,7 @@ perform_writeback(IOWriteBack *writeback)
 	flushAfter = IsBGWriter ? bgwriter_flush_after : backend_flush_after;
 	flushAfter *= BLCKSZ / ORIOLEDB_BLCKSZ;
 
-	/* PG defaults: flushAfter == 0 turns off writeback */
+	// PG defaults: flushAfter == 0 turns off writeback
 	if (flushAfter == 0)
 	{
 		writeback->extentsNumber = 0;
@@ -3465,12 +3465,12 @@ perform_writeback(IOWriteBack *writeback)
 typedef void (*RelnodeFileCallback) (const char *filename, uint32 segno,
 									 char *ext, void *arg);
 
-/*
- * Iterate all the files belonging to given (datoid, relnode) pair and call
- * the callback for each filename.
- *
- * Guarantees that at first we process the first data file.
- */
+//
+// Iterate all the files belonging to given (datoid, relnode) pair and call
+// the callback for each filename.
+//
+// Guarantees that at first we process the first data file.
+//
 static bool
 iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback, void *arg)
 {
@@ -3510,16 +3510,16 @@ iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback, void *arg)
 				{
 					filename = psprintf("%s/%u", db_prefix, key.oids.relnode);
 
-					/*
-					 * The first-file callback exists for callers that care
-					 * about ordering the base file relative to its segments
-					 * (e.g. durable unlink, precommit fsync).  Skip it when
-					 * the base file is absent: after a crash, a secondary
-					 * file like "<relnode>.1" or "<relnode>-<chkp>.map" can
-					 * exist on disk while the base file was never durably
-					 * created, and fsync/unlink of a missing path would
-					 * ereport ERROR (PANIC during startup recovery).
-					 */
+					//
+// The first-file callback exists for callers that care
+// about ordering the base file relative to its segments
+// (e.g. durable unlink, precommit fsync).  Skip it when
+// the base file is absent: after a crash, a secondary
+// file like "<relnode>.1" or "<relnode>-<chkp>.map" can
+// exist on disk while the base file was never durably
+// created, and fsync/unlink of a missing path would
+// ereport ERROR (PANIC during startup recovery).
+//
 					if (access(filename, F_OK) == 0)
 						callback(filename, 0, NULL, arg);
 					pfree(filename);
@@ -3544,11 +3544,11 @@ iterate_relnode_files(OIndexKey key, RelnodeFileCallback callback, void *arg)
 static void
 unlink_callback(const char *filename, uint32 segno, char *ext, void *arg)
 {
-	/*
-	 * Recovery determines relation data presence by presence of the first
-	 * data file.  So, we durably delete the first data file to avoid
-	 * situation when partially deleted file data is visible.
-	 */
+	//
+// Recovery determines relation data presence by presence of the first
+// data file.  So, we durably delete the first data file to avoid
+// situation when partially deleted file data is visible.
+//
 	bool		fsync = *(bool *) arg;
 
 	if (segno == 0 && ext == NULL && fsync)
@@ -3615,7 +3615,7 @@ try_to_punch_holes(BTreeDescr *desc)
 		else
 		{
 			chkp_num = metaPage->punchHolesChkpNum + 1;
-			/* Try for next checkpoint number */
+			// Try for next checkpoint number
 			LWLockRelease(punchHolesLock);
 			continue;
 		}
@@ -3626,7 +3626,7 @@ try_to_punch_holes(BTreeDescr *desc)
 		tag.num = chkp_num;
 		if (!seq_buf_file_exist(&tag))
 		{
-			/* table may be deleted or *.tmp file not created */
+			// table may be deleted or *.tmp file not created
 			LWLockAcquire(metaLock, LW_EXCLUSIVE);
 			Assert(chkp_num == metaPage->punchHolesChkpNum + 1);
 			metaPage->punchHolesChkpNum = chkp_num;
@@ -3636,7 +3636,7 @@ try_to_punch_holes(BTreeDescr *desc)
 			continue;
 		}
 
-		/* free extents from *.tmp file */
+		// free extents from *.tmp file
 		filename = get_seq_buf_filename(&tag);
 		file = PathNameOpenFile(filename, O_RDONLY | PG_BINARY);
 		if (file < 0)
@@ -3644,16 +3644,16 @@ try_to_punch_holes(BTreeDescr *desc)
 							errmsg("could not open file %s: %m", filename)));
 		file_size = FileSize(file);
 
-		/*
-		 * Each -N.tmp file is a self-contained list of freed block offsets
-		 * and must be read from its own offset 0.  Reset the read cursor /
-		 * byte counter for every file: when a single try_to_punch_holes()
-		 * call drains more than one checkpoint's tmp file (several
-		 * checkpoints accumulated undrained files), a stale len would seek
-		 * past the next file's EOF and trip the file_size != len check below.
-		 * (add_free_extents_from_tmp() declares len inside its loop for the
-		 * same reason.)
-		 */
+		//
+// Each -N.tmp file is a self-contained list of freed block offsets
+// and must be read from its own offset 0.  Reset the read cursor /
+// byte counter for every file: when a single try_to_punch_holes()
+// call drains more than one checkpoint's tmp file (several
+// checkpoints accumulated undrained files), a stale len would seek
+// past the next file's EOF and trip the file_size != len check below.
+// (add_free_extents_from_tmp() declares len inside its loop for the
+// same reason.)
+//
 		len = 0;
 
 		while (true)
@@ -3692,7 +3692,7 @@ try_to_punch_holes(BTreeDescr *desc)
 
 		LWLockRelease(punchHolesLock);
 
-		/* Try for next checkpoint number */
+		// Try for next checkpoint number
 		chkp_num++;
 	}
 }

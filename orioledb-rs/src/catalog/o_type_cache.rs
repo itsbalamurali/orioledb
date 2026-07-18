@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_type_cache.c
- *		Routines for orioledb type cache.
- *
- * type_cache is tree that contains cached metadata from pg_type.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_type_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_type_cache.c
+// Routines for orioledb type cache.
+//
+// type_cache is tree that contains cached metadata from pg_type.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_type_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -47,9 +47,9 @@ static OSysCacheFuncs type_cache_funcs =
 	.fill_entry = o_type_cache_fill_entry
 };
 
-/*
- * Initializes the type sys cache memory.
- */
+//
+// Initializes the type sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(type_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -72,7 +72,7 @@ o_type_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 		elog(ERROR, "cache lookup failed for type %u", typeoid);
 	typeform = (Form_pg_type) GETSTRUCT(typetup);
 
-	if (o_type != NULL)			/* Existed o_type updated */
+	if (o_type != NULL)			// Existed o_type updated
 	{
 		Assert(false);
 	}
@@ -228,9 +228,9 @@ o_type_cache_fill_info(Oid typeoid, int16 *typlen, bool *typbyval,
 		*typcollation = o_type->typcollation;
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_type_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 					   OTuple tup, Pointer arg)

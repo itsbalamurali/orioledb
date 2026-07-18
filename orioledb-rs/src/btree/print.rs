@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * print.c
- *		Routines for printing orioledb B-tree structure and contents.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/print.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// print.c
+// Routines for printing orioledb B-tree structure and contents.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/print.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -33,27 +33,27 @@
 typedef struct
 {
 	BTreePrintOptions *options;
-	/* Page number in NLR tree traversal */
+	// Page number in NLR tree traversal
 	OInMemoryBlkno NLRPageNumber;
 	uint32		minCheckpointNum;
 	CommitSeqNo minCsn;
 	UndoLocation minUndoLoc;
-	/* Used for saving backend id number during NLR traversal. */
+	// Used for saving backend id number during NLR traversal.
 #if PG_VERSION_NUM >= 170000
 	ProcNumber	backendIdInTraversal;
 #else
 	BackendId	backendIdInTraversal;
 #endif
 	bool		hasCsn;
-	/* hash mapping of the backend id with the number of   */
+	// hash mapping of the backend id with the number of
 	HTAB	   *backendIdHash;
 
-	/*
-	 * hash mapping of the page number in memory with number in the NLR tree
-	 * traversal
-	 */
+	//
+// hash mapping of the page number in memory with number in the NLR tree
+// traversal
+//
 	HTAB	   *pageHash;
-	/* sorted list of unique undo locations in ascending order */
+	// sorted list of unique undo locations in ascending order
 	List	   *undosList[(int) UndoLogsCount];
 } BTreePrintData;
 
@@ -116,10 +116,10 @@ static List *ladd_unique_undo(List *list,
 							  UndoLocation location);
 
 
-/*
- * Recursively print contents of B-tree pages with given depth.  Uses
- * callbacks for printing keys and tuples.
- */
+//
+// Recursively print contents of B-tree pages with given depth.  Uses
+// callbacks for printing keys and tuples.
+//
 void
 o_print_btree_pages(BTreeDescr *desc, StringInfo outbuf,
 					PrintFunc keyPrintFunc, PrintFunc tuplePrintFunc,
@@ -153,7 +153,7 @@ o_print_btree_pages(BTreeDescr *desc, StringInfo outbuf,
 	printData.pageHash = hash_create("page hash", 8, &ctl,
 									 HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
-	/* calculate minimal values only if one of the options set */
+	// calculate minimal values only if one of the options set
 	if (printData.options->pagePrintType == BTreePrintRelative ||
 		printData.options->csnPrintType == BTreePrintRelative ||
 		printData.options->undoLogLocationPrintType == BTreePrintRelative ||
@@ -180,10 +180,10 @@ o_print_btree_pages(BTreeDescr *desc, StringInfo outbuf,
 	hash_destroy(printData.backendIdHash);
 }
 
-/*
- * Print contents of give B-tree page.  If non-leaf page is given, recursively
- * print childredn.
- */
+//
+// Print contents of give B-tree page.  If non-leaf page is given, recursively
+// print childredn.
+//
 static void
 print_page_contents_recursive(BTreeDescr *desc, OInMemoryBlkno blkno,
 							  PrintFunc keyPrintFunc,
@@ -542,10 +542,10 @@ print_page_contents_recursive(BTreeDescr *desc, OInMemoryBlkno blkno,
 									  printArg, printData, depthLeft, outbuf);
 }
 
-/*
- * Calculate values needed for printing page positions in NLR traversal,
- * relative CSNs and Undo locations.
- */
+//
+// Calculate values needed for printing page positions in NLR traversal,
+// relative CSNs and Undo locations.
+//
 static void
 btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 						   BTreePrintData *printData)
@@ -559,7 +559,7 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 	UndoLogType pageUndoType = GET_PAGE_LEVEL_UNDO_TYPE(undoType);
 
 
-	/* if page number is not in hash, then add new value to hash */
+	// if page number is not in hash, then add new value to hash
 	pageHashEntry = (PageHashEntry *) hash_search(printData->pageHash,
 												  &blkno, HASH_ENTER, &found);
 	if (!found)
@@ -574,7 +574,7 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 																pageUndoType,
 																header->undoLocation);
 
-	/* Iterate over the child nodes */
+	// Iterate over the child nodes
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{
 		Pointer		ptr = BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
@@ -603,11 +603,11 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 																			HASH_ENTER,
 																			&found);
 
-					/*
-					 * if backend id wasn't in hash that means it first
-					 * appearance of backend saving id in traversal to hash
-					 * needed
-					 */
+					//
+// if backend id wasn't in hash that means it first
+// appearance of backend saving id in traversal to hash
+// needed
+//
 					if (!found)
 					{
 						backendIdHashEntry->backendIdInTraversal = printData->backendIdInTraversal;
@@ -625,10 +625,10 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 		{
 			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) ptr;
 
-			/* If tuple is downlink in memory */
+			// If tuple is downlink in memory
 			if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
 			{
-				/* recursively traverse to every child */
+				// recursively traverse to every child
 				btree_calculate_min_values(undoType,
 										   DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink),
 										   printData);
@@ -636,21 +636,21 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 		}
 	}
 
-	/* If node has valid rightlink also traverse to it */
+	// If node has valid rightlink also traverse to it
 	blkno = RIGHTLINK_GET_BLKNO(BTREE_PAGE_GET_RIGHTLINK(p));
 	if (OInMemoryBlknoIsValid(blkno))
 		btree_calculate_min_values(undoType, blkno, printData);
 }
 
-/*
- * Print in memory downlink for child node
- */
+//
+// Print in memory downlink for child node
+//
 static bool
 btree_print_csn(CommitSeqNo csn, StringInfo outbuf, BTreePrintData *printData, bool addComma)
 {
 	CommitSeqNo printedCsn = csn;
 
-	/* print csn if option has another value then BTreePrintAbsolute */
+	// print csn if option has another value then BTreePrintAbsolute
 	if (printData->options->csnPrintType != BTreeNotPrint)
 	{
 		if (addComma)
@@ -662,10 +662,10 @@ btree_print_csn(CommitSeqNo csn, StringInfo outbuf, BTreePrintData *printData, b
 			appendStringInfo(outbuf, "INPROGRESS");
 		else
 		{
-			/*
-			 * If relative csn option set, then substract min csn from
-			 * absolute node csn
-			 */
+			//
+// If relative csn option set, then substract min csn from
+// absolute node csn
+//
 			if (printData->options->csnPrintType == BTreePrintRelative)
 				printedCsn = csn - printData->minCsn;
 			appendStringInfo(outbuf, UINT64_FORMAT, printedCsn);
@@ -675,9 +675,9 @@ btree_print_csn(CommitSeqNo csn, StringInfo outbuf, BTreePrintData *printData, b
 	return false;
 }
 
-/*
- * Print node backend id
- */
+//
+// Print node backend id
+//
 static void
 btree_print_backend_id(OXid oxid, StringInfo outbuf, BTreePrintData *printData)
 {
@@ -692,7 +692,7 @@ btree_print_backend_id(OXid oxid, StringInfo outbuf, BTreePrintData *printData)
 
 	if (printData->options->backendIdPrintType != BTreeNotPrint)
 	{
-		/* find backend id in traversal by backend id */
+		// find backend id in traversal by backend id
 		hentry = (BackendIdHashEntry *) hash_search(printData->backendIdHash, &backendId, HASH_FIND, &found);
 		Assert(found);
 		appendStringInfo(outbuf, ", backend = %d", hentry->backendIdInTraversal);
@@ -724,15 +724,15 @@ btree_print_undo_location(UndoLogType undoType, UndoLocation undoLocation,
 
 	if (printType != BTreeNotPrint && undoType != UndoLogNone)
 	{
-		/* print undo location only if it is valid */
+		// print undo location only if it is valid
 		if (UndoLocationIsValid(undoLocation) &&
 			(((UNDO_REC_EXISTS(undoType, undoLocation) && printType == BTreePrintAbsolute)) ||
 			 ((UNDO_REC_XACT_RETAIN(undoType, undoLocation) && printType == BTreePrintRelative))))
 		{
-			/*
-			 * if ascending number option set, then it gets number of undo
-			 * location in sorted list
-			 */
+			//
+// if ascending number option set, then it gets number of undo
+// location in sorted list
+//
 			if (printData->options->undoLogLocationPrintType ==
 				BTreePrintRelative)
 			{
@@ -765,9 +765,9 @@ btree_print_format_flags(int formatFlags, StringInfo outbuf,
 	return false;
 }
 
-/*
- * Print page number for node
- */
+//
+// Print page number for node
+//
 static void
 btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, BTreePrintData *printData)
 {
@@ -775,10 +775,10 @@ btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, BTreePrintData 
 	bool		found;
 	OInMemoryBlkno printedPageNumber = blkno;
 
-	/* print page number in NLR traverse only if corresponding option set */
+	// print page number in NLR traverse only if corresponding option set
 	if (printData->options->pagePrintType == BTreePrintRelative)
 	{
-		/* find the corresponding page number in NLR traversal */
+		// find the corresponding page number in NLR traversal
 		hentry = (PageHashEntry *) hash_search(printData->pageHash, &blkno, HASH_FIND, &found);
 		Assert(found);
 		printedPageNumber = hentry->NLRPageNumber;
@@ -786,9 +786,9 @@ btree_print_page_number(OInMemoryBlkno blkno, StringInfo outbuf, BTreePrintData 
 	appendStringInfo(outbuf, "Page %u: ", printedPageNumber);
 }
 
-/*
- * Print in memory downlink for child node
- */
+//
+// Print in memory downlink for child node
+//
 static void
 btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, BTreePrintData *printData)
 {
@@ -796,10 +796,10 @@ btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, BTreePrintData
 	bool		found;
 	OInMemoryBlkno printedPageNumber = DOWNLINK_GET_IN_MEMORY_BLKNO(downlink);
 
-	/* print page number in NLR traverse only if corresponding option set */
+	// print page number in NLR traverse only if corresponding option set
 	if (printData->options->pagePrintType == BTreePrintRelative)
 	{
-		/* find the corresponding page number in NLR traversal */
+		// find the corresponding page number in NLR traversal
 		hentry = (PageHashEntry *) hash_search(printData->pageHash, &printedPageNumber, HASH_FIND, &found);
 		Assert(found);
 		printedPageNumber = hentry->NLRPageNumber;
@@ -809,9 +809,9 @@ btree_print_orioledb_downlink(uint64 downlink, StringInfo outbuf, BTreePrintData
 		appendStringInfo(outbuf, " (%u)", DOWNLINK_GET_IN_MEMORY_CHANGECOUNT(downlink));
 }
 
-/*
- * Print rightlink for node
- */
+//
+// Print rightlink for node
+//
 static void
 btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf, BTreePrintData *printData)
 {
@@ -819,15 +819,15 @@ btree_print_rightlink(OInMemoryBlkno rightlink, StringInfo outbuf, BTreePrintDat
 	bool		found;
 	OInMemoryBlkno printedPageNumber = rightlink;
 
-	/*
-	 * print rightlink page number in NLR traverse only if corresponding
-	 * option set
-	 */
+	//
+// print rightlink page number in NLR traverse only if corresponding
+// option set
+//
 	if (OInMemoryBlknoIsValid(rightlink))
 	{
 		if (printData->options->pagePrintType == BTreePrintRelative)
 		{
-			/* find the corresponding page number in NLR traversal */
+			// find the corresponding page number in NLR traversal
 			hentry = (PageHashEntry *) hash_search(printData->pageHash, &printedPageNumber, HASH_FIND, &found);
 			Assert(found);
 			printedPageNumber = hentry->NLRPageNumber;
@@ -851,7 +851,7 @@ pdata_set_min_csn(BTreePrintData *printData, CommitSeqNo csn)
 	}
 }
 
-/* adds unique undo location in ascending order */
+// adds unique undo location in ascending order
 static List *
 ladd_unique_undo(List *list, UndoLogType undoType, UndoLocation location)
 {
@@ -868,7 +868,7 @@ ladd_unique_undo(List *list, UndoLogType undoType, UndoLocation location)
 	copyLoc = palloc(sizeof(UndoLocation));
 	*copyLoc = location;
 
-	/* lappend_cell does not work with NIL list */
+	// lappend_cell does not work with NIL list
 	if (list == NIL)
 		return lappend(list, copyLoc);
 

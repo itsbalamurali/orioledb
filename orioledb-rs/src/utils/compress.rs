@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * compress.c
- *		Compression functions for BTree pages. Wrapper for libzstd.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/utils/compress.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// compress.c
+// Compression functions for BTree pages. Wrapper for libzstd.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/utils/compress.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -27,9 +27,9 @@ static ZSTD_DCtx *zstd_dctx = NULL;
 static size_t zstd_dst_size;
 static Pointer zstd_dst = NULL;
 
-/*
- * Initializes compression context.
- */
+//
+// Initializes compression context.
+//
 void
 o_compress_init(void)
 {
@@ -38,20 +38,20 @@ o_compress_init(void)
 	zstd_dst_size = ZSTD_compressBound(ORIOLEDB_BLCKSZ);
 	zstd_dst = malloc(zstd_dst_size);
 
-	/*
-	 * It helps to avoid Valgrind uninitialized bytes error inside
-	 * OFileWrite().
-	 *
-	 * We write compressed pages to a file with size % ORIOLEDB_COMP_BLCKSZ ==
-	 * 0, where size >= compressed page size. So it's normal to write
-	 * uninitialized bytes.
-	 */
+	//
+// It helps to avoid Valgrind uninitialized bytes error inside
+// OFileWrite().
+//
+// We write compressed pages to a file with size % ORIOLEDB_COMP_BLCKSZ ==
+// 0, where size >= compressed page size. So it's normal to write
+// uninitialized bytes.
+//
 	VALGRIND_MAKE_MEM_DEFINED(zstd_dst, ORIOLEDB_BLCKSZ);
 }
 
-/*
- * Compresses a BTree page.
- */
+//
+// Compresses a BTree page.
+//
 Pointer
 o_compress_page(Pointer page, size_t *size, OCompress lvl)
 {
@@ -70,9 +70,9 @@ o_compress_page(Pointer page, size_t *size, OCompress lvl)
 	return zstd_dst;
 }
 
-/*
- * Decompresses a BTree page.
- */
+//
+// Decompresses a BTree page.
+//
 void
 o_decompress_page(Pointer src, size_t size, Pointer page)
 {
@@ -90,9 +90,9 @@ o_decompress_page(Pointer src, size_t size, Pointer page)
 	Assert(result == ORIOLEDB_BLCKSZ);
 }
 
-/*
- * Returns max orioledb compression level.
- */
+//
+// Returns max orioledb compression level.
+//
 OCompress
 o_compress_max_lvl()
 {

@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_database_cache.c
- *		Routines for orioledb database cache.
- *
- * database_cache is tree that contains cached metadata from pg_database.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_database_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_database_cache.c
+// Routines for orioledb database cache.
+//
+// database_cache is tree that contains cached metadata from pg_database.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_database_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -63,9 +63,9 @@ static OSysCacheFuncs database_cache_funcs =
 	.toast_deserialize_entry = o_database_cache_deserialize_entry,
 };
 
-/*
- * Initializes the database sys cache memory.
- */
+//
+// Initializes the database sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(database_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -96,7 +96,7 @@ o_database_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	dbform = (Form_pg_database) GETSTRUCT(databasetup);
 
 	prev_context = MemoryContextSwitchTo(database_cache->mcxt);
-	if (o_database != NULL)		/* Existed o_database updated */
+	if (o_database != NULL)		// Existed o_database updated
 	{
 		Assert(false);
 	}

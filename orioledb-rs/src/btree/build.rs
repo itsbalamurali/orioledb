@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * build.c
- *		Routines for sort-based B-tree index building.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/build.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// build.c
+// Routines for sort-based B-tree index building.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/build.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -86,7 +86,7 @@ stack_page_split(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 
 	left_count = btree_page_split_location(desc, &items, offset, 0.9, NULL);
 
-	/* Distribute the tuples according the the split location */
+	// Distribute the tuples according the the split location
 	BTREE_PAGE_OFFSET_GET_LOCATOR(img, left_count, &loc);
 	BTREE_PAGE_LOCATOR_FIRST(new_page, &newLoc);
 	while (BTREE_PAGE_LOCATOR_IS_VALID(img, &loc))
@@ -114,7 +114,7 @@ stack_page_split(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 	memcpy(tuple_ptr, tuple.data, tuplesize);
 	BTREE_PAGE_SET_ITEM_FLAGS(new_page, &newLoc, tuple.formatFlags);
 
-	/* Setup the new high key on the left page */
+	// Setup the new high key on the left page
 	BTREE_PAGE_LOCATOR_FIRST(new_page, &newLoc);
 	BTREE_PAGE_READ_TUPLE(rightbound_key, new_page, &newLoc);
 	if (leaf)
@@ -223,7 +223,7 @@ put_item_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 			PAGE_SET_N_ONDISK(stack[level].img,
 							  BTREE_PAGE_ITEMS_COUNT(stack[level].img));
 
-		/* write old page to disk */
+		// write old page to disk
 
 		extent.len = InvalidFileExtentLen;
 		extent.off = InvalidFileExtentOff;
@@ -247,7 +247,7 @@ put_item_to_stack(BTreeDescr *desc, OIndexBuildStackItem *stack, int level,
 #endif
 		}
 
-		/* copy new page to stack */
+		// copy new page to stack
 		memcpy(stack[level].img, new_page, ORIOLEDB_BLCKSZ);
 		BTREE_PAGE_LOCATOR_TAIL(stack[level].img, &stack[level].loc);
 
@@ -324,7 +324,7 @@ btree_write_index_data(BTreeDescr *desc, TupleDesc tupdesc,
 	pg_atomic_init_u64(&metaPage.bridge_ctid, bridge_ctid);
 	for (i = 0; i < ORIOLEDB_MAX_DEPTH; i++)
 	{
-		/* init_page_first_chunk() needs leaf flag to be set */
+		// init_page_first_chunk() needs leaf flag to be set
 		if (i == 0)
 			((BTreePageHeader *) stack[i].img)->flags = O_BTREE_FLAG_LEAF;
 		init_page_first_chunk(desc, stack[i].img, 0);

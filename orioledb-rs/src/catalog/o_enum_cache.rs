@@ -1,21 +1,21 @@
-/*-------------------------------------------------------------------------
- *
- * o_enum_cache.c
- *		Routines for orioledb enum and enumoid system caches.
- *
- * enum_cache is TOAST tree that contains cached enum and its values
- * metadata from pg_type.
- * enumoid_cache is tree that contains typeoids for enumoids,
- * that used to get type from enumoid in o_enum_cmp_internal_hook.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_enum_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_enum_cache.c
+// Routines for orioledb enum and enumoid system caches.
+//
+// enum_cache is TOAST tree that contains cached enum and its values
+// metadata from pg_type.
+// enumoid_cache is tree that contains typeoids for enumoids,
+// that used to get type from enumoid in o_enum_cmp_internal_hook.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_enum_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -45,19 +45,19 @@ static void o_enumoid_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 									   Pointer arg);
 static void o_enumoid_cache_free_entry(Pointer entry);
 
-/* Copied from typecache.c */
+// Copied from typecache.c
 typedef struct
 {
-	Oid			enum_oid;		/* OID of one enum value */
-	float4		sort_order;		/* its sort position */
+	Oid			enum_oid;		// OID of one enum value
+	float4		sort_order;		// its sort position
 } EnumItem;
 
-/* Copied from typecache.c */
+// Copied from typecache.c
 typedef struct TypeCacheEnumData
 {
-	Oid			bitmap_base;	/* OID corresponding to bit 0 of bitmapset */
-	Bitmapset  *sorted_values;	/* Set of OIDs known to be in order */
-	int			num_values;		/* total number of values in enum */
+	Oid			bitmap_base;	// OID corresponding to bit 0 of bitmapset
+	Bitmapset  *sorted_values;	// Set of OIDs known to be in order
+	int			num_values;		// total number of values in enum
 	EnumItem	enum_values[FLEXIBLE_ARRAY_MEMBER];
 } TypeCacheEnumData;
 
@@ -76,9 +76,9 @@ static OSysCacheFuncs enumoid_cache_funcs =
 	.fill_entry = o_enumoid_cache_fill_entry
 };
 
-/*
- * Initializes the enum B-tree memory.
- */
+//
+// Initializes the enum B-tree memory.
+//
 O_SYS_CACHE_INIT_FUNC(enum_cache)
 {
 	Oid			keytypes[] = {OIDOID, NAMEOID};
@@ -107,7 +107,7 @@ o_enum_cache_add_all(Oid datoid, Oid enum_oid, XLogRecPtr insert_lsn)
 	HeapTuple	enum_tuple;
 	ScanKeyData skey;
 
-	/* Scan pg_enum for the members of the target enum type. */
+	// Scan pg_enum for the members of the target enum type.
 	ScanKeyInit(&skey, Anum_pg_enum_enumtypid, BTEqualStrategyNumber, F_OIDEQ,
 				ObjectIdGetDatum(enum_oid));
 
@@ -150,7 +150,7 @@ o_enum_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	enumform = (Form_pg_enum) GETSTRUCT(enumtup);
 
 	prev_context = MemoryContextSwitchTo(enum_cache->mcxt);
-	if (o_enum != NULL)			/* Existed o_enum updated */
+	if (o_enum != NULL)			// Existed o_enum updated
 	{
 		Assert(false);
 	}
@@ -184,7 +184,7 @@ o_enumoid_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	enumform = (Form_pg_enum) GETSTRUCT(enumtup);
 
 	prev_context = MemoryContextSwitchTo(enumoid_cache->mcxt);
-	if (o_enumoid != NULL)		/* Existed o_enum updated */
+	if (o_enumoid != NULL)		// Existed o_enum updated
 	{
 		Assert(false);
 	}
@@ -212,9 +212,9 @@ o_enumoid_cache_free_entry(Pointer entry)
 	pfree(entry);
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_enum_cache_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup,
 					   Pointer arg)
@@ -231,9 +231,9 @@ o_enum_cache_tup_print(BTreeDescr *desc, StringInfo buf, OTuple tup,
 					 o_enum_data->enumsortorder);
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_enumoid_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 						  OTuple tup, Pointer arg)
@@ -350,9 +350,9 @@ o_enum_cache_search_htup(TupleDesc tupdesc, Oid enumtypid, Name enumlabel)
 	return result;
 }
 
-/*
- * qsort comparison function for OID-ordered EnumItems
- */
+//
+// qsort comparison function for OID-ordered EnumItems
+//
 static int
 enum_oid_cmp(const void *left, const void *right)
 {
@@ -367,9 +367,9 @@ enum_oid_cmp(const void *left, const void *right)
 		return 0;
 }
 
-/*
- * Load (or re-load) the enumData member of the typcache entry.
- */
+//
+// Load (or re-load) the enumData member of the typcache entry.
+//
 void
 o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 {
@@ -388,19 +388,19 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 	int			bm_size,
 				start_pos;
 
-	/* Check that this is actually an enum */
+	// Check that this is actually an enum
 	if (tcache->typtype != TYPTYPE_ENUM)
 		ereport(ERROR, (errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						errmsg("%s is not an enum",
 							   format_type_be(tcache->type_id))));
 
-	/*
-	 * Read all the information for members of the enum type.  We collect the
-	 * info in working memory in the caller's context, and then transfer it to
-	 * permanent memory in CacheMemoryContext.  This minimizes the risk of
-	 * leaking memory from CacheMemoryContext in the event of an error partway
-	 * through.
-	 */
+	//
+// Read all the information for members of the enum type.  We collect the
+// info in working memory in the caller's context, and then transfer it to
+// permanent memory in CacheMemoryContext.  This minimizes the risk of
+// leaking memory from CacheMemoryContext in the event of an error partway
+// through.
+//
 	maxitems = 64;
 	items = (EnumItem *) palloc(sizeof(EnumItem) * maxitems);
 	numitems = 0;
@@ -447,30 +447,30 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 
 	btree_iterator_free(it);
 
-	/* Sort the items into OID order */
+	// Sort the items into OID order
 	qsort(items, numitems, sizeof(EnumItem), enum_oid_cmp);
 
-	/*
-	 * Here, we create a bitmap listing a subset of the enum's OIDs that are
-	 * known to be in order and can thus be compared with just OID comparison.
-	 *
-	 * The point of this is that the enum's initial OIDs were certainly in
-	 * order, so there is some subset that can be compared via OID comparison;
-	 * and we'd rather not do binary searches unnecessarily.
-	 *
-	 * This is somewhat heuristic, and might identify a subset of OIDs that
-	 * isn't exactly what the type started with.  That's okay as long as the
-	 * subset is correctly sorted.
-	 */
+	//
+// Here, we create a bitmap listing a subset of the enum's OIDs that are
+// known to be in order and can thus be compared with just OID comparison.
+//
+// The point of this is that the enum's initial OIDs were certainly in
+// order, so there is some subset that can be compared via OID comparison;
+// and we'd rather not do binary searches unnecessarily.
+//
+// This is somewhat heuristic, and might identify a subset of OIDs that
+// isn't exactly what the type started with.  That's okay as long as the
+// subset is correctly sorted.
+//
 	bitmap_base = InvalidOid;
 	bitmap = NULL;
-	bm_size = 1;				/* only save sets of at least 2 OIDs */
+	bm_size = 1;				// only save sets of at least 2 OIDs
 
 	for (start_pos = 0; start_pos < numitems - 1; start_pos++)
 	{
-		/*
-		 * Identify longest sorted subsequence starting at start_pos
-		 */
+		//
+// Identify longest sorted subsequence starting at start_pos
+//
 		Bitmapset  *this_bitmap = bms_make_singleton(0);
 		int			this_bm_size = 1;
 		Oid			start_oid = items[start_pos].enum_oid;
@@ -482,10 +482,10 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 			Oid			offset;
 
 			offset = items[i].enum_oid - start_oid;
-			/* quit if bitmap would be too large; cutoff is arbitrary */
+			// quit if bitmap would be too large; cutoff is arbitrary
 			if (offset >= 8192)
 				break;
-			/* include the item if it's in-order */
+			// include the item if it's in-order
 			if (items[i].sort_order > prev_order)
 			{
 				prev_order = items[i].sort_order;
@@ -494,7 +494,7 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 			}
 		}
 
-		/* Remember it if larger than previous best */
+		// Remember it if larger than previous best
 		if (this_bm_size > bm_size)
 		{
 			bms_free(bitmap);
@@ -505,17 +505,17 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 		else
 			bms_free(this_bitmap);
 
-		/*
-		 * Done if it's not possible to find a longer sequence in the rest of
-		 * the list.  In typical cases this will happen on the first
-		 * iteration, which is why we create the bitmaps on the fly instead of
-		 * doing a second pass over the list.
-		 */
+		//
+// Done if it's not possible to find a longer sequence in the rest of
+// the list.  In typical cases this will happen on the first
+// iteration, which is why we create the bitmaps on the fly instead of
+// doing a second pass over the list.
+//
 		if (bm_size >= (numitems - start_pos - 1))
 			break;
 	}
 
-	/* OK, copy the data into CacheMemoryContext */
+	// OK, copy the data into CacheMemoryContext
 	oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
 	enumdata = (TypeCacheEnumData *)
 		palloc(offsetof(TypeCacheEnumData, enum_values) +
@@ -529,7 +529,7 @@ o_load_enum_cache_data_hook(TypeCacheEntry *tcache)
 	pfree(items);
 	bms_free(bitmap);
 
-	/* And link the finished cache struct into the typcache */
+	// And link the finished cache struct into the typcache
 	if (tcache->enumData != NULL)
 		pfree(tcache->enumData);
 	tcache->enumData = enumdata;

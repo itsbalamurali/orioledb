@@ -1,15 +1,15 @@
-/*-------------------------------------------------------------------------
- *
- * bitmap_scan.c
- *		Routines for bitmap scan of orioledb table
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/bitmap_scan.c
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// bitmap_scan.c
+// Routines for bitmap scan of orioledb table
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/bitmap_scan.c
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -89,14 +89,14 @@ typedef struct BridgeIterator
 #define BRIDGE_ITER_NTUPLES(iter) ((iter)->tbmres->ntuples)
 #endif
 
-/* One streamed primary index scan (a single BitmapIndexScan node). */
+// One streamed primary index scan (a single BitmapIndexScan node).
 typedef struct OBitmapStreamChild
 {
 	OScanState	ostate;
 	OIndexDescr *ix;
-	Relation	index;			/* kept open for scandesc.indexRelation */
-	bool		scandesc_ready; /* scandesc + cxt were initialized */
-	bool		empty;			/* qual_ok false / empty array: no rows */
+	Relation	index;			// kept open for scandesc.indexRelation
+	bool		scandesc_ready; // scandesc + cxt were initialized
+	bool		empty;			// qual_ok false / empty array: no rows
 } OBitmapStreamChild;
 
 typedef struct OBitmapScan
@@ -112,24 +112,24 @@ typedef struct OBitmapScan
 
 	BridgeIterator bridge_iter;
 
-	/*
-	 * Primary-scan streaming.  When the bitmap qual is a single
-	 * BitmapIndexScan over the primary index -- or a BitmapOr of such scans
-	 * (e.g. a row-array "(a,b,c) IN (...)" on a composite pk) -- there is
-	 * nothing to intersect and the union only needs de-duplication.  Instead
-	 * of materializing a key bitmap and re-reading the primary tree we drive
-	 * the primary index scan(s) directly and hand their live tuples straight
-	 * to the output (o_exec_fetch-style), keeping full orioledb row identity
-	 * (csn / hint / rowid) for locking, EPQ and toast and skipping the second
-	 * pass.  For a BitmapOr the children can produce the same pk (duplicate /
-	 * overlapping branches), so a dedup bitmap carries the "already emitted"
-	 * bit.
-	 */
+	//
+// Primary-scan streaming.  When the bitmap qual is a single
+// BitmapIndexScan over the primary index -- or a BitmapOr of such scans
+// (e.g. a row-array "(a,b,c) IN (...)" on a composite pk) -- there is
+// nothing to intersect and the union only needs de-duplication.  Instead
+// of materializing a key bitmap and re-reading the primary tree we drive
+// the primary index scan(s) directly and hand their live tuples straight
+// to the output (o_exec_fetch-style), keeping full orioledb row identity
+// (csn / hint / rowid) for locking, EPQ and toast and skipping the second
+// pass.  For a BitmapOr the children can produce the same pk (duplicate /
+// overlapping branches), so a dedup bitmap carries the "already emitted"
+// bit.
+//
 	bool		stream_primary;
 	OBitmapStreamChild *stream_children;
 	int			stream_nchildren;
 	int			stream_cur;
-	OKeyBitmap *stream_dedup;	/* NULL for a single child (no dup possible) */
+	OKeyBitmap *stream_dedup;	// NULL for a single child (no dup possible)
 } OBitmapScan;
 
 static bool o_bitmap_is_range_valid(OTuple low, OTuple high, void *arg);
@@ -222,10 +222,10 @@ seconary_tuple_get_pk_data(OTuple tuple, OIndexDescr *ix_descr)
 	Assert(ix_descr->nPrimaryFields == 1);
 	Assert(!O_TUPLE_IS_NULL(tuple));
 
-	/*
-	 * Currently bitmap scan works only for first field with int4, int8 or
-	 * ctid type
-	 */
+	//
+// Currently bitmap scan works only for first field with int4, int8 or
+// ctid type
+//
 	attnum = ix_descr->primaryFieldsAttnums[0];
 	attr = TupleDescAttr(ix_descr->leafTupdesc, attnum - 1);
 	val = o_toast_nocachegetattr(tuple, attnum, ix_descr->leafTupdesc,
@@ -254,21 +254,21 @@ primary_tuple_get_data(OTuple tuple, OIndexDescr *primary, bool onlyPkey)
 	return val_get_uint64(val, attr->atttypid);
 }
 
-/* ---- composite (fixed-key) primary key encoding ---- */
+// ---- composite (fixed-key) primary key encoding ----
 
-/*
- * How one fixed-size attribute is turned into order-preserving key bytes.  The
- * bitmap's radix tree is walked in byte order to drive the primary-tree seek
- * (o_bitmap_get_next_key), so the encoding of every supported type must sort
- * bytewise exactly as the type's default btree opclass sorts values.
- */
+//
+// How one fixed-size attribute is turned into order-preserving key bytes.  The
+// bitmap's radix tree is walked in byte order to drive the primary-tree seek
+// (o_bitmap_get_next_key), so the encoding of every supported type must sort
+// bytewise exactly as the type's default btree opclass sorts values.
+//
 typedef enum OPkEncKind
 {
-	PKENC_SINT,					/* signed integer: big-endian, sign bit
-								 * flipped */
-	PKENC_UINT,					/* unsigned integer / raw byte: big-endian */
-	PKENC_FLOAT,				/* IEEE float: order-preserving bit transform */
-	PKENC_RAW,					/* fixed-size by-ref, already memcmp-ordered */
+	PKENC_SINT,					// signed integer: big-endian, sign bit
+// flipped
+	PKENC_UINT,					// unsigned integer / raw byte: big-endian
+	PKENC_FLOAT,				// IEEE float: order-preserving bit transform
+	PKENC_RAW,					// fixed-size by-ref, already memcmp-ordered
 } OPkEncKind;
 
 typedef struct OPkFixedType
@@ -278,26 +278,26 @@ typedef struct OPkFixedType
 	OPkEncKind	kind;
 } OPkFixedType;
 
-/*
- * All built-in fixed-size types whose default btree ordering has an
- * order-preserving fixed-width byte encoding.  Types whose ordering is not a
- * bytewise function of a fixed-size value are intentionally absent (they fall
- * back to O_KEYBITMAP_NONE): xid/xid8 (modular), timetz/interval (multi-field
- * ordering), name (64 bytes > OKBM_FIXED_BYTES), and all varlena types.
- */
+//
+// All built-in fixed-size types whose default btree ordering has an
+// order-preserving fixed-width byte encoding.  Types whose ordering is not a
+// bytewise function of a fixed-size value are intentionally absent (they fall
+// back to O_KEYBITMAP_NONE): xid/xid8 (modular), timetz/interval (multi-field
+// ordering), name (64 bytes > OKBM_FIXED_BYTES), and all varlena types.
+//
 static const OPkFixedType o_pk_fixed_types[] = {
 	{BOOLOID, 1, PKENC_UINT},
-	{CHAROID, 1, PKENC_UINT},	/* "char" compares as unsigned byte */
+	{CHAROID, 1, PKENC_UINT},	// "char" compares as unsigned byte
 	{INT2OID, 2, PKENC_SINT},
 	{INT4OID, 4, PKENC_SINT},
 	{DATEOID, 4, PKENC_SINT},
 	{OIDOID, 4, PKENC_UINT},
 	{FLOAT4OID, 4, PKENC_FLOAT},
 	{INT8OID, 8, PKENC_SINT},
-	{TIMEOID, 8, PKENC_SINT},	/* time-of-day, non-negative int64 */
+	{TIMEOID, 8, PKENC_SINT},	// time-of-day, non-negative int64
 	{TIMESTAMPOID, 8, PKENC_SINT},
 	{TIMESTAMPTZOID, 8, PKENC_SINT},
-	{MONEYOID, 8, PKENC_SINT},	/* Cash is a signed int64 */
+	{MONEYOID, 8, PKENC_SINT},	// Cash is a signed int64
 	{FLOAT8OID, 8, PKENC_FLOAT},
 	{MACADDROID, 6, PKENC_RAW},
 	{MACADDR8OID, 8, PKENC_RAW},
@@ -315,7 +315,7 @@ o_pk_fixed_lookup(Oid typeoid)
 	return NULL;
 }
 
-/* Encoded width of a fixed-size key column, or -1 if the type is unsupported. */
+// Encoded width of a fixed-size key column, or -1 if the type is unsupported.
 static int
 o_pk_fixed_width(Oid typeoid)
 {
@@ -330,19 +330,19 @@ o_keybitmap_pk_mode(OIndexDescr *primary, int *fixedKeyLen)
 	int			i;
 	int			len = 0;
 
-	/*
-	 * For the primary index descriptor the PK columns are its own key fields
-	 * (nKeyFields; INCLUDE columns in nFields are not part of the ordering
-	 * and must be ignored).  nPrimaryFields is zero here (it counts the PK
-	 * columns appended to *secondary* indexes).
-	 */
+	//
+// For the primary index descriptor the PK columns are its own key fields
+// (nKeyFields; INCLUDE columns in nFields are not part of the ordering
+// and must be ignored).  nPrimaryFields is zero here (it counts the PK
+// columns appended to *secondary* indexes).
+//
 
-	/*
-	 * uint64 densified mode: the historically supported single-field case.
-	 * Gated on nFields (not nKeyFields) so a single-key PK with INCLUDE
-	 * columns falls through to fixed-key mode rather than the uint64 helpers,
-	 * whose asserts require nFields == 1.
-	 */
+	//
+// uint64 densified mode: the historically supported single-field case.
+// Gated on nFields (not nKeyFields) so a single-key PK with INCLUDE
+// columns falls through to fixed-key mode rather than the uint64 helpers,
+// whose asserts require nFields == 1.
+//
 	if (primary->nFields <= 1)
 	{
 		bool		ok = true;
@@ -361,12 +361,12 @@ o_keybitmap_pk_mode(OIndexDescr *primary, int *fixedKeyLen)
 			return O_KEYBITMAP_UINT64;
 	}
 
-	/*
-	 * Fixed-key mode: composite of ascending fixed-size fields.  Classify by
-	 * the stored attribute type (atttypid of the ordering tuple) -- exactly
-	 * what o_pk_encode_nonleaf()/o_pk_decode_to_key() encode -- so the mode
-	 * decision and the encoding can never disagree.
-	 */
+	//
+// Fixed-key mode: composite of ascending fixed-size fields.  Classify by
+// the stored attribute type (atttypid of the ordering tuple) -- exactly
+// what o_pk_encode_nonleaf()/o_pk_decode_to_key() encode -- so the mode
+// decision and the encoding can never disagree.
+//
 	if (primary->primaryIsCtid)
 		return O_KEYBITMAP_NONE;
 	for (i = 0; i < primary->nKeyFields; i++)
@@ -388,24 +388,24 @@ o_keybitmap_pk_mode(OIndexDescr *primary, int *fixedKeyLen)
 	return O_KEYBITMAP_FIXED;
 }
 
-/*
- * Order-preserving transform masks for o_pk_encode_one()/o_pk_decode_one(),
- * named by the encoded width in bits.  A signed integer has its sign bit
- * flipped so negatives sort before positives; an IEEE float has its sign bit
- * flipped when non-negative and all bits flipped when negative (the all-ones
- * masks are PG_UINT{32,64}_MAX).
- */
+//
+// Order-preserving transform masks for o_pk_encode_one()/o_pk_decode_one(),
+// named by the encoded width in bits.  A signed integer has its sign bit
+// flipped so negatives sort before positives; an IEEE float has its sign bit
+// flipped when non-negative and all bits flipped when negative (the all-ones
+// masks are PG_UINT{32,64}_MAX).
+//
 #define OKBM_SIGNBIT16	UINT64CONST(0x8000)
 #define OKBM_SIGNBIT32	0x80000000U
 #define OKBM_SIGNBIT64	UINT64CONST(0x8000000000000000)
-/* Canonical quiet-NaN bit patterns (sort highest after the float transform). */
+// Canonical quiet-NaN bit patterns (sort highest after the float transform).
 #define OKBM_FLOAT4_NAN	0x7fc00000U
 #define OKBM_FLOAT8_NAN	UINT64CONST(0x7ff8000000000000)
 
-/*
- * Order-preserving encode of one fixed-size Datum into big-endian key bytes;
- * returns the width written.  See OPkEncKind for the per-kind transforms.
- */
+//
+// Order-preserving encode of one fixed-size Datum into big-endian key bytes;
+// returns the width written.  See OPkEncKind for the per-kind transforms.
+//
 static int
 o_pk_encode_one(Datum val, Oid typeoid, uint8 *out)
 {
@@ -421,7 +421,7 @@ o_pk_encode_one(Datum val, Oid typeoid, uint8 *out)
 	switch (t->kind)
 	{
 		case PKENC_RAW:
-			/* already memcmp-ordered (uuid, macaddr*): copy raw bytes */
+			// already memcmp-ordered (uuid, macaddr*): copy raw bytes
 			memcpy(out, DatumGetPointer(val), w);
 			return w;
 		case PKENC_UINT:
@@ -438,33 +438,33 @@ o_pk_encode_one(Datum val, Oid typeoid, uint8 *out)
 			break;
 		case PKENC_FLOAT:
 
-			/*
-			 * IEEE 754 -> sortable unsigned integer, the standard trick used
-			 * for radix-sorting floats.  Reinterpret the value's bits as an
-			 * unsigned integer, then: - non-negative (sign bit 0): set the
-			 * sign bit.  Non-negatives keep their relative order and all sort
-			 * above negatives. - negative (sign bit 1): flip every bit.  This
-			 * both clears the sign bit (so negatives sort below
-			 * non-negatives) and reverses the order among negatives, which is
-			 * what we want: the IEEE magnitude fields increase as the value
-			 * moves away from zero, so -1.0 has a smaller bit pattern than
-			 * -2.0 and flipping restores -2.0 < -1.0.  Both cases collapse to
-			 * one XOR: with all-ones when the sign bit is set, with just the
-			 * sign bit otherwise.  o_pk_decode_one() applies the inverse.
-			 *
-			 * Portability: this only assumes IEEE 754 binary32/binary64,
-			 * which PostgreSQL requires (see the float ordering in float.h /
-			 * the configure checks), and that float and uint of the same
-			 * width share the machine's byte order -- true on every supported
-			 * platform. memcpy (not a pointer cast / union) reinterprets the
-			 * bits without violating strict aliasing.  We work on the integer
-			 * *value*, not the raw memory bytes, and
-			 * o_pk_encode_one()/o_pk_decode_one() serialize/deserialize that
-			 * value big-endian symmetrically, so the key is
-			 * endianness-independent.  -0.0 and NaN are normalized above (to
-			 * +0.0 and one canonical NaN) so equal-comparing values never get
-			 * two distinct encodings.
-			 */
+			//
+// IEEE 754 -> sortable unsigned integer, the standard trick used
+// for radix-sorting floats.  Reinterpret the value's bits as an
+// unsigned integer, then: - non-negative (sign bit 0): set the
+// sign bit.  Non-negatives keep their relative order and all sort
+// above negatives. - negative (sign bit 1): flip every bit.  This
+// both clears the sign bit (so negatives sort below
+// non-negatives) and reverses the order among negatives, which is
+// what we want: the IEEE magnitude fields increase as the value
+// moves away from zero, so -1.0 has a smaller bit pattern than
+// -2.0 and flipping restores -2.0 < -1.0.  Both cases collapse to
+// one XOR: with all-ones when the sign bit is set, with just the
+// sign bit otherwise.  o_pk_decode_one() applies the inverse.
+//
+// Portability: this only assumes IEEE 754 binary32/binary64,
+// which PostgreSQL requires (see the float ordering in float.h /
+// the configure checks), and that float and uint of the same
+// width share the machine's byte order -- true on every supported
+// platform. memcpy (not a pointer cast / union) reinterprets the
+// bits without violating strict aliasing.  We work on the integer
+// *value*, not the raw memory bytes, and
+// o_pk_encode_one()/o_pk_decode_one() serialize/deserialize that
+// value big-endian symmetrically, so the key is
+// endianness-independent.  -0.0 and NaN are normalized above (to
+// +0.0 and one canonical NaN) so equal-comparing values never get
+// two distinct encodings.
+//
 			if (w == 4)
 			{
 				float		f = DatumGetFloat4(val);
@@ -473,7 +473,7 @@ o_pk_encode_one(Datum val, Oid typeoid, uint8 *out)
 				if (isnan(f))
 					bits = OKBM_FLOAT4_NAN;
 				else if (f == 0.0f)
-					bits = 0;	/* normalize -0 to +0 */
+					bits = 0;	// normalize -0 to +0
 				else
 					memcpy(&bits, &f, sizeof(bits));
 				bits ^= (bits & OKBM_SIGNBIT32) ? PG_UINT32_MAX : OKBM_SIGNBIT32;
@@ -487,7 +487,7 @@ o_pk_encode_one(Datum val, Oid typeoid, uint8 *out)
 				if (isnan(d))
 					bits = OKBM_FLOAT8_NAN;
 				else if (d == 0.0)
-					bits = 0;	/* normalize -0 to +0 */
+					bits = 0;	// normalize -0 to +0
 				else
 					memcpy(&bits, &d, sizeof(bits));
 				bits ^= (bits & OKBM_SIGNBIT64) ? PG_UINT64_MAX : OKBM_SIGNBIT64;
@@ -541,15 +541,15 @@ o_pk_decode_one(const uint8 *in, Oid typeoid, int *width)
 				return Int64GetDatum((int64) (u ^ OKBM_SIGNBIT64));
 		case PKENC_FLOAT:
 
-			/*
-			 * Inverse of the o_pk_encode_one() float transform.  The encoded
-			 * sign bit tells which case produced it: a set sign bit came from
-			 * a non-negative value (encode set it), so clear it back with an
-			 * XOR of the sign bit; a clear sign bit came from a negative
-			 * value (encode flipped all bits), so restore it by flipping all
-			 * bits again.  See o_pk_encode_one() for the ordering and
-			 * portability rationale.
-			 */
+			//
+// Inverse of the o_pk_encode_one() float transform.  The encoded
+// sign bit tells which case produced it: a set sign bit came from
+// a non-negative value (encode set it), so clear it back with an
+// XOR of the sign bit; a clear sign bit came from a negative
+// value (encode flipped all bits), so restore it by flipping all
+// bits again.  See o_pk_encode_one() for the ordering and
+// portability rationale.
+//
 			if (w == 4)
 			{
 				uint32		bits = (uint32) u;
@@ -569,17 +569,17 @@ o_pk_decode_one(const uint8 *in, Oid typeoid, int *width)
 				return Float8GetDatum(d);
 			}
 		default:
-			/* PKENC_RAW handled above */
+			// PKENC_RAW handled above
 			Assert(false);
 			return (Datum) 0;
 	}
 }
 
-/*
- * Encode the primary key held in a leaf tuple of index "id" (primary or a
- * secondary, which carries the pk fields) into a right-aligned, zero-high-
- * padded OKBM_FIXED_BYTES buffer.
- */
+//
+// Encode the primary key held in a leaf tuple of index "id" (primary or a
+// secondary, which carries the pk fields) into a right-aligned, zero-high-
+// padded OKBM_FIXED_BYTES buffer.
+//
 static void
 o_pk_encode_leaf(OTuple tuple, OIndexDescr *id, uint8 *out)
 {
@@ -615,7 +615,7 @@ o_pk_encode_leaf(OTuple tuple, OIndexDescr *id, uint8 *out)
 	}
 }
 
-/* Encode the primary key held in a non-leaf (pk-only) tuple. */
+// Encode the primary key held in a non-leaf (pk-only) tuple.
 static void
 o_pk_encode_nonleaf(OTuple tuple, OIndexDescr *primary, uint8 *out)
 {
@@ -644,7 +644,7 @@ o_pk_encode_nonleaf(OTuple tuple, OIndexDescr *primary, uint8 *out)
 	}
 }
 
-/* Decode a fixed key back into a non-leaf pk tuple stored in key->fixedData. */
+// Decode a fixed key back into a non-leaf pk tuple stored in key->fixedData.
 static void
 o_pk_decode_to_key(const uint8 *keybytes, OIndexDescr *primary, OFixedKey *key)
 {
@@ -658,17 +658,17 @@ o_pk_decode_to_key(const uint8 *keybytes, OIndexDescr *primary, OFixedKey *key)
 	int			off;
 	OTuple		tup;
 
-	/*
-	 * Only the ordering key columns can be recovered from the encoded key.  A
-	 * covering primary key also carries INCLUDE columns in nonLeafTupdesc,
-	 * but they are not part of the ordering and can't be navigated by, so the
-	 * seek key needs only the ordering columns; leave the rest NULL.  Marking
-	 * any attribute NULL makes o_form_tuple() build a non-fixed tuple with a
-	 * null bitmap and skip those attributes, so it never reads the
-	 * uninitialized INCLUDE values (which would be undefined behavior -- e.g.
-	 * a bogus by-ref box).  o_btree_cmp() on the result only touches the
-	 * nKeyFields columns.
-	 */
+	//
+// Only the ordering key columns can be recovered from the encoded key.  A
+// covering primary key also carries INCLUDE columns in nonLeafTupdesc,
+// but they are not part of the ordering and can't be navigated by, so the
+// seek key needs only the ordering columns; leave the rest NULL.  Marking
+// any attribute NULL makes o_form_tuple() build a non-fixed tuple with a
+// null bitmap and skip those attributes, so it never reads the
+// uninitialized INCLUDE values (which would be undefined behavior -- e.g.
+// a bogus by-ref box).  o_btree_cmp() on the result only touches the
+// nKeyFields columns.
+//
 	for (i = 0; i < natts; i++)
 		isnull[i] = true;
 
@@ -685,7 +685,7 @@ o_pk_decode_to_key(const uint8 *keybytes, OIndexDescr *primary, OFixedKey *key)
 		int			w;
 
 		values[attnums[i] - 1] = o_pk_decode_one(keybytes + off, types[i], &w);
-		isnull[attnums[i] - 1] = false; /* ordering key column is present */
+		isnull[attnums[i] - 1] = false; // ordering key column is present
 		off += w;
 	}
 
@@ -734,15 +734,15 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 	ostate.indexQuals = bitmap_ix_scan->indexqual;
 	ResetExprContext(econtext);
 
-	/*
-	 * ExecIndexBuildScanKeys() (called from init_index_scan_state below)
-	 * palloc's fresh scan-key and runtime-key arrays and assigns them via the
-	 * **scanKeys / **runtimeKeys output pointers, overwriting whatever was
-	 * there before without pfree'ing it.  Each call to this function happens
-	 * once per SubPlan execution, so leftover arrays from prior runs would
-	 * accumulate in the per-query context for the lifetime of the query. Free
-	 * the previous ones here.
-	 */
+	//
+// ExecIndexBuildScanKeys() (called from init_index_scan_state below)
+// palloc's fresh scan-key and runtime-key arrays and assigns them via the
+// **scanKeys / **runtimeKeys output pointers, overwriting whatever was
+// there before without pfree'ing it.  Each call to this function happens
+// once per SubPlan execution, so leftover arrays from prior runs would
+// accumulate in the per-query context for the lifetime of the query. Free
+// the previous ones here.
+//
 	if (node->biss_ScanKeys)
 	{
 		pfree(node->biss_ScanKeys);
@@ -832,12 +832,12 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 				}
 				else
 				{
-					/*
-					 * The scanned index may be the primary index itself (e.g.
-					 * a bitmap index scan over the primary for a row-array
-					 * IN), in which case the pk is the tuple's own key rather
-					 * than an appended secondary payload.
-					 */
+					//
+// The scanned index may be the primary index itself (e.g.
+// a bitmap index scan over the primary for a row-array
+// IN), in which case the pk is the tuple's own key rather
+// than an appended secondary payload.
+//
 					if (indexDescr->desc.type == oIndexPrimary)
 						data = primary_tuple_get_data(tuple, indexDescr, false);
 					else
@@ -859,7 +859,7 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 					OTupleFixedFormatSpec *spec = &primary->leafSpec;
 					ItemPointer bridge_iptr;
 
-					/* fetch primary index key from tuple and search raw tuple */
+					// fetch primary index key from tuple and search raw tuple
 					o_fill_pindex_tuple_key_bound(&indexDescr->desc, tuple, &bound);
 
 					ptup = o_btree_find_tuple_by_key(&primary->desc,
@@ -867,10 +867,10 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 													 &ostate.oSnapshot, NULL,
 													 mcxt, NULL);
 
-					/*
-					 * in concurrent DELETE/UPDATE it might happen, we should
-					 * to try fetch next tuple
-					 */
+					//
+// in concurrent DELETE/UPDATE it might happen, we should
+// to try fetch next tuple
+//
 					if (!O_TUPLE_IS_NULL(ptup))
 					{
 						attnum = primary->primaryIsCtid ? 2 : 1;
@@ -889,15 +889,15 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 			}
 			nTuples += 1;
 
-			/*
-			 * o_iterate_index() palloc'd tuple.data in mcxt
-			 * (ss_ScanTupleSlot->tts_mcxt = the per-query context).  We've
-			 * already extracted everything we need into the bitmap / tbm
-			 * result, so release the buffer; otherwise it would accumulate
-			 * across all tuples this index scan visits and balloon
-			 * ExecutorState on SubPlan-heavy queries that re-build the bitmap
-			 * many times.
-			 */
+			//
+// o_iterate_index() palloc'd tuple.data in mcxt
+// (ss_ScanTupleSlot->tts_mcxt = the per-query context).  We've
+// already extracted everything we need into the bitmap / tbm
+// result, so release the buffer; otherwise it would accumulate
+// across all tuples this index scan visits and balloon
+// ExecutorState on SubPlan-heavy queries that re-build the bitmap
+// many times.
+//
 			pfree(tuple.data);
 		}
 	} while (!O_TUPLE_IS_NULL(tuple));
@@ -906,16 +906,16 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 		btree_iterator_free(ostate.iterator);
 	MemoryContextReset(ostate.cxt);
 
-	/*
-	 * init_index_scan_state() above called btbeginscan(), which palloc'd a
-	 * BTScanOpaque (and, lazily, currTuples / arrayContext / keyData) and
-	 * stashed it in ostate.scandesc.opaque.  The IndexScanDesc itself was
-	 * pfree'd inside init_index_scan_state(), but its private workspace
-	 * survives there.  Without a matching btendscan() that workspace —
-	 * including the 16KB currTuples buffer btree allocates on demand —
-	 * would accumulate in the per-query context for every call (one per
-	 * SubPlan execution that goes through bitmap heap scan).
-	 */
+	//
+// init_index_scan_state() above called btbeginscan(), which palloc'd a
+// BTScanOpaque (and, lazily, currTuples / arrayContext / keyData) and
+// stashed it in ostate.scandesc.opaque.  The IndexScanDesc itself was
+// pfree'd inside init_index_scan_state(), but its private workspace
+// survives there.  Without a matching btendscan() that workspace —
+// including the 16KB currTuples buffer btree allocates on demand —
+// would accumulate in the per-query context for every call (one per
+// SubPlan execution that goes through bitmap heap scan).
+//
 	btendscan(&ostate.scandesc);
 
 	ea_counters = prev_ea_counters;
@@ -948,7 +948,7 @@ exec_bitmap_index_state(OBitmapHeapPlanState *bitmap_state, PlanState *planstate
 	else
 		node->biss_RuntimeKeysReady = true;
 
-	/* reset index scan */
+	// reset index scan
 	if (node->biss_RuntimeKeysReady)
 		index_rescan(node->biss_ScanDesc,
 					 node->biss_ScanKeys, node->biss_NumScanKeys,
@@ -966,17 +966,17 @@ exec_bitmap_index_state(OBitmapHeapPlanState *bitmap_state, PlanState *planstate
 		if (*tbm_result == NULL)
 			*tbm_result = tbm_create(work_mem * 1024L, NULL);
 
-		/*
-		 * extract necessary information from index scan node
-		 */
+		//
+// extract necessary information from index scan node
+//
 		scandesc = node->biss_ScanDesc;
 
-		/*
-		 * If we have runtime keys and they've not already been set up, do it
-		 * now. Array keys are also treated as runtime keys; note that if
-		 * ExecReScan returns with biss_RuntimeKeysReady still false, then
-		 * there is an empty array key so we should do nothing.
-		 */
+		//
+// If we have runtime keys and they've not already been set up, do it
+// now. Array keys are also treated as runtime keys; note that if
+// ExecReScan returns with biss_RuntimeKeysReady still false, then
+// there is an empty array key so we should do nothing.
+//
 		if (!node->biss_RuntimeKeysReady &&
 			(node->biss_NumRuntimeKeys != 0 || node->biss_NumArrayKeys != 0))
 		{
@@ -994,7 +994,7 @@ exec_bitmap_index_state(OBitmapHeapPlanState *bitmap_state, PlanState *planstate
 
 			doscan = ExecIndexAdvanceArrayKeys(node->biss_ArrayKeys,
 											   node->biss_NumArrayKeys);
-			if (doscan)			/* reset index scan */
+			if (doscan)			// reset index scan
 				index_rescan(node->biss_ScanDesc,
 							 node->biss_ScanKeys, node->biss_NumScanKeys,
 							 NULL, 0);
@@ -1100,7 +1100,7 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 					{
 						if (*tbm_result == NULL)
 						{
-							*tbm_result = tbm_subresult;	/* first subplan */
+							*tbm_result = tbm_subresult;	// first subplan
 						}
 						else
 						{
@@ -1114,7 +1114,7 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 						{
 							if (*rbt_result == NULL)
 							{
-								*rbt_result = rbt_subresult;	/* first subplan */
+								*rbt_result = rbt_subresult;	// first subplan
 							}
 							else if (*rbt_result != NULL)
 							{
@@ -1143,14 +1143,14 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 						tbm_free(temp_bitmap);
 					}
 
-					/*
-					 * If at any stage we have a completely empty bitmap, we
-					 * can fall out without evaluating the remaining subplans,
-					 * since ANDing them can no longer change the result.
-					 * (Note: the fact that indxpath.c orders the subplans by
-					 * selectivity should make this case more likely to
-					 * occur.)
-					 */
+					//
+// If at any stage we have a completely empty bitmap, we
+// can fall out without evaluating the remaining subplans,
+// since ANDing them can no longer change the result.
+// (Note: the fact that indxpath.c orders the subplans by
+// selectivity should make this case more likely to
+// occur.)
+//
 					if ((*rbt_result && o_keybitmap_is_empty(*rbt_result)) ||
 						(*tbm_result && tbm_is_empty(*tbm_result)))
 						break;
@@ -1181,10 +1181,10 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 						Assert(!(rbt_subresult && tbm_subresult));
 						o_exec_bitmapqual(bitmap_state, subnode, &rbt_subresult, &tbm_subresult);
 
-						/*
-						 * In other situations union should be already made
-						 * inside of o_exec_bitmapqual
-						 */
+						//
+// In other situations union should be already made
+// inside of o_exec_bitmapqual
+//
 						if (*rbt_result == NULL && rbt_subresult != NULL)
 							*rbt_result = rbt_subresult;
 						if (*tbm_result == NULL && tbm_subresult != NULL)
@@ -1192,13 +1192,13 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 					}
 					else
 					{
-						/* standard implementation */
+						// standard implementation
 						o_exec_bitmapqual(bitmap_state, subnode, &rbt_subresult, &tbm_subresult);
 
 						if (tbm_subresult != NULL)
 						{
 							if (*tbm_result == NULL)
-								*tbm_result = tbm_subresult;	/* first subplan */
+								*tbm_result = tbm_subresult;	// first subplan
 							else
 							{
 								tbm_union(*tbm_result, tbm_subresult);
@@ -1209,7 +1209,7 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 						{
 							if (*rbt_result == NULL)
 							{
-								*rbt_result = rbt_subresult;	/* first subplan */
+								*rbt_result = rbt_subresult;	// first subplan
 							}
 							else if (*tbm_result == NULL)
 							{
@@ -1245,14 +1245,14 @@ o_exec_bitmapqual(OBitmapHeapPlanState *bitmap_state, PlanState *planstate,
 	}
 }
 
-/*
- * Set up one streamed primary index scan for a BitmapIndexScan node (mirroring
- * exec_bitmap_index_state() + o_index_getbitmap()'s setup, minus the collect
- * loop) that o_bitmap_stream_fetch() drives directly.  Returns false -- leaving
- * *child untouched apart from a closed index -- when this node is not a
- * streamable primary orioledb index scan, so the caller falls back to building
- * a key bitmap.
- */
+//
+// Set up one streamed primary index scan for a BitmapIndexScan node (mirroring
+// exec_bitmap_index_state() + o_index_getbitmap()'s setup, minus the collect
+// loop) that o_bitmap_stream_fetch() drives directly.  Returns false -- leaving
+// *child untouched apart from a closed index -- when this node is not a
+// streamable primary orioledb index scan, so the caller falls back to building
+// a key bitmap.
+//
 static bool
 setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 					 BitmapIndexScanState *node, OBitmapStreamChild *child)
@@ -1267,7 +1267,7 @@ setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 	OBTOptions *options = (OBTOptions *) node->biss_RelationDesc->rd_options;
 	BTScanOpaque so;
 
-	/* Non-orioledb (bridged) indexes go through the TIDBitmap path. */
+	// Non-orioledb (bridged) indexes go through the TIDBitmap path.
 	if (node->biss_RelationDesc->rd_rel->relam != BTREE_AM_OID ||
 		(options && !options->orioledb_index))
 		return false;
@@ -1281,7 +1281,7 @@ setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 	}
 	Assert(ix_num < descr->nIndices && indexDescr != NULL);
 
-	/* Only the primary index scan yields the table's own rows directly. */
+	// Only the primary index scan yields the table's own rows directly.
 	if (indexDescr->desc.type != oIndexPrimary)
 	{
 		index_close(index, AccessShareLock);
@@ -1291,7 +1291,7 @@ setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 	child->index = index;
 	child->ix = indexDescr;
 
-	/* Evaluate runtime / array keys (cf. exec_bitmap_index_state()). */
+	// Evaluate runtime / array keys (cf. exec_bitmap_index_state()).
 	if (node->biss_NumRuntimeKeys != 0)
 		ExecIndexEvalRuntimeKeys(econtext, node->biss_RuntimeKeys,
 								 node->biss_NumRuntimeKeys);
@@ -1302,14 +1302,14 @@ setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 	else
 		node->biss_RuntimeKeysReady = true;
 
-	/* Empty array key: the scan yields nothing. */
+	// Empty array key: the scan yields nothing.
 	if (!node->biss_RuntimeKeysReady)
 	{
 		child->empty = true;
 		return true;
 	}
 
-	/* Build the orioledb scan state (cf. o_index_getbitmap()). */
+	// Build the orioledb scan state (cf. o_index_getbitmap()).
 	memset(ostate, 0, sizeof(*ostate));
 	ostate->ixNum = ix_num;
 	ostate->scanDir = ForwardScanDirection;
@@ -1381,11 +1381,11 @@ setup_primary_stream(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 	return true;
 }
 
-/*
- * Set up primary-scan streaming for the whole bitmap qual, if it is a single
- * BitmapIndexScan over the primary index or a BitmapOr of only such scans.
- * Returns false (having freed anything it opened) to fall back to a key bitmap.
- */
+//
+// Set up primary-scan streaming for the whole bitmap qual, if it is a single
+// BitmapIndexScan over the primary index or a BitmapOr of only such scans.
+// Returns false (having freed anything it opened) to fall back to a key bitmap.
+//
 static bool
 setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 						  PlanState *qual)
@@ -1403,7 +1403,7 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 			return false;
 		}
 		scan->stream_nchildren = 1;
-		/* a single scan never yields the same pk twice: no dedup needed */
+		// a single scan never yields the same pk twice: no dedup needed
 		return true;
 	}
 	else if (IsA(qual, BitmapOrState))
@@ -1411,7 +1411,7 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 		BitmapOrState *orstate = (BitmapOrState *) qual;
 		int			i;
 
-		/* Only when every branch is itself a plain BitmapIndexScan. */
+		// Only when every branch is itself a plain BitmapIndexScan.
 		for (i = 0; i < orstate->nplans; i++)
 			if (!IsA(orstate->bitmapplans[i], BitmapIndexScanState))
 				return false;
@@ -1424,7 +1424,7 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 									  (BitmapIndexScanState *) orstate->bitmapplans[i],
 									  &scan->stream_children[i]))
 			{
-				/* tear down the children already set up, then fall back */
+				// tear down the children already set up, then fall back
 				int			j;
 
 				for (j = 0; j <= i; j++)
@@ -1449,7 +1449,7 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 			scan->stream_nchildren++;
 		}
 
-		/* Branches can overlap / duplicate pks: dedup emitted rows. */
+		// Branches can overlap / duplicate pks: dedup emitted rows.
 		if (o_keybitmap_pk_mode(GET_PRIMARY(scan->arg.tbl_desc), NULL) == O_KEYBITMAP_FIXED)
 			scan->stream_dedup = o_keybitmap_create_fixed();
 		else
@@ -1460,13 +1460,13 @@ setup_primary_stream_qual(OBitmapHeapPlanState *bitmap_state, OBitmapScan *scan,
 	return false;
 }
 
-/*
- * Fetch the next tuple of a primary-scan-streamed bitmap scan.  Mirrors
- * o_exec_fetch(): pull one live primary tuple from the current child scan and
- * hand it to the scan slot with full row identity, applying the node qual.  A
- * BitmapOr's branches are streamed in turn; a dedup bitmap drops any pk already
- * emitted by an earlier (overlapping / duplicate) branch.
- */
+//
+// Fetch the next tuple of a primary-scan-streamed bitmap scan.  Mirrors
+// o_exec_fetch(): pull one live primary tuple from the current child scan and
+// hand it to the scan slot with full row identity, applying the node qual.  A
+// BitmapOr's branches are streamed in turn; a dedup bitmap drops any pk already
+// emitted by an earlier (overlapping / duplicate) branch.
+//
 static TupleTableSlot *
 o_bitmap_stream_fetch(OBitmapScan *scan, CustomScanState *node)
 {
@@ -1497,7 +1497,7 @@ o_bitmap_stream_fetch(OBitmapScan *scan, CustomScanState *node)
 			continue;
 		}
 
-		/* Dedup across BitmapOr branches. */
+		// Dedup across BitmapOr branches.
 		if (scan->stream_dedup)
 		{
 			bool		fresh;
@@ -1516,7 +1516,7 @@ o_bitmap_stream_fetch(OBitmapScan *scan, CustomScanState *node)
 			if (!fresh)
 			{
 				pfree(tuple.data);
-				continue;		/* already emitted by an earlier branch */
+				continue;		// already emitted by an earlier branch
 			}
 		}
 
@@ -1526,7 +1526,7 @@ o_bitmap_stream_fetch(OBitmapScan *scan, CustomScanState *node)
 
 		if (o_exec_qual(ss->ps.ps_ExprContext, ss->ps.qual, slot))
 			return slot;
-		/* qual failed: keep scanning */
+		// qual failed: keep scanning
 	}
 
 	return ExecClearTuple(ss->ss_ScanTupleSlot);
@@ -1547,11 +1547,11 @@ o_make_bitmap_scan(OBitmapHeapPlanState *bitmap_state, ScanState *ss,
 	scan->arg.tbl_desc = relation_get_descr(rel);
 	bitmap_state->scan = scan;
 
-	/*
-	 * Fast path: a single primary BitmapIndexScan, or a BitmapOr of only such
-	 * scans, is executed as live primary index scan(s) -- no key bitmap, no
-	 * second pass over the primary tree.
-	 */
+	//
+// Fast path: a single primary BitmapIndexScan, or a BitmapOr of only such
+// scans, is executed as live primary index scan(s) -- no key bitmap, no
+// second pass over the primary tree.
+//
 	if (setup_primary_stream_qual(bitmap_state, scan, bitmapqualplanstate))
 	{
 		scan->stream_primary = true;
@@ -1603,25 +1603,25 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 
 		fetched = false;
 
-		/*
-		 * Reset per-tuple memory before each iteration.  PG's ExecCustomScan
-		 * just delegates to the AM's callback without wrapping in ExecScan,
-		 * so the standard per-tuple reset that ExecScan performs between
-		 * fetch attempts doesn't run here.  Without this, every qual
-		 * evaluation (especially ones with SubPlans, e.g. the TPC-C
-		 * consistency-check #10 join, where each candidate row triggers
-		 * subplan executions) accumulates intermediate values in
-		 * ps_ExprContext->ecxt_per_tuple_memory and ExecutorState grows for
-		 * the whole duration of the scan node.
-		 */
+		//
+// Reset per-tuple memory before each iteration.  PG's ExecCustomScan
+// just delegates to the AM's callback without wrapping in ExecScan,
+// so the standard per-tuple reset that ExecScan performs between
+// fetch attempts doesn't run here.  Without this, every qual
+// evaluation (especially ones with SubPlans, e.g. the TPC-C
+// consistency-check #10 join, where each candidate row triggers
+// subplan executions) accumulates intermediate values in
+// ps_ExprContext->ecxt_per_tuple_memory and ExecutorState grows for
+// the whole duration of the scan node.
+//
 		ResetExprContext(node->ss.ps.ps_ExprContext);
 
-		/* Path 1: Iterate using bridge bitmap */
+		// Path 1: Iterate using bridge bitmap
 		if (bridge_iter->tbmiterator != NULL && page_exhausted)
 		{
 			if (!bridge_iterate(bridge_iter))
 			{
-				/* No more pages in the bitmap */
+				// No more pages in the bitmap
 				slot = ExecClearTuple(node->ss.ss_ScanTupleSlot);
 				fetched = true;
 			}
@@ -1630,7 +1630,7 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 				bridge_next_page(scan, bitmap_state);
 		}
 
-		/* Path 2: Iterate using OKeyBitmap bitmap with seq scan */
+		// Path 2: Iterate using OKeyBitmap bitmap with seq scan
 		if (!fetched)
 		{
 			Assert(scan->seq_scan);
@@ -1640,14 +1640,14 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 
 			if (O_TUPLE_IS_NULL(tuple))
 			{
-				/*
-				 * The per-page primary seq scan is exhausted.  In bridge mode
-				 * the TIDBitmap may still hold more pages: dead bridge_ctids
-				 * left by earlier UPDATEs make the keybitmap on a page
-				 * resolve to fewer (or zero) live PKs than page_ntuples, so
-				 * BRIDGE_NEXT_TUPLE never marks the page exhausted on its
-				 * own.  Force the advance here and continue the outer loop.
-				 */
+				//
+// The per-page primary seq scan is exhausted.  In bridge mode
+// the TIDBitmap may still hold more pages: dead bridge_ctids
+// left by earlier UPDATEs make the keybitmap on a page
+// resolve to fewer (or zero) live PKs than page_ntuples, so
+// BRIDGE_NEXT_TUPLE never marks the page exhausted on its
+// own.  Force the advance here and continue the outer loop.
+//
 				if (bridge_iter->tbmiterator != NULL)
 				{
 #if PG_VERSION_NUM >= 180000
@@ -1655,7 +1655,7 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 #else
 					bridge_iter->tbmres = NULL;
 #endif
-					continue;	/* skip the InstrCountFiltered2 below */
+					continue;	// skip the InstrCountFiltered2 below
 				}
 				else
 				{
@@ -1697,12 +1697,12 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 					{
 						ExprContext *tup_econtext = bitmap_state->scan->ss->ps.ps_ExprContext;
 
-						/*
-						 * Initialize bitmapqualorig_state lazily on first
-						 * recheck.  Plans without lossy bitmap pages never
-						 * reach this branch, so we avoid building the
-						 * ExprState for them entirely.
-						 */
+						//
+// Initialize bitmapqualorig_state lazily on first
+// recheck.  Plans without lossy bitmap pages never
+// reach this branch, so we avoid building the
+// ExprState for them entirely.
+//
 						if (bitmap_state->bitmapqualorig_state == NULL)
 							bitmap_state->bitmapqualorig_state =
 								ExecInitQual(bitmap_state->bitmapqualorig,
@@ -1727,14 +1727,14 @@ o_exec_bitmap_fetch(OBitmapScan *scan, CustomScanState *node)
 				}
 				else
 				{
-					/*
-					 * Row's primary key is not in the bitmap, so this version
-					 * isn't part of the result.  btree_seq_scan_getnext()
-					 * palloc'd tuple.data in tupleCxt = ss_ScanTupleSlot's
-					 * tts_mcxt (the per-query context) and we are not handing
-					 * it to the slot, so it would otherwise accumulate there
-					 * for every rejected primary row until end of query.
-					 */
+					//
+// Row's primary key is not in the bitmap, so this version
+// isn't part of the result.  btree_seq_scan_getnext()
+// palloc'd tuple.data in tupleCxt = ss_ScanTupleSlot's
+// tts_mcxt (the per-query context) and we are not handing
+// it to the slot, so it would otherwise accumulate there
+// for every rejected primary row until end of query.
+//
 					pfree(tuple.data);
 				}
 
@@ -1839,18 +1839,18 @@ o_bitmap_is_range_valid(OTuple low, OTuple high, void *arg)
 									  lowValue, highValue);
 }
 
-/*
- * Rewrite key->tuple with the smallest bitmap key at or after the position it
- * carries (NULL tuple => from the start of the tree); return false when none
- * remains.  keyType selects how the incoming position is decoded and drives the
- * two levels of the bitmap-directed walk (see BTreeSeqScanCallbacks.getNextKey):
- *   - BTreeKeyLeafTuple: position is the current leaf tuple (per-tuple walk);
- *   - BTreeKeyNonLeafKey: position is an internal-page boundary -- a downlink
- *     separator or page hikey (skip whole pages / downlinks, always inclusive).
- * The two only differ in how the position's PK value is read (leaf vs non-leaf
- * layout); the value is looked up in the same bitmap and the result is built as
- * the same key either way.
- */
+//
+// Rewrite key->tuple with the smallest bitmap key at or after the position it
+// carries (NULL tuple => from the start of the tree); return false when none
+// remains.  keyType selects how the incoming position is decoded and drives the
+// two levels of the bitmap-directed walk (see BTreeSeqScanCallbacks.getNextKey):
+// - BTreeKeyLeafTuple: position is the current leaf tuple (per-tuple walk);
+// - BTreeKeyNonLeafKey: position is an internal-page boundary -- a downlink
+// separator or page hikey (skip whole pages / downlinks, always inclusive).
+// The two only differ in how the position's PK value is read (leaf vs non-leaf
+// layout); the value is looked up in the same bitmap and the result is built as
+// the same key either way.
+//
 static bool
 o_bitmap_get_next_key(OFixedKey *key, BTreeKeyType keyType, bool inclusive,
 					  void *arg)
@@ -1881,7 +1881,7 @@ o_bitmap_get_next_key(OFixedKey *key, BTreeKeyType keyType, bool inclusive,
 			{
 				int			i;
 
-				/* smallest key strictly greater than prev */
+				// smallest key strictly greater than prev
 				for (i = OKBM_FIXED_BYTES - 1; i >= 0; i--)
 					if (++prevKey[i] != 0)
 						break;
@@ -2006,11 +2006,11 @@ bridge_next_page(OBitmapScan *scan, OBitmapHeapPlanState *bitmap_state)
 											&bitmap_seq_scan_callbacks, &scan->arg);
 	if (!BRIDGE_ITER_ISLOSSY(iter))
 	{
-		/*
-		 * Bitmap is non-lossy, so we just look through the offsets listed in
-		 * tbmres; but we have to follow any HOT chain starting at each such
-		 * offset.
-		 */
+		//
+// Bitmap is non-lossy, so we just look through the offsets listed in
+// tbmres; but we have to follow any HOT chain starting at each such
+// offset.
+//
 		int			curoff;
 
 		iter->page_ntuples = BRIDGE_ITER_NTUPLES(iter);
@@ -2056,9 +2056,9 @@ bridge_next_page(OBitmapScan *scan, OBitmapHeapPlanState *bitmap_state)
 	}
 	else
 	{
-		/*
-		 * Bitmap is lossy, so we must examine each line pointer on the page.
-		 */
+		//
+// Bitmap is lossy, so we must examine each line pointer on the page.
+//
 
 		OTableDescr *tbl_descr = scan->arg.tbl_desc;
 		BTreeIterator *it;

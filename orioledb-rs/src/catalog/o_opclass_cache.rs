@@ -1,19 +1,19 @@
-/*-------------------------------------------------------------------------
- *
- * o_opclass_cache.c
- *		Routines for orioledb operator classes sys cache.
- *
- * Operator class B-tree stores data used by comparator and field initialization
- * for orioledb engine tables.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_opclass_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_opclass_cache.c
+// Routines for orioledb operator classes sys cache.
+//
+// Operator class B-tree stores data used by comparator and field initialization
+// for orioledb engine tables.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_opclass_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -55,9 +55,9 @@ static OSysCacheFuncs opclass_cache_funcs =
 	.fill_entry = o_opclass_cache_fill_entry
 };
 
-/*
- * Initializes the opclass sys cache memory.
- */
+//
+// Initializes the opclass sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(opclass_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -69,21 +69,21 @@ O_SYS_CACHE_INIT_FUNC(opclass_cache)
 }
 
 
-/*
- * o_opclass_get
- *
- * Look up Oriole opclass metadata by (datoid, opclassoid).
- *
- * Why datoid matters:
- * Oriole sys-cache entries are database-scoped. During global page-pool
- * eviction, a backend may inspect index pages that belong to another
- * database. In such paths, relying on MyDatabaseId can resolve metadata in
- * the wrong database context, causing cache misses and descriptor failures.
- *
- * If datoid == InvalidOid, keep legacy behavior and infer database context
- * from o_sys_cache_set_datoid_lsn(). New call sites should pass explicit
- * object datoid whenever available.
- */
+//
+// o_opclass_get
+//
+// Look up Oriole opclass metadata by (datoid, opclassoid).
+//
+// Why datoid matters:
+// Oriole sys-cache entries are database-scoped. During global page-pool
+// eviction, a backend may inspect index pages that belong to another
+// database. In such paths, relying on MyDatabaseId can resolve metadata in
+// the wrong database context, causing cache misses and descriptor failures.
+//
+// If datoid == InvalidOid, keep legacy behavior and infer database context
+// from o_sys_cache_set_datoid_lsn(). New call sites should pass explicit
+// object datoid whenever available.
+//
 OOpclass *
 o_opclass_get(Oid opclassoid, Oid datoid)
 {
@@ -132,9 +132,9 @@ o_opclass_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	Oid			opclassoid = DatumGetObjectId(key->keys[0]);
 	Oid			inputtype;
 
-	/*
-	 * find typecache entry
-	 */
+	//
+// find typecache entry
+//
 	opclasstuple = SearchSysCache1(CLAOID, key->keys[0]);
 	if (!HeapTupleIsValid(opclasstuple))
 		elog(ERROR, "cache lookup failed for opclass %u", opclassoid);
@@ -167,9 +167,9 @@ o_opclass_cache_free_entry(Pointer entry)
 	pfree(entry);
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_opclass_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 						  OTuple tup, Pointer arg)

@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * archive.c
- *		Routines for S3 WAL archiving.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/archive.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// archive.c
+// Routines for S3 WAL archiving.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/archive.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -40,14 +40,14 @@ preload_item_hash(const void *key, Size keysize)
 {
 	const char **filename = (const char **) key;
 
-	/* We don't bother to include the payload's trailing null in the hash */
+	// We don't bother to include the payload's trailing null in the hash
 	return DatumGetUInt32(hash_any((const unsigned char *) *filename,
 								   strlen(*filename)));
 }
 
-/*
- * notification_match: match function to use with notification_hash
- */
+//
+// notification_match: match function to use with notification_hash
+//
 static int
 preload_item_match(const void *key1, const void *key2, Size keysize)
 {
@@ -67,7 +67,7 @@ make_preload_hash(void)
 {
 	HASHCTL		hash_ctl;
 
-	/* Create the hash table */
+	// Create the hash table
 	hash_ctl.keysize = sizeof(char *);
 	hash_ctl.entrysize = sizeof(PreloadHashItem);
 	hash_ctl.hash = preload_item_hash;
@@ -92,11 +92,11 @@ static const ArchiveModuleCallbacks s3_archive_callbacks = {
 	.archive_file_cb = s3_archive_file
 };
 
-/*
- * _PG_archive_module_init
- *
- * Returns the module's archiving callbacks.
- */
+//
+// _PG_archive_module_init
+//
+// Returns the module's archiving callbacks.
+//
 const ArchiveModuleCallbacks *
 _PG_archive_module_init(void)
 {
@@ -106,20 +106,20 @@ _PG_archive_module_init(void)
 	return &s3_archive_callbacks;
 }
 
-/*
- * We only allow S3 archiving if we're in S3 mode.
- */
+//
+// We only allow S3 archiving if we're in S3 mode.
+//
 static bool
 s3_archive_configured(ArchiveModuleState *state)
 {
 	return orioledb_s3_mode;
 }
 
-/*
- * This callback archieves given WAL file into S3.  This function have to
- * return the result synchronously, and it works in dedicated archiving process.
- * So, no point to schedule this for S3 worker.  Make the S3 request right-away.
- */
+//
+// This callback archieves given WAL file into S3.  This function have to
+// return the result synchronously, and it works in dedicated archiving process.
+// So, no point to schedule this for S3 worker.  Make the S3 request right-away.
+//
 static void
 s3_archive_preload_file(ArchiveModuleState *state,
 						const char *file, const char *path)
@@ -143,11 +143,11 @@ s3_archive_preload_file(ArchiveModuleState *state,
 	item->location = s3_schedule_wal_file_write((char *) file);
 }
 
-/*
- * This callback archieves given WAL file into S3.  This function have to
- * return the result synchronously, and it works in dedicated archiving process.
- * So, no point to schedule this for S3 worker.  Make the S3 request right-away.
- */
+//
+// This callback archieves given WAL file into S3.  This function have to
+// return the result synchronously, and it works in dedicated archiving process.
+// So, no point to schedule this for S3 worker.  Make the S3 request right-away.
+//
 static bool
 s3_archive_file(ArchiveModuleState *state,
 				const char *file, const char *path)

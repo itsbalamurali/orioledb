@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * worker.c
- *		Recovery worker process implementation for orioledb engine.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/recovery/worker.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// worker.c
+// Recovery worker process implementation for orioledb engine.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/recovery/worker.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -72,7 +72,7 @@ typedef struct
 	OTuple		tuple;
 	OTuple		key;
 	CommitSeqNo csn;
-	OTableDescr *descr;			/* for set_pending_sk_marker_from_tup_copy */
+	OTableDescr *descr;			// for set_pending_sk_marker_from_tup_copy
 } CallbackTupleCopy;
 
 static void
@@ -81,20 +81,20 @@ set_pending_sk_marker_from_tup_copy(UndoLocation pkUndoLoc, void *arg)
 	set_pending_sk_marker(((CallbackTupleCopy *) arg)->descr, pkUndoLoc);
 }
 
-/*
- * Used by apply_tbl_insert(), where callbackInfo.arg is unused by the
- * modify callbacks themselves -- we repurpose it to carry the
- * OTableDescr for the post-undo hook.
- */
+//
+// Used by apply_tbl_insert(), where callbackInfo.arg is unused by the
+// modify callbacks themselves -- we repurpose it to carry the
+// OTableDescr for the post-undo hook.
+//
 static void
 set_pending_sk_marker_from_descr(UndoLocation pkUndoLoc, void *arg)
 {
 	set_pending_sk_marker((OTableDescr *) arg, pkUndoLoc);
 }
 
-/*
- * Callback examples which stores modified tuple as arg.
- */
+//
+// Callback examples which stores modified tuple as arg.
+//
 static OBTreeModifyCallbackAction
 o_delete_copy_callback(BTreeDescr *descr,
 					   OTuple tup, OTuple *newtup, OXid oxid,
@@ -157,10 +157,10 @@ o_update_copy_callback(BTreeDescr *descr,
 	return OBTreeCallbackActionUpdate;
 }
 
-/*
- * Registers a new recovery worker. Returns NULL typically if no background
- * workers slots available.
- */
+//
+// Registers a new recovery worker. Returns NULL typically if no background
+// workers slots available.
+//
 BackgroundWorkerHandle *
 recovery_worker_register(int worker_id)
 {
@@ -169,7 +169,7 @@ recovery_worker_register(int worker_id)
 	BackgroundWorkerHandle *handle = NULL;
 
 	sprintf(worker_name, "orioledb recovery worker %d", worker_id);
-	/* Set up background worker parameters */
+	// Set up background worker parameters
 	memset(&worker, 0, sizeof(worker));
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS;
 	worker.bgw_start_time = BgWorkerStart_PostmasterStart;
@@ -193,9 +193,9 @@ recovery_worker_register(int worker_id)
 	return handle;
 }
 
-/*
- * Recovery worker main function.
- */
+//
+// Recovery worker main function.
+//
 void
 recovery_worker_main(Datum main_arg)
 {
@@ -207,9 +207,9 @@ recovery_worker_main(Datum main_arg)
 
 		elog(LOG, "orioledb recovery worker %d started.", id);
 
-		/* enable timeout for relation lock */
+		// enable timeout for relation lock
 		RegisterTimeout(DEADLOCK_TIMEOUT, CheckDeadLockAlert);
-		/* enable relation cache invalidation (remove old table descriptors) */
+		// enable relation cache invalidation (remove old table descriptors)
 		RelationCacheInitialize();
 		SharedInvalBackendInit(false);
 
@@ -227,10 +227,10 @@ recovery_worker_main(Datum main_arg)
 		my_ptr = pg_atomic_read_u64(&worker_ptrs[id].commitPtr);
 		recovery_queue_process(recovery_worker_queue, id);
 
-		/* Exit without calling recovery_finish() in case of interrupts */
+		// Exit without calling recovery_finish() in case of interrupts
 		o_worker_handle_interrupts();
 
-		/* In case of unexpected detach exit without calling recovery_finish() */
+		// In case of unexpected detach exit without calling recovery_finish()
 		if (detached)
 			ereport(ERROR,
 					(errmsg("orioledb recovery worker %d finished: unexpected detach from recovery messages queue.",
@@ -252,35 +252,35 @@ recovery_worker_main(Datum main_arg)
 	}
 	PG_CATCH();
 	{
-		/*
-		 * If this worker was sleeping on a ConditionVariable (e.g. in a DSM
-		 * segment during parallel index build), cancel the sleep before we
-		 * detach DSM.  Otherwise ProcKill -> ConditionVariableCancelSleep
-		 * will try to access already-unmapped memory and SIGSEGV.
-		 */
+		//
+// If this worker was sleeping on a ConditionVariable (e.g. in a DSM
+// segment during parallel index build), cancel the sleep before we
+// detach DSM.  Otherwise ProcKill -> ConditionVariableCancelSleep
+// will try to access already-unmapped memory and SIGSEGV.
+//
 		ConditionVariableCancelSleep();
 
 		if (recovery_worker_queue != NULL)
 		{
-			/* detach from queue if attached */
+			// detach from queue if attached
 			shm_mq_detach(recovery_worker_queue);
 		}
 
-		/*
-		 * Release all resources. We care mostly about temporary files which
-		 * are freed in RESOURCE_RELEASE_AFTER_LOCKS phase for conventional
-		 * temp-files and RESOURCE_RELEASE_BEFORE_LOCKS for SharedFileSet
-		 * which are tracked in dsm. But it is safer to release everything.
-		 */
+		//
+// Release all resources. We care mostly about temporary files which
+// are freed in RESOURCE_RELEASE_AFTER_LOCKS phase for conventional
+// temp-files and RESOURCE_RELEASE_BEFORE_LOCKS for SharedFileSet
+// which are tracked in dsm. But it is safer to release everything.
+//
 
 		ReleaseWorkerResources(false);
 
-		/*
-		 * Don't call recovery_finish().  We haven't receive the finish
-		 * message from main recovery process.  So, we aren't promoted.
-		 * Information about running transactions might be needed by
-		 * checkpoint.
-		 */
+		//
+// Don't call recovery_finish().  We haven't receive the finish
+// message from main recovery process.  So, we aren't promoted.
+// Information about running transactions might be needed by
+// checkpoint.
+//
 		LockReleaseSession(DEFAULT_LOCKMETHOD);
 		PG_RE_THROW();
 	}
@@ -331,10 +331,10 @@ DestroyParallelRecoveryContext(ParallelRecoveryContext *context)
 		context->seg = NULL;
 	}
 
-	/*
-	 * If this parallel context is actually in private memory rather than
-	 * shared memory, free that memory instead.
-	 */
+	//
+// If this parallel context is actually in private memory rather than
+// shared memory, free that memory instead.
+//
 	if (context->private_memory != NULL)
 	{
 		pfree(context->private_memory);
@@ -355,9 +355,9 @@ update_worker_ptr(int worker_id, XLogRecPtr ptr)
 	my_ptr = ptr;
 }
 
-/*
- * Reads messages from recovery queue and applies modify records to BTrees.
- */
+//
+// Reads messages from recovery queue and applies modify records to BTrees.
+//
 static void
 recovery_queue_process(shm_mq_handle *queue, int id)
 {
@@ -522,11 +522,11 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 										  msg->ix_num, true, NULL);
 				}
 
-				/*
-				 * Wake up the other recovery processes that may wait to do
-				 * their modify operations on this relation or to do oxid
-				 * update
-				 */
+				//
+// Wake up the other recovery processes that may wait to do
+// their modify operations on this relation or to do oxid
+// update
+//
 				pg_atomic_write_u64(recovery_index_completed_pos,
 									msg->current_position);
 				ConditionVariableBroadcast(recovery_index_cv);
@@ -555,9 +555,9 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 
 				Assert(id >= index_build_first_worker && id <= index_build_last_worker);
 
-				/*
-				 * Participate as a worker in parallel index build.
-				 */
+				//
+// Participate as a worker in parallel index build.
+//
 
 				seg = dsm_attach(msg->seg_handle);
 				if (seg == NULL)
@@ -664,9 +664,9 @@ recovery_queue_process(shm_mq_handle *queue, int id)
 	MemoryContextDelete(recovery_context);
 }
 
-/*
- * Apply the modify WAL record.
- */
+//
+// Apply the modify WAL record.
+//
 void
 apply_modify_record(OTableDescr *descr, OIndexDescr *id, uint16 type,
 					OTuple p)
@@ -675,14 +675,14 @@ apply_modify_record(OTableDescr *descr, OIndexDescr *id, uint16 type,
 
 	oxid = get_current_oxid();
 
-	/*
-	 * Don't apply changes to secondary indices before TOAST is consisntent.
-	 * Otherwise, values of secondary indices on TOASTed fields can be
-	 * invalid.
-	 */
+	//
+// Don't apply changes to secondary indices before TOAST is consisntent.
+// Otherwise, values of secondary indices on TOASTed fields can be
+// invalid.
+//
 	if (descr && toast_consistent)
 	{
-		/* Modify table */
+		// Modify table
 		apply_tbl_modify_record(descr, type, p, oxid, COMMITSEQNO_INPROGRESS);
 	}
 	else
@@ -691,9 +691,9 @@ apply_modify_record(OTableDescr *descr, OIndexDescr *id, uint16 type,
 	}
 }
 
-/*
- * Reads a message from the queue.
- */
+//
+// Reads a message from the queue.
+//
 static inline Pointer
 recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id)
 {
@@ -719,12 +719,12 @@ recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id)
 			break;
 		}
 
-		/*
-		 * else the queue is empty
-		 */
+		//
+// else the queue is empty
+//
 		Assert(read_result == SHM_MQ_WOULD_BLOCK);
 
-		/* we can try to update our ptr if queue is empty */
+		// we can try to update our ptr if queue is empty
 		cur_rec_ptr = pg_atomic_read_u64(recovery_ptr);
 		if (cur_rec_ptr > my_ptr)
 		{
@@ -733,27 +733,27 @@ recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id)
 				update_worker_ptr(id, prev_rec_ptr);
 			}
 
-			/*
-			 * if cur_skiped is a new value than we need to recheck is queue
-			 * still empty before apply it
-			 */
+			//
+// if cur_skiped is a new value than we need to recheck is queue
+// still empty before apply it
+//
 			prev_rec_ptr = cur_rec_ptr != prev_rec_ptr ? cur_rec_ptr : InvalidXLogRecPtr;
 			continue;
 		}
 
 		prev_rec_ptr = InvalidXLogRecPtr;
 
-		/*---
-		 * Wake the main recovery process (startup) when either:
-		 * 1. A committed transaction requested feedback (e.g. synchronous
-		 *    replication), or
-		 * 2. This worker has replayed everything up to recovery_ptr but
-		 *    recovery_finished_list_ptr has not yet caught up — meaning
-		 *    CSN assignment and finishedPtr update are pending.  Waking
-		 *    startup immediately runs update_proc_retain_undo_location()
-		 *    and eliminates the up-to-10-second replay lag visible in
-		 *    pg_stat_replication.
-		 */
+		// ---
+// Wake the main recovery process (startup) when either:
+// 1. A committed transaction requested feedback (e.g. synchronous
+// replication), or
+// 2. This worker has replayed everything up to recovery_ptr but
+// recovery_finished_list_ptr has not yet caught up — meaning
+// CSN assignment and finishedPtr update are pending.  Waking
+// startup immediately runs update_proc_retain_undo_location()
+// and eliminates the up-to-10-second replay lag visible in
+// pg_stat_replication.
+//
 		{
 			XLogRecPtr	commit_ptr = pg_atomic_read_u64(&worker_ptrs[id].commitPtr);
 			XLogRecPtr	rec_ptr = pg_atomic_read_u64(recovery_ptr);
@@ -788,10 +788,10 @@ recovery_queue_read(shm_mq_handle *queue, Size *data_size, int id)
 	return data;
 }
 
-/*
- * Applies table modify records. We skip unique indices because recovery master
- * distributes it separately.
- */
+//
+// Applies table modify records. We skip unique indices because recovery master
+// distributes it separately.
+//
 static void
 apply_tbl_modify_record(OTableDescr *descr, RecoveryMsgType type,
 						OTuple p, OXid oxid, CommitSeqNo csn)
@@ -879,10 +879,10 @@ apply_tbl_insert(OTableDescr *descr, OTuple tuple,
 			callbackInfo.modifyCallback = recovery_insert_primary_callback;
 			callbackInfo.modifyDeletedCallback = recovery_insert_deleted_primary_callback;
 
-			/*
-			 * recovery_insert_primary_callback ignores arg, so we reuse the
-			 * slot to carry the OTableDescr the post-undo hook needs.
-			 */
+			//
+// recovery_insert_primary_callback ignores arg, so we reuse the
+// slot to carry the OTableDescr the post-undo hook needs.
+//
 			callbackInfo.arg = descr;
 			callbackInfo.postUndoRecorded = set_pending_sk_marker_from_descr;
 		}
@@ -895,13 +895,13 @@ apply_tbl_insert(OTableDescr *descr, OTuple tuple,
 		}
 		tts_orioledb_fill_key_bound(slot, id, &keyBound);
 
-		/*
-		 * When primary server detects secondary index tuple is too long, the
-		 * WAL record for primary index is already written.  So, during WAL
-		 * replay we may face this situation too.  Skip the secondary index
-		 * tuple if it's too long.  (Sub)transaction must be later aborted by
-		 * WAL.
-		 */
+		//
+// When primary server detects secondary index tuple is too long, the
+// WAL record for primary index is already written.  So, during WAL
+// replay we may face this situation too.  Skip the secondary index
+// tuple if it's too long.  (Sub)transaction must be later aborted by
+// WAL.
+//
 		if (o_btree_len(&id->desc, cur_tuple, OTupleLength) > O_BTREE_MAX_TUPLE_SIZE)
 		{
 			Assert(!isPrimary);
@@ -911,7 +911,7 @@ apply_tbl_insert(OTableDescr *descr, OTuple tuple,
 			continue;
 		}
 
-		/* HACK: prevent sys cache pages from loading during o_btree_modify */
+		// HACK: prevent sys cache pages from loading during o_btree_modify
 		(void) o_btree_cmp(&id->desc, &cur_tuple, BTreeKeyLeafTuple,
 						   (Pointer) &keyBound, BTreeKeyBound);
 		(void) o_btree_modify(&id->desc, BTreeOperationInsert,
@@ -1108,14 +1108,14 @@ apply_tbl_update(OTableDescr *descr, OTuple tuple,
 					callbackInfo.modifyCallback = recovery_insert_overwrite_callback;
 					new_stup = tts_orioledb_make_secondary_tuple(new_slot, tree, true);
 
-					/*
-					 * When primary server detects secondary index tuple is
-					 * too long, the WAL record for primary index is already
-					 * written.  So, during WAL replay we may face this
-					 * situation too.  Skip the secondary index tuple if it's
-					 * too long.  (Sub)transaction must be later aborted by
-					 * WAL.
-					 */
+					//
+// When primary server detects secondary index tuple is
+// too long, the WAL record for primary index is already
+// written.  So, during WAL replay we may face this
+// situation too.  Skip the secondary index tuple if it's
+// too long.  (Sub)transaction must be later aborted by
+// WAL.
+//
 					if (o_btree_len(&tree->desc, new_stup, OTupleLength) > O_BTREE_MAX_TUPLE_SIZE)
 					{
 						pfree(new_stup.data);
@@ -1139,10 +1139,10 @@ apply_tbl_update(OTableDescr *descr, OTuple tuple,
 	ExecClearTuple(old_slot);
 }
 
-/*
- * Safely release all resources owned by the current background worker.
- * Mirrors ReleaseAuxProcessResources but applies to CurrentResourceOwner.
- */
+//
+// Safely release all resources owned by the current background worker.
+// Mirrors ReleaseAuxProcessResources but applies to CurrentResourceOwner.
+//
 static void
 ReleaseWorkerResources(bool isCommit)
 {

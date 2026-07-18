@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * o_indices.c
- * 		Routines for orioledb indices system tree.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_indices.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_indices.c
+// Routines for orioledb indices system tree.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_indices.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -161,7 +161,7 @@ oIndicesFetchCallback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
 	OIndexChunkKey *tupleKey = (OIndexChunkKey *) tuple.data;
 	OIndexChunkBoundKey *boundKey = (OIndexChunkBoundKey *) arg;
 
-	/* Ignore reloid because it may changes */
+	// Ignore reloid because it may changes
 	if (tupleKey->oids.datoid == boundKey->key.oids.datoid &&
 		tupleKey->oids.relnode == boundKey->key.oids.relnode &&
 		tupleKey->type == boundKey->key.type)
@@ -200,10 +200,10 @@ oIndicesFetchCallback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
 			return OTupleFetchNotMatch;
 	}
 
-	/*
-	 * Return current tuple with unmatched key to iterator immediately to
-	 * finish the scan.
-	 */
+	//
+// Return current tuple with unmatched key to iterator immediately to
+// finish the scan.
+//
 	return OTupleFetchMatch;
 }
 
@@ -244,16 +244,16 @@ make_builtin_field(OTableField *leafField, OTableIndexField *internalField,
 	}
 }
 
-/*
- * Increment or reset index version according to OIndexVersionMode provided.
- *
- * Version is used as part of the sys-tree key for OIndex records.
- * Incrementing it guarantees that a newly created/recreated index metadata record
- * will not collide with an older incarnation that might still be visible under some
- * snapshot during recovery / logical decoding.
- *
- * If the previous version is invalid / uninitialized, start from 0.
- */
+//
+// Increment or reset index version according to OIndexVersionMode provided.
+//
+// Version is used as part of the sys-tree key for OIndex records.
+// Incrementing it guarantees that a newly created/recreated index metadata record
+// will not collide with an older incarnation that might still be visible under some
+// snapshot during recovery / logical decoding.
+//
+// If the previous version is invalid / uninitialized, start from 0.
+//
 static uint32
 increment_or_reset_o_index_version(uint32 version, OIndexVersionMode ixVerMode)
 {
@@ -298,11 +298,11 @@ make_ctid_o_index(OTable *table, OIndexVersionMode ixVerMode)
 	new_version = increment_or_reset_o_index_version(table->primary_ixversion, ixVerMode);
 	result->indexVersion = new_version;
 
-	/*
-	 * Persist the current index incarnation version in OTable so that
-	 * subsequent reads (recovery / decoding) can fetch the matching OIndex
-	 * record by version.
-	 */
+	//
+// Persist the current index incarnation version in OTable so that
+// subsequent reads (recovery / decoding) can fetch the matching OIndex
+// record by version.
+//
 	table->primary_ixversion = new_version;
 
 	elog(DEBUG2, "[%s] oids [ %u %u %u ] version %u", __func__,
@@ -388,11 +388,11 @@ make_primary_o_index(OTable *table, OIndexVersionMode ixVerMode)
 	new_version = increment_or_reset_o_index_version(table->primary_ixversion, ixVerMode);
 	result->indexVersion = new_version;
 
-	/*
-	 * Persist the current index incarnation version in OTable so that
-	 * subsequent reads (recovery / decoding) can fetch the matching OIndex
-	 * record by version.
-	 */
+	//
+// Persist the current index incarnation version in OTable so that
+// subsequent reads (recovery / decoding) can fetch the matching OIndex
+// record by version.
+//
 	table->primary_ixversion = new_version;
 	tableIndex->version = new_version;
 
@@ -411,14 +411,14 @@ make_primary_o_index(OTable *table, OIndexVersionMode ixVerMode)
 						   table->tid_btree_ops_oid,
 						   table->tid_hash_fn_oid);
 
-	/*
-	 * TODO: We should probably use add_index_fields to not duplicate code,
-	 * but now it should be rewritten
-	 */
+	//
+// TODO: We should probably use add_index_fields to not duplicate code,
+// but now it should be rewritten
+//
 	for (i = 0; i < saved_nLeafFields; i++)
 		result->leafTableFields[nadded++] = table->fields[i];
 
-	/* Switching context to store duplicates */
+	// Switching context to store duplicates
 	mcxt = OGetIndexContext(result);
 	old_mcxt = MemoryContextSwitchTo(mcxt);
 
@@ -437,8 +437,8 @@ make_primary_o_index(OTable *table, OIndexVersionMode ixVerMode)
 			else
 				result->nIncludedFields--;
 
-			/* (fieldnum, original fieldnum) */
-			/* cppcheck-suppress unknownEvaluationOrder */
+			// (fieldnum, original fieldnum)
+			// cppcheck-suppress unknownEvaluationOrder
 			duplicate = list_make2_int(nadded, found_attnum);
 			result->duplicates = lappend(result->duplicates, duplicate);
 			continue;
@@ -485,8 +485,8 @@ add_index_fields(OIndex *index, OTable *table, OTableIndex *tableIndex, int *nad
 						index->nIncludedFields--;
 
 					Assert(CurrentMemoryContext == index->index_mctx);
-					/* (fieldnum, original fieldnum) */
-					/* cppcheck-suppress unknownEvaluationOrder */
+					// (fieldnum, original fieldnum)
+					// cppcheck-suppress unknownEvaluationOrder
 					duplicate = list_make2_int(*nadded, found_attnum);
 					index->duplicates = lappend(index->duplicates, duplicate);
 				}
@@ -567,7 +567,7 @@ make_secondary_o_index(OTable *table, OTableIndex *tableIndex, OIndexVersionMode
 	result->immediate = tableIndex->immediate;
 
 	nadded = 0;
-	/* Switching context to store duplicates */
+	// Switching context to store duplicates
 	mcxt = OGetIndexContext(result);
 	old_mcxt = MemoryContextSwitchTo(mcxt);
 	result->predicate = list_copy_deep(tableIndex->predicate);
@@ -608,11 +608,11 @@ make_toast_o_index(OTable *table, OIndexVersionMode ixVerMode)
 	new_version = increment_or_reset_o_index_version(table->toast_ixversion, ixVerMode);
 	result->indexVersion = new_version;
 
-	/*
-	 * Persist the current index incarnation version in OTable so that
-	 * subsequent reads (recovery / decoding) can fetch the matching OIndex
-	 * record by version.
-	 */
+	//
+// Persist the current index incarnation version in OTable so that
+// subsequent reads (recovery / decoding) can fetch the matching OIndex
+// record by version.
+//
 	table->toast_ixversion = new_version;
 
 	result->indexOids = table->toast_oids;
@@ -635,7 +635,7 @@ make_toast_o_index(OTable *table, OIndexVersionMode ixVerMode)
 	}
 	else
 	{
-		/* ctid_primary case */
+		// ctid_primary case
 		result->nLeafFields = 1;
 		result->nNonLeafFields = 1;
 		result->nKeyFields = 1;
@@ -687,11 +687,11 @@ make_bridge_o_index(OTable *table, OIndexVersionMode ixVerMode)
 	new_version = increment_or_reset_o_index_version(table->bridge_ixversion, ixVerMode);
 	result->indexVersion = new_version;
 
-	/*
-	 * Persist the current index incarnation version in OTable so that
-	 * subsequent reads (recovery / decoding) can fetch the matching OIndex
-	 * record by version.
-	 */
+	//
+// Persist the current index incarnation version in OTable so that
+// subsequent reads (recovery / decoding) can fetch the matching OIndex
+// record by version.
+//
 	table->bridge_ixversion = new_version;
 
 	result->indexOids = table->bridge_oids;
@@ -778,10 +778,10 @@ o_deserialize_string(Pointer *ptr)
 	return result;
 }
 
-/*
- * Bounds-checking variant of o_deserialize_string().  Returns false if the
- * remaining data is too short, leaving *ptr and *out unchanged.
- */
+//
+// Bounds-checking variant of o_deserialize_string().  Returns false if the
+// remaining data is too short, leaving *ptr and *out unchanged.
+//
 bool
 o_deserialize_string_safe(Pointer *ptr, Pointer data, Size length, char **out)
 {
@@ -836,10 +836,10 @@ o_deserialize_node(Pointer *ptr)
 	return result;
 }
 
-/*
- * Bounds-checking variant of o_deserialize_node().  Returns false if the
- * remaining data is too short, leaving *ptr and *out unchanged.
- */
+//
+// Bounds-checking variant of o_deserialize_node().  Returns false if the
+// remaining data is too short, leaving *ptr and *out unchanged.
+//
 bool
 o_deserialize_node_safe(Pointer *ptr, Pointer data, Size length, Node **out)
 {
@@ -890,10 +890,10 @@ serialize_o_index(OIndex *o_index, int *size)
 	return str.data;
 }
 
-/*
- * Deserialize OIndex from toast data.  Returns NULL if the data is truncated
- * (e.g. due to missing toast chunks from a concurrent write race condition).
- */
+//
+// Deserialize OIndex from toast data.  Returns NULL if the data is truncated
+// (e.g. due to missing toast chunks from a concurrent write race condition).
+//
 static OIndex *
 deserialize_o_index(OIndexChunkKey *key, Pointer data, Size length)
 {
@@ -1002,12 +1002,12 @@ truncated:
 	return NULL;
 }
 
-/*
- * Make OIndex structure for provided OTable. OIndexVersionPass is used
- * to specify if OIndex is created by a DDL operation that may need old
- * OIndex to be used later in logical decoding. Otherwise
- * OIndexVersionReset should be passed.
- */
+//
+// Make OIndex structure for provided OTable. OIndexVersionPass is used
+// to specify if OIndex is created by a DDL operation that may need old
+// OIndex to be used later in logical decoding. Otherwise
+// OIndexVersionReset should be passed.
+//
 OIndex *
 make_o_index(OTable *table, OIndexNumber ixNum, OIndexVersionMode ixVerMode)
 {
@@ -1096,10 +1096,10 @@ cache_scan_tupdesc_and_slot(OIndexDescr *index_descr, OIndex *oIndex)
 	int			nduplicates = list_length(oIndex->duplicates);
 	int			cur_attr;
 
-	/*
-	 * TODO: Check why this called multiple times for ctid_primary during
-	 * single CREATE INDEX
-	 */
+	//
+// TODO: Check why this called multiple times for ctid_primary during
+// single CREATE INDEX
+//
 
 	if (!index_descr->primaryIsCtid)
 	{
@@ -1151,28 +1151,28 @@ cache_scan_tupdesc_and_slot(OIndexDescr *index_descr, OIndex *oIndex)
 	index_descr->index_slot = MakeSingleTupleTableSlot(index_descr->itupdesc, &TTSOpsOrioleDB);
 }
 
-/*
- * o_index_fill_descr()
- *
- * Initialize *descr from the catalog OIndex entry.
- *
- * The function resets the descriptor, copies identity fields (OIDs/name/version),
- * builds leaf/non-leaf tuple descriptors, fills per-field metadata (collation,
- * ordering, opclasses, comparators), and initializes predicate/expressions state.
- *
- * Base table dependency:
- * - For oIndexPrimary, additional data is taken from OTable (constraints and
- *   primary_init_nfields). The table is obtained using o_table_source/source).
- * - For other index types, o_table_source/source are currently unused.
- *
- * Memory/ownership:
- * - Descriptor-owned allocations are made in OGetIndexContext(descr).
- * - If OTable loaded from OTableFetchContext (when source == oTableSourceContext)
- *   it is freed before return.
- *
- * Requirements:
- * - oIndex != NULL, descr points to writable memory.
- */
+//
+// o_index_fill_descr()
+//
+// Initialize *descr from the catalog OIndex entry.
+//
+// The function resets the descriptor, copies identity fields (OIDs/name/version),
+// builds leaf/non-leaf tuple descriptors, fills per-field metadata (collation,
+// ordering, opclasses, comparators), and initializes predicate/expressions state.
+//
+// Base table dependency:
+// - For oIndexPrimary, additional data is taken from OTable (constraints and
+// primary_init_nfields). The table is obtained using o_table_source/source).
+// - For other index types, o_table_source/source are currently unused.
+//
+// Memory/ownership:
+// - Descriptor-owned allocations are made in OGetIndexContext(descr).
+// - If OTable loaded from OTableFetchContext (when source == oTableSourceContext)
+// it is freed before return.
+//
+// Requirements:
+// - oIndex != NULL, descr points to writable memory.
+//
 void
 o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTableSource source)
 {
@@ -1186,12 +1186,12 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 
 	Assert(oIndex != NULL);
 
-	/*
-	 * Defer invalidation messages while filling the index descriptor. Catalog
-	 * lookups in oFillFieldOpClassAndComparator() can trigger
-	 * AcceptInvalidationMessages(), which could free this descriptor while
-	 * it's still being initialized.
-	 */
+	//
+// Defer invalidation messages while filling the index descriptor. Catalog
+// lookups in oFillFieldOpClassAndComparator() can trigger
+// AcceptInvalidationMessages(), which could free this descriptor while
+// it's still being initialized.
+//
 	was_saving = o_start_saving_inval_messages();
 
 	memset(descr, 0, sizeof(*descr));
@@ -1337,7 +1337,7 @@ o_index_fill_descr(OIndexDescr *descr, OIndex *oIndex, void *o_table_source, OTa
 
 		if (iField->nullsOrdering == SORTBY_NULLS_DEFAULT)
 		{
-			/* default null ordering is LAST for ASC, FIRST for DESC */
+			// default null ordering is LAST for ASC, FIRST for DESC
 			field->nullfirst = !field->ascending;
 		}
 		else
@@ -1510,11 +1510,11 @@ o_indices_get(ORelOids oids, OIndexType type)
 	return o_indices_get_extended(oids, type, default_table_fetch_context);
 }
 
-/*
- * If deserialization fails due to truncated toast data (missing chunks from a
- * concurrent write), retries with exponential backoff up to
- * O_DESERIALIZE_MAX_RETRIES times before reporting an error.
- */
+//
+// If deserialization fails due to truncated toast data (missing chunks from a
+// concurrent write), retries with exponential backoff up to
+// O_DESERIALIZE_MAX_RETRIES times before reporting an error.
+//
 OIndex *
 o_indices_get_extended(ORelOids oids, OIndexType type, OTableFetchContext ctx)
 {
@@ -1562,7 +1562,7 @@ o_indices_get_extended(ORelOids oids, OIndexType type, OTableFetchContext ctx)
 			return oIndex;
 		}
 
-		/* Truncated data — concurrent chunk write in progress, retry */
+		// Truncated data — concurrent chunk write in progress, retry
 		pfree(found_key);
 
 		if (retry >= O_DESERIALIZE_MAX_RETRIES ||
@@ -1620,9 +1620,9 @@ o_indices_update(OTable *table, OIndexNumber ixNum, OXid oxid, CommitSeqNo csn)
 	return result;
 }
 
-/*
- * This method is used by o_tables_get_by_tree only, which is unused
- */
+//
+// This method is used by o_tables_get_by_tree only, which is unused
+//
 bool
 o_indices_find_table_oids(ORelOids indexOids, OIndexType type,
 						  OSnapshot *oSnapshot, ORelOids *tableOids)
@@ -1663,10 +1663,10 @@ o_indices_foreach_oids(OIndexOidsCallback callback, void *arg)
 	chunkKey.chunknum = 0;
 	chunkKey.version = O_TABLE_INVALID_VERSION;
 
-	/*
-	 * Only actual versions are needed here, so it's fine to use
-	 * o_non_deleted_snapshot and O_TABLE_INVALID_VERSION
-	 */
+	//
+// Only actual versions are needed here, so it's fine to use
+// o_non_deleted_snapshot and O_TABLE_INVALID_VERSION
+//
 
 	it = o_btree_iterator_create(desc, (Pointer) &chunkKey, BTreeKeyBound,
 								 &o_non_deleted_snapshot, ForwardScanDirection);
@@ -1697,7 +1697,7 @@ o_indices_foreach_oids(OIndexOidsCallback callback, void *arg)
 		pfree(tuple.data);
 		btree_iterator_free(it);
 
-		oids.relnode += 1;		/* go to the next oid */
+		oids.relnode += 1;		// go to the next oid
 		chunkKey.oids = oids;
 		chunkKey.type = type;
 		chunkKey.chunknum = 0;
@@ -1781,7 +1781,7 @@ orioledb_index_oids(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -1814,7 +1814,7 @@ describe_index(TupleDesc tupdesc, ORelOids oids, OIndexType type)
 	Datum		values[2];
 	bool		isnull[2] = {false};
 
-	/* Only actual versions are needed here */
+	// Only actual versions are needed here
 	index = o_indices_get(oids, type);
 	if (index == NULL)
 		elog(ERROR, "unable to find orioledb index description.");
@@ -1922,9 +1922,9 @@ orioledb_index_description(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(describe_index(tupdesc, oids, indexType)));
 }
 
-/*
- * Returns amount of all rows and dead rows
- */
+//
+// Returns amount of all rows and dead rows
+//
 Datum
 orioledb_index_rows(PG_FUNCTION_ARGS)
 {
@@ -1955,9 +1955,9 @@ orioledb_index_rows(PG_FUNCTION_ARGS)
 	td = &descr->indices[ix_num]->desc;
 	o_btree_load_shmem(td);
 
-	/*
-	 * Build a tuple descriptor for our result type
-	 */
+	//
+// Build a tuple descriptor for our result type
+//
 	if (get_call_result_type(fcinfo, NULL, &tupleDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -1981,9 +1981,9 @@ orioledb_index_rows(PG_FUNCTION_ARGS)
 
 	tupleDesc = BlessTupleDesc(tupleDesc);
 
-	/*
-	 * Build and return the tuple
-	 */
+	//
+// Build and return the tuple
+//
 	MemSet(nulls, 0, sizeof(nulls));
 	values[0] = Int64GetDatum(total);
 	values[1] = Int64GetDatum(dead);

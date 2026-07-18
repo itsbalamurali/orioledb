@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * sys_trees.c
- *		Definitions for system trees.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/sys_trees.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// sys_trees.c
+// Definitions for system trees.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/sys_trees.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -136,7 +136,7 @@ static JsonbValue *o_sys_xid_undo_location_key_to_jsonb(BTreeDescr *desc, OTuple
 
 static SysTreeMeta sysTreesMeta[] =
 {
-	{							/* SYS_TREES_SHARED_ROOT_INFO */
+	{							// SYS_TREES_SHARED_ROOT_INFO
 		.keyLength = sizeof(SharedRootInfoKey),
 		.tupleLength = sizeof(SharedRootInfo),
 		.cmpFunc = shared_root_info_key_cmp,
@@ -148,7 +148,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStorageInMemory,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_O_TABLES */
+	{							// SYS_TREES_O_TABLES
 		.keyLength = sizeof(OTableChunkKey),
 		.tupleLength = -1,
 		.tupleLengthFunc = o_table_chunk_length,
@@ -161,7 +161,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = o_table_chunk_needs_undo
 	},
-	{							/* SYS_TREES_O_INDICES */
+	{							// SYS_TREES_O_INDICES
 		.keyLength = sizeof(OIndexChunkKey),
 		.tupleLength = -1,
 		.tupleLengthFunc = o_index_chunk_length,
@@ -174,7 +174,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = o_index_chunk_needs_undo
 	},
-	{							/* SYS_TREES_OPCLASS_CACHE */
+	{							// SYS_TREES_OPCLASS_CACHE
 		.keyLength = sizeof(OSysCacheKey1),
 		.tupleLength = sizeof(OOpclass),
 		.cmpFunc = o_sys_cache_cmp,
@@ -186,7 +186,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_ENUM_CACHE */
+	{							// SYS_TREES_ENUM_CACHE
 		.keyLength = -1,
 		.keyLengthFunc = o_sys_cache_key_length,
 		.tupleLength = -1,
@@ -200,7 +200,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_ENUMOID_CACHE */
+	{							// SYS_TREES_ENUMOID_CACHE
 		.keyLength = sizeof(OSysCacheKey1),
 		.tupleLength = sizeof(OEnumOid),
 		.cmpFunc = o_sys_cache_cmp,
@@ -212,7 +212,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_RANGE_CACHE */
+	{							// SYS_TREES_RANGE_CACHE
 		.keyLength = sizeof(OSysCacheKey1),
 		.tupleLength = sizeof(ORange),
 		.cmpFunc = o_sys_cache_cmp,
@@ -224,7 +224,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_CLASS_CACHE */
+	{							// SYS_TREES_CLASS_CACHE
 		.keyLength = sizeof(OSysCacheToastChunkKey1),
 		.tupleLength = -1,
 		.tupleLengthFunc = o_sys_cache_toast_chunk_length,
@@ -237,7 +237,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_EXTENTS_OFF_LEN */
+	{							// SYS_TREES_EXTENTS_OFF_LEN
 		.keyLength = sizeof(FreeTreeTuple),
 		.tupleLength = MAXALIGN(sizeof(FreeTreeTuple)),
 		.cmpFunc = free_tree_off_len_cmp,
@@ -249,7 +249,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStorageTemporary,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_EXTENTS_LEN_OFF */
+	{							// SYS_TREES_EXTENTS_LEN_OFF
 		.keyLength = sizeof(FreeTreeTuple),
 		.tupleLength = MAXALIGN(sizeof(FreeTreeTuple)),
 		.cmpFunc = free_tree_len_off_cmp,
@@ -261,7 +261,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStorageTemporary,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_PROC_CACHE */
+	{							// SYS_TREES_PROC_CACHE
 		.keyLength = sizeof(OSysCacheToastChunkKey1),
 		.tupleLength = -1,
 		.tupleLengthFunc = o_sys_cache_toast_chunk_length,
@@ -274,7 +274,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_TYPE_CACHE */
+	{							// SYS_TREES_TYPE_CACHE
 		.keyLength = sizeof(OSysCacheKey1),
 		.tupleLength = sizeof(OType),
 		.cmpFunc = o_sys_cache_cmp,
@@ -286,7 +286,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_AGG_CACHE */
+	{							// SYS_TREES_AGG_CACHE
 		.keyLength = sizeof(OSysCacheToastChunkKey1),
 		.tupleLength = -1,
 		.tupleLengthFunc = o_sys_cache_toast_chunk_length,
@@ -299,7 +299,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_OPER_CACHE */
+	{							// SYS_TREES_OPER_CACHE
 		.keyLength = sizeof(OSysCacheKey1),
 		.tupleLength = sizeof(OOperator),
 		.cmpFunc = o_sys_cache_cmp,
@@ -311,7 +311,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_AMOP_CACHE */
+	{							// SYS_TREES_AMOP_CACHE
 		.keyLength = sizeof(OSysCacheKey3),
 		.tupleLength = sizeof(OAmOp),
 		.cmpFunc = o_sys_cache_cmp,
@@ -323,7 +323,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_AMPROC_CACHE */
+	{							// SYS_TREES_AMPROC_CACHE
 		.keyLength = sizeof(OSysCacheKey4),
 		.tupleLength = sizeof(OAmProc),
 		.cmpFunc = o_sys_cache_cmp,
@@ -335,7 +335,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_COLLATION_CACHE */
+	{							// SYS_TREES_COLLATION_CACHE
 		.keyLength = sizeof(OSysCacheToastChunkKey1),
 		.tupleLength = -1,
 		.tupleLengthFunc = o_sys_cache_toast_chunk_length,
@@ -348,7 +348,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_DATABASE_CACHE */
+	{							// SYS_TREES_DATABASE_CACHE
 		.keyLength = sizeof(OSysCacheToastChunkKey1),
 		.tupleLength = -1,
 		.tupleLengthFunc = o_sys_cache_toast_chunk_length,
@@ -361,7 +361,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_AMOP_STRAT_CACHE */
+	{							// SYS_TREES_AMOP_STRAT_CACHE
 		.keyLength = sizeof(OSysCacheKey4),
 		.tupleLength = sizeof(OAmOpStrat),
 		.cmpFunc = o_sys_cache_cmp,
@@ -373,7 +373,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_EVICTED_DATA */
+	{							// SYS_TREES_EVICTED_DATA
 		.keyLength = sizeof(SharedRootInfoKey),
 		.tupleLength = sizeof(EvictedTreeData),
 		.cmpFunc = shared_root_info_key_cmp,
@@ -385,7 +385,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStorageTemporary,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_CHKP_NUM */
+	{							// SYS_TREES_CHKP_NUM
 		.keyLength = sizeof(SharedRootInfoKey),
 		.tupleLength = sizeof(ChkpNumTuple),
 		.cmpFunc = shared_root_info_key_cmp,
@@ -397,7 +397,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_MULTIRANGE_CACHE */
+	{							// SYS_TREES_MULTIRANGE_CACHE
 		.keyLength = sizeof(OSysCacheKey1),
 		.tupleLength = sizeof(OMultiRange),
 		.cmpFunc = o_sys_cache_cmp,
@@ -409,7 +409,7 @@ static SysTreeMeta sysTreesMeta[] =
 		.storageType = BTreeStoragePersistence,
 		.needs_undo = NULL
 	},
-	{							/* SYS_TREES_CATALOG_XID_UNDO_LOCATION */
+	{							// SYS_TREES_CATALOG_XID_UNDO_LOCATION
 		.keyLength = sizeof(TransactionId),
 		.tupleLength = sizeof(ReplicationRetainUndoTuple),
 		.cmpFunc = o_sys_xid_undo_location_key_cmp,
@@ -430,9 +430,9 @@ PG_FUNCTION_INFO_V1(orioledb_sys_tree_structure);
 PG_FUNCTION_INFO_V1(orioledb_sys_tree_check);
 PG_FUNCTION_INFO_V1(orioledb_sys_tree_rows);
 
-/*
- * Returns size of the shared memory needed for enum tree header.
- */
+//
+// Returns size of the shared memory needed for enum tree header.
+//
 Size
 sys_trees_shmem_needs(void)
 {
@@ -446,9 +446,9 @@ sys_trees_shmem_needs(void)
 	return size;
 }
 
-/*
- * Initializes the enum B-tree memory.
- */
+//
+// Initializes the enum B-tree memory.
+//
 void
 sys_trees_shmem_init(Pointer ptr, bool found)
 {
@@ -519,9 +519,9 @@ check_tree_num_input(int num)
 						SYS_TREES_NUM)));
 }
 
-/*
- * Prints structure of sys trees.
- */
+//
+// Prints structure of sys trees.
+//
 Datum
 orioledb_sys_tree_structure(PG_FUNCTION_ARGS)
 {
@@ -546,7 +546,7 @@ orioledb_sys_tree_structure(PG_FUNCTION_ARGS)
 }
 
 #ifdef IS_DEV
-/* No existing callers */
+// No existing callers
 const text *
 inspect_sys_tree_structure(int systree, int depth)
 {
@@ -588,9 +588,9 @@ o_tuphdr_to_jsonb(BTreeLeafTuphdr *tupHdr, JsonbParseState **state)
 	return pushJsonbValue(state, WJB_END_OBJECT, NULL);
 }
 
-/*
- * Returns content of sys tree as table
- */
+//
+// Returns content of sys tree as table
+//
 Datum
 orioledb_sys_tree_rows(PG_FUNCTION_ARGS)
 {
@@ -612,11 +612,11 @@ orioledb_sys_tree_rows(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, &funcrettype, NULL) != TYPEFUNC_SCALAR)
 		elog(ERROR, "return type must be a scalar type");
 
-	/* Base data type, i.e. scalar */
+	// Base data type, i.e. scalar
 	tupdesc = CreateTemplateTupleDesc(1);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 1, NULL, funcrettype, -1, 0);
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
@@ -691,12 +691,12 @@ sys_tree_get_extra(int tree_num)
 	return sysTreesMeta[tree_num - 1].extra;
 }
 
-/*
- * Initializes the system B-tree if it is not already done.
- *
- * We can not initialize it on the shared memory startup because it uses
- * postgres file descriptors for BTreeDescr.file.
- */
+//
+// Initializes the system B-tree if it is not already done.
+//
+// We can not initialize it on the shared memory startup because it uses
+// postgres file descriptors for BTreeDescr.file.
+//
 static void
 sys_tree_init_if_needed(int i)
 {
@@ -705,12 +705,12 @@ sys_tree_init_if_needed(int i)
 	if (sysTreesDescrs[i].initialized)
 		return;
 
-	/*
-	 * Try to initialize every system tree (avoid possible problem when
-	 * walk_page() initializes system tree).  Given we initialize them at
-	 * once, they all should be already initialized when walk_page() is
-	 * called.
-	 */
+	//
+// Try to initialize every system tree (avoid possible problem when
+// walk_page() initializes system tree).  Given we initialize them at
+// once, they all should be already initialized when walk_page() is
+// called.
+//
 	for (i = 0; i < SYS_TREES_NUM; i++)
 	{
 		if (sysTreesDescrs[i].initialized)
@@ -728,7 +728,7 @@ sys_tree_init_if_needed(int i)
 			if (header->initialized)
 			{
 				LWLockRelease(&checkpoint_state->oSharedRootInfoInsertLocks[0]);
-				/* might be concurrently initialized */
+				// might be concurrently initialized
 				sys_tree_init(i, false);
 				continue;
 			}
@@ -746,15 +746,15 @@ sys_tree_init_if_needed(int i)
 	}
 }
 
-/*
- * Initializes the system B-tree.
- *
- * We can not initialize system BTree on shmem startup because it uses
- * postgres file descriptors and functions to work with them.
- *
- * Recovery worker should initialize system BTree with init_shmem = true on
- * startup. Backends should call it only with init_shmem = false.
- */
+//
+// Initializes the system B-tree.
+//
+// We can not initialize system BTree on shmem startup because it uses
+// postgres file descriptors and functions to work with them.
+//
+// Recovery worker should initialize system BTree with init_shmem = true on
+// startup. Backends should call it only with init_shmem = false.
+//
 static void
 sys_tree_init(int i, bool init_shmem)
 {
@@ -1109,9 +1109,9 @@ o_index_chunk_needs_undo(BTreeDescr *desc, BTreeOperationType action,
 	return true;
 }
 
-/*
- * Compares oids and ix_num of FreeTreeTuples.
- */
+//
+// Compares oids and ix_num of FreeTreeTuples.
+//
 static inline int
 free_tree_id_cmp(FreeTreeTuple *left, FreeTreeTuple *right)
 {
@@ -1124,13 +1124,13 @@ free_tree_id_cmp(FreeTreeTuple *left, FreeTreeTuple *right)
 	return 0;
 }
 
-/*
- * Comparator for sort order inside a B-tree:
- * 1. FreeTreeTuple.datoid
- * 2. FreeTreeTuple.relnode
- * 3. FreeTreeTuple.ix_num
- * 4. FreeTreeTuple.extent.off
- */
+//
+// Comparator for sort order inside a B-tree:
+// 1. FreeTreeTuple.datoid
+// 2. FreeTreeTuple.relnode
+// 3. FreeTreeTuple.ix_num
+// 4. FreeTreeTuple.extent.off
+//
 static int
 free_tree_off_len_cmp(BTreeDescr *desc,
 					  void *p1, BTreeKeyType k1,
@@ -1149,14 +1149,14 @@ free_tree_off_len_cmp(BTreeDescr *desc,
 	return 0;
 }
 
-/*
- * Comparator for sort order inside a B-tree:
- * 1. FreeTreeTuple.datoid
- * 2. FreeTreeTuple.relnode
- * 3. FreeTreeTuple.ix_num
- * 4. FreeTreeTuple.extent.len
- * 5. FreeTreeTuple.extent.off
- */
+//
+// Comparator for sort order inside a B-tree:
+// 1. FreeTreeTuple.datoid
+// 2. FreeTreeTuple.relnode
+// 3. FreeTreeTuple.ix_num
+// 4. FreeTreeTuple.extent.len
+// 5. FreeTreeTuple.extent.off
+//
 static int
 free_tree_len_off_cmp(BTreeDescr *desc,
 					  void *p1, BTreeKeyType k1,
@@ -1259,13 +1259,13 @@ o_sys_xid_undo_location_tuple_print(BTreeDescr *desc, StringInfo buf, OTuple tup
 {
 	ReplicationRetainUndoTuple *tuple = (ReplicationRetainUndoTuple *) tup.data;
 
-	/*
-	 * The undo location is an absolute offset into the undo log, which shifts
-	 * with any change to undo allocation (e.g. differential page-level undo
-	 * images consume less space).  Mask it so the structure dump stays stable
-	 * across such layout changes; the actual value is verified separately via
-	 * orioledb_read_sys_xid_undo_location().
-	 */
+	//
+// The undo location is an absolute offset into the undo log, which shifts
+// with any change to undo allocation (e.g. differential page-level undo
+// images consume less space).  Mask it so the structure dump stays stable
+// across such layout changes; the actual value is verified separately via
+// orioledb_read_sys_xid_undo_location().
+//
 	appendStringInfo(buf, "(%u, X)", tuple->xid);
 }
 

@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * descr.c
- *		Routines for handling descriptors of orioledb trees.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/descr.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// descr.c
+// Routines for handling descriptors of orioledb trees.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/descr.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -93,15 +93,15 @@ typedef struct DeferredDescrInvalidation
 	Oid			relfilenode;
 } DeferredDescrInvalidation;
 
-/*
- * When true, invalidation messages arriving via o_invalidate_descrs() are
- * saved instead of being processed immediately.  This is set while executing
- * a comparator function inside o_call_comparator(), because the comparator
- * may trigger AcceptInvalidationMessages() which processes sinval messages,
- * which in turn may call o_invalidate_descrs().  Processing those
- * invalidations inside a comparator is unsafe (it can read catalogs while
- * the caller holds page locks), so we save them and replay later.
- */
+//
+// When true, invalidation messages arriving via o_invalidate_descrs() are
+// saved instead of being processed immediately.  This is set while executing
+// a comparator function inside o_call_comparator(), because the comparator
+// may trigger AcceptInvalidationMessages() which processes sinval messages,
+// which in turn may call o_invalidate_descrs().  Processing those
+// invalidations inside a comparator is unsafe (it can read catalogs while
+// the caller holds page locks), so we save them and replay later.
+//
 static bool saving_inval_messages = false;
 static List *saved_descr_invals = NIL;
 
@@ -120,10 +120,10 @@ struct OComparator
 	OComparatorKey key;
 	bool		haveSortSupport;
 
-	/* Filled when haveSortSupport == false */
+	// Filled when haveSortSupport == false
 	FmgrInfo	finfo;
 
-	/* Filled when haveSortSupport == true */
+	// Filled when haveSortSupport == true
 	MemoryContext ssup_cxt;
 	void	   *ssup_extra;
 	int			(*ssup_comparator) (Datum x, Datum y, SortSupport ssup);
@@ -135,11 +135,11 @@ static HTAB *comparatorCache;
 static HTAB *exclusionFnCache;
 static HTAB *hashFnCache;
 
-/*
- * Backend-local hash of SharedRootInfo for trees backed by LocalPagePool
- * (temp tables).  Their pages carry BLKNO_LOCAL_BIT and are meaningless to
- * other backends, so they must not reach SYS_TREES_SHARED_ROOT_INFO.
- */
+//
+// Backend-local hash of SharedRootInfo for trees backed by LocalPagePool
+// (temp tables).  Their pages carry BLKNO_LOCAL_BIT and are meaningless to
+// other backends, so they must not reach SYS_TREES_SHARED_ROOT_INFO.
+//
 static HTAB *localSharedRootInfoHash = NULL;
 static OComparatorKey lastkey = {0};
 static OComparator *lastcmp = NULL;
@@ -152,19 +152,19 @@ OHashFn		o_default_hash_fn = {.key = {.hash_fn_oid = O_DEFAULT_HASH_FN_OID}};
 
 static void o_find_toastable_attrs(OTableDescr *tableDescr);
 
-/*
- * Default context for fetching table/index descriptors from system trees.
- *
- * Uses o_non_deleted_snapshot so that trees deleted by uncommitted
- * (sub-)transactions are still accessible -- they may become visible again
- * on rollback.
- */
+//
+// Default context for fetching table/index descriptors from system trees.
+//
+// Uses o_non_deleted_snapshot so that trees deleted by uncommitted
+// (sub-)transactions are still accessible -- they may become visible again
+// on rollback.
+//
 OTableFetchContext default_table_fetch_context = {.snapshot = &o_non_deleted_snapshot,.version = O_TABLE_INVALID_VERSION};
 
-/*
- * Creates shared root info.  But insertion into shared cache is performed by
- * table_descr_init_tree function.
- */
+//
+// Creates shared root info.  But insertion into shared cache is performed by
+// table_descr_init_tree function.
+//
 static SharedRootInfo *
 create_shared_root_info(PagePool *pool, SharedRootInfoKey *key)
 {
@@ -245,11 +245,11 @@ read_evicted_data(Oid datoid, Oid relnode, bool delete)
 	OTuple		keyTuple;
 	OTuple		result;
 
-	/*
-	 * Don't do lookup for system trees.  This is essential for initialization
-	 * sequence.  This is correct because we don't evict root pages of system
-	 * trees.
-	 */
+	//
+// Don't do lookup for system trees.  This is essential for initialization
+// sequence.  This is correct because we don't evict root pages of system
+// trees.
+//
 	if (datoid == SYS_TREES_DATOID)
 		return NULL;
 
@@ -304,7 +304,7 @@ orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -345,20 +345,20 @@ orioledb_get_evicted_trees(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
-/*
- * OTableDescr* BTrees are created without shared memory initialization.
- * Sequence buffers files, data rootInfo file are not initialized too. There are
- * reasons for it:
- *
- * 1. Long queries may do not use all indices.
- * 2. In some cases no sense to initialize BTree memory if it not exists.
- *
- * We can load shared memory in-place, in low-level BTree code
- * but it more complicated approach. It will be harder to understand and debug.
- *
- * To avoid concurrency problems with eviction/cleanup table this call must be
- * under AccessShareLock (See o_tables.h/o_tables_rel_lock()).
- */
+//
+// OTableDescr* BTrees are created without shared memory initialization.
+// Sequence buffers files, data rootInfo file are not initialized too. There are
+// reasons for it:
+//
+// 1. Long queries may do not use all indices.
+// 2. In some cases no sense to initialize BTree memory if it not exists.
+//
+// We can load shared memory in-place, in low-level BTree code
+// but it more complicated approach. It will be harder to understand and debug.
+//
+// To avoid concurrency problems with eviction/cleanup table this call must be
+// under AccessShareLock (See o_tables.h/o_tables_rel_lock()).
+//
 static bool
 o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 {
@@ -376,7 +376,7 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 	if (!ORelOidsIsValid(desc->oids) || IS_SYS_TREE_OIDS(desc->oids))
 		return true;
 
-	/* easy case: shared memory is initialized */
+	// easy case: shared memory is initialized
 	if (ORootPageIsValid(desc) && OMetaPageIsValid(desc))
 		return true;
 
@@ -386,38 +386,38 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 	key.datoid = desc->oids.datoid;
 	key.relnode = desc->oids.relnode;
 
-	/*
-	 * evictable_tree_init() needs that.  Initialized it before we get one of
-	 * checkpoint_state->oSharedRootInfoInsertLocks.
-	 */
+	//
+// evictable_tree_init() needs that.  Initialized it before we get one of
+// checkpoint_state->oSharedRootInfoInsertLocks.
+//
 	(void) get_sys_tree(SYS_TREES_CHKP_NUM);
 
 	sharedRootInfo = o_find_shared_root_info(&key);
 	if (sharedRootInfo == NULL)
 	{
-		/*
-		 * Deletion from SYS_TREES_SHARED_ROOT_INFO comes before applying undo
-		 * records to SYS_TREES_O_INDICES.  So, this situation is possible in
-		 * checkpointer due to concurrent deletion.  Just give up then.
-		 */
+		//
+// Deletion from SYS_TREES_SHARED_ROOT_INFO comes before applying undo
+// records to SYS_TREES_O_INDICES.  So, this situation is possible in
+// checkpointer due to concurrent deletion.  Just give up then.
+//
 		if (checkpoint && tree_is_under_checkpoint(desc))
 			return false;
 
-		/*---
-		 * Reserve 8 pages:
-		 *
-		 * - root page
-		 * - meta page
-		 * - 2 for nextChkp seq bufs
-		 * - 2 for tmp seq bufs
-		 * - 2 for free seq bufs
-		 */
+		// ---
+// Reserve 8 pages:
+//
+// - root page
+// - meta page
+// - 2 for nextChkp seq bufs
+// - 2 for tmp seq bufs
+// - 2 for free seq bufs
+//
 		ppool_reserve_pages(desc->ppool, PPOOL_RESERVE_META, 8);
 
-		/*
-		 * Temporary trees live in a backend-local hash, so the shared insert
-		 * lock is unnecessary (and a no-op re-lookup would be too).
-		 */
+		//
+// Temporary trees live in a backend-local hash, so the shared insert
+// lock is unnecessary (and a no-op re-lookup would be too).
+//
 		if (!is_temp)
 		{
 			lockNo = tag_hash(&key, sizeof(key)) % SHARED_ROOT_INFO_INSERT_NUM_LOCKS;
@@ -443,7 +443,7 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 	{
 		OTuple		sharedRootInfoTuple;
 
-		/* tries to create SharedRootInfo */
+		// tries to create SharedRootInfo
 		sharedRootInfo = create_shared_root_info(desc->ppool, &key);
 		desc->rootInfo = sharedRootInfo->rootInfo;
 		Assert(desc->storageType == BTreeStoragePersistence ||
@@ -466,11 +466,11 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 		{
 			init_extents = true;
 
-			/*
-			 * We should prevent iteration through free extentents list by the
-			 * checkpointer until free extents is not completely initialized
-			 * yet.
-			 */
+			//
+// We should prevent iteration through free extentents list by the
+// checkpointer until free extents is not completely initialized
+// yet.
+//
 			LWLockAcquire(&BTREE_GET_META(desc)->copyBlknoLock, LW_SHARED);
 		}
 
@@ -489,9 +489,9 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 
 		if (init_extents)
 		{
-			/*
-			 * The loader of an index fills the free extents list.
-			 */
+			//
+// The loader of an index fills the free extents list.
+//
 			if (!o_tree_init_free_extents(desc))
 			{
 				LWLockRelease(&BTREE_GET_META(desc)->copyBlknoLock);
@@ -504,11 +504,11 @@ o_btree_load_shmem_internal(BTreeDescr *desc, bool checkpoint)
 	}
 	else
 	{
-		/*
-		 * o_btree_load_shmem() must be called only under relation locks, in
-		 * this state BTree can not be evicted and removed from ShareDescr
-		 * cache because AccessExclusiveLock needed for this actions.
-		 */
+		//
+// o_btree_load_shmem() must be called only under relation locks, in
+// this state BTree can not be evicted and removed from ShareDescr
+// cache because AccessExclusiveLock needed for this actions.
+//
 		Assert(OInMemoryBlknoIsValid(sharedRootInfo->rootInfo.rootPageBlkno));
 		Assert(OInMemoryBlknoIsValid(sharedRootInfo->rootInfo.metaPageBlkno));
 
@@ -550,12 +550,12 @@ o_btree_load_shmem_checkpoint(BTreeDescr *desc)
 	return o_btree_load_shmem_internal(desc, true);
 }
 
-/*
- * Returns false if BTree does not exist in shared memory.
- *
- * Same to o_btree_load_shmem() but it does not create a BTree in shared
- * memory. Must be called under relation locks too.
- */
+//
+// Returns false if BTree does not exist in shared memory.
+//
+// Same to o_btree_load_shmem() but it does not create a BTree in shared
+// memory. Must be called under relation locks too.
+//
 bool
 o_btree_try_use_shmem(BTreeDescr *desc)
 {
@@ -594,9 +594,9 @@ o_btree_try_use_shmem(BTreeDescr *desc)
 	return true;
 }
 
-/*
- * Appends extents from free blocks file to the free extents list.
- */
+//
+// Appends extents from free blocks file to the free extents list.
+//
 static bool
 o_tree_init_free_extents(BTreeDescr *desc)
 {
@@ -819,12 +819,12 @@ fill_table_descr(OTableDescr *descr, OTable *o_table, OSnapshot *snapshot)
 	bool		was_saving;
 	bool		success;
 
-	/*
-	 * Defer invalidation messages while filling the table descriptor. Index
-	 * descriptor filling involves catalog lookups that can trigger
-	 * AcceptInvalidationMessages(), which could free descriptors while they
-	 * are still being initialized.
-	 */
+	//
+// Defer invalidation messages while filling the table descriptor. Index
+// descriptor filling involves catalog lookups that can trigger
+// AcceptInvalidationMessages(), which could free descriptors while they
+// are still being initialized.
+//
 	was_saving = o_start_saving_inval_messages();
 
 	fill_table_descr_common_fields(descr, o_table);
@@ -922,7 +922,7 @@ create_table_descr(ORelOids oids, OTableFetchContext ctx)
 						&o_table->oids,
 						HASH_ENTER,
 						&found);
-	/* Assert(!found); */
+	// Assert(!found);
 
 	Assert(ctx.snapshot);
 
@@ -940,9 +940,9 @@ create_table_descr(ORelOids oids, OTableFetchContext ctx)
 	return descr;
 }
 
-/*
- * Finds tree with given oids in private table descriptor.
- */
+//
+// Finds tree with given oids in private table descriptor.
+//
 OIndexNumber
 find_tree_in_descr(OTableDescr *descr, ORelOids oids)
 {
@@ -966,44 +966,44 @@ find_tree_in_descr(OTableDescr *descr, ORelOids oids)
 	return InvalidIndexNumber;
 }
 
-/*
- * o_fetch_table_descr fetches OTableDescr from cache, or creates a new one.
- */
+//
+// o_fetch_table_descr fetches OTableDescr from cache, or creates a new one.
+//
 OTableDescr *
 o_fetch_table_descr(ORelOids oids)
 {
 	return o_fetch_table_descr_extended(oids, default_table_fetch_context);
 }
 
-/*
- * o_fetch_table_descr_extended
- *
- * Fetch an OrioleDB table descriptor for the specified relation OIDs using
- * the provided fetch context.
- *
- * The descriptor is resolved according to:
- *  - ctx.snapshot : MVCC visibility rules
- *  - ctx.version  : explicit table schema version
- *
- * This function may return a historical version of the table descriptor if
- * the requested version differs from the current catalog version, as long
- * as it is visible under the given snapshot.
- *
- * Parameters:
- *  - oids : OIDs identifying the table
- *  - ctx  : fetch context combining snapshot and schema version
- *
- * Returns:
- *  - Pointer to OTableDescr if the table is visible and exists
- *  - NULL if no visible descriptor can be found
- *
- * Notes:
- *  - The returned descriptor may differ from the current in-memory descriptor
- *    if catalog changes occurred after the snapshot.
- *  - Callers must not assume the descriptor reflects the latest schema
- *  - Use default fetch context with O_TABLE_INVALID_VERSION and some default snapshot
- *    to retrieve latest descriptor
- */
+//
+// o_fetch_table_descr_extended
+//
+// Fetch an OrioleDB table descriptor for the specified relation OIDs using
+// the provided fetch context.
+//
+// The descriptor is resolved according to:
+// - ctx.snapshot : MVCC visibility rules
+// - ctx.version  : explicit table schema version
+//
+// This function may return a historical version of the table descriptor if
+// the requested version differs from the current catalog version, as long
+// as it is visible under the given snapshot.
+//
+// Parameters:
+// - oids : OIDs identifying the table
+// - ctx  : fetch context combining snapshot and schema version
+//
+// Returns:
+// - Pointer to OTableDescr if the table is visible and exists
+// - NULL if no visible descriptor can be found
+//
+// Notes:
+// - The returned descriptor may differ from the current in-memory descriptor
+// if catalog changes occurred after the snapshot.
+// - Callers must not assume the descriptor reflects the latest schema
+// - Use default fetch context with O_TABLE_INVALID_VERSION and some default snapshot
+// to retrieve latest descriptor
+//
 OTableDescr *
 o_fetch_table_descr_extended(ORelOids oids, OTableFetchContext ctx)
 {
@@ -1015,8 +1015,8 @@ o_fetch_table_descr_extended(ORelOids oids, OTableFetchContext ctx)
 	Assert((found && table_descr) || !found);
 	if (found && table_descr)
 	{
-		refcnt = table_descr->refcnt;	/* store actual reference count if
-										 * descr is present */
+		refcnt = table_descr->refcnt;	// store actual reference count if
+// descr is present
 	}
 	found = found && (ctx.version == O_TABLE_INVALID_VERSION || table_descr->version == ctx.version);
 
@@ -1024,16 +1024,16 @@ o_fetch_table_descr_extended(ORelOids oids, OTableFetchContext ctx)
 		table_descr = create_table_descr(oids, ctx);
 
 	if (table_descr)
-		table_descr->refcnt = refcnt;	/* restore reference count after
-										 * possible reload */
+		table_descr->refcnt = refcnt;	// restore reference count after
+// possible reload
 
 	return table_descr;
 }
 
-/*
- * o_fetch_index_descr fetches OIndexDescr for particular tree from cache, or
- * creates a new one.
- */
+//
+// o_fetch_index_descr fetches OIndexDescr for particular tree from cache, or
+// creates a new one.
+//
 OIndexDescr *
 o_fetch_index_descr(ORelOids oids, OIndexType type, bool lock, bool *nested)
 {
@@ -1042,37 +1042,37 @@ o_fetch_index_descr(ORelOids oids, OIndexType type, bool lock, bool *nested)
 										default_table_fetch_context);
 }
 
-/*
- * o_fetch_index_descr_extended
- *
- * Fetch an OrioleDB index descriptor for the specified OIDs and index type
- * using snapshot-aware and version-aware catalog lookup.
- *
- * The function resolves the index descriptor using two fetch contexts:
- *  - ctx       : fetch context for the index itself
- *  - base_ctx  : fetch context for the underlying base table descriptor
- *
- * This separation is required because index and table schema versions may
- * diverge temporarily during DDL operations and transactional catalog updates.
- *
- * Parameters:
- *  - oids      : OIDs identifying the index
- *  - type      : OrioleDB index type (primary, unique, regular, toast, etc.)
- *  - lock      : whether to acquire a catalog lock while fetching
- *  - ctx       : fetch context for the index descriptor
- *  - base_ctx  : fetch context for the base table descriptor
- *
- * Returns:
- *  - Pointer to OIndexDescr if the index is visible and exists
- *  - NULL if no visible descriptor can be found
- *
- * Notes:
- *  - The returned index descriptor may correspond to a historical schema
- *    version and must be interpreted in conjunction with the base table
- *    descriptor fetched using base_ctx.
- *  - Callers must ensure consistent usage of ctx and base_ctx to avoid
- *    descriptor mismatches during logical decoding and recovery.
- */
+//
+// o_fetch_index_descr_extended
+//
+// Fetch an OrioleDB index descriptor for the specified OIDs and index type
+// using snapshot-aware and version-aware catalog lookup.
+//
+// The function resolves the index descriptor using two fetch contexts:
+// - ctx       : fetch context for the index itself
+// - base_ctx  : fetch context for the underlying base table descriptor
+//
+// This separation is required because index and table schema versions may
+// diverge temporarily during DDL operations and transactional catalog updates.
+//
+// Parameters:
+// - oids      : OIDs identifying the index
+// - type      : OrioleDB index type (primary, unique, regular, toast, etc.)
+// - lock      : whether to acquire a catalog lock while fetching
+// - ctx       : fetch context for the index descriptor
+// - base_ctx  : fetch context for the base table descriptor
+//
+// Returns:
+// - Pointer to OIndexDescr if the index is visible and exists
+// - NULL if no visible descriptor can be found
+//
+// Notes:
+// - The returned index descriptor may correspond to a historical schema
+// version and must be interpreted in conjunction with the base table
+// descriptor fetched using base_ctx.
+// - Callers must ensure consistent usage of ctx and base_ctx to avoid
+// descriptor mismatches during logical decoding and recovery.
+//
 OIndexDescr *
 o_fetch_index_descr_extended(ORelOids oids, OIndexType type, bool lock,
 							 OTableFetchContext ctx, OTableFetchContext base_ctx)
@@ -1120,10 +1120,10 @@ init_shared_root_info(PagePool *pool, SharedRootInfo *sharedRootInfo)
 	}
 }
 
-/*
- * Start saving invalidation messages instead of processing them immediately.
- * Returns the previous saving state so it can be restored by the caller.
- */
+//
+// Start saving invalidation messages instead of processing them immediately.
+// Returns the previous saving state so it can be restored by the caller.
+//
 bool
 o_start_saving_inval_messages(void)
 {
@@ -1133,22 +1133,22 @@ o_start_saving_inval_messages(void)
 	return was_saving;
 }
 
-/*
- * Stop saving invalidation messages, restoring the previous state.
- */
+//
+// Stop saving invalidation messages, restoring the previous state.
+//
 void
 o_stop_saving_inval_messages(bool was_saving)
 {
 	saving_inval_messages = was_saving;
 }
 
-/* #define ALWAYS_DISCARD_CACHES */
+// #define ALWAYS_DISCARD_CACHES
 
-/*
- * Replay invalidation messages saved during o_call_comparator() or
- * ppool_reserve_pages().  Called from AcceptInvalidationMessagesHook
- * when we are outside a saving section, so it is safe to process them.
- */
+//
+// Replay invalidation messages saved during o_call_comparator() or
+// ppool_reserve_pages().  Called from AcceptInvalidationMessagesHook
+// when we are outside a saving section, so it is safe to process them.
+//
 void
 o_replay_saved_inval_messages(void)
 {
@@ -1259,11 +1259,11 @@ o_invalidate_descrs(Oid datoid, Oid reloid, Oid relfilenode)
 	MemoryContext oldcontext;
 	bool		was_saving;
 
-	/*
-	 * If we are inside o_call_comparator(), save the invalidation message for
-	 * later replay.  Processing it now could read catalogs while the caller
-	 * holds page locks or is in the middle of a comparison.
-	 */
+	//
+// If we are inside o_call_comparator(), save the invalidation message for
+// later replay.  Processing it now could read catalogs while the caller
+// holds page locks or is in the middle of a comparison.
+//
 	if (saving_inval_messages)
 	{
 		oldcontext = MemoryContextSwitchTo(TopMemoryContext);
@@ -1278,7 +1278,7 @@ o_invalidate_descrs(Oid datoid, Oid reloid, Oid relfilenode)
 
 	was_saving = o_start_saving_inval_messages();
 
-	/* Handle the current invalidation. */
+	// Handle the current invalidation.
 	o_invalidate_descrs_internal(datoid, reloid, relfilenode);
 
 	o_stop_saving_inval_messages(was_saving);
@@ -1439,21 +1439,21 @@ recreate_index_descr(OIndexDescr *descr)
 	(void) o_btree_try_use_shmem(&descr->desc);
 }
 
-/*
- * o_table_descr_fill_indices()
- *
- * Populate OTableDescr with index descriptors visible under the given snapshot.
- *
- * Important: index descriptors are fetched from OrioleDB system trees using an
- * OTableFetchContext that includes both:
- *  - snapshot: MVCC visibility for sys-tree tuples,
- *  - version: an "incarnation id" for the index metadata record.
- *
- * The version disambiguates multiple incarnations of the same logical index
- * (primary/toast/bridge) that can appear across CREATE/DROP/TRUNCATE/rollback
- * sequences and may be concurrently visible to different readers during
- * recovery and logical decoding.
- */
+//
+// o_table_descr_fill_indices()
+//
+// Populate OTableDescr with index descriptors visible under the given snapshot.
+//
+// Important: index descriptors are fetched from OrioleDB system trees using an
+// OTableFetchContext that includes both:
+// - snapshot: MVCC visibility for sys-tree tuples,
+// - version: an "incarnation id" for the index metadata record.
+//
+// The version disambiguates multiple incarnations of the same logical index
+// (primary/toast/bridge) that can appear across CREATE/DROP/TRUNCATE/rollback
+// sequences and may be concurrently visible to different readers during
+// recovery and logical decoding.
+//
 static bool
 o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapshot)
 {
@@ -1475,26 +1475,26 @@ o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapsho
 		uint32		version;
 		OTableFetchContext ctx;
 
-		/*
-		 * NOTE: version here is *not* the Postgres relcache/catversion. It's
-		 * an OrioleDB per-index incarnation number used in sys-tree keys.
-		 */
+		//
+// NOTE: version here is *not* the Postgres relcache/catversion. It's
+// an OrioleDB per-index incarnation number used in sys-tree keys.
+//
 
-		/*
-		 * Choose the correct index incarnation version to build a fetch
-		 * context.
-		 *
-		 * For regular indexes the version is stored in
-		 * table->indices[].version.
-		 *
-		 * For the synthetic "primary" descriptor (ctid-based) used when the
-		 * base table has no declared primary index, the incarnation is
-		 * tracked in table->primary_ixversion.
-		 *
-		 * In both cases the version becomes part of the sys-tree key-space
-		 * for OIndex records, ensuring get_index_descr() reads the intended
-		 * incarnation under the supplied snapshot.
-		 */
+		//
+// Choose the correct index incarnation version to build a fetch
+// context.
+//
+// For regular indexes the version is stored in
+// table->indices[].version.
+//
+// For the synthetic "primary" descriptor (ctid-based) used when the
+// base table has no declared primary index, the incarnation is
+// tracked in table->primary_ixversion.
+//
+// In both cases the version becomes part of the sys-tree key-space
+// for OIndex records, ensuring get_index_descr() reads the intended
+// incarnation under the supplied snapshot.
+//
 
 		if (!table->has_primary && cur_ix == 0)
 		{
@@ -1518,10 +1518,10 @@ o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapsho
 
 	if (ORelOidsIsValid(table->bridge_oids))
 	{
-		/*
-		 * Bridge index is not part of table->indices[]: it has its own OIDs
-		 * and its own incarnation counter in OTable.
-		 */
+		//
+// Bridge index is not part of table->indices[]: it has its own OIDs
+// and its own incarnation counter in OTable.
+//
 		OTableFetchContext ctx = build_fetch_context(snapshot, table->bridge_ixversion);
 
 		descr->bridge = get_index_descr(table->bridge_oids, oIndexBridge, true, ctx, table, oTableSourceTable);
@@ -1534,10 +1534,10 @@ o_table_descr_fill_indices(OTableDescr *descr, OTable *table, OSnapshot *snapsho
 
 	if (ORelOidsIsValid(table->toast_oids))
 	{
-		/*
-		 * Toast index metadata may be recreated independently of user
-		 * indexes. toast_ixversion tracks the current incarnation.
-		 */
+		//
+// Toast index metadata may be recreated independently of user
+// indexes. toast_ixversion tracks the current incarnation.
+//
 		OTableFetchContext ctx = build_fetch_context(snapshot, table->toast_ixversion);
 
 		descr->toast = get_index_descr(table->toast_oids, oIndexToast, true, ctx, table, oTableSourceTable);
@@ -1607,17 +1607,17 @@ o_find_toastable_attrs(OTableDescr *tableDescr)
 	}
 }
 
-/*
- * oFillFieldOpClassAndComparator
- *
- * Resolve opclass/comparator metadata for an index field using explicit
- * object datoid.
- *
- * Note: this function may be reached while processing pages selected by the
- * global page-pool clock. Therefore, database context must come from the
- * index/table metadata (datoid argument), not implicitly from the current
- * backend database.
- */
+//
+// oFillFieldOpClassAndComparator
+//
+// Resolve opclass/comparator metadata for an index field using explicit
+// object datoid.
+//
+// Note: this function may be reached while processing pages selected by the
+// global page-pool clock. Therefore, database context must come from the
+// index/table metadata (datoid argument), not implicitly from the current
+// backend database.
+//
 void
 oFillFieldOpClassAndComparator(OIndexField *field, Oid datoid, Oid opclassoid,
 							   Oid exacttype, Oid exclusion_op, Oid hash_fn_oid)
@@ -1649,10 +1649,10 @@ oFillFieldOpClassAndComparator(OIndexField *field, Oid datoid, Oid opclassoid,
 	Assert(field->comparator != NULL);
 }
 
-/*
- * Find opfamily omparator for given datatypes and collation.  Throws error
- * if not found.
- */
+//
+// Find opfamily omparator for given datatypes and collation.  Throws error
+// if not found.
+//
 OComparator *
 o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 {
@@ -1667,16 +1667,16 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 	OComparator comparator;
 	Oid			procOid;
 
-	/*
-	 * At first, try to find existing comparator in cache.
-	 */
+	//
+// At first, try to find existing comparator in cache.
+//
 	if ((result = o_find_cached_comparator(&key)) != NULL)
 		return result;
 
-	/*
-	 * If comparator isn't cached, then look for comparator with sort support
-	 * function.
-	 */
+	//
+// If comparator isn't cached, then look for comparator with sort support
+// function.
+//
 	Assert(OidIsValid(lefttype));
 	Assert(OidIsValid(righttype));
 	procOid =
@@ -1701,9 +1701,9 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 		}
 	}
 
-	/*
-	 * Finally, look for plain comparison function.  Throw error if not found.
-	 */
+	//
+// Finally, look for plain comparison function.  Throw error if not found.
+//
 	if (!comparator.haveSortSupport)
 	{
 		MemoryContext oldcontext;
@@ -1727,16 +1727,16 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 							format_type_be(righttype))));
 		}
 
-		/*
-		 * The cached OComparator (see o_add_comparator_to_cache) lives in
-		 * descrCxt, but fmgr_info() sets finfo->fn_mcxt to whatever
-		 * CurrentMemoryContext happens to be at miss time.  Misses from
-		 * o_call_comparator() during execution arrive with a transient
-		 * per-query context current; leaving fn_mcxt pointing there would
-		 * dangle once that context is reset, and the next FunctionCall (which
-		 * lazily allocates fn_extra in fn_mcxt) would touch freed memory.
-		 * Switch to descrCxt so fn_mcxt matches the cache's lifetime.
-		 */
+		//
+// The cached OComparator (see o_add_comparator_to_cache) lives in
+// descrCxt, but fmgr_info() sets finfo->fn_mcxt to whatever
+// CurrentMemoryContext happens to be at miss time.  Misses from
+// o_call_comparator() during execution arrive with a transient
+// per-query context current; leaving fn_mcxt pointing there would
+// dangle once that context is reset, and the next FunctionCall (which
+// lazily allocates fn_extra in fn_mcxt) would touch freed memory.
+// Switch to descrCxt so fn_mcxt matches the cache's lifetime.
+//
 		oldcontext = MemoryContextSwitchTo(descrCxt);
 		fmgr_info(procOid, &comparator.finfo);
 		MemoryContextSwitchTo(oldcontext);
@@ -1745,13 +1745,13 @@ o_find_comparator(Oid opfamily, Oid lefttype, Oid righttype, Oid collation)
 	return o_add_comparator_to_cache(&comparator);
 }
 
-/*
- * Find opclass comparator in cache or create new one.
- *
- * Comparator support functions are resolved in opclass-owning database.
- * Use opclass->key.common.datoid explicitly to avoid cross-database proc
- * cache lookup when descriptor build is triggered from global eviction path.
- */
+//
+// Find opclass comparator in cache or create new one.
+//
+// Comparator support functions are resolved in opclass-owning database.
+// Use opclass->key.common.datoid explicitly to avoid cross-database proc
+// cache lookup when descriptor build is triggered from global eviction path.
+//
 static OComparator *
 o_find_opclass_comparator(OOpclass *opclass, Oid collation, Oid exacttype)
 {
@@ -1767,20 +1767,20 @@ o_find_opclass_comparator(OOpclass *opclass, Oid collation, Oid exacttype)
 	key.exacttype = OidIsValid(exacttype) ? exacttype : opclass->inputtype;
 	key.collation = collation;
 
-	/*
-	 * At first, try to find existing comparator in cache.
-	 */
+	//
+// At first, try to find existing comparator in cache.
+//
 	if ((result = o_find_cached_comparator(&key)) != NULL)
 		return result;
 
 	memset(&comparator, 0, sizeof(comparator));
 	comparator.key = key;
 
-	/*
-	 * If comparator isn't cached, then look for comparator with sort support
-	 * function.
-	 */
-	Assert(OidIsValid(opclass->key.common.datoid)); /* ssup may use SysCache */
+	//
+// If comparator isn't cached, then look for comparator with sort support
+// function.
+//
+	Assert(OidIsValid(opclass->key.common.datoid)); // ssup may use SysCache
 	o_set_syscache_hooks();
 	if (MyDatabaseId == opclass->key.common.datoid &&
 		OidIsValid(opclass->ssupOid))
@@ -1807,12 +1807,12 @@ o_find_opclass_comparator(OOpclass *opclass, Oid collation, Oid exacttype)
 		}
 	}
 
-	/*
-	 * Finally, look for plain comparison function.
-	 */
+	//
+// Finally, look for plain comparison function.
+//
 	if (!comparator.haveSortSupport)
 	{
-		/* See o_find_comparator() for why we switch to descrCxt. */
+		// See o_find_comparator() for why we switch to descrCxt.
 		MemoryContext oldcontext = MemoryContextSwitchTo(descrCxt);
 
 		o_proc_cache_fill_finfo(&comparator.finfo, opclass->cmpOid, opclass->key.common.datoid);
@@ -1824,20 +1824,20 @@ o_find_opclass_comparator(OOpclass *opclass, Oid collation, Oid exacttype)
 	return o_add_comparator_to_cache(&comparator);
 }
 
-/*
- * Tries to find a comparator in the cache.
- */
+//
+// Tries to find a comparator in the cache.
+//
 static inline OComparator *
 o_find_cached_comparator(OComparatorKey *key)
 {
 	OComparator *result;
 	bool		found;
 
-	/* compares with previous search */
+	// compares with previous search
 	if (memcmp(key, &lastkey, sizeof(OComparatorKey)) == 0)
 		return lastcmp;
 
-	/* try to find in the cache */
+	// try to find in the cache
 	result = hash_search(comparatorCache, key, HASH_FIND, &found);
 	if (found)
 	{
@@ -1849,9 +1849,9 @@ o_find_cached_comparator(OComparatorKey *key)
 	return NULL;
 }
 
-/*
- * Adds the comparator to the cache.
- */
+//
+// Adds the comparator to the cache.
+//
 static inline OComparator *
 o_add_comparator_to_cache(OComparator *comparator)
 {
@@ -1963,16 +1963,16 @@ o_call_comparator(OComparator *comparator, Datum left, Datum right)
 	{
 		Datum		cmp;
 
-		/* FIX: There should be a better way */
+		// FIX: There should be a better way
 		if (o_is_syscache_hooks_set() && comparator->finfo.fn_addr == fmgr_sql)
 		{
 			comparator->finfo.fn_addr = o_fmgr_sql;
 
-			/*
-			 * We must clear fn_extra because the layout of SQLFunctionCache
-			 * from postgres's fmgr_sql might differ from o_fmgr_sql's
-			 * version.
-			 */
+			//
+// We must clear fn_extra because the layout of SQLFunctionCache
+// from postgres's fmgr_sql might differ from o_fmgr_sql's
+// version.
+//
 			comparator->finfo.fn_extra = NULL;
 		}
 
@@ -1986,22 +1986,22 @@ o_call_comparator(OComparator *comparator, Datum left, Datum right)
 	return ret;
 }
 
-/* Info needed to use an old-style comparison function as a sort comparator */
+// Info needed to use an old-style comparison function as a sort comparator
 typedef struct
 {
-	FmgrInfo	flinfo;			/* lookup data for comparison function */
-	FunctionCallInfoBaseData fcinfo;	/* reusable callinfo structure */
+	FmgrInfo	flinfo;			// lookup data for comparison function
+	FunctionCallInfoBaseData fcinfo;	// reusable callinfo structure
 } SortShimExtra;
 
 #define SizeForSortShimExtra(nargs) (offsetof(SortShimExtra, fcinfo) + SizeForFunctionCallInfo(nargs))
 
-/*
- * Shim function for calling an old-style comparator
- *
- * This is essentially an inlined version of FunctionCall2Coll(), except
- * we assume that the FunctionCallInfoBaseData was already mostly set up by
- * PrepareSortSupportComparisonShim.
- */
+//
+// Shim function for calling an old-style comparator
+//
+// This is essentially an inlined version of FunctionCall2Coll(), except
+// we assume that the FunctionCallInfoBaseData was already mostly set up by
+// PrepareSortSupportComparisonShim.
+//
 static int
 comparison_shim(Datum x, Datum y, SortSupport ssup)
 {
@@ -2011,12 +2011,12 @@ comparison_shim(Datum x, Datum y, SortSupport ssup)
 	extra->fcinfo.args[0].value = x;
 	extra->fcinfo.args[1].value = y;
 
-	/* just for paranoia's sake, we reset isnull each time */
+	// just for paranoia's sake, we reset isnull each time
 	extra->fcinfo.isnull = false;
 
 	result = FunctionCallInvoke(&extra->fcinfo);
 
-	/* Check for null result, since caller is clearly not expecting one */
+	// Check for null result, since caller is clearly not expecting one
 	if (extra->fcinfo.isnull)
 		elog(ERROR, "function %u returned NULL", extra->flinfo.fn_oid);
 
@@ -2041,7 +2041,7 @@ o_finish_sort_support_function(OComparator *comparator, SortSupport ssup)
 
 		memcpy(&extra->flinfo, &comparator->finfo, sizeof(FmgrInfo));
 
-		/* We can initialize the callinfo just once and re-use it */
+		// We can initialize the callinfo just once and re-use it
 		InitFunctionCallInfoData(extra->fcinfo, &extra->flinfo, 2,
 								 ssup->ssup_collation, NULL, NULL);
 		extra->fcinfo.args[0].isnull = false;
@@ -2179,7 +2179,7 @@ orioledb_get_table_descrs(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -2220,7 +2220,7 @@ orioledb_get_index_descrs(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
@@ -2290,9 +2290,9 @@ o_add_invalidate_undo_item(ORelOids oids, uint32 flags)
 	release_undo_size(UndoLogSystem);
 }
 
-/*
- * Find exclusion function in cache or create new one.
- */
+//
+// Find exclusion function in cache or create new one.
+//
 static OExclusionFn *
 o_find_exclusion_op_fn(Oid exclusion_op)
 {
@@ -2310,7 +2310,7 @@ o_find_exclusion_op_fn(Oid exclusion_op)
 	o_set_syscache_hooks();
 	oprcode = o_operator_cache_get_oprcode(exclusion_op);
 
-	/* See o_find_comparator() for why we switch to descrCxt. */
+	// See o_find_comparator() for why we switch to descrCxt.
 	oldcontext = MemoryContextSwitchTo(descrCxt);
 	o_proc_cache_fill_finfo(&exclusion_fn.finfo, oprcode, MyDatabaseId);
 	MemoryContextSwitchTo(oldcontext);
@@ -2320,20 +2320,20 @@ o_find_exclusion_op_fn(Oid exclusion_op)
 	return o_add_exclusion_fn_to_cache(&exclusion_fn);
 }
 
-/*
- * Tries to find an exclusion function in the cache.
- */
+//
+// Tries to find an exclusion function in the cache.
+//
 static inline OExclusionFn *
 o_find_cached_exclusion_fn(Oid exclusion_op)
 {
 	OExclusionFn *result;
 	bool		found;
 
-	/* compares with previous search */
+	// compares with previous search
 	if (exclusion_op == last_exclusion_op)
 		return last_exclusion_fn;
 
-	/* try to find in the cache */
+	// try to find in the cache
 	result = hash_search(exclusionFnCache, &exclusion_op, HASH_FIND, &found);
 	if (found)
 	{
@@ -2345,9 +2345,9 @@ o_find_cached_exclusion_fn(Oid exclusion_op)
 	return NULL;
 }
 
-/*
- * Adds the exclusion function to the cache.
- */
+//
+// Adds the exclusion function to the cache.
+//
 static inline OExclusionFn *
 o_add_exclusion_fn_to_cache(OExclusionFn *exclusion_fn)
 {
@@ -2368,7 +2368,7 @@ o_call_exclusion_fn(OExclusionFn *exclusion_fn, Datum left, Datum right, Oid col
 	int			cmp;
 	Datum		ret;
 
-	/* FIX: There should be a better way */
+	// FIX: There should be a better way
 	if (o_is_syscache_hooks_set() && exclusion_fn->finfo.fn_addr == fmgr_sql)
 		exclusion_fn->finfo.fn_addr = o_fmgr_sql;
 	ret = FunctionCall2Coll(&exclusion_fn->finfo, collation, left, right);
@@ -2383,9 +2383,9 @@ reset_saving_inval_messages(void)
 	saving_inval_messages = false;
 }
 
-/*
- * Find hash function in cache or create new one.
- */
+//
+// Find hash function in cache or create new one.
+//
 static OHashFn *
 o_find_hash_fn(Oid hash_fn_oid, Oid datoid)
 {
@@ -2405,7 +2405,7 @@ o_find_hash_fn(Oid hash_fn_oid, Oid datoid)
 
 	o_set_syscache_hooks();
 
-	/* See o_find_comparator() for why we switch to descrCxt. */
+	// See o_find_comparator() for why we switch to descrCxt.
 	oldcontext = MemoryContextSwitchTo(descrCxt);
 	o_proc_cache_fill_finfo(&hash_fn.finfo, hash_fn_oid, datoid);
 	MemoryContextSwitchTo(oldcontext);
@@ -2415,20 +2415,20 @@ o_find_hash_fn(Oid hash_fn_oid, Oid datoid)
 	return o_add_hash_fn_to_cache(&hash_fn);
 }
 
-/*
- * Tries to find an hash function in the cache.
- */
+//
+// Tries to find an hash function in the cache.
+//
 static inline OHashFn *
 o_find_cached_hash_fn(OHashFnKey *key)
 {
 	OHashFn    *result;
 	bool		found;
 
-	/* compares with previous search */
+	// compares with previous search
 	if (memcmp(key, &last_hash_fn_key, sizeof(OHashFnKey)) == 0)
 		return last_hash_fn;
 
-	/* try to find in the cache */
+	// try to find in the cache
 	result = hash_search(hashFnCache, key, HASH_FIND, &found);
 	if (found)
 	{
@@ -2440,9 +2440,9 @@ o_find_cached_hash_fn(OHashFnKey *key)
 	return NULL;
 }
 
-/*
- * Adds the hash function to the cache.
- */
+//
+// Adds the hash function to the cache.
+//
 static inline OHashFn *
 o_add_hash_fn_to_cache(OHashFn *hash_fn)
 {
@@ -2466,7 +2466,7 @@ o_call_hash_fn(OHashFn *hash_fn, Oid collation, Datum val)
 
 	was_saving = o_start_saving_inval_messages();
 
-	/* FIX: There should be a better way */
+	// FIX: There should be a better way
 	if (o_is_syscache_hooks_set() && hash_fn->finfo.fn_addr == fmgr_sql)
 		hash_fn->finfo.fn_addr = o_fmgr_sql;
 	ret = FunctionCall1Coll(&hash_fn->finfo, collation, val);
@@ -2525,14 +2525,14 @@ ResOwnerPrintOTableDescr(Datum res)
 
 #else
 
-/*
- * PG16 lacks the per-owner ResourceOwnerRemember API, so we rely on the
- * global ResourceReleaseCallback mechanism.  The callback fires for every
- * ResourceOwner release in the tree, so we maintain our own list of
- * (owner, descr) pairs and filter by CurrentResourceOwner to only decrement
- * refcnt when the matching owner is being released.  A single callback is
- * registered once per backend on the first Remember call.
- */
+//
+// PG16 lacks the per-owner ResourceOwnerRemember API, so we rely on the
+// global ResourceReleaseCallback mechanism.  The callback fires for every
+// ResourceOwner release in the tree, so we maintain our own list of
+// (owner, descr) pairs and filter by CurrentResourceOwner to only decrement
+// refcnt when the matching owner is being released.  A single callback is
+// registered once per backend on the first Remember call.
+//
 typedef struct OTableDescrResOwnerItem
 {
 	struct OTableDescrResOwnerItem *next;
@@ -2662,7 +2662,7 @@ ResOwnerPrintOIndexDescr(Datum res)
 
 #else
 
-/* See comment on OTableDescr's PG16 implementation above. */
+// See comment on OTableDescr's PG16 implementation above.
 typedef struct OIndexDescrResOwnerItem
 {
 	struct OIndexDescrResOwnerItem *next;

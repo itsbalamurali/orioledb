@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * o_sys_cache.c
- *		Generic interface for sys cache duplicate trees.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_sys_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_sys_cache.c
+// Generic interface for sys cache duplicate trees.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_sys_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -58,16 +58,16 @@ static void orioledb_setup_syscache_hooks(void);
 
 typedef struct OSysCacheHashTreeEntry
 {
-	OSysCache  *sys_cache;		/* If NULL only link stored */
+	OSysCache  *sys_cache;		// If NULL only link stored
 	Pointer		entry;
 } OSysCacheHashTreeEntry;
 typedef struct OSysCacheHashEntry
 {
 	OSysCacheHashKey key;
-	List	   *tree_entries;	/* list of OSysCacheHashTreeEntry-s that used
-								 * because we store entries for all sys caches
-								 * in same fastcache for simpler invalidation
-								 * of dependent objects */
+	List	   *tree_entries;	// list of OSysCacheHashTreeEntry-s that used
+// because we store entries for all sys caches
+// in same fastcache for simpler invalidation
+// of dependent objects
 } OSysCacheHashEntry;
 
 typedef struct OCacheIdMapEntry
@@ -131,9 +131,9 @@ static Oid	save_userid;
 static int	save_sec_context;
 static int	o_sys_cache_hooks_depth = 0;
 
-/*
- * Initializes the enum B-tree memory.
- */
+//
+// Initializes the enum B-tree memory.
+//
 void
 o_sys_caches_init(void)
 {
@@ -206,10 +206,10 @@ int4hashfast(OSysCacheKey *key, int att_num)
 static uint32
 texthashfast(OSysCacheKey *key, int att_num)
 {
-	/*
-	 * The use of DEFAULT_COLLATION_OID is fairly arbitrary here.  We just
-	 * want to take the fast "deterministic" path in texteq().
-	 */
+	//
+// The use of DEFAULT_COLLATION_OID is fairly arbitrary here.  We just
+// want to take the fast "deterministic" path in texteq().
+//
 	return DatumGetInt32(DirectFunctionCall1Coll(hashtext,
 												 DEFAULT_COLLATION_OID,
 												 key->keys[att_num]));
@@ -265,14 +265,14 @@ set_hash_func(Oid keytype, O_CCHashFN *hashfunc)
 			break;
 		default:
 			elog(FATAL, "type %u not supported as catcache key", keytype);
-			*hashfunc = NULL;	/* keep compiler quiet */
+			*hashfunc = NULL;	// keep compiler quiet
 			break;
 	}
 }
 
-/*
- * Initializes the enum B-tree memory.
- */
+//
+// Initializes the enum B-tree memory.
+//
 OSysCache *
 o_create_sys_cache(int sys_tree_num, bool is_toast,
 				   Oid cc_indexoid, int cacheId, int nkeys,
@@ -319,11 +319,11 @@ o_create_sys_cache(int sys_tree_num, bool is_toast,
 	return sys_cache;
 }
 
-/*
- *		CatalogCacheComputeHashValue
- *
- * Compute the hash value associated with a given set of lookup keys
- */
+//
+// CatalogCacheComputeHashValue
+//
+// Compute the hash value associated with a given set of lookup keys
+//
 static OSysCacheHashKey
 compute_hash_value(O_CCHashFN *cc_hashfunc, int nkeys, OSysCacheKey *key)
 {
@@ -337,19 +337,19 @@ compute_hash_value(O_CCHashFN *cc_hashfunc, int nkeys, OSysCacheKey *key)
 
 			hashValue ^= oneHash << 24;
 			hashValue ^= oneHash >> 8;
-			/* FALLTHROUGH */
+			// FALLTHROUGH
 		case 3:
 			oneHash = (cc_hashfunc[2]) (key, 2);
 
 			hashValue ^= oneHash << 16;
 			hashValue ^= oneHash >> 16;
-			/* FALLTHROUGH */
+			// FALLTHROUGH
 		case 2:
 			oneHash = (cc_hashfunc[1]) (key, 1);
 
 			hashValue ^= oneHash << 8;
 			hashValue ^= oneHash >> 24;
-			/* FALLTHROUGH */
+			// FALLTHROUGH
 		case 1:
 			oneHash = (cc_hashfunc[0]) (key, 0);
 
@@ -441,7 +441,7 @@ o_sys_cache_search(OSysCache *sys_cache, int nkeys, OSysCacheKey *key)
 	cur_fast_cache_key = compute_hash_value(sys_cache->cc_hashfunc,
 											sys_cache->nkeys, key);
 
-	/* fast search */
+	// fast search
 	if (!memcmp(&cur_fast_cache_key, &sys_cache->last_fast_cache_key,
 				sizeof(OSysCacheHashKey)) &&
 		sys_cache->last_fast_cache_entry)
@@ -456,7 +456,7 @@ o_sys_cache_search(OSysCache *sys_cache, int nkeys, OSysCacheKey *key)
 			return sys_cache->last_fast_cache_entry;
 	}
 
-	/* cache search */
+	// cache search
 	fast_cache_entry = (OSysCacheHashEntry *)
 		hash_search(sys_cache->fast_cache, &cur_fast_cache_key, HASH_ENTER,
 					&found);
@@ -653,7 +653,7 @@ o_sys_cache_unlock(OSysCache *sys_cache, OSysCacheKey *key, int lockmode)
 
 static
 
-/* Non-key fields of entry should be filled before call */
+// Non-key fields of entry should be filled before call
 bool
 o_sys_cache_add(OSysCache *sys_cache, OSysCacheKey *key, Pointer entry)
 {
@@ -677,11 +677,11 @@ o_sys_cache_add(OSysCache *sys_cache, OSysCacheKey *key, Pointer entry)
 					Pointer		new_entry;
 					int			new_entry_len;
 
-					/*
-					 * In the code below we storing fields with Name type at
-					 * the end of entry. NAMEOID key fields now only used with
-					 * non-toast o_enum_cache
-					 */
+					//
+// In the code below we storing fields with Name type at
+// the end of entry. NAMEOID key fields now only used with
+// non-toast o_enum_cache
+//
 					Assert(!sys_cache->is_toast);
 					if (key_len == -1 && entry_len == -1)
 					{
@@ -839,10 +839,10 @@ o_sys_cache_update(OSysCache *sys_cache, Pointer updated_entry)
 				O_TUPLE_SET_NULL(nulltup);
 				Assert(IS_SYS_TREE_OIDS(desc->oids));
 
-				/*
-				 * no version is necessary here for system trees other than
-				 * OTable
-				 */
+				//
+// no version is necessary here for system trees other than
+// OTable
+//
 				o_wal_update(desc, tup, nulltup, REPLICA_IDENTITY_DEFAULT, O_TABLE_INVALID_VERSION);
 			}
 		}
@@ -908,9 +908,9 @@ o_sys_cache_add_if_needed(OSysCache *sys_cache, OSysCacheKey *key, Pointer arg)
 
 	Assert(entry);
 
-	/*
-	 * All done, now try to insert into B-tree.
-	 */
+	//
+// All done, now try to insert into B-tree.
+//
 	inserted = o_sys_cache_add(sys_cache, key, entry);
 	Assert(inserted);
 	o_sys_cache_unlock(sys_cache, key, AccessExclusiveLock);
@@ -931,7 +931,7 @@ o_sys_cache_update_if_needed(OSysCache *sys_cache, OSysCacheKey *key,
 	entry = o_sys_cache_search(sys_cache, sys_cache->nkeys, key);
 	if (entry == NULL)
 	{
-		/* it's not exist in B-tree */
+		// it's not exist in B-tree
 		return;
 	}
 
@@ -1431,7 +1431,7 @@ o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 		opclass = GetDefaultOpClass(typoid, BTREE_AM_OID);
 
 	oldcxt = MemoryContextSwitchTo(CurTransactionContext);
-	/* cppcheck-suppress unknownEvaluationOrder */
+	// cppcheck-suppress unknownEvaluationOrder
 	oids = list_make2_oid(typoid, opclass);
 	Assert(processed);
 	if (*processed && list_member(*processed, oids))
@@ -1548,12 +1548,12 @@ o_cache_type_safe(Oid datoid, Oid typoid, Oid opclass, XLogRecPtr insert_lsn,
 		ReleaseSysCache(tuple);
 }
 
-/*
- * Find a hash function for the type given its btree opclass.  Looks up the
- * equality operator of the btree opclass, then searches for a hash opclass
- * that uses the same equality operator, and returns the hash procedure from
- * that hash opclass.  Returns InvalidOid if no matching hash procedure exists.
- */
+//
+// Find a hash function for the type given its btree opclass.  Looks up the
+// equality operator of the btree opclass, then searches for a hash opclass
+// that uses the same equality operator, and returns the hash procedure from
+// that hash opclass.  Returns InvalidOid if no matching hash procedure exists.
+//
 Oid
 o_get_hash_proc_by_btree_opclass(Oid btreeOpclass)
 {
@@ -1779,10 +1779,10 @@ o_validate_composite_type(Oid typoid, Oid opclass)
 				 errdetail("not allowing it here, because any inserts in such index will break recovery for orioledb tables")));
 }
 
-/*
- * Inserts type elements for all fields of the o_table to the orioledb sys
- * cache.
- */
+//
+// Inserts type elements for all fields of the o_table to the orioledb sys
+// cache.
+//
 void
 o_cache_index_types(OTable *o_table, OTableIndex *o_table_index)
 {
@@ -1809,9 +1809,9 @@ o_cache_index_types(OTable *o_table, OTableIndex *o_table_index)
 
 }
 
-/*
- * Inserts opclasses for all fields of the o_table to the opclass B-tree.
- */
+//
+// Inserts opclasses for all fields of the o_table to the opclass B-tree.
+//
 void
 o_cache_table_types(OTable *o_table)
 {
@@ -1830,18 +1830,18 @@ o_cache_table_types(OTable *o_table)
 
 	o_database_cache_add_if_needed(Template1DbOid, Template1DbOid, cur_lsn, NULL);
 
-	/*
-	 * Inserts opclasses for TOAST index.
-	 */
+	//
+// Inserts opclasses for TOAST index.
+//
 	o_cache_type(datoid, INT2OID, InvalidOid, cur_lsn);
 	o_collect_function_by_oid(F_HASHINT2, InvalidOid, &processed);
 
 	o_cache_type(datoid, INT4OID, InvalidOid, cur_lsn);
 	o_collect_function_by_oid(F_HASHINT4, InvalidOid, &processed);
 
-	/*
-	 * Inserts opclass for default index.
-	 */
+	//
+// Inserts opclass for default index.
+//
 	Assert(o_table->nindices == 0);
 	o_cache_type(datoid, TIDOID, InvalidOid, cur_lsn);
 	o_collect_function_by_oid(F_HASHTID, InvalidOid, &processed);
@@ -1857,19 +1857,19 @@ heap_to_catctup(CatCache *cache, TupleDesc cc_tupdesc, HeapTuple tuple,
 	MemoryContext oldcxt;
 	int			i;
 
-	/*
-	 * If there are any out-of-line toasted fields in the tuple, expand them
-	 * in-line. This saves cycles during later use of the catcache entry, and
-	 * also protects us against the possibility of the toast tuples being
-	 * freed before we attempt to fetch them, in case of something using a
-	 * slightly stale catcache entry.
-	 */
+	//
+// If there are any out-of-line toasted fields in the tuple, expand them
+// in-line. This saves cycles during later use of the catcache entry, and
+// also protects us against the possibility of the toast tuples being
+// freed before we attempt to fetch them, in case of something using a
+// slightly stale catcache entry.
+//
 	if (HeapTupleHasExternal(tuple))
 		dtp = toast_flatten_tuple(tuple, cc_tupdesc);
 	else
 		dtp = tuple;
 
-	/* Allocate memory for CatCTup and the cached tuple in one go */
+	// Allocate memory for CatCTup and the cached tuple in one go
 	oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
 
 	ct = (CatCTup *) palloc0(sizeof(CatCTup) + MAXIMUM_ALIGNOF + dtp->t_len);
@@ -1878,7 +1878,7 @@ heap_to_catctup(CatCache *cache, TupleDesc cc_tupdesc, HeapTuple tuple,
 	ct->tuple.t_tableOid = dtp->t_tableOid;
 	ct->tuple.t_data = (HeapTupleHeader) MAXALIGN(((char *) ct) +
 												  sizeof(CatCTup));
-	/* copy tuple contents */
+	// copy tuple contents
 	memcpy((char *) ct->tuple.t_data, (const char *) dtp->t_data,
 		   dtp->t_len);
 	MemoryContextSwitchTo(oldcxt);
@@ -1886,7 +1886,7 @@ heap_to_catctup(CatCache *cache, TupleDesc cc_tupdesc, HeapTuple tuple,
 	if (dtp != tuple)
 		heap_freetuple(dtp);
 
-	/* extract keys - they'll point into the tuple if not by-value */
+	// extract keys - they'll point into the tuple if not by-value
 	for (i = 0; i < cache->cc_nkeys; i++)
 	{
 		Datum		atp;
@@ -1898,14 +1898,14 @@ heap_to_catctup(CatCache *cache, TupleDesc cc_tupdesc, HeapTuple tuple,
 		ct->keys[i] = atp;
 	}
 
-	/*
-	 * Finish initializing the CatCTup header, and add it to the cache's
-	 * linked list and counts.
-	 */
+	//
+// Finish initializing the CatCTup header, and add it to the cache's
+// linked list and counts.
+//
 	ct->ct_magic = CT_MAGIC;
 	ct->my_cache = cache;
 
-	/* immediately set the refcount to 1 */
+	// immediately set the refcount to 1
 	if (refcount)
 	{
 		ResourceOwnerEnlargeCatCacheRefs(CurrentResourceOwner);
@@ -2333,15 +2333,15 @@ o_sys_cache_tup_length(BTreeDescr *desc, OTuple tuple)
 	return key_len + data_len;
 }
 
-/*
- * Comparison function for non-TOAST sys cache B-tree.
- *
- * If none of the arguments is BTreeKeyBound it compares by both
- * oid and lsn. It make possible to insert values with same oid.
- * Else it compares only by oid, which is used by other operations than
- * insert, to find all rows with exact oid.
- * If key kind is not BTreeKeyBound it expects that OTuple passed.
- */
+//
+// Comparison function for non-TOAST sys cache B-tree.
+//
+// If none of the arguments is BTreeKeyBound it compares by both
+// oid and lsn. It make possible to insert values with same oid.
+// Else it compares only by oid, which is used by other operations than
+// insert, to find all rows with exact oid.
+// If key kind is not BTreeKeyBound it expects that OTuple passed.
+//
 int
 o_sys_cache_cmp(BTreeDescr *desc, void *p1, BTreeKeyType k1, void *p2,
 				BTreeKeyType k2)
@@ -2421,9 +2421,9 @@ o_sys_cache_keys_to_str(StringInfo buf, OSysCache *sys_cache,
 	appendStringInfo(buf, ")");
 }
 
-/*
- * Generic non-TOAST sys cache key print function for o_print_btree_pages()
- */
+//
+// Generic non-TOAST sys cache key print function for o_print_btree_pages()
+//
 void
 o_sys_cache_key_print(BTreeDescr *desc, StringInfo buf, OTuple key_tup,
 					  Pointer arg)
@@ -2432,7 +2432,7 @@ o_sys_cache_key_print(BTreeDescr *desc, StringInfo buf, OTuple key_tup,
 	uint32		id,
 				off;
 
-	/* Decode ID and offset */
+	// Decode ID and offset
 	id = (uint32) (key->common.lsn >> 32);
 	off = (uint32) key->common.lsn;
 
@@ -2530,13 +2530,13 @@ o_sys_cache_toast_chunk_length(BTreeDescr *desc, OTuple tuple)
 		common->dataLength;
 }
 
-/*
- * Comparison function for TOAST sys cache B-tree.
- *
- * If key kind BTreeKeyBound it expects OSysCacheToastKeyBound.
- * Otherwise it expects that OTuple passed.
- * It wraps OSysCacheToastChunkKey to OTuple to pass it to o_sys_cache_cmp.
- */
+//
+// Comparison function for TOAST sys cache B-tree.
+//
+// If key kind BTreeKeyBound it expects OSysCacheToastKeyBound.
+// Otherwise it expects that OTuple passed.
+// It wraps OSysCacheToastChunkKey to OTuple to pass it to o_sys_cache_cmp.
+//
 int
 o_sys_cache_toast_cmp(BTreeDescr *desc, void *p1, BTreeKeyType k1,
 					  void *p2, BTreeKeyType k2)
@@ -2567,8 +2567,8 @@ o_sys_cache_toast_cmp(BTreeDescr *desc, void *p1, BTreeKeyType k1,
 		chunknum1 = kb1->common.chunknum;
 		memcpy(key1->keys, kb1->key->keys, sizeof(Datum) * nkeys);
 		if (kb1->lsn_cmp)
-			k1 = BTreeKeyNonLeafKey;	/* make o_sys_cache_cmp to compare by
-										 * lsn */
+			k1 = BTreeKeyNonLeafKey;	// make o_sys_cache_cmp to compare by
+// lsn
 		else
 			sys_cache_key_cmp_arg1 = (Pointer) &_bound;
 	}
@@ -2597,8 +2597,8 @@ o_sys_cache_toast_cmp(BTreeDescr *desc, void *p1, BTreeKeyType k1,
 		chunknum2 = kb2->common.chunknum;
 		memcpy(key2->keys, kb2->key->keys, sizeof(Datum) * nkeys);
 		if (kb2->lsn_cmp)
-			k2 = BTreeKeyNonLeafKey;	/* make o_sys_cache_cmp to compare by
-										 * lsn */
+			k2 = BTreeKeyNonLeafKey;	// make o_sys_cache_cmp to compare by
+// lsn
 		else
 			sys_cache_key_cmp_arg2 = (Pointer) &_bound;
 	}
@@ -2630,9 +2630,9 @@ o_sys_cache_toast_cmp(BTreeDescr *desc, void *p1, BTreeKeyType k1,
 	return 0;
 }
 
-/*
- * Generic TOAST sys cache key print function for o_print_btree_pages()
- */
+//
+// Generic TOAST sys cache key print function for o_print_btree_pages()
+//
 void
 o_sys_cache_toast_key_print(BTreeDescr *desc, StringInfo buf,
 							OTuple tup, Pointer arg)
@@ -2659,9 +2659,9 @@ o_sys_cache_toast_key_to_jsonb(BTreeDescr *desc, OTuple tup,
 	return pushJsonbValue(state, WJB_END_OBJECT, NULL);
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_sys_cache_toast_tup_print(BTreeDescr *desc, StringInfo buf,
 							OTuple tup, Pointer arg)

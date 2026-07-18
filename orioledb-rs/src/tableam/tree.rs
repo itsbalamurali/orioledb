@@ -1,17 +1,17 @@
-/*-------------------------------------------------------------------------
- *
- * tree.c
- *		Implementation BTree interface methods for OrioleDB tables and
- *		related routines.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/tree.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// tree.c
+// Implementation BTree interface methods for OrioleDB tables and
+// related routines.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/tree.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -185,7 +185,7 @@ o_idx_len(BTreeDescr *desc, OTuple tuple, OLengthType type)
 	}
 }
 
-/* creates index tuple from current index tuple */
+// creates index tuple from current index tuple
 static OTuple
 o_create_key_tuple(BTreeDescr *desc, OTuple tuple, Pointer data,
 				   OIndexType type, bool keep_version)
@@ -229,12 +229,12 @@ o_create_key_tuple(BTreeDescr *desc, OTuple tuple, Pointer data,
 
 #define HASH_INITIAL (0x9e3779b9)
 
-/*
- * Useful links:
- *
- * http://burtleburtle.net/bob/hash/index.html
- * http://burtleburtle.net/bob/hash/doobs.html
- */
+//
+// Useful links:
+//
+// http://burtleburtle.net/bob/hash/index.html
+// http://burtleburtle.net/bob/hash/doobs.html
+//
 static inline uint32
 hash_combine_mix(char *key, uint32 len, uint32 hash)
 {
@@ -251,10 +251,10 @@ hash_combine_mix(char *key, uint32 len, uint32 hash)
 #endif
 		}
 
-		/*
-		 * else helps us to get the same values for a key tuple without
-		 * fetching datums from the tuple, see o_hash_key()
-		 */
+		//
+// else helps us to get the same values for a key tuple without
+// fetching datums from the tuple, see o_hash_key()
+//
 	}
 
 	return hash;
@@ -270,13 +270,13 @@ hash_final(uint32 hash)
 #endif
 }
 
-/*
- * It's ok with inline and hash variable declaration as:
- *
- * register uint32 hash;
- *
- * Checked with gcc -O2
- */
+//
+// It's ok with inline and hash variable declaration as:
+//
+// register uint32 hash;
+//
+// Checked with gcc -O2
+//
 static inline uint32
 hash_combine_mix_field(OIndexDescr *idx, TupleDesc tupdesc,
 					   OTupleFixedFormatSpec *spec,
@@ -416,7 +416,7 @@ o_idx_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
 	else if (kind == BTreeKeyNonLeafKey)
 		return o_hash_key((OIndexDescr *) desc->arg, tuple);
 	else
-		return 0;				/* keep compiler quiet */
+		return 0;				// keep compiler quiet
 }
 
 static uint32
@@ -429,13 +429,13 @@ o_toast_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind)
 	else if (kind == BTreeKeyNonLeafKey)
 		return o_hash_key_from_toast_key((OIndexDescr *) desc->arg, tuple);
 	else
-		return 0;				/* keep compiler quiet */
+		return 0;				// keep compiler quiet
 }
 
-/*
- * Provide hash for unique index insert.  It mixes tree oids with unique
- * fields.
- */
+//
+// Provide hash for unique index insert.  It mixes tree oids with unique
+// fields.
+//
 static uint32
 o_idx_unique_hash(BTreeDescr *desc, OTuple tuple)
 {
@@ -459,7 +459,7 @@ o_idx_unique_hash(BTreeDescr *desc, OTuple tuple)
 	return hash;
 }
 
-/* creates index tuple from table tuple for primary index */
+// creates index tuple from table tuple for primary index
 static OTuple
 o_tuple_make_key(BTreeDescr *desc, OTuple tuple, Pointer data,
 				 bool keep_version, bool *allocated)
@@ -476,7 +476,7 @@ o_sidx_tuple_make_key(BTreeDescr *desc, OTuple tuple, Pointer data,
 	return o_create_key_tuple(desc, tuple, data, oIndexRegular, keep_version);
 }
 
-/* fills key bound from tuple or index tuple that belongs to current BTree */
+// fills key bound from tuple or index tuple that belongs to current BTree
 void
 o_fill_key_bound(OIndexDescr *id, OTuple tuple,
 				 BTreeKeyType keyType, OBTreeKeyBound *bound)
@@ -516,11 +516,11 @@ o_fill_key_bound(OIndexDescr *id, OTuple tuple,
 	}
 }
 
-/*
- * Fills bridge index key bound from bridge index tuple.
- *
- * No existing callers.
- */
+//
+// Fills bridge index key bound from bridge index tuple.
+//
+// No existing callers.
+//
 void
 o_fill_bridge_index_key_bound(BTreeDescr *secondary, OTuple tuple, OBTreeKeyBound *bound)
 {
@@ -538,7 +538,7 @@ o_fill_bridge_index_key_bound(BTreeDescr *secondary, OTuple tuple, OBTreeKeyBoun
 	bound->keys[0].exclusion_fn = NULL;
 }
 
-/* fills primary index key bound from tuple that belongs secondary index */
+// fills primary index key bound from tuple that belongs secondary index
 void
 o_fill_pindex_tuple_key_bound(BTreeDescr *desc,
 							  OTuple tup,
@@ -782,7 +782,7 @@ o_idx_cmp_value_bounds(OBTreeValueBound *bound1,
 					   OIndexField *field,
 					   bool *equal)
 {
-	/* Keep clang analyzer quiet */
+	// Keep clang analyzer quiet
 #ifndef __clang_analyzer__
 	int			res;
 
@@ -792,7 +792,7 @@ o_idx_cmp_value_bounds(OBTreeValueBound *bound1,
 	if ((bound1->flags & O_VALUE_BOUND_NO_VALUE) == 0 &&
 		(bound2->flags & O_VALUE_BOUND_NO_VALUE) == 0)
 	{
-		/* Handle normal values */
+		// Handle normal values
 		if ((bound1->flags & bound2->flags & O_VALUE_BOUND_COERCIBLE) &&
 			bound1->value == bound2->value)
 		{
@@ -837,7 +837,7 @@ o_idx_cmp_value_bounds(OBTreeValueBound *bound1,
 	else if ((bound1->flags & O_VALUE_BOUND_UNBOUNDED) ||
 			 (bound2->flags & O_VALUE_BOUND_UNBOUNDED))
 	{
-		/* Handle infinities */
+		// Handle infinities
 		if ((bound1->flags & O_VALUE_BOUND_UNBOUNDED) &&
 			(bound2->flags & O_VALUE_BOUND_UNBOUNDED))
 		{
@@ -856,7 +856,7 @@ o_idx_cmp_value_bounds(OBTreeValueBound *bound1,
 	else if ((bound1->flags & O_VALUE_BOUND_NULL) ||
 			 (bound2->flags & O_VALUE_BOUND_NULL))
 	{
-		/* Handle nulls */
+		// Handle nulls
 		if ((bound1->flags & O_VALUE_BOUND_NULL) &&
 			(bound2->flags & O_VALUE_BOUND_NULL))
 			res = cmp_inclusive2(bound1->flags, bound2->flags);
@@ -882,7 +882,7 @@ o_idx_cmp(BTreeDescr *desc,
 		  void *p1, BTreeKeyType keyType1,
 		  void *p2, BTreeKeyType keyType2)
 {
-	/* Keep clang analyzer quiet */
+	// Keep clang analyzer quiet
 #ifndef __clang_analyzer__
 	OIndexDescr *id = o_get_tree_def(desc);
 	OBTreeKeyBound *key1,

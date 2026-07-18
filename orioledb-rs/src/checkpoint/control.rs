@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * control.c
- *		Routines to work with control file.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/checkpoint/control.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// control.c
+// Routines to work with control file.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/checkpoint/control.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -23,11 +23,11 @@
 
 #include "utils/wait_event.h"
 
-/*
- * Read checkpoint control file data from the disk.
- *
- * Returns false if the control file doesn't exist.
- */
+//
+// Read checkpoint control file data from the disk.
+//
+// Returns false if the control file doesn't exist.
+//
 bool
 get_checkpoint_control_data(CheckpointControl *control)
 {
@@ -37,10 +37,10 @@ get_checkpoint_control_data(CheckpointControl *control)
 	controlFile = BasicOpenFile(CONTROL_FILENAME, O_RDONLY | PG_BINARY);
 	if (controlFile < 0)
 	{
-		/*
-		 * If we couldn't find the control file the we consider this case as
-		 * if there wasn't any checkpoint before.
-		 */
+		//
+// If we couldn't find the control file the we consider this case as
+// if there wasn't any checkpoint before.
+//
 		if (errno == ENOENT)
 			return false;
 
@@ -52,11 +52,11 @@ get_checkpoint_control_data(CheckpointControl *control)
 
 	readBytes = read(controlFile, (Pointer) control, sizeof(CheckpointControl));
 
-	/*
-	 * Handle special case when the control file is empty.  We consider this
-	 * case as if there wasn't created the control file and checkpoint never
-	 * finished successfully.
-	 */
+	//
+// Handle special case when the control file is empty.  We consider this
+// case as if there wasn't created the control file and checkpoint never
+// finished successfully.
+//
 	if (readBytes == 0)
 		return false;
 	else if (readBytes != sizeof(CheckpointControl))
@@ -72,11 +72,11 @@ get_checkpoint_control_data(CheckpointControl *control)
 	return true;
 }
 
-/*
- * Check checkpoint control data
- *   - Check CRC
- *   - Check control parameters
- */
+//
+// Check checkpoint control data
+// - Check CRC
+// - Check control parameters
+//
 void
 check_checkpoint_control(CheckpointControl *control)
 {
@@ -91,12 +91,12 @@ check_checkpoint_control(CheckpointControl *control)
 
 	if (control->controlFileVersion != ORIOLEDB_CHECKPOINT_CONTROL_VERSION)
 	{
-		/*
-		 * Now we have only one control version. When we bump
-		 * ORIOLEDB_CHECKPOINT_CONTROL_VERSION this is the place to write
-		 * routine for on-the-flight convesion of data read from control file
-		 * to CheckpointControl contents.
-		 */
+		//
+// Now we have only one control version. When we bump
+// ORIOLEDB_CHECKPOINT_CONTROL_VERSION this is the place to write
+// routine for on-the-flight convesion of data read from control file
+// to CheckpointControl contents.
+//
 		ereport(FATAL,
 				(errmsg("checkpoint files are incompatible with server"),
 				 errdetail("OrioleDB checkpount control file was initialized with version %d,"
@@ -121,9 +121,9 @@ check_checkpoint_control(CheckpointControl *control)
 						   orioledb_s3_mode ? "on" : "off")));
 }
 
-/*
- * Write checkpoint control file to the disk (and sync).
- */
+//
+// Write checkpoint control file to the disk (and sync).
+//
 void
 write_checkpoint_control(CheckpointControl *control)
 {

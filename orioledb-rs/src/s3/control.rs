@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * control.c
- *		Functions to work with S3 control and lock files.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/control.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// control.c
+// Functions to work with S3 control and lock files.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/control.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -32,10 +32,10 @@
 
 #define LOCK_FILENAME		ORIOLEDB_DATA_DIR "/s3_lock"
 
-/*
- * Read local CheckpointControl file and the file from S3 and check if the
- * S3 bucket compatible with the local instance.
- */
+//
+// Read local CheckpointControl file and the file from S3 and check if the
+// S3 bucket compatible with the local instance.
+//
 bool
 s3_check_control(const char **errmsgp, const char **errdetailp)
 {
@@ -51,21 +51,21 @@ s3_check_control(const char **errmsgp, const char **errdetailp)
 	objectname = psprintf("data/%s", CONTROL_FILENAME);
 	initStringInfo(&buf);
 
-	/*
-	 * If orioledb_data/control file doesn't exist on the S3 bucket we assume
-	 * that it is empty and it is safe to use it without further checks.
-	 */
+	//
+// If orioledb_data/control file doesn't exist on the S3 bucket we assume
+// that it is empty and it is safe to use it without further checks.
+//
 	if (s3_get_object(objectname, &buf, true) == S3_RESPONSE_NOT_FOUND)
 	{
 		res = true;
 		goto cleanup;
 	}
 
-	/*
-	 * If there is no orioledb_data/control file locally (in case if
-	 * CHECKPOINT didn't happen yet) but it exists on the S3 bucket then the
-	 * local instance isn't consistent with the S3 bucket.
-	 */
+	//
+// If there is no orioledb_data/control file locally (in case if
+// CHECKPOINT didn't happen yet) but it exists on the S3 bucket then the
+// local instance isn't consistent with the S3 bucket.
+//
 	if (!control_res)
 	{
 		*errmsgp = psprintf("OrioleDB can be incompatible with the S3 bucket "
@@ -137,9 +137,9 @@ cleanup:
 	return res;
 }
 
-/*
- * Try to put a lock file into S3 bucket using conditional write.
- */
+//
+// Try to put a lock file into S3 bucket using conditional write.
+//
 void
 s3_put_lock_file(void)
 {
@@ -176,10 +176,10 @@ s3_put_lock_file(void)
 					(errcode_for_file_access(),
 					 errmsg("could not open file \"%s\": %m", LOCK_FILENAME)));
 
-		/*
-		 * Calculate a lock identifier similar to how PostgreSQL calculates a
-		 * system identifier.
-		 */
+		//
+// Calculate a lock identifier similar to how PostgreSQL calculates a
+// system identifier.
+//
 		gettimeofday(&tv, NULL);
 		lock_identifier = ((uint64) tv.tv_sec) << 32;
 		lock_identifier |= ((uint64) tv.tv_usec) << 12;
@@ -237,11 +237,11 @@ retry_put:
 		StringInfoData buf;
 		uint64		s3_lock_identifier;
 
-		/*
-		 * The lock file exists on the S3 bucket. In this case check its lock
-		 * identifier. If it is same as the local identifier then proceed with
-		 * startup.
-		 */
+		//
+// The lock file exists on the S3 bucket. In this case check its lock
+// identifier. If it is same as the local identifier then proceed with
+// startup.
+//
 		initStringInfo(&buf);
 
 		s3_get_object(objectname, &buf, false);
@@ -277,9 +277,9 @@ retry_put:
 	pfree(objectname);
 }
 
-/*
- * Delete a lock file from an S3 bucket.
- */
+//
+// Delete a lock file from an S3 bucket.
+//
 void
 s3_delete_lock_file(void)
 {

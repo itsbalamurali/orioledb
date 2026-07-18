@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_class_cache.c
- *		Routines for orioledb class sys cache.
- *
- * class_cache is tree that contains cached range metadata from pg_type.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_class_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_class_cache.c
+// Routines for orioledb class sys cache.
+//
+// class_cache is tree that contains cached range metadata from pg_type.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_class_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -66,9 +66,9 @@ static OSysCacheFuncs class_cache_funcs =
 	.toast_deserialize_entry = o_class_cache_deserialize_entry
 };
 
-/*
- * Initializes the record sys cache memory.
- */
+//
+// Initializes the record sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(class_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -93,7 +93,7 @@ o_class_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 
 	prev_context = MemoryContextSwitchTo(class_cache->mcxt);
 	len = rel->rd_att->natts * sizeof(FormData_pg_attribute);
-	if (o_class != NULL)		/* Existed o_class updated */
+	if (o_class != NULL)		// Existed o_class updated
 	{
 		o_class->attrs = (FormData_pg_attribute *) repalloc(o_class->attrs,
 															len);
@@ -226,7 +226,7 @@ o_class_cache_search_tupdesc(Oid cc_reloid)
 #if PG_VERSION_NUM >= 180000
 		Form_pg_attribute *attrs;
 
-		/* Prepare the pointer array in CurrentMemoryContext */
+		// Prepare the pointer array in CurrentMemoryContext
 		attrs = (Form_pg_attribute *) palloc(o_class->natts * sizeof(Form_pg_attribute));
 		for (int i = 0; i < o_class->natts; i++)
 			attrs[i] = &o_class->attrs[i];
@@ -263,7 +263,7 @@ o_class_cache_preload_for_column(Oid typoid)
 
 	found = o_type_cache_get_typtype(typoid, &typtype);
 
-	/* if not found this is probably an array type */
+	// if not found this is probably an array type
 	if (found)
 	{
 		o_class = o_class_cache_search(datoid, TypeRelationId, cur_lsn,

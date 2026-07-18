@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * indices.c
- *		Indices routines
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/indices.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// indices.c
+// Indices routines
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/indices.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -62,65 +62,65 @@
 #include "optimizer/plancat.h"
 #include "optimizer/paths.h"
 
-/* copied from nbtsort.c with modifications*/
+// copied from nbtsort.c with modifications
 
-/* Magic numbers for parallel state sharing */
+// Magic numbers for parallel state sharing
 #define PARALLEL_KEY_BTREE_SHARED		UINT64CONST(0xA000000000000001)
 #define PARALLEL_KEY_WAL_USAGE			UINT64CONST(0xA000000000000005)
 #define PARALLEL_KEY_BUFFER_USAGE		UINT64CONST(0xA000000000000006)
 #define PARALLEL_KEY_TUPLESORT			UINT64CONST(0xA000000000000007)
-/* up to INDEX_MAX_KEYS tuplesorts following PARALLEL_KEY_TUPLESORT */
+// up to INDEX_MAX_KEYS tuplesorts following PARALLEL_KEY_TUPLESORT
 
-/*
- * DISABLE_LEADER_PARTICIPATION disables the leader's participation in
- * parallel index builds.  This may be useful as a debugging aid.
-#undef DISABLE_LEADER_PARTICIPATION
- */
+//
+// DISABLE_LEADER_PARTICIPATION disables the leader's participation in
+// parallel index builds.  This may be useful as a debugging aid.
+// #undef DISABLE_LEADER_PARTICIPATION
+//
 
-/*
- * Status for leader participation in parallel index build.
- * It is inherited from bt_leader unmodified, not joined with oIdxBuildState which
- * is also used only on leader to preserve similarity with parallel btree build code.
- */
+//
+// Status for leader participation in parallel index build.
+// It is inherited from bt_leader unmodified, not joined with oIdxBuildState which
+// is also used only on leader to preserve similarity with parallel btree build code.
+//
 typedef struct oIdxLeader
 {
-	/* parallel context itself */
+	// parallel context itself
 	ParallelContext *pcxt;
 
-	/* Recovery parallel context of recovery workers */
+	// Recovery parallel context of recovery workers
 	ParallelRecoveryContext *recoveryContext;
 
-	/*
-	 * nparticipanttuplesorts is the exact number of worker processes
-	 * successfully launched, plus one leader process if it participates as a
-	 * worker (only DISABLE_LEADER_PARTICIPATION builds avoid leader
-	 * participating as a worker).
-	 *
-	 * In case of index rebuild actual number of sort states is
-	 * (nparticipanttuplesorts * nallindices) as rebuild fills and sorts all
-	 * indexes sortstates in each worker. There is some semantic discrepancy
-	 * here as name  nparticipanttuplesorts is inherited from PG unchanged.
-	 */
+	//
+// nparticipanttuplesorts is the exact number of worker processes
+// successfully launched, plus one leader process if it participates as a
+// worker (only DISABLE_LEADER_PARTICIPATION builds avoid leader
+// participating as a worker).
+//
+// In case of index rebuild actual number of sort states is
+// (nparticipanttuplesorts * nallindices) as rebuild fills and sorts all
+// indexes sortstates in each worker. There is some semantic discrepancy
+// here as name  nparticipanttuplesorts is inherited from PG unchanged.
+//
 	int			nparticipanttuplesorts;
 
-	/*
-	 * Leader process convenience pointers to shared state (leader avoids TOC
-	 * lookups).
-	 *
-	 * btshared is the shared state for entire build.  sharedsort is the
-	 * shared, tuplesort-managed state passed to each process tuplesort.
-	 */
+	//
+// Leader process convenience pointers to shared state (leader avoids TOC
+// lookups).
+//
+// btshared is the shared state for entire build.  sharedsort is the
+// shared, tuplesort-managed state passed to each process tuplesort.
+//
 	oIdxShared *btshared;
 	Sharedsort **sharedsort;
 	WalUsage   *walusage;
 	BufferUsage *bufferusage;
 } oIdxLeader;
 
-/*
- * Working state for parallel build used only for leader. It is used
- * to fill oIdxShared for workers in shmem or recovery_shmem and
- * a oIdxLeader for leader participation in parallel scan.
- */
+//
+// Working state for parallel build used only for leader. It is used
+// to fill oIdxShared for workers in shmem or recovery_shmem and
+// a oIdxLeader for leader participation in parallel scan.
+//
 typedef struct oIdxBuildState
 {
 	bool		isunique;
@@ -128,7 +128,7 @@ typedef struct oIdxBuildState
 	oIdxSpool  *spool;
 	double		reltuples;
 
-	/* Oriole-specific */
+	// Oriole-specific
 	oIdxLeader *btleader;
 	void		(*worker_heap_sort_fn) (oIdxSpool *, void *, Sharedsort **, int worker_sortmem, bool progress);
 	OIndexNumber ix_num;
@@ -153,13 +153,13 @@ static int	o_estimate_parallel_workers(double table_pages, double index_pages,
 										int max_workers);
 
 
-/* copied from tablecmds.c */
+// copied from tablecmds.c
 typedef struct NewColumnValue
 {
-	AttrNumber	attnum;			/* which column */
-	Expr	   *expr;			/* expression to compute */
-	ExprState  *exprstate;		/* execution state */
-	bool		is_generated;	/* is it a GENERATED expression? */
+	AttrNumber	attnum;			// which column
+	Expr	   *expr;			// expression to compute
+	ExprState  *exprstate;		// execution state
+	bool		is_generated;	// is it a GENERATED expression?
 }			NewColumnValue;
 
 static bool in_indexes_rebuild = false;
@@ -177,7 +177,7 @@ assign_new_oids(OTable *oTable, Relation rel, bool drop_pkey)
 
 	CheckTableForSerializableConflictIn(rel);
 
-	/* If toast relation exists, set new filenode for it */
+	// If toast relation exists, set new filenode for it
 	toast_relid = rel->rd_rel->reltoastrelid;
 	if (OidIsValid(toast_relid))
 	{
@@ -205,13 +205,13 @@ assign_new_oids(OTable *oTable, Relation rel, bool drop_pkey)
 
 		in_indexes_rebuild = true;
 
-		/* not using simple reindex_relation here anymore, */
-		/* because we hold a lock on relation already */
+		// not using simple reindex_relation here anymore,
+		// because we hold a lock on relation already
 		indexIds = RelationGetIndexList(rel);
 
 		persistence = rel->rd_rel->relpersistence;
 
-		/* Reindex all the indexes. */
+		// Reindex all the indexes.
 		foreach(indexId, indexIds)
 		{
 			Oid			indexOid = lfirst_oid(indexId);
@@ -262,18 +262,18 @@ recreate_o_table(OTable *old_o_table, OTable *o_table)
 	o_tables_drop_by_oids(old_o_table->oids, oxid, oSnapshot.csn);
 	o_tables_add(o_table, oxid, oSnapshot.csn);
 
-	/*
-	 * o_tables_add() always inserts at sys-tree version 0, but it does not
-	 * touch the in-memory o_table->version field, which still carries the
-	 * pre-recreate value.  Callers (notably add_bridge_index ->
-	 * o_tables_update) compute the next version as table->version + 1, so
-	 * leaving the stale value here yields a sys-tree history with a hole (0,
-	 * <skipped>, +1).  handle_o_tables_meta_unlock() on the standby later
-	 * does o_tables_get_extended(oids, new_o_table->version - 1) to recover
-	 * old_o_table for an InvalidOid oldRelnode record, and a hole makes that
-	 * lookup return NULL.  Pin the in-memory version back to 0 to match what
-	 * we just wrote.
-	 */
+	//
+// o_tables_add() always inserts at sys-tree version 0, but it does not
+// touch the in-memory o_table->version field, which still carries the
+// pre-recreate value.  Callers (notably add_bridge_index ->
+// o_tables_update) compute the next version as table->version + 1, so
+// leaving the stale value here yields a sys-tree history with a hole (0,
+// <skipped>, +1).  handle_o_tables_meta_unlock() on the standby later
+// does o_tables_get_extended(oids, new_o_table->version - 1) to recover
+// old_o_table for an InvalidOid oldRelnode record, and a hole makes that
+// lookup return NULL.  Pin the in-memory version back to 0 to match what
+// we just wrote.
+//
 	o_table->version = 0;
 
 	is_temp = o_table->persistence == RELPERSISTENCE_TEMP;
@@ -309,10 +309,10 @@ o_define_index_validate(ORelOids oids, Relation index, IndexInfo *indexInfo, OTa
 		}
 	}
 
-	/* check index type */
+	// check index type
 	ix_type = o_index_rel_get_ix_type(index);
 
-	/* check index fields number */
+	// check index fields number
 	nattrs = index->rd_index->indnatts;
 	if (ix_type == oIndexPrimary)
 	{
@@ -343,7 +343,7 @@ o_define_index_validate(ORelOids oids, Relation index, IndexInfo *indexInfo, OTa
 		}
 	}
 
-	/* check index fields */
+	// check index fields
 	o_validate_index_elements(RelationGetIndexExpressions(index),
 							  RelationGetIndexPredicate(index));
 }
@@ -353,11 +353,11 @@ rebuild_indices_insert_placeholders(OTableDescr *descr)
 {
 	int			i;
 
-	/*
-	 * Placeholders guard concurrent access to shared SharedRootInfo during
-	 * index build.  Temporary trees live in a backend-local hash, so no other
-	 * backend can observe them and placeholders are unnecessary.
-	 */
+	//
+// Placeholders guard concurrent access to shared SharedRootInfo during
+// index build.  Temporary trees live in a backend-local hash, so no other
+// backend can observe them and placeholders are unnecessary.
+//
 	for (i = 0; i < descr->nIndices; i++)
 	{
 		if (descr->indices[i]->desc.storageType == BTreeStorageTemporary)
@@ -390,17 +390,17 @@ index_build_params(OTableIndex *index)
 	return res;
 }
 
-/*--
- * We build indices in three phases.
- *
- * 1. Update meta-information in system trees and insert shared root info
- *    placeholders for new trees (under oTablesMetaLock).
- * 2. Write the new trees data.
- * 3. Insert new tree headers and delete place holders (under oTablesMetaLock).
- *
- * So, checkpointer can't reach the new tree until the meta-information is
- * complete.  Also checkpoint numer in tree headers is valid.
- */
+// --
+// We build indices in three phases.
+//
+// 1. Update meta-information in system trees and insert shared root info
+// placeholders for new trees (under oTablesMetaLock).
+// 2. Write the new trees data.
+// 3. Insert new tree headers and delete place holders (under oTablesMetaLock).
+//
+// So, checkpointer can't reach the new tree until the meta-information is
+// complete.  Also checkpoint numer in tree headers is valid.
+//
 void
 o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 			   OIndexNumber old_ix_num, Oid oldTblRelnode,
@@ -516,7 +516,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 				old_o_table->indices[PrimaryIndexNumber].tablespace;
 			is_build = tbl_data_exists(&primary_oids, primary_tablespace);
 
-			/* Rebuild, assign new oids */
+			// Rebuild, assign new oids
 			if (ix_type == oIndexPrimary)
 			{
 				OTable	   *new_o_table;
@@ -527,7 +527,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 				oids = new_o_table->oids;
 				o_table->has_primary = true;
 				o_table->primary_init_nfields = o_table->nfields;
-				ix_num = 0;		/* place first */
+				ix_num = 0;		// place first
 			}
 			else
 			{
@@ -537,7 +537,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 				repalloc(o_table->indices, sizeof(OTableIndex) *
 						 (o_table->nindices + 1));
 
-			/* move indices if needed */
+			// move indices if needed
 			if (ix_type == oIndexPrimary && o_table->nindices > 0)
 			{
 				memmove(&o_table->indices[1], &o_table->indices[0],
@@ -577,7 +577,7 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 			   sizeof(NameData));
 	table_index->oids.relnode = index->rd_rel->relfilenode;
 
-	/* fill index fields */
+	// fill index fields
 	if (!reuse_relnode)
 	{
 		table_index->nulls_not_distinct = index->rd_index->indnullsnotdistinct;
@@ -655,21 +655,21 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 			o_verify_dir_exists_or_create(db_prefix, NULL, NULL);
 			pfree(db_prefix);
 
-			/*
-			 * Temporary trees are backend-local; no other backend can race
-			 * against the build, so no placeholder is needed.
-			 */
+			//
+// Temporary trees are backend-local; no other backend can race
+// against the build, so no placeholder is needed.
+//
 			if (o_table->persistence != RELPERSISTENCE_TEMP)
 				o_insert_shared_root_placeholder(table_index->oids.datoid,
 												 table_index->oids.relnode);
 		}
 	}
 
-	/*
-	 * Verify or create tablespace directory for defined secondary index if it
-	 * have to be located in differen tablespace then the table, but table is
-	 * an empty yet.
-	 */
+	//
+// Verify or create tablespace directory for defined secondary index if it
+// have to be located in differen tablespace then the table, but table is
+// an empty yet.
+//
 	if (!is_build && table_index->type != oIndexPrimary && o_table->tablespace != tablespace)
 	{
 		char	   *prefix;
@@ -728,22 +728,22 @@ o_define_index(Relation heap, Relation index, Oid indoid, bool reindex,
 		ResourceOwnerForgetOTableDescr(CurrentResourceOwner, old_descr);
 }
 
-/*
- * Invoke workers for leader. For non-recovery create parallel context and launch
- * parallel workers. For recovery mode signal the existing Orioledb recovery
- * workers to join as parallel workers.
- *
- * buildstate argument should be initialized (with the exception of the
- * tuplesort state in spools, which may later be created based on shared
- * state initially set up here).
- *
- * request is the target number of parallel worker processes to launch.
- *
- * Sets buildstate's oIdxLeader, which caller must use to shut down parallel
- * mode by passing it to _o_index_end_parallel() at the very end of its index
- * build.  If not even a single worker process can be launched, this is
- * never set, and caller should proceed with a serial index build.
- */
+//
+// Invoke workers for leader. For non-recovery create parallel context and launch
+// parallel workers. For recovery mode signal the existing Orioledb recovery
+// workers to join as parallel workers.
+//
+// buildstate argument should be initialized (with the exception of the
+// tuplesort state in spools, which may later be created based on shared
+// state initially set up here).
+//
+// request is the target number of parallel worker processes to launch.
+//
+// Sets buildstate's oIdxLeader, which caller must use to shut down parallel
+// mode by passing it to _o_index_end_parallel() at the very end of its index
+// build.  If not even a single worker process can be launched, this is
+// never set, and caller should proceed with a serial index build.
+//
 static void
 _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int request)
 {
@@ -774,25 +774,25 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 	leaderparticipates = false;
 #endif
 
-	/*
-	 * Currently we expect that only client backends and recovery workers
-	 * build indexes in parallel.
-	 */
+	//
+// Currently we expect that only client backends and recovery workers
+// build indexes in parallel.
+//
 	Assert(MyBackendType == B_BACKEND || in_recovery);
 
-	/* All indices plus TOAST index */
+	// All indices plus TOAST index
 	nallindices = buildstate->spool->descr->nIndices + 1;
 
 	if (btspool->descr->bridge)
 		nallindices += 1;
 
-	/* Create parallel context */
+	// Create parallel context
 	if (!in_recovery)
 	{
-		/*
-		 * Enter parallel mode, and create context for parallel build of btree
-		 * index
-		 */
+		//
+// Enter parallel mode, and create context for parallel build of btree
+// index
+//
 		EnterParallelMode();
 		Assert(request > 0);
 		pcxt = CreateParallelContext("orioledb", "_o_index_parallel_build_main",
@@ -808,31 +808,31 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 		nworkers = recoveryContext->nworkers;
 	}
 
-	/* Estimate DSM size */
+	// Estimate DSM size
 	o_table_serialized = serialize_o_table(btspool->o_table, &o_table_size);
-	if (buildstate->isrebuild)	/* Rebuild */
+	if (buildstate->isrebuild)	// Rebuild
 	{
 		old_o_table_serialized = serialize_o_table(btspool->old_o_table, &old_o_table_size);
 	}
 
 	scantuplesortstates = leaderparticipates ? nworkers + 1 : nworkers;
 
-	/*
-	 * Estimate size for our own PARALLEL_KEY_BTREE_SHARED workspace, and
-	 * PARALLEL_KEY_TUPLESORT tuplesort workspace
-	 */
+	//
+// Estimate size for our own PARALLEL_KEY_BTREE_SHARED workspace, and
+// PARALLEL_KEY_TUPLESORT tuplesort workspace
+//
 	estbtshared = _o_index_parallel_estimate_shared(o_table_size + old_o_table_size);
 	shm_toc_estimate_chunk(estimator, estbtshared);
 	shm_toc_estimate_keys(estimator, 1);
 
 	estsort = tuplesort_estimate_shared(scantuplesortstates);
-	if (buildstate->isrebuild)	/* Rebuild indices */
+	if (buildstate->isrebuild)	// Rebuild indices
 	{
-		/* All indices plus TOAST sort states */
+		// All indices plus TOAST sort states
 		shm_toc_estimate_chunk(estimator, mul_size(BUFFERALIGN(estsort), nallindices));
 		shm_toc_estimate_keys(estimator, nallindices);
 	}
-	else						/* Add secondary index */
+	else						// Add secondary index
 	{
 		shm_toc_estimate_chunk(estimator, estsort);
 		shm_toc_estimate_keys(estimator, 1);
@@ -840,14 +840,14 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 
 	if (!in_recovery)
 	{
-		/*
-		 * Estimate space for WalUsage and BufferUsage --
-		 * PARALLEL_KEY_WAL_USAGE and PARALLEL_KEY_BUFFER_USAGE.
-		 *
-		 * If there are no extensions loaded that care, we could skip this. We
-		 * have no way of knowing whether anyone's looking at pgWalUsage or
-		 * pgBufferUsage, so do it unconditionally.
-		 */
+		//
+// Estimate space for WalUsage and BufferUsage --
+// PARALLEL_KEY_WAL_USAGE and PARALLEL_KEY_BUFFER_USAGE.
+//
+// If there are no extensions loaded that care, we could skip this. We
+// have no way of knowing whether anyone's looking at pgWalUsage or
+// pgBufferUsage, so do it unconditionally.
+//
 		shm_toc_estimate_chunk(estimator,
 							   mul_size(sizeof(WalUsage), nworkers));
 		shm_toc_estimate_keys(estimator, 1);
@@ -856,11 +856,11 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 		shm_toc_estimate_keys(estimator, 1);
 	}
 
-	/* Initialize parallel DSM */
+	// Initialize parallel DSM
 	if (!in_recovery)
 	{
 		InitializeParallelDSM(pcxt);
-		/* If no DSM segment was available, back out (do serial build) */
+		// If no DSM segment was available, back out (do serial build)
 		if (pcxt->seg == NULL)
 		{
 			pfree(o_table_serialized);
@@ -879,7 +879,7 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 	else
 	{
 		InitializeParallelRecoveryDSM(recoveryContext);
-		/* If no DSM segment was available, back out (do serial build) */
+		// If no DSM segment was available, back out (do serial build)
 		if (recoveryContext->seg == NULL)
 		{
 			pfree(o_table_serialized);
@@ -895,7 +895,7 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 		seg = recoveryContext->seg;
 	}
 
-	/* Put shared data into DSM */
+	// Put shared data into DSM
 	btshared = (oIdxShared *) shm_toc_allocate(toc, estbtshared);
 
 	memcpy(&btshared->o_table_serialized, o_table_serialized, o_table_size);
@@ -922,7 +922,7 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 		pfree(old_o_table_serialized);
 
 	Assert((buildstate->isrebuild && buildstate->ix_num == InvalidIndexNumber) || (!buildstate->isrebuild && buildstate->ix_num != InvalidIndexNumber));
-	/* Initialize immutable state */
+	// Initialize immutable state
 	btshared->isunique = btspool->isunique;
 	btshared->isconcurrent = isconcurrent;
 	btshared->isrebuild = buildstate->isrebuild;
@@ -932,7 +932,7 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 	btshared->o_table_size = o_table_size;
 	btshared->old_o_table_size = old_o_table_size;
 
-	/* Initialize mutable state */
+	// Initialize mutable state
 	ConditionVariableInit(&btshared->workersdonecv);
 	SpinLockInit(&btshared->mutex);
 	if (in_recovery)
@@ -945,10 +945,10 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 
 	shm_toc_insert(toc, PARALLEL_KEY_BTREE_SHARED, btshared);
 
-	/*
-	 * Store shared tuplesort-private state, for which we reserved space.
-	 * Then, initialize opaque state using tuplesort routine.
-	 */
+	//
+// Store shared tuplesort-private state, for which we reserved space.
+// Then, initialize opaque state using tuplesort routine.
+//
 	if (buildstate->isrebuild)
 	{
 		for (i = 0; i < nallindices; i++)
@@ -957,7 +957,7 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 			shm_toc_insert(toc, PARALLEL_KEY_TUPLESORT + i, sharedsort[i]);
 		}
 	}
-	else						/* Add secondary index */
+	else						// Add secondary index
 	{
 		tuplesort_initialize_shared(sharedsort[0], scantuplesortstates, seg);
 		shm_toc_insert(toc, PARALLEL_KEY_TUPLESORT, sharedsort[0]);
@@ -965,10 +965,10 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 
 	if (!in_recovery)
 	{
-		/*
-		 * Allocate space for each worker's WalUsage and BufferUsage; no need
-		 * to initialize.
-		 */
+		//
+// Allocate space for each worker's WalUsage and BufferUsage; no need
+// to initialize.
+//
 		walusage = shm_toc_allocate(pcxt->toc,
 									mul_size(sizeof(WalUsage), pcxt->nworkers));
 		shm_toc_insert(pcxt->toc, PARALLEL_KEY_WAL_USAGE, walusage);
@@ -976,7 +976,7 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 									   mul_size(sizeof(BufferUsage), pcxt->nworkers));
 		shm_toc_insert(pcxt->toc, PARALLEL_KEY_BUFFER_USAGE, bufferusage);
 
-		/* Launch workers, saving status for leader/caller */
+		// Launch workers, saving status for leader/caller
 		LaunchParallelWorkers(pcxt);
 		btleader->pcxt = pcxt;
 		btleader->nparticipanttuplesorts = leaderparticipates ? pcxt->nworkers_launched + 1 : pcxt->nworkers_launched;
@@ -999,7 +999,7 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 	btleader->walusage = walusage;
 	btleader->bufferusage = bufferusage;
 
-	/* If no workers were successfully launched, back out (do serial build) */
+	// If no workers were successfully launched, back out (do serial build)
 	if (!in_recovery)
 	{
 		if (pcxt->nworkers_launched == 0)
@@ -1019,19 +1019,19 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 		}
 	}
 
-	/* Save leader state now that it's clear build will be parallel */
+	// Save leader state now that it's clear build will be parallel
 	buildstate->btleader = btleader;
 
-	/* Join heap scan ourselves */
+	// Join heap scan ourselves
 	if (leaderparticipates)
 		_o_index_leader_participate_as_worker(buildstate);
 
 	Assert(in_recovery == is_recovery_in_progress());
 
-	/*
-	 * Caller needs to wait for all launched workers when we return.  Make
-	 * sure that the failure-to-start case will not hang forever.
-	 */
+	//
+// Caller needs to wait for all launched workers when we return.  Make
+// sure that the failure-to-start case will not hang forever.
+//
 	if (!in_recovery)
 		WaitForParallelWorkersToAttach(pcxt);
 	else
@@ -1040,11 +1040,11 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 		{
 			o_worker_handle_interrupts();
 
-			/*
-			 * We wait on a condition variable that will wake us as soon as
-			 * the pause ends, but we use a timeout so we can check the
-			 * ShutdownRequestPending periodically too.
-			 */
+			//
+// We wait on a condition variable that will wake us as soon as
+// the pause ends, but we use a timeout so we can check the
+// ShutdownRequestPending periodically too.
+//
 			ConditionVariableTimedSleep(&btshared->recoveryjoinedcv, 1000,
 										WAIT_EVENT_PARALLEL_CREATE_INDEX_SCAN);
 		}
@@ -1053,21 +1053,21 @@ _o_index_begin_parallel(oIdxBuildState *buildstate, bool isconcurrent, int reque
 	}
 }
 
-/*
- * Shut down workers, destroy parallel context, and end parallel mode.
- */
+//
+// Shut down workers, destroy parallel context, and end parallel mode.
+//
 static void
 _o_index_end_parallel(oIdxLeader *btleader)
 {
 	if (!is_recovery_in_progress())
 	{
-		/* Shutdown worker processes */
+		// Shutdown worker processes
 		WaitForParallelWorkersToFinish(btleader->pcxt);
 
-		/*
-		 * Next, accumulate WAL usage.  (This must wait for the workers to
-		 * finish, or we might get incomplete data.)
-		 */
+		//
+// Next, accumulate WAL usage.  (This must wait for the workers to
+// finish, or we might get incomplete data.)
+//
 		for (int i = 0; i < btleader->pcxt->nworkers_launched; i++)
 			InstrAccumParallelQuery(&btleader->bufferusage[i], &btleader->walusage[i]);
 
@@ -1083,27 +1083,27 @@ _o_index_end_parallel(oIdxLeader *btleader)
 	}
 }
 
-/*
- * Returns size of shared memory required to store shared state for a parallel
- * OrioleDB index build.
- */
+//
+// Returns size of shared memory required to store shared state for a parallel
+// OrioleDB index build.
+//
 static Size
 _o_index_parallel_estimate_shared(Size o_table_size)
 {
 	Size		size = add_size(BUFFERALIGN(sizeof(oIdxShared)), o_table_size);
 
-	/* c.f. shm_toc_allocate as to why BUFFERALIGN is used */
+	// c.f. shm_toc_allocate as to why BUFFERALIGN is used
 	return size;
 }
 
-/*
- * Within leader, wait for end of workers heap scans and sorts.
- *
- * When called, parallel heap scan started by _o_index_begin_parallel() will
- * already be underway within worker processes (when leader participates
- * as a worker, we should end up here just as workers are finishing).
- *
- */
+//
+// Within leader, wait for end of workers heap scans and sorts.
+//
+// When called, parallel heap scan started by _o_index_begin_parallel() will
+// already be underway within worker processes (when leader participates
+// as a worker, we should end up here just as workers are finishing).
+//
+//
 static void
 _o_index_parallel_heapscan(oIdxBuildState *buildstate)
 {
@@ -1111,10 +1111,10 @@ _o_index_parallel_heapscan(oIdxBuildState *buildstate)
 	int			nparticipanttuplesorts;
 	bool		in_recovery = is_recovery_in_progress();
 
-	/*
-	 * Currently we expect that only client backends and recovery workers
-	 * build indexes in parallel.
-	 */
+	//
+// Currently we expect that only client backends and recovery workers
+// build indexes in parallel.
+//
 	Assert(MyBackendType == B_BACKEND || in_recovery);
 
 	nparticipanttuplesorts = buildstate->btleader->nparticipanttuplesorts;
@@ -1132,11 +1132,11 @@ _o_index_parallel_heapscan(oIdxBuildState *buildstate)
 		{
 			o_worker_handle_interrupts();
 
-			/*
-			 * We wait on a condition variable that will wake us as soon as
-			 * the pause ends, but we use a timeout so we can check the
-			 * ShutdownRequestPending periodically too.
-			 */
+			//
+// We wait on a condition variable that will wake us as soon as
+// the pause ends, but we use a timeout so we can check the
+// ShutdownRequestPending periodically too.
+//
 			ConditionVariableTimedSleep(&btshared->workersdonecv, 1000,
 										WAIT_EVENT_PARALLEL_CREATE_INDEX_SCAN);
 		}
@@ -1155,7 +1155,7 @@ _o_index_leader_participate_as_worker(oIdxBuildState *buildstate)
 	oIdxSpool  *leaderworker;
 	int			worker_sortmem;
 
-	/* Allocate memory and initialize private spool */
+	// Allocate memory and initialize private spool
 	leaderworker = (oIdxSpool *) palloc0(sizeof(oIdxSpool));
 	leaderworker->index = buildstate->spool->index;
 	leaderworker->isunique = buildstate->spool->isunique;
@@ -1164,14 +1164,14 @@ _o_index_leader_participate_as_worker(oIdxBuildState *buildstate)
 	leaderworker->old_o_table = buildstate->spool->old_o_table;
 	leaderworker->old_descr = buildstate->spool->old_descr;
 
-	/*
-	 * Might as well use reliable figure when doling out maintenance_work_mem
-	 * (when requested number of workers were not launched, this will be
-	 * somewhat higher than it is for other workers).
-	 */
+	//
+// Might as well use reliable figure when doling out maintenance_work_mem
+// (when requested number of workers were not launched, this will be
+// somewhat higher than it is for other workers).
+//
 	worker_sortmem = maintenance_work_mem / btleader->nparticipanttuplesorts;
 
-	/* Perform work common to all participants */
+	// Perform work common to all participants
 	buildstate->worker_heap_sort_fn(leaderworker, btleader->btshared, btleader->sharedsort,
 									worker_sortmem, true);
 
@@ -1182,23 +1182,23 @@ _o_index_leader_participate_as_worker(oIdxBuildState *buildstate)
 		ShowUsage("BTREE BUILD (Leader Partial Spool) STATISTICS");
 		ResetUsage();
 	}
-#endif							/* BTREE_BUILD_STATS */
+#endif							// BTREE_BUILD_STATS
 }
 
-/*
- * Wrapper to be called from parallel context when not in recovery.
- */
+//
+// Wrapper to be called from parallel context when not in recovery.
+//
 void
 _o_index_parallel_build_main(dsm_segment *seg, shm_toc *toc)
 {
 	_o_index_parallel_build_inner(seg, toc, NULL, NULL);
 }
 
-/*
- * Perform work within a launched parallel process.
- * For recovery attaches to recovery shared memory and gets
- * serialized o_table as an explicit argument.
- */
+//
+// Perform work within a launched parallel process.
+// For recovery attaches to recovery shared memory and gets
+// serialized o_table as an explicit argument.
+//
 void
 _o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
 							  OTable *recovery_o_table, OTable *recovery_old_o_table)
@@ -1215,25 +1215,25 @@ _o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
 #ifdef BTREE_BUILD_STATS
 	if (log_btree_build_stats)
 		ResetUsage();
-#endif							/* BTREE_BUILD_STATS */
+#endif							// BTREE_BUILD_STATS
 
-	/* Initialize worker's own spool */
+	// Initialize worker's own spool
 	btspool = (oIdxSpool *) palloc0(sizeof(oIdxSpool));
 
-	/*
-	 * btshared and sharedsort are allocated in DSM shared state. btshared is
-	 * allocated to contain serialized o_table
-	 */
+	//
+// btshared and sharedsort are allocated in DSM shared state. btshared is
+// allocated to contain serialized o_table
+//
 	btshared = shm_toc_lookup(toc, PARALLEL_KEY_BTREE_SHARED, false);
 	Assert(btshared->o_table_size > 0);
 	btspool->o_table = deserialize_o_table((Pointer) (&btshared->o_table_serialized),
 										   btshared->o_table_size);
 	if (btshared->isrebuild)
 	{
-		/*
-		 * old_o_table_serialized is placed just after o_table_serialized in
-		 * btshared
-		 */
+		//
+// old_o_table_serialized is placed just after o_table_serialized in
+// btshared
+//
 		Assert(btshared->old_o_table_size > 0);
 		btspool->old_o_table = deserialize_o_table(((Pointer) (&btshared->o_table_serialized)) + btshared->o_table_size,
 												   btshared->old_o_table_size);
@@ -1281,10 +1281,10 @@ _o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
 		tuplesort_attach_shared(sharedsort[0], seg);
 	}
 
-	/* Prepare to track buffer usage during parallel execution */
+	// Prepare to track buffer usage during parallel execution
 	InstrStartParallelQuery();
 
-	/* Perform sorting of spool */
+	// Perform sorting of spool
 	worker_sortmem = maintenance_work_mem / btshared->scantuplesortstates;
 	btshared->worker_heap_sort_fn(btspool, btshared, sharedsort,
 								  worker_sortmem, false);
@@ -1304,7 +1304,7 @@ _o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
 
 	if (!is_recovery_in_progress())
 	{
-		/* Report WAL/buffer usage during parallel execution */
+		// Report WAL/buffer usage during parallel execution
 		bufferusage = shm_toc_lookup(toc, PARALLEL_KEY_BUFFER_USAGE, false);
 		walusage = shm_toc_lookup(toc, PARALLEL_KEY_WAL_USAGE, false);
 		InstrEndParallelQuery(&bufferusage[ParallelWorkerNumber],
@@ -1317,18 +1317,18 @@ _o_index_parallel_build_inner(dsm_segment *seg, shm_toc *toc,
 		ShowUsage("BTREE BUILD (Worker Partial Spool) STATISTICS");
 		ResetUsage();
 	}
-#endif							/* BTREE_BUILD_STATS */
+#endif							// BTREE_BUILD_STATS
 }
 
-/*
- * Perform a worker's portion of a parallel sort for secondary index build
- *
- * This generates a tuplesort for passed btspool.  All
- * other spool fields should already be set when this is called.
- *
- * worker_sortmem is the amount of working memory to use within each worker,
- * expressed in KBs.
- */
+//
+// Perform a worker's portion of a parallel sort for secondary index build
+//
+// This generates a tuplesort for passed btspool.  All
+// other spool fields should already be set when this is called.
+//
+// worker_sortmem is the amount of working memory to use within each worker,
+// expressed in KBs.
+//
 static void
 build_secondary_index_worker_sort(oIdxSpool *btspool, void *bt_shared, Sharedsort **sharedsort,
 								  int worker_sortmem, bool progress)
@@ -1342,7 +1342,7 @@ build_secondary_index_worker_sort(oIdxSpool *btspool, void *bt_shared, Sharedsor
 	OIndexDescr *idx;
 
 	indtuples = palloc0(sizeof(double));
-	/* Initialize local tuplesort coordination state */
+	// Initialize local tuplesort coordination state
 	coordinate = palloc0(sizeof(SortCoordinateData));
 	coordinate->isWorker = true;
 	coordinate->nParticipants = -1;
@@ -1353,20 +1353,20 @@ build_secondary_index_worker_sort(oIdxSpool *btspool, void *bt_shared, Sharedsor
 
 	if (is_recovery_in_progress() && !(*recovery_single_process))
 	{
-		/* Track recovery workers joined parallel operation */
+		// Track recovery workers joined parallel operation
 		SpinLockAcquire(&btshared->mutex);
 		btshared->nrecoveryworkersjoined++;
 		SpinLockRelease(&btshared->mutex);
 		ConditionVariableBroadcast(&btshared->recoveryjoinedcv);
 	}
 
-	/* Begin "partial" tuplesort */
+	// Begin "partial" tuplesort
 	btspool->sortstates = palloc0(sizeof(Pointer));
 	btspool->sortstates[0] = tuplesort_begin_orioledb_index(idx, worker_sortmem, false, coordinate);
 
 	build_secondary_index_worker_heap_scan(btspool->descr, idx, poscan, btspool->sortstates, progress, &heaptuples, &indtuples);
 
-	/* Execute this worker's part of the sort */
+	// Execute this worker's part of the sort
 	if (progress)
 		pgstat_progress_update_param(PROGRESS_CREATEIDX_SUBPHASE,
 									 PROGRESS_BTREE_PHASE_PERFORMSORT_1);
@@ -1374,10 +1374,10 @@ build_secondary_index_worker_sort(oIdxSpool *btspool, void *bt_shared, Sharedsor
 	tuplesort_performsort(btspool->sortstates[0]);
 	o_unset_syscache_hooks();
 
-	/*
-	 * Done.  Record ambuild statistics, and whether we encountered a broken
-	 * HOT chain.
-	 */
+	//
+// Done.  Record ambuild statistics, and whether we encountered a broken
+// HOT chain.
+//
 	SpinLockAcquire(&btshared->mutex);
 	btshared->nparticipantsdone++;
 	elog(DEBUG3, "Worker %d finished scan and local sort", btshared->nparticipantsdone);
@@ -1386,16 +1386,16 @@ build_secondary_index_worker_sort(oIdxSpool *btspool, void *bt_shared, Sharedsor
 	btshared->indtuples[0] += indtuples[0];
 	SpinLockRelease(&btshared->mutex);
 
-	/* Notify leader */
+	// Notify leader
 	ConditionVariableSignal(&btshared->workersdonecv);
 
 	pfree(indtuples);
-	/* We can end tuplesorts immediately */
+	// We can end tuplesorts immediately
 	tuplesort_end(btspool->sortstates[0]);
 	pfree(btspool->sortstates);
 }
 
-/* Get next tuple and store all its attributes to a slot */
+// Get next tuple and store all its attributes to a slot
 static inline
 bool
 scan_getnextslot_allattrs(BTreeSeqScan *scan, OTableDescr *descr,
@@ -1417,10 +1417,10 @@ scan_getnextslot_allattrs(BTreeSeqScan *scan, OTableDescr *descr,
 	return true;
 }
 
-/*
- * Make a local heapscan in a worker, in a leader, or sequentially
- * for building secomndary index. Put result into provided sortstate
- */
+//
+// Make a local heapscan in a worker, in a leader, or sequentially
+// for building secomndary index. Put result into provided sortstate
+//
 static void
 build_secondary_index_worker_heap_scan(OTableDescr *descr, OIndexDescr *idx,
 									   ParallelOScanDesc poscan,
@@ -1459,10 +1459,10 @@ build_secondary_index_worker_heap_scan(OTableDescr *descr, OIndexDescr *idx,
 	free_btree_seq_scan(sscan);
 }
 
-/*
- * If we are inside transaction, cap workers based on available maintenance_work_mem as need, else fallback to maximum.
- * Capping is similar to plan_create_index_workers()
- */
+//
+// If we are inside transaction, cap workers based on available maintenance_work_mem as need, else fallback to maximum.
+// Capping is similar to plan_create_index_workers()
+//
 static int
 o_calculate_index_workers(BTreeDescr *primary, bool shmem_loaded, int nindices)
 {
@@ -1485,16 +1485,16 @@ o_calculate_index_workers(BTreeDescr *primary, bool shmem_loaded, int nindices)
 		else
 			parallel_workers = 0;
 
-		/*
-		 * Cap workers based on available maintenance_work_mem as needed.
-		 *
-		 * Note that each tuplesort participant receives an even share of the
-		 * total maintenance_work_mem budget.  Aim to leave participants
-		 * (including the leader as a participant) with no less than 32MB of
-		 * memory.  This leaves cases where maintenance_work_mem is set to
-		 * 64MB immediately past the threshold of being capable of launching a
-		 * single parallel worker to sort.
-		 */
+		//
+// Cap workers based on available maintenance_work_mem as needed.
+//
+// Note that each tuplesort participant receives an even share of the
+// total maintenance_work_mem budget.  Aim to leave participants
+// (including the leader as a participant) with no less than 32MB of
+// memory.  This leaves cases where maintenance_work_mem is set to
+// 64MB immediately past the threshold of being capable of launching a
+// single parallel worker to sort.
+//
 		while (parallel_workers > 0 &&
 			   maintenance_work_mem / (nindices * (parallel_workers + 1)) < 32768L)
 			parallel_workers--;
@@ -1507,22 +1507,22 @@ o_calculate_index_workers(BTreeDescr *primary, bool shmem_loaded, int nindices)
 	return parallel_workers;
 }
 
-/*
- * Simplified version of compute_parallel_worker, without RelOptInfo parameter.
- */
+//
+// Simplified version of compute_parallel_worker, without RelOptInfo parameter.
+//
 static int
 o_estimate_parallel_workers(double table_pages, double index_pages,
 							int max_workers)
 {
 	int			parallel_workers = 0;
 
-	/*
-	 * If the number of pages being scanned is insufficient to justify a
-	 * parallel scan, just return zero ... unless it's an inheritance child.
-	 * In that case, we want to generate a parallel path here anyway.  It
-	 * might not be worthwhile just for this relation, but when combined with
-	 * all of its inheritance siblings it may well pay off.
-	 */
+	//
+// If the number of pages being scanned is insufficient to justify a
+// parallel scan, just return zero ... unless it's an inheritance child.
+// In that case, we want to generate a parallel path here anyway.  It
+// might not be worthwhile just for this relation, but when combined with
+// all of its inheritance siblings it may well pay off.
+//
 	if ((table_pages >= 0 && table_pages < min_parallel_table_scan_size) ||
 		(index_pages >= 0 && index_pages < min_parallel_index_scan_size))
 		return 0;
@@ -1532,20 +1532,20 @@ o_estimate_parallel_workers(double table_pages, double index_pages,
 		int			heap_parallel_threshold;
 		int			heap_parallel_workers = 1;
 
-		/*
-		 * Select the number of workers based on the log of the size of the
-		 * relation.  This probably needs to be a good deal more
-		 * sophisticated, but we need something here for now.  Note that the
-		 * upper limit of the min_parallel_table_scan_size GUC is chosen to
-		 * prevent overflow here.
-		 */
+		//
+// Select the number of workers based on the log of the size of the
+// relation.  This probably needs to be a good deal more
+// sophisticated, but we need something here for now.  Note that the
+// upper limit of the min_parallel_table_scan_size GUC is chosen to
+// prevent overflow here.
+//
 		heap_parallel_threshold = Max(min_parallel_table_scan_size, 1);
 		while (table_pages >= (BlockNumber) (heap_parallel_threshold * 3))
 		{
 			heap_parallel_workers++;
 			heap_parallel_threshold *= 3;
 			if (heap_parallel_threshold > INT_MAX / 3)
-				break;			/* avoid overflow */
+				break;			// avoid overflow
 		}
 
 		parallel_workers = heap_parallel_workers;
@@ -1556,14 +1556,14 @@ o_estimate_parallel_workers(double table_pages, double index_pages,
 		int			index_parallel_workers = 1;
 		int			index_parallel_threshold;
 
-		/* same calculation as for heap_pages above */
+		// same calculation as for heap_pages above
 		index_parallel_threshold = Max(min_parallel_index_scan_size, 1);
 		while (index_pages >= (BlockNumber) (index_parallel_threshold * 3))
 		{
 			index_parallel_workers++;
 			index_parallel_threshold *= 3;
 			if (index_parallel_threshold > INT_MAX / 3)
-				break;			/* avoid overflow */
+				break;			// avoid overflow
 		}
 
 		if (parallel_workers > 0)
@@ -1572,7 +1572,7 @@ o_estimate_parallel_workers(double table_pages, double index_pages,
 			parallel_workers = index_parallel_workers;
 	}
 
-	/* In no case use more than caller supplied maximum number of workers */
+	// In no case use more than caller supplied maximum number of workers
 	parallel_workers = Min(parallel_workers, max_workers);
 
 	return parallel_workers;
@@ -1589,7 +1589,7 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 				indexRelation = NULL;
 	CheckpointFileHeader fileHeader;
 
-	/* Infrastructure for parallel build corresponds to _bt_spools_heapscan */
+	// Infrastructure for parallel build corresponds to _bt_spools_heapscan
 	oIdxSpool  *btspool = NULL;
 	oIdxBuildState buildstate = {0};
 	SortCoordinate coordinate = NULL;
@@ -1605,22 +1605,22 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 	idx = descr->indices[o_table->has_primary ? ix_num : ix_num + 1];
 	buildstate.btleader = NULL;
 
-	/*
-	 * Set snapshot retain undo locations to prevent undo cleanup during the
-	 * heap scan.  Without this, recovery could advance minProcRetainLocation
-	 * past undo records that the scan still needs for reading historical page
-	 * versions via imgReadCsn.  Applies to both parallel and serial builds
-	 * (the latter is the only option when parallel workers fail to launch, or
-	 * when the table is temporary — see below).
-	 */
+	//
+// Set snapshot retain undo locations to prevent undo cleanup during the
+// heap scan.  Without this, recovery could advance minProcRetainLocation
+// past undo records that the scan still needs for reading historical page
+// versions via imgReadCsn.  Applies to both parallel and serial builds
+// (the latter is the only option when parallel workers fail to launch, or
+// when the table is temporary — see below).
+//
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		set_my_snapshot_retain_location((UndoLogType) i);
 
-	/*
-	 * Attempt to launch parallel worker scan when required.  Parallel workers
-	 * cannot access data in temporary tables because they use a per-backend
-	 * local page pool.
-	 */
+	//
+// Attempt to launch parallel worker scan when required.  Parallel workers
+// cannot access data in temporary tables because they use a per-backend
+// local page pool.
+//
 	if ((in_dedicated_recovery_worker || (ActiveSnapshotSet() && max_parallel_maintenance_workers > 0)) &&
 		o_table->persistence != RELPERSISTENCE_TEMP)
 	{
@@ -1651,10 +1651,10 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 			 o_table->oids.datoid, o_table->oids.reloid, o_table->oids.relnode,
 			 ix_num);
 
-	/*
-	 * If parallel build requested and at least one worker process was
-	 * successfully launched, set up coordination state
-	 */
+	//
+// If parallel build requested and at least one worker process was
+// successfully launched, set up coordination state
+//
 	if (buildstate.btleader)
 	{
 		coordinate = (SortCoordinate) palloc0(sizeof(SortCoordinateData));
@@ -1664,20 +1664,20 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 		coordinate->sharedsort = buildstate.btleader->sharedsort[0];
 	}
 
-	/* Begin serial/leader tuplesort */
+	// Begin serial/leader tuplesort
 	sortstates = (Tuplesortstate **) palloc0(sizeof(Pointer));
 	sortstates[0] = tuplesort_begin_orioledb_index(idx, maintenance_work_mem, false, coordinate);
 
-	/* Fill spool using either serial or parallel heap scan */
+	// Fill spool using either serial or parallel heap scan
 	if (!buildstate.btleader)
 	{
-		/* Serial build */
+		// Serial build
 		build_secondary_index_worker_heap_scan(descr, idx, NULL, sortstates,
 											   false, &heap_tuples, &index_tuples);
 	}
 	else
 	{
-		/* We are on leader. Wait until workers end their scans */
+		// We are on leader. Wait until workers end their scans
 		_o_index_parallel_heapscan(&buildstate);
 		index_tuples[0] = buildstate.btleader->btshared->indtuples[0];
 		heap_tuples = buildstate.btleader->btshared->reltuples;
@@ -1689,7 +1689,7 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 
 	btree_write_index_data(&idx->desc, idx->leafTupdesc, sortstates[0],
 						   ctid, 0, &fileHeader);
-	/* End serial/leader sort */
+	// End serial/leader sort
 	tuplesort_end(sortstates[0]);
 	pfree((void *) sortstates);
 
@@ -1699,16 +1699,16 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 		_o_index_end_parallel(buildstate.btleader);
 	}
 
-	/* Scan is done; release retained undo locations. */
+	// Scan is done; release retained undo locations.
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		clear_my_snapshot_retain_location((UndoLogType) i);
 
-	/*
-	 * Write the file header.  We need to write the correct checkpoint number,
-	 * meta lock will prevent checkpointer from walking through.  Remove
-	 * shared root info placeholder to let checkpointer process this tree when
-	 * we release the lock.
-	 */
+	//
+// Write the file header.  We need to write the correct checkpoint number,
+// meta lock will prevent checkpointer from walking through.  Remove
+// shared root info placeholder to let checkpointer process this tree when
+// we release the lock.
+//
 	o_tables_table_meta_lock(o_table);
 
 	btree_write_file_header(&idx->desc, &fileHeader);
@@ -1725,14 +1725,14 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 	}
 	else if (!is_recovery_in_progress())
 	{
-		/*
-		 * ShareUpdateExclusiveLock is the minimum level index_update_stats()
-		 * expects: heap_inplace_update()'s lock check
-		 * (heapam.c:check_inplace_rel_lock) emits a "missing lock" warning
-		 * for anything weaker.  SUE is still much weaker than the AEL we used
-		 * to take here, so the deadlock cycles with autovacuum (e.g. DROP
-		 * CASCADE vs ANALYZE) that the AEL re-acquire created stay fixed.
-		 */
+		//
+// ShareUpdateExclusiveLock is the minimum level index_update_stats()
+// expects: heap_inplace_update()'s lock check
+// (heapam.c:check_inplace_rel_lock) emits a "missing lock" warning
+// for anything weaker.  SUE is still much weaker than the AEL we used
+// to take here, so the deadlock cycles with autovacuum (e.g. DROP
+// CASCADE vs ANALYZE) that the AEL re-acquire created stay fixed.
+//
 		tableRelation = table_open(o_table->oids.reloid,
 								   ShareUpdateExclusiveLock);
 		indexRelation = index_open(o_table->indices[ix_num].oids.reloid,
@@ -1745,7 +1745,7 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 						   false,
 						   index_tuples[0]);
 
-		/* Make the updated catalog row versions visible */
+		// Make the updated catalog row versions visible
 		CommandCounterIncrement();
 		table_close(tableRelation, ShareUpdateExclusiveLock);
 		index_close(indexRelation, ShareUpdateExclusiveLock);
@@ -1754,15 +1754,15 @@ build_secondary_index(Oid oldTblRelnode, OTable *o_table,
 	pfree(index_tuples);
 }
 
-/*
- * Perform a worker's portion of a parallel sort for all indexes rebuild
- *
- * This generates partial tuplesorts for each indexes for passed btspool. All
- * other spool fields should already be set when this is called.
- *
- * worker_sortmem is the amount of working memory to use within each worker,
- * expressed in KBs.
- */
+//
+// Perform a worker's portion of a parallel sort for all indexes rebuild
+//
+// This generates partial tuplesorts for each indexes for passed btspool. All
+// other spool fields should already be set when this is called.
+//
+// worker_sortmem is the amount of working memory to use within each worker,
+// expressed in KBs.
+//
 static void
 rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 							Sharedsort **sharedsort, int worker_sortmem,
@@ -1776,7 +1776,7 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 	int			i;
 	int			nIndices = btspool->descr->nIndices;
 	int			nallindices = nIndices;
-	int			sortstate_sortmem;	/* Memory per sort state */
+	int			sortstate_sortmem;	// Memory per sort state
 
 	if (btspool->descr->toast)
 		nallindices++;
@@ -1786,7 +1786,7 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 	indtuples = palloc0(sizeof(double) * nIndices);
 	coordinate = (SortCoordinate) palloc0(sizeof(SortCoordinateData) * nallindices);
 
-	/* Initialize local tuplesort coordination states */
+	// Initialize local tuplesort coordination states
 	for (i = PrimaryIndexNumber; i < nallindices; i++)
 	{
 		coordinate[i].isWorker = true;
@@ -1796,14 +1796,14 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 
 	if (is_recovery_in_progress() && !(*recovery_single_process))
 	{
-		/* Track recovery workers joined parallel operation */
+		// Track recovery workers joined parallel operation
 		SpinLockAcquire(&btshared->mutex);
 		btshared->nrecoveryworkersjoined++;
 		SpinLockRelease(&btshared->mutex);
 		ConditionVariableBroadcast(&btshared->recoveryjoinedcv);
 	}
 
-	/* Begin "partial" tuplesorts for all indexes to be rebuilt */
+	// Begin "partial" tuplesorts for all indexes to be rebuilt
 	btspool->sortstates = palloc0(sizeof(Pointer) * nallindices);
 	sortstate_sortmem = worker_sortmem / nallindices;
 	for (i = PrimaryIndexNumber; i < nIndices; i++)
@@ -1827,7 +1827,7 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 									 poscan, btspool->sortstates, false,
 									 &heaptuples, &indtuples, NULL, NULL);
 
-	/* Execute this worker's part of the sort */
+	// Execute this worker's part of the sort
 	if (progress)
 		pgstat_progress_update_param(PROGRESS_CREATEIDX_SUBPHASE,
 									 PROGRESS_BTREE_PHASE_PERFORMSORT_1);
@@ -1836,7 +1836,7 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 		tuplesort_performsort(btspool->sortstates[i]);
 	}
 
-	/* Done, record statistics. */
+	// Done, record statistics.
 	SpinLockAcquire(&btshared->mutex);
 	btshared->nparticipantsdone++;
 	elog(DEBUG3, "Worker %d finished scan and local sort", btshared->nparticipantsdone);
@@ -1848,12 +1848,12 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 	}
 	SpinLockRelease(&btshared->mutex);
 
-	/* Notify leader */
+	// Notify leader
 	ConditionVariableSignal(&btshared->workersdonecv);
 
 	pfree(indtuples);
 
-	/* We can end tuplesorts immediately */
+	// We can end tuplesorts immediately
 	for (i = PrimaryIndexNumber; i < nallindices; i++)
 	{
 		tuplesort_end(btspool->sortstates[i]);
@@ -1861,14 +1861,14 @@ rebuild_indices_worker_sort(oIdxSpool *btspool, void *bt_shared,
 	pfree(btspool->sortstates);
 }
 
-/*
- * Run single OrioleDB table scan. Extract attributes for each index and put them
- * into each index sort state.
- *
- * In case of parallel indexes rebuild process only a part of the table as a worker
- * and for each tuple put extracted attributes for each index into each index partial
- * sort state.
- */
+//
+// Run single OrioleDB table scan. Extract attributes for each index and put them
+// into each index sort state.
+//
+// In case of parallel indexes rebuild process only a part of the table as a worker
+// and for each tuple put extracted attributes for each index into each index partial
+// sort state.
+//
 static void
 rebuild_indices_worker_heap_scan(OTableDescr *old_descr, OTableDescr *descr,
 								 ParallelOScanDesc poscan, Tuplesortstate **sortstates,
@@ -2009,23 +2009,23 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 
 	buildstate.btleader = NULL;
 
-	/*
-	 * Set snapshot retain undo locations to prevent undo cleanup during the
-	 * heap scan.  Without this, recovery could advance minProcRetainLocation
-	 * past undo records that the scan still needs for reading historical page
-	 * versions via imgReadCsn.  Applies to both parallel and serial builds;
-	 * in particular, the bridge index add path (descr->bridge &&
-	 * !old_descr->bridge) and temporary tables (per-backend local page pool,
-	 * see below) always rebuild serially.
-	 */
+	//
+// Set snapshot retain undo locations to prevent undo cleanup during the
+// heap scan.  Without this, recovery could advance minProcRetainLocation
+// past undo records that the scan still needs for reading historical page
+// versions via imgReadCsn.  Applies to both parallel and serial builds;
+// in particular, the bridge index add path (descr->bridge &&
+// !old_descr->bridge) and temporary tables (per-backend local page pool,
+// see below) always rebuild serially.
+//
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		set_my_snapshot_retain_location((UndoLogType) i);
 
-	/*
-	 * Attempt to launch parallel worker scan when required.  Parallel workers
-	 * cannot access data in temporary tables because they use a per-backend
-	 * local page pool.
-	 */
+	//
+// Attempt to launch parallel worker scan when required.  Parallel workers
+// cannot access data in temporary tables because they use a per-backend
+// local page pool.
+//
 	if ((in_dedicated_recovery_worker || (ActiveSnapshotSet() && max_parallel_maintenance_workers > 0)) &&
 		o_table->persistence != RELPERSISTENCE_TEMP &&
 		!descr->indices[PrimaryIndexNumber]->primaryIsCtid &&
@@ -2060,10 +2060,10 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 			 old_o_table->oids.datoid, old_o_table->oids.reloid, old_o_table->oids.relnode,
 			 o_table->oids.datoid, o_table->oids.reloid, o_table->oids.relnode);
 
-	/*
-	 * If parallel build requested and at least one worker process was
-	 * successfully launched, set up coordination state
-	 */
+	//
+// If parallel build requested and at least one worker process was
+// successfully launched, set up coordination state
+//
 	if (buildstate.btleader)
 	{
 		for (i = PrimaryIndexNumber; i < nallindices; i++)
@@ -2075,7 +2075,7 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 		}
 	}
 
-	/* Begin serial/leader tuplesorts */
+	// Begin serial/leader tuplesorts
 	leader_sortmem = maintenance_work_mem / nallindices;
 
 	for (i = PrimaryIndexNumber; i < descr->nIndices; i++)
@@ -2099,10 +2099,10 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 		sortstates[bridge_idx] = tuplesort_begin_orioledb_index(descr->bridge, leader_sortmem, false, coordinate[bridge_idx]);
 	}
 
-	/* Fill spool using either serial or parallel heap scan */
+	// Fill spool using either serial or parallel heap scan
 	if (!buildstate.btleader)
 	{
-		/* Serial build */
+		// Serial build
 		rebuild_indices_worker_heap_scan(old_descr, descr, NULL, sortstates,
 										 false, &heap_tuples, &index_tuples,
 										 &ctid,
@@ -2110,13 +2110,13 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 	}
 	else
 	{
-		/* We are on leader. Wait until workers end their scans */
+		// We are on leader. Wait until workers end their scans
 		_o_index_parallel_heapscan(&buildstate);
 		index_tuples[0] = buildstate.btleader->btshared->indtuples[0];
 		heap_tuples = buildstate.btleader->btshared->reltuples;
 	}
 
-	/* Scan is done; release retained undo locations. */
+	// Scan is done; release retained undo locations.
 	for (i = 0; i < (int) UndoLogsCount; i++)
 		clear_my_snapshot_retain_location((UndoLogType) i);
 
@@ -2124,7 +2124,7 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 	for (i = PrimaryIndexNumber; i < nallindices; i++)
 	{
 		tuplesort_performsort(sortstates[i]);
-		if (i < descr->nIndices)	/* Indices sort states */
+		if (i < descr->nIndices)	// Indices sort states
 		{
 			btree_write_index_data(&descr->indices[i]->desc, descr->indices[i]->leafTupdesc,
 								   sortstates[i],
@@ -2132,12 +2132,12 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 								   (i == PrimaryIndexNumber) ? bridge_ctid : 0,
 								   &fileHeaders[i]);
 		}
-		else if (descr->toast && i == descr->nIndices)	/* TOAST sort state */
+		else if (descr->toast && i == descr->nIndices)	// TOAST sort state
 		{
 			btree_write_index_data(&descr->toast->desc, descr->toast->leafTupdesc,
 								   sortstates[i], 0, 0, &fileHeaders[i]);
 		}
-		else if (descr->bridge) /* bridge_index sort state */
+		else if (descr->bridge) // bridge_index sort state
 		{
 			btree_write_index_data(&descr->bridge->desc, descr->bridge->leafTupdesc,
 								   sortstates[i], 0, 0, &fileHeaders[i]);
@@ -2163,29 +2163,29 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 		_o_index_end_parallel(buildstate.btleader);
 	}
 
-	/*
-	 * Write the file headers.  We need to write the correct checkpoint
-	 * number, meta lock will prevent checkpointer from walking through.
-	 * Remove shared root info placeholders to let checkpointer process these
-	 * trees when we release the lock.
-	 */
+	//
+// Write the file headers.  We need to write the correct checkpoint
+// number, meta lock will prevent checkpointer from walking through.
+// Remove shared root info placeholders to let checkpointer process these
+// trees when we release the lock.
+//
 	o_tables_table_meta_lock(o_table);
 
 	for (i = PrimaryIndexNumber; i < nallindices; i++)
 	{
-		if (i < descr->nIndices)	/* Indices sort states */
+		if (i < descr->nIndices)	// Indices sort states
 		{
 			location = btree_write_file_header(&descr->indices[i]->desc, &fileHeaders[i]);
 			o_drop_shared_root_info(descr->indices[i]->desc.oids.datoid,
 									descr->indices[i]->desc.oids.relnode);
 		}
-		else if (descr->toast && i == descr->nIndices)	/* TOAST sort state */
+		else if (descr->toast && i == descr->nIndices)	// TOAST sort state
 		{
 			location = btree_write_file_header(&descr->toast->desc, &fileHeaders[i]);
 			o_drop_shared_root_info(descr->toast->desc.oids.datoid,
 									descr->toast->desc.oids.relnode);
 		}
-		else if (descr->bridge) /* bridge_index sort state */
+		else if (descr->bridge) // bridge_index sort state
 		{
 			location = btree_write_file_header(&descr->bridge->desc, &fileHeaders[i]);
 			o_drop_shared_root_info(descr->bridge->desc.oids.datoid,
@@ -2203,7 +2203,7 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 
 	if (!is_recovery_in_progress())
 	{
-		/* See note in build_secondary_index() — SUE is the minimum. */
+		// See note in build_secondary_index() — SUE is the minimum.
 		tableRelation = table_open(o_table->oids.reloid,
 								   ShareUpdateExclusiveLock);
 		index_update_stats(tableRelation, true, heap_tuples);
@@ -2228,7 +2228,7 @@ rebuild_indices(OTable *old_o_table, OTableDescr *old_descr,
 			}
 		}
 
-		/* Make the updated catalog row versions visible */
+		// Make the updated catalog row versions visible
 		CommandCounterIncrement();
 		table_close(tableRelation, ShareUpdateExclusiveLock);
 	}
@@ -2253,7 +2253,7 @@ drop_primary_index(Relation rel, OTable *o_table)
 			(o_table->nindices - 1) * sizeof(OTableIndex));
 	o_table->nindices--;
 	o_table->has_primary = false;
-	o_table->primary_init_nfields = o_table->nfields + 1;	/* + ctid field */
+	o_table->primary_init_nfields = o_table->nfields + 1;	// + ctid field
 
 	o_tables_table_meta_lock(NULL);
 	old_descr = o_fetch_table_descr(old_o_table->oids);
@@ -2285,7 +2285,7 @@ drop_secondary_index(OTable *o_table, OIndexNumber ix_num)
 				(o_table->nindices - ix_num) * sizeof(OTableIndex));
 	}
 
-	/* update o_table */
+	// update o_table
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 	o_tables_table_meta_lock(o_table);
 	o_tables_update(o_table, oxid, oSnapshot.csn);

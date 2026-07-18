@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * format.c
- * 		Routines for accessing tuples in orioledb format.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tuple/format.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// format.c
+// Routines for accessing tuples in orioledb format.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tuple/format.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -22,11 +22,11 @@
 
 #include "access/htup_details.h"
 
-/* Does att's datatype allow packing into the 1-byte-header varlena format? */
+// Does att's datatype allow packing into the 1-byte-header varlena format?
 #define ATT_IS_PACKABLE(att) \
 	((att)->attlen == -1 && (att)->attstorage != 'p')
 
-/* Use this if it's already known varlena */
+// Use this if it's already known varlena
 #define VARLENA_ATT_IS_PACKABLE(att) \
 	((att)->attstorage != 'p')
 
@@ -207,11 +207,11 @@ o_tuple_get_last_iptr(TupleDesc desc, OTupleFixedFormatSpec *spec,
 	}
 }
 
-/*
- * nocachegetattr analog for tuples that can consist
- * orioledb toast values (OToastValue). But return just pointer to field
- * in the tuple.
- */
+//
+// nocachegetattr analog for tuples that can consist
+// orioledb toast values (OToastValue). But return just pointer to field
+// in the tuple.
+//
 Pointer
 o_toast_nocachegetattr_ptr(OTuple tuple,
 						   int attnum,
@@ -219,20 +219,20 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 						   OTupleFixedFormatSpec *spec)
 {
 	OTupleHeader tup = (OTupleHeader) tuple.data;
-	char	   *tp;				/* ptr to data part of tuple */
-	bool		slow = false;	/* do we have to walk attrs? */
+	char	   *tp;				// ptr to data part of tuple
+	bool		slow = false;	// do we have to walk attrs?
 	int			i;
 	OTupleReaderState reader;
 	Pointer		result = NULL;
 
-	/* ----------------
-	 *	 Three cases:
-	 *
-	 *	 1: No nulls and no variable-width attributes.
-	 *	 2: Has a null or a var-width AFTER att.
-	 *	 3: Has nulls or var-widths BEFORE att.
-	 * ----------------
-	 */
+	// ----------------
+// Three cases:
+//
+// 1: No nulls and no variable-width attributes.
+// 2: Has a null or a var-width AFTER att.
+// 3: Has nulls or var-widths BEFORE att.
+// ----------------
+//
 
 	attnum--;
 
@@ -242,21 +242,21 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 	}
 	else if (tup->hasnulls)
 	{
-		/*
-		 * there's a null somewhere in the tuple
-		 *
-		 * check to see if any preceding bits are null...
-		 */
+		//
+// there's a null somewhere in the tuple
+//
+// check to see if any preceding bits are null...
+//
 		int			byte = attnum >> 3;
 		int			finalbit = attnum & 0x07;
 		bits8	   *bp = (bits8 *) (tuple.data + SizeOfOTupleHeader);
 
-		/* check for nulls "before" final bit of last byte */
+		// check for nulls "before" final bit of last byte
 		if ((~bp[byte]) & ((1 << finalbit) - 1))
 			slow = true;
 		else
 		{
-			/* check for nulls in any "earlier" bytes */
+			// check for nulls in any "earlier" bytes
 			for (i = 0; i < byte; i++)
 			{
 				if (bp[i] != 0xFF)
@@ -277,10 +277,10 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 	{
 		OTupleAttrCompact *att = OTupleDescAttrFast(tupleDesc, attnum);
 
-		/*
-		 * If we get here, there are no nulls up to and including the target
-		 * attribute.  If we have a cached offset, we can use it.
-		 */
+		//
+// If we get here, there are no nulls up to and including the target
+// attribute.  If we have a cached offset, we can use it.
+//
 		if (att->attcacheoff >= 0)
 			return tp + att->attcacheoff;
 	}
@@ -294,10 +294,10 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 }
 
 
-/*
- * nocachegetattr analog for tuples that can consist
- * orioledb toast values (OToastValue).
- */
+//
+// nocachegetattr analog for tuples that can consist
+// orioledb toast values (OToastValue).
+//
 Datum
 o_toast_nocachegetattr(OTuple tuple,
 					   int attnum,
@@ -306,22 +306,22 @@ o_toast_nocachegetattr(OTuple tuple,
 					   bool *is_null)
 {
 	OTupleHeader tup = (OTupleHeader) tuple.data;
-	char	   *tp;				/* ptr to data part of tuple */
-	bool		slow = false;	/* do we have to walk attrs? */
+	char	   *tp;				// ptr to data part of tuple
+	bool		slow = false;	// do we have to walk attrs?
 	int			i;
 	OTupleReaderState reader;
 	Datum		result = (Datum) 0;
 
 	*is_null = false;
 
-	/* ----------------
-	 *	 Three cases:
-	 *
-	 *	 1: No nulls and no variable-width attributes.
-	 *	 2: Has a null or a var-width AFTER att.
-	 *	 3: Has nulls or var-widths BEFORE att.
-	 * ----------------
-	 */
+	// ----------------
+// Three cases:
+//
+// 1: No nulls and no variable-width attributes.
+// 2: Has a null or a var-width AFTER att.
+// 3: Has nulls or var-widths BEFORE att.
+// ----------------
+//
 
 	attnum--;
 
@@ -331,21 +331,21 @@ o_toast_nocachegetattr(OTuple tuple,
 	}
 	else if (tup->hasnulls)
 	{
-		/*
-		 * there's a null somewhere in the tuple
-		 *
-		 * check to see if any preceding bits are null...
-		 */
+		//
+// there's a null somewhere in the tuple
+//
+// check to see if any preceding bits are null...
+//
 		int			byte = attnum >> 3;
 		int			finalbit = attnum & 0x07;
 		bits8	   *bp = (bits8 *) (tuple.data + SizeOfOTupleHeader);
 
-		/* check for nulls "before" final bit of last byte */
+		// check for nulls "before" final bit of last byte
 		if ((~bp[byte]) & ((1 << finalbit) - 1))
 			slow = true;
 		else
 		{
-			/* check for nulls in any "earlier" bytes */
+			// check for nulls in any "earlier" bytes
 			for (i = 0; i < byte; i++)
 			{
 				if (bp[i] != 0xFF)
@@ -366,10 +366,10 @@ o_toast_nocachegetattr(OTuple tuple,
 	{
 		OTupleAttrCompact *att;
 
-		/*
-		 * If we get here, there are no nulls up to and including the target
-		 * attribute.  If we have a cached offset, we can use it.
-		 */
+		//
+// If we get here, there are no nulls up to and including the target
+// attribute.  If we have a cached offset, we can use it.
+//
 		att = OTupleDescAttrFast(tupleDesc, attnum);
 		if (att->attcacheoff >= 0)
 			return fetchatt(att, tp + att->attcacheoff);
@@ -381,10 +381,10 @@ o_toast_nocachegetattr(OTuple tuple,
 
 	if (*is_null && !tup->hasnulls && tup->natts < tupleDesc->natts)
 	{
-		/*
-		 * This possible when reading tuple without nulls after adding null
-		 * column
-		 */
+		//
+// This possible when reading tuple without nulls after adding null
+// column
+//
 		*is_null = true;
 		return 0;
 	}
@@ -394,7 +394,7 @@ o_toast_nocachegetattr(OTuple tuple,
 	return result;
 }
 
-/* No existing callers */
+// No existing callers
 Pointer
 o_tuple_get_data(OTuple tuple, int *size, OTupleFixedFormatSpec *spec)
 {
@@ -417,10 +417,10 @@ o_tuple_get_data(OTuple tuple, int *size, OTupleFixedFormatSpec *spec)
 	}
 }
 
-/*
- * toast_compute_data_size
- *		Determine size of the data area of a tuple to be constructed
- */
+//
+// toast_compute_data_size
+// Determine size of the data area of a tuple to be constructed
+//
 static Size
 o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, BridgeData *bridge_data,
 						  Datum *values, bool *isnull, char *to_toast,
@@ -467,19 +467,19 @@ o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, BridgeData *bri
 		if (ATT_IS_PACKABLE(atti) &&
 			VARATT_CAN_MAKE_SHORT(DatumGetPointer(val)))
 		{
-			/*
-			 * we're anticipating converting to a short varlena header, so
-			 * adjust length and don't count any alignment
-			 */
+			//
+// we're anticipating converting to a short varlena header, so
+// adjust length and don't count any alignment
+//
 			data_length += VARATT_CONVERTED_SHORT_SIZE(DatumGetPointer(val));
 		}
 		else if (atti->attlen == -1 &&
 				 VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val)))
 		{
-			/*
-			 * we want to flatten the expanded value so that the constructed
-			 * tuple doesn't depend on it
-			 */
+			//
+// we want to flatten the expanded value so that the constructed
+// tuple doesn't depend on it
+//
 			data_length = att_align_nominal(data_length, atti->attalign);
 			data_length += EOH_get_flat_size(DatumGetEOHP(val));
 		}
@@ -515,9 +515,9 @@ o_new_tuple_size(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 	if (has_bridge_ctid)
 		ctid_off++;
 
-	/*
-	 * Check for nulls
-	 */
+	//
+// Check for nulls
+//
 	for (i = ctid_off; i < natts; i++)
 	{
 		if (isnull[i - ctid_off])
@@ -529,9 +529,9 @@ o_new_tuple_size(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 			fixedFormat = false;
 	}
 
-	/*
-	 * Determine total space needed
-	 */
+	//
+// Determine total space needed
+//
 	if (!fixedFormat)
 	{
 		result = SizeOfOTupleHeader;
@@ -550,9 +550,9 @@ o_new_tuple_size(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 	return result;
 }
 
-/*
- * Memory is expected to be already zeroed!
- */
+//
+// Memory is expected to be already zeroed!
+//
 void
 o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 			 OTuple *tuple, Size tuple_size,
@@ -577,9 +577,9 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 	if (bridge_data && bridge_data->is_pkey)
 		ctid_off++;
 
-	/*
-	 * Check for nulls
-	 */
+	//
+// Check for nulls
+//
 	for (i = ctid_off; i < natts; i++)
 	{
 		if (isnull[i - ctid_off])
@@ -608,7 +608,7 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 		}
 		else
 		{
-			/* just to keep compiler quiet */
+			// just to keep compiler quiet
 			bitP = NULL;
 			bitmask = 0;
 		}
@@ -713,30 +713,30 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 		}
 
 
-		/*
-		 * XXX we use the att_align macros on the pointer value itself, not on
-		 * an offset.  This is a bit of a hack.
-		 */
+		//
+// XXX we use the att_align macros on the pointer value itself, not on
+// an offset.  This is a bit of a hack.
+//
 		if (att->attbyval)
 		{
-			/* pass-by-value */
+			// pass-by-value
 			data = (char *) att_align_nominal(data, att->attalign);
 			store_att_byval(data, value, att->attlen);
 			data_length = att->attlen;
 		}
 		else if (att->attlen == -1)
 		{
-			/* varlena */
+			// varlena
 			Pointer		val = DatumGetPointer(value);
 
 			if (VARATT_IS_EXTERNAL(val))
 			{
 				if (VARATT_IS_EXTERNAL_EXPANDED(val))
 				{
-					/*
-					 * we want to flatten the expanded value so that the
-					 * constructed tuple doesn't depend on it
-					 */
+					//
+// we want to flatten the expanded value so that the
+// constructed tuple doesn't depend on it
+//
 					ExpandedObjectHeader *eoh = DatumGetEOHP(value);
 
 					data = (char *) att_align_nominal(data,
@@ -746,28 +746,28 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 				}
 				else
 				{
-					/* no alignment, since it's short by definition */
+					// no alignment, since it's short by definition
 					data_length = VARSIZE_EXTERNAL(val);
 					memcpy(data, val, data_length);
 				}
 			}
 			else if (VARATT_IS_SHORT(val))
 			{
-				/* no alignment for short varlenas */
+				// no alignment for short varlenas
 				data_length = VARSIZE_SHORT(val);
 				memcpy(data, val, data_length);
 			}
 			else if (VARLENA_ATT_IS_PACKABLE(att) &&
 					 VARATT_CAN_MAKE_SHORT(val))
 			{
-				/* convert to short varlena -- no alignment */
+				// convert to short varlena -- no alignment
 				data_length = VARATT_CONVERTED_SHORT_SIZE(val);
 				SET_VARSIZE_SHORT(data, data_length);
 				memcpy(data + 1, VARDATA(val), data_length - 1);
 			}
 			else
 			{
-				/* full 4-byte header varlena */
+				// full 4-byte header varlena
 				data = (char *) att_align_nominal(data,
 												  att->attalign);
 				data_length = VARSIZE(val);
@@ -776,14 +776,14 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 		}
 		else if (att->attlen == -2)
 		{
-			/* cstring ... never needs alignment */
+			// cstring ... never needs alignment
 			Assert(att->attalign == 'c');
 			data_length = strlen(DatumGetCString(value)) + 1;
 			memcpy(data, DatumGetPointer(value), data_length);
 		}
 		else
 		{
-			/* fixed-length pass-by-reference */
+			// fixed-length pass-by-reference
 			data = (char *) att_align_nominal(data, att->attalign);
 			Assert(att->attlen > 0);
 			data_length = att->attlen;

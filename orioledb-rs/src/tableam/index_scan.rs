@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * index_scan.c
- *		Routines for index scan of orioledb table
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/index_scan.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// index_scan.c
+// Routines for index scan of orioledb table
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/index_scan.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -180,10 +180,10 @@ is_tuple_valid(OTuple tup, OIndexDescr *id, OBTreeKeyRange *range,
 
 #if PG_VERSION_NUM >= 180000
 
-		/*
-		 * Skip scan bounds are dynamic and checked earlier, no need for array
-		 * element matches
-		 */
+		//
+// Skip scan bounds are dynamic and checked earlier, no need for array
+// element matches
+//
 		if (key->sk_flags & SK_BT_SKIP)
 		{
 			Assert(arrayKey->num_elems == -1);
@@ -208,14 +208,14 @@ is_tuple_valid(OTuple tup, OIndexDescr *id, OBTreeKeyRange *range,
 
 			Assert(arrayKey->num_elems > 0);
 
-			/*
-			 * The array elements are sorted in index-column order, so the
-			 * membership test is a binary search rather than a linear scan.
-			 * Pick the comparator once (out of the loop): a coercible bound
-			 * uses the field comparator, otherwise the bound's own one.  The
-			 * comparator orders by the datum's ascending value, so flip its
-			 * result for a descending column to match the element order.
-			 */
+			//
+// The array elements are sorted in index-column order, so the
+// membership test is a binary search rather than a linear scan.
+// Pick the comparator once (out of the loop): a coercible bound
+// uses the field comparator, otherwise the bound's own one.  The
+// comparator orders by the datum's ascending value, so flip its
+// result for a descending column to match the element order.
+//
 			if (o_bound_is_coercible(bound, field))
 				comparator = field->comparator;
 			else
@@ -250,20 +250,20 @@ is_tuple_valid(OTuple tup, OIndexDescr *id, OBTreeKeyRange *range,
 }
 
 #if PG_VERSION_NUM >= 180000
-/*
- * Vendored copies of nbtree's static array-advancement primitives.
- *
- * Upstream PG18 (commit 92fe23d93aa) added btree skip scan via the static
- * helpers _bt_array_set_low_or_high and _bt_skiparray_set_element in
- * nbtutils.c.  OrioleDB drives its scan loop from key-range bounds rather
- * than per-tuple btree callbacks and needs to call these primitives directly
- * to reset and pin skip arrays between ranges; they are not exported via
- * nbtree.h.
- *
- * The copies below are kept structurally identical to upstream so future
- * rebases can diff them mechanically.  They only touch public fields of
- * BTArrayKeyInfo / ScanKey; no nbtree internals beyond the public header.
- */
+//
+// Vendored copies of nbtree's static array-advancement primitives.
+//
+// Upstream PG18 (commit 92fe23d93aa) added btree skip scan via the static
+// helpers _bt_array_set_low_or_high and _bt_skiparray_set_element in
+// nbtutils.c.  OrioleDB drives its scan loop from key-range bounds rather
+// than per-tuple btree callbacks and needs to call these primitives directly
+// to reset and pin skip arrays between ranges; they are not exported via
+// nbtree.h.
+//
+// The copies below are kept structurally identical to upstream so future
+// rebases can diff them mechanically.  They only touch public fields of
+// BTArrayKeyInfo / ScanKey; no nbtree internals beyond the public header.
+//
 static void
 o_bt_array_set_low_or_high(Relation rel, ScanKey skey, BTArrayKeyInfo *array,
 						   bool low_not_high)
@@ -304,14 +304,14 @@ o_bt_array_set_low_or_high(Relation rel, ScanKey skey, BTArrayKeyInfo *array,
 		skey->sk_flags |= SK_BT_MAXVAL;
 }
 
-/*
- * Pin a skip array to a concrete leading-column value from an in-flight
- * tuple.  This is the orioledb counterpart of upstream's
- * _bt_skiparray_set_element: it clears the MINVAL/MAXVAL/NEXT/PRIOR
- * sentinel/transition flags and copies the tuple's datum into
- * sk_argument so that the next o_key_data_to_key_range() call computes a
- * point bound at this distinct leading value.
- */
+//
+// Pin a skip array to a concrete leading-column value from an in-flight
+// tuple.  This is the orioledb counterpart of upstream's
+// _bt_skiparray_set_element: it clears the MINVAL/MAXVAL/NEXT/PRIOR
+// sentinel/transition flags and copies the tuple's datum into
+// sk_argument so that the next o_key_data_to_key_range() call computes a
+// point bound at this distinct leading value.
+//
 static void
 o_bt_skiparray_set_element_from_tuple(ScanKey skey, BTArrayKeyInfo *array,
 									  Datum tupdatum, bool tupnull)
@@ -353,11 +353,11 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 	int			i;
 	bool		have_array_keys = false;
 
-	/*
-	 * We must advance the last array key most quickly, since it will
-	 * correspond to the lowest-order index column among the available
-	 * qualifications
-	 */
+	//
+// We must advance the last array key most quickly, since it will
+// correspond to the lowest-order index column among the available
+// qualifications
+//
 	for (i = so->numArrayKeys - 1; i >= 0; i--)
 	{
 		BTArrayKeyInfo *curArrayKey = &so->arrayKeys[i];
@@ -370,27 +370,27 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 
 #if PG_VERSION_NUM >= 180000
 
-		/*
-		 * Skip arrays (PG18+) drive per-distinct-value iteration. Handle them
-		 * before the trailing-array check because numPrefixExactKeys caps
-		 * itself at the skip array's scan_key (via
-		 * o_adjust_num_prefix_exact_keys), so the trailing check would
-		 * otherwise short-circuit the skip array's own advancement.
-		 *
-		 * Strategy: surface SK_BT_NEXT (forward) / SK_BT_PRIOR (backward) on
-		 * the skip array's scan key instead of using SkipSupport's
-		 * increment/decrement directly.  The flag makes
-		 * o_key_data_to_key_range produce an exclusive bound past
-		 * sk_argument; the iterator then probes for the next actual leading
-		 * value present in the index, and o_iterate_index pins sk_argument to
-		 * that tuple's value. Termination is natural: if no tuple is found
-		 * past sk_argument (within low_compare..high_compare), the iterator
-		 * returns NULL and the scan ends.
-		 *
-		 * Pre-check the relevant compare bound before setting the transition
-		 * flag so we don't keep iterating once sk_argument has reached the
-		 * global edge of the skip array.
-		 */
+		//
+// Skip arrays (PG18+) drive per-distinct-value iteration. Handle them
+// before the trailing-array check because numPrefixExactKeys caps
+// itself at the skip array's scan_key (via
+// o_adjust_num_prefix_exact_keys), so the trailing check would
+// otherwise short-circuit the skip array's own advancement.
+//
+// Strategy: surface SK_BT_NEXT (forward) / SK_BT_PRIOR (backward) on
+// the skip array's scan key instead of using SkipSupport's
+// increment/decrement directly.  The flag makes
+// o_key_data_to_key_range produce an exclusive bound past
+// sk_argument; the iterator then probes for the next actual leading
+// value present in the index, and o_iterate_index pins sk_argument to
+// that tuple's value. Termination is natural: if no tuple is found
+// past sk_argument (within low_compare..high_compare), the iterator
+// returns NULL and the scan ends.
+//
+// Pre-check the relevant compare bound before setting the transition
+// flag so we don't keep iterating once sk_argument has reached the
+// global edge of the skip array.
+//
 		if (skey->sk_flags & SK_BT_SKIP)
 		{
 			ScanKey		bound_key;
@@ -398,22 +398,22 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 
 			if (skey->sk_flags & (SK_BT_MINVAL | SK_BT_MAXVAL | SK_ISNULL))
 			{
-				/*
-				 * Still on the initial sentinel: either o_iterate_index never
-				 * saw a tuple from the broad probe, or it saw only
-				 * NULL-leading tuples (which observe_tuple does not
-				 * transition through -- see comment there).  Either way there
-				 * is no concrete sk_argument to advance from, so reset for
-				 * direction reversal and report exhaustion.
-				 *
-				 * Critically, ISNULL must be handled here and not fall
-				 * through to the "concrete state" path below: that path sets
-				 * SK_BT_NEXT/PRIOR on top of sk_argument, but sentinel-ISNULL
-				 * state has sk_argument == 0, and a subsequent
-				 * o_key_data_to_key_range build would pass that NULL datum
-				 * into o_fill_key_bounds -> comparator, segfaulting on
-				 * by-reference types (text, etc.).
-				 */
+				//
+// Still on the initial sentinel: either o_iterate_index never
+// saw a tuple from the broad probe, or it saw only
+// NULL-leading tuples (which observe_tuple does not
+// transition through -- see comment there).  Either way there
+// is no concrete sk_argument to advance from, so reset for
+// direction reversal and report exhaustion.
+//
+// Critically, ISNULL must be handled here and not fall
+// through to the "concrete state" path below: that path sets
+// SK_BT_NEXT/PRIOR on top of sk_argument, but sentinel-ISNULL
+// state has sk_argument == 0, and a subsequent
+// o_key_data_to_key_range build would pass that NULL datum
+// into o_fill_key_bounds -> comparator, segfaulting on
+// by-reference types (text, etc.).
+//
 				o_bt_array_set_low_or_high(rel, skey, curArrayKey,
 										   ScanDirectionIsForward(dir));
 				continue;
@@ -421,10 +421,10 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 
 			if (skey->sk_flags & (SK_BT_NEXT | SK_BT_PRIOR))
 			{
-				/*
-				 * Already in transition state and the probe failed to find
-				 * another tuple.  Reset and report exhaustion.
-				 */
+				//
+// Already in transition state and the probe failed to find
+// another tuple.  Reset and report exhaustion.
+//
 				skey->sk_flags &= ~(SK_BT_NEXT | SK_BT_PRIOR);
 				o_bt_array_set_low_or_high(rel, skey, curArrayKey,
 										   ScanDirectionIsForward(dir));
@@ -437,11 +437,11 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 			exhausted = false;
 			if (bound_key)
 			{
-				/*
-				 * Strategy <= for high_compare in forward scan, >= for
-				 * low_compare in backward scan: if sk_argument already fails
-				 * the bound, we've walked past the skip array's global edge.
-				 */
+				//
+// Strategy <= for high_compare in forward scan, >= for
+// low_compare in backward scan: if sk_argument already fails
+// the bound, we've walked past the skip array's global edge.
+//
 				if (!DatumGetBool(FunctionCall2Coll(&bound_key->sk_func,
 													bound_key->sk_collation,
 													skey->sk_argument,
@@ -456,11 +456,11 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 				continue;
 			}
 
-			/*
-			 * Signal advancement to the next distinct value via the upstream
-			 * NEXT/PRIOR flag mechanism.  sk_argument stays at the previous
-			 * distinct value -- the iterator will probe past it.
-			 */
+			//
+// Signal advancement to the next distinct value via the upstream
+// NEXT/PRIOR flag mechanism.  sk_argument stays at the previous
+// distinct value -- the iterator will probe past it.
+//
 			if (ScanDirectionIsForward(dir))
 				skey->sk_flags |= SK_BT_NEXT;
 			else
@@ -488,19 +488,19 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 		if (!rolled)
 			return true;
 
-		/* Need to advance next array key, if any */
+		// Need to advance next array key, if any
 	}
 
-	/*
-	 * The array keys are now exhausted.  (There isn't actually a distinct
-	 * state that represents array exhaustion, since index scans don't always
-	 * end after btgettuple returns "false".)
-	 *
-	 * Restore the array keys to the state they were in immediately before we
-	 * were called.  This ensures that the arrays only ever ratchet in the
-	 * current scan direction.  Without this, scans would overlook matching
-	 * tuples if and when the scan's direction was subsequently reversed.
-	 */
+	//
+// The array keys are now exhausted.  (There isn't actually a distinct
+// state that represents array exhaustion, since index scans don't always
+// end after btgettuple returns "false".)
+//
+// Restore the array keys to the state they were in immediately before we
+// were called.  This ensures that the arrays only ever ratchet in the
+// current scan direction.  Without this, scans would overlook matching
+// tuples if and when the scan's direction was subsequently reversed.
+//
 	if (have_array_keys)
 		_bt_start_array_keys(scan, -dir);
 
@@ -508,13 +508,13 @@ o_bt_advance_array_keys_increment(OScanState *ostate, ScanDirection dir)
 }
 
 #if PG_VERSION_NUM >= 180000
-/*
- * Does the scan have any PG18 skip array?  A skip array (num_elems == -1)
- * carries a dynamic range (low_compare / high_compare) that changes from one
- * range to the next, so the o_key_data_update_array_key_range() shortcut --
- * which only refreshes fixed array element values -- cannot represent it and
- * switch_to_next_range() must rebuild the full key range instead.
- */
+//
+// Does the scan have any PG18 skip array?  A skip array (num_elems == -1)
+// carries a dynamic range (low_compare / high_compare) that changes from one
+// range to the next, so the o_key_data_update_array_key_range() shortcut --
+// which only refreshes fixed array element values -- cannot represent it and
+// switch_to_next_range() must rebuild the full key range instead.
+//
 static bool
 scan_has_skip_array(BTScanOpaque so)
 {
@@ -561,7 +561,7 @@ switch_to_next_range(OIndexDescr *indexDescr, OScanState *ostate,
 			result = false;
 			so->needPrimScan = false;
 			so->scanBehind = false;
-			/* elog(LOG, "no array keys"); */
+			// elog(LOG, "no array keys");
 		}
 		else
 		{
@@ -583,7 +583,7 @@ switch_to_next_range(OIndexDescr *indexDescr, OScanState *ostate,
 
 	if (!ostate->curKeyRangeIsLoaded
 #if PG_VERSION_NUM >= 180000
-	/* skip arrays have dynamic ranges: rebuild fully, see comment above */
+	// skip arrays have dynamic ranges: rebuild fully, see comment above
 		|| (so->numArrayKeys > 0 && scan_has_skip_array(so))
 #endif
 		)
@@ -610,7 +610,7 @@ switch_to_next_range(OIndexDescr *indexDescr, OScanState *ostate,
 				 ? &ostate->curKeyRange.low
 				 : &ostate->curKeyRange.high);
 
-		/* Re-use the existing iterator when possible */
+		// Re-use the existing iterator when possible
 		if (!ostate->iterator)
 			ostate->iterator = o_btree_iterator_create(&indexDescr->desc,
 													   (Pointer) bound,
@@ -626,14 +626,14 @@ switch_to_next_range(OIndexDescr *indexDescr, OScanState *ostate,
 
 #if PG_VERSION_NUM >= 180000
 
-	/*
-	 * Mark the iterator as a probe range when any skip array is in its
-	 * sentinel (MINVAL/MAXVAL/SearchNull-initial) or transition
-	 * (SK_BT_NEXT/SK_BT_PRIOR) state.  o_iterate_index will use the first
-	 * non-NULL tuple to pin sk_argument and reopen with a narrow point bound.
-	 * If no tuple is found, the iterator simply returns NULL and the scan
-	 * terminates.
-	 */
+	//
+// Mark the iterator as a probe range when any skip array is in its
+// sentinel (MINVAL/MAXVAL/SearchNull-initial) or transition
+// (SK_BT_NEXT/SK_BT_PRIOR) state.  o_iterate_index will use the first
+// non-NULL tuple to pin sk_argument and reopen with a narrow point bound.
+// If no tuple is found, the iterator simply returns NULL and the scan
+// terminates.
+//
 	ostate->skipScanProbePending = false;
 	if (so->numArrayKeys > 0)
 	{
@@ -658,16 +658,16 @@ switch_to_next_range(OIndexDescr *indexDescr, OScanState *ostate,
 }
 
 #if PG_VERSION_NUM >= 180000
-/*
- * After o_iterate_index fetches the first tuple over a probe range,
- * use the tuple's leading-column value to pin each prefix skip
- * array's sk_argument.  The next iterator reopen with the updated
- * scan-key state will build a narrow point bound on that value via
- * o_key_data_to_key_range.
- *
- * Returns true if at least one skip array was transitioned (caller
- * should reopen the iterator); false otherwise.
- */
+//
+// After o_iterate_index fetches the first tuple over a probe range,
+// use the tuple's leading-column value to pin each prefix skip
+// array's sk_argument.  The next iterator reopen with the updated
+// scan-key state will build a narrow point bound on that value via
+// o_key_data_to_key_range.
+//
+// Returns true if at least one skip array was transitioned (caller
+// should reopen the iterator); false otherwise.
+//
 static bool
 o_skip_arrays_observe_tuple(OIndexDescr *indexDescr, OScanState *ostate,
 							OTuple tup)
@@ -690,7 +690,7 @@ o_skip_arrays_observe_tuple(OIndexDescr *indexDescr, OScanState *ostate,
 		if (!(skey->sk_flags & SK_BT_SKIP))
 			continue;
 
-		/* Only act on a skip array that is in sentinel or transition. */
+		// Only act on a skip array that is in sentinel or transition.
 		if (!(skey->sk_flags &
 			  (SK_BT_MINVAL | SK_BT_MAXVAL | SK_ISNULL |
 			   SK_BT_NEXT | SK_BT_PRIOR)))
@@ -701,21 +701,21 @@ o_skip_arrays_observe_tuple(OIndexDescr *indexDescr, OScanState *ostate,
 		value = o_fastgetattr(tup, attnum, indexDescr->leafTupdesc,
 							  &indexDescr->leafSpec, &isnull);
 
-		/*
-		 * Don't transition on a NULL leading-column value.  Pinning
-		 * sk_argument to NULL via set_element_from_tuple lands the skip array
-		 * in the SK_ISNULL state, which is flag-indistinguishable from the
-		 * initial sentinel-NULL state that _bt_start_array_keys uses for
-		 * nulls-last + null_elem=true.  Without a way to tell those apart,
-		 * o_key_data_to_key_range falls back to the broad range -- which
-		 * would re-open the same iterator and re-emit the same NULL-leading
-		 * tuple, infinite-looping.  Leave the array in its current
-		 * (transition or sentinel) state and let the active iterator continue
-		 * from this position, emitting any further NULL-leading tuples that
-		 * match the trailing predicates and then exhausting.  Skip-scan
-		 * optimization is forfeited for the NULL band, but correctness is
-		 * preserved.
-		 */
+		//
+// Don't transition on a NULL leading-column value.  Pinning
+// sk_argument to NULL via set_element_from_tuple lands the skip array
+// in the SK_ISNULL state, which is flag-indistinguishable from the
+// initial sentinel-NULL state that _bt_start_array_keys uses for
+// nulls-last + null_elem=true.  Without a way to tell those apart,
+// o_key_data_to_key_range falls back to the broad range -- which
+// would re-open the same iterator and re-emit the same NULL-leading
+// tuple, infinite-looping.  Leave the array in its current
+// (transition or sentinel) state and let the active iterator continue
+// from this position, emitting any further NULL-leading tuples that
+// match the trailing predicates and then exhausting.  Skip-scan
+// optimization is forfeited for the NULL band, but correctness is
+// preserved.
+//
 		if (isnull)
 			continue;
 
@@ -847,24 +847,24 @@ o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
 
 #if PG_VERSION_NUM >= 180000
 
-		/*
-		 * Probe-then-narrow.  The just-fetched tuple came from a range opened
-		 * over one or more skip arrays in sentinel (initial broad probe) or
-		 * transition (post-advance) state. Pin each such skip array's
-		 * sk_argument to this tuple's leading-column value, drop the
-		 * broad/probe iterator, and reopen with a narrow point-bound range
-		 * for that distinct value via inline key-range rebuild.  Subsequent
-		 * matching tuples come from the narrow iterator; when it exhausts,
-		 * o_bt_advance_array_keys_increment sets SK_BT_NEXT (or SK_BT_PRIOR
-		 * for backward) so the next probe range opens past sk_argument.
-		 * Termination is natural: if a probe finds no tuple within
-		 * low_compare..high_compare, the iterator returns NULL and the scan
-		 * ends.
-		 *
-		 * Do not emit this probe tuple yet -- the narrow iterator's first
-		 * fetch will return the same row.  Loop back and let the narrow
-		 * iterator drive emission.
-		 */
+		//
+// Probe-then-narrow.  The just-fetched tuple came from a range opened
+// over one or more skip arrays in sentinel (initial broad probe) or
+// transition (post-advance) state. Pin each such skip array's
+// sk_argument to this tuple's leading-column value, drop the
+// broad/probe iterator, and reopen with a narrow point-bound range
+// for that distinct value via inline key-range rebuild.  Subsequent
+// matching tuples come from the narrow iterator; when it exhausts,
+// o_bt_advance_array_keys_increment sets SK_BT_NEXT (or SK_BT_PRIOR
+// for backward) so the next probe range opens past sk_argument.
+// Termination is natural: if a probe finds no tuple within
+// low_compare..high_compare, the iterator returns NULL and the scan
+// ends.
+//
+// Do not emit this probe tuple yet -- the narrow iterator's first
+// fetch will return the same row.  Loop back and let the narrow
+// iterator drive emission.
+//
 		if (tup_fetched && !O_TUPLE_IS_NULL(tup) &&
 			ostate->skipScanProbePending)
 		{
@@ -872,21 +872,21 @@ o_iterate_index(OIndexDescr *indexDescr, OScanState *ostate,
 
 			ostate->skipScanProbePending = false;
 
-			/*
-			 * Switch to scan-lifetime context before observe_tuple so
-			 * datumCopy() into sk_argument lands in ostate->cxt, not in
-			 * whatever short-lived context the executor called us from --
-			 * sk_argument must survive across iterator rebuild.
-			 */
+			//
+// Switch to scan-lifetime context before observe_tuple so
+// datumCopy() into sk_argument lands in ostate->cxt, not in
+// whatever short-lived context the executor called us from --
+// sk_argument must survive across iterator rebuild.
+//
 			oldcontext = MemoryContextSwitchTo(ostate->cxt);
 			if (o_skip_arrays_observe_tuple(indexDescr, ostate, tup))
 			{
-				/*
-				 * Rebuild iterator inline.  Avoid switch_to_next_range: its
-				 * curKeyRangeIsLoaded=false branch would call
-				 * _bt_start_array_keys and overwrite the pin; its
-				 * curKeyRangeIsLoaded=true branch would advance past it.
-				 */
+				//
+// Rebuild iterator inline.  Avoid switch_to_next_range: its
+// curKeyRangeIsLoaded=false branch would call
+// _bt_start_array_keys and overwrite the pin; its
+// curKeyRangeIsLoaded=true branch would advance past it.
+//
 				if (ostate->iterator != NULL)
 				{
 					btree_iterator_free(ostate->iterator);
@@ -951,12 +951,12 @@ o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
 
 		if (so->numArrayKeys)
 		{
-			/* punt if we have any unsatisfiable array keys */
+			// punt if we have any unsatisfiable array keys
 			if (so->numArrayKeys < 0)
 			{
 				O_TUPLE_SET_NULL(tup);
 				descr->noInvalidation = false;
-				/* cppcheck-suppress uninitvar */
+				// cppcheck-suppress uninitvar
 				return tup;
 			}
 		}
@@ -968,12 +968,12 @@ o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
 		pgstat_count_index_scan(ostate->scandesc.indexRelation);
 #if PG_VERSION_NUM >= 180000
 
-		/*
-		 * Match upstream AMs (nbtsearch.c::_bt_first et al.) and bump the
-		 * PG18 EXPLAIN ANALYZE "Index Searches" counter once per descent from
-		 * root.  This is the same point at which we account a logical index
-		 * scan for pgstat.
-		 */
+		//
+// Match upstream AMs (nbtsearch.c::_bt_first et al.) and bump the
+// PG18 EXPLAIN ANALYZE "Index Searches" counter once per descent from
+// root.  This is the same point at which we account a logical index
+// scan for pgstat.
+//
 		if (ostate->scandesc.instrument)
 			ostate->scandesc.instrument->nsearches++;
 #endif
@@ -986,17 +986,17 @@ o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
 		if (!scan_primary || O_TUPLE_IS_NULL(tup))
 			break;
 
-		/*
-		 * if we should fetch tuple from primary and the current index is
-		 * secondary
-		 */
+		//
+// if we should fetch tuple from primary and the current index is
+// secondary
+//
 		if (ostate->ixNum != PrimaryIndexNumber)
 		{
 			OBTreeKeyBound bound;
 			OTuple		ptup;
 			OIndexDescr *primary = GET_PRIMARY(descr);
 
-			/* fetch primary index key from tuple and search raw tuple */
+			// fetch primary index key from tuple and search raw tuple
 			o_fill_pindex_tuple_key_bound(&id->desc, tup, &bound);
 
 			if (hint)
@@ -1012,10 +1012,10 @@ o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
 			pfree(tup.data);
 			tup = ptup;
 
-			/*
-			 * in concurrent DELETE/UPDATE it might happen, we should to try
-			 * fetch next tuple
-			 */
+			//
+// in concurrent DELETE/UPDATE it might happen, we should to try
+// fetch next tuple
+//
 			if (O_TUPLE_IS_NULL(tup))
 				continue;
 		}
@@ -1025,7 +1025,7 @@ o_index_scan_getnext(OTableDescr *descr, OScanState *ostate,
 	return tup;
 }
 
-/* fetches next tuple for oIterateDirectModify */
+// fetches next tuple for oIterateDirectModify
 TupleTableSlot *
 o_exec_fetch(OScanState *ostate, ScanState *ss)
 {
@@ -1065,7 +1065,7 @@ o_exec_fetch(OScanState *ostate, ScanState *ss)
 	return slot;
 }
 
-/* checks quals for a tuple slot */
+// checks quals for a tuple slot
 bool
 o_exec_qual(ExprContext *econtext, ExprState *qual, TupleTableSlot *slot)
 {
@@ -1076,10 +1076,10 @@ o_exec_qual(ExprContext *econtext, ExprState *qual, TupleTableSlot *slot)
 	return ExecQual(qual, econtext);
 }
 
-/*
- * executes a project for a slot fetched by o_exec_bitmap_fetch function if it
- * needed.
- */
+//
+// executes a project for a slot fetched by o_exec_bitmap_fetch function if it
+// needed.
+//
 TupleTableSlot *
 o_exec_project(ProjectionInfo *projInfo, ExprContext *econtext,
 			   TupleTableSlot *scanTuple, TupleTableSlot *innerTuple)
@@ -1093,9 +1093,9 @@ o_exec_project(ProjectionInfo *projInfo, ExprContext *econtext,
 	return ExecProject(projInfo);
 }
 
-/* explain analyze */
+// explain analyze
 
-/* initialize explain analyze counters */
+// initialize explain analyze counters
 void
 eanalyze_counters_init(OEACallsCounters *eacc, OTableDescr *descr)
 {
@@ -1107,7 +1107,7 @@ eanalyze_counters_init(OEACallsCounters *eacc, OTableDescr *descr)
 												eacc->nindices);
 }
 
-/* adds explain analyze info for particular index */
+// adds explain analyze info for particular index
 static void
 eanalyze_counter_explain(OEACallsCounter *counter, char *label,
 						 char *ix_name, ExplainState *es)
@@ -1134,7 +1134,7 @@ eanalyze_counter_explain(OEACallsCounter *counter, char *label,
 		if (counts[i] > 0)
 			is_null = false;
 
-	/* do not print empty counters */
+	// do not print empty counters
 	if (is_null)
 		return;
 
@@ -1210,7 +1210,7 @@ eanalyze_counter_explain(OEACallsCounter *counter, char *label,
 	}
 }
 
-/* adds explain analyze info for particular index */
+// adds explain analyze info for particular index
 void
 eanalyze_counters_explain(OTableDescr *descr, OEACallsCounters *counters,
 						  ExplainState *es)

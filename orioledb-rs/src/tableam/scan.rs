@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * scan.c
- *		Scan Provider for orioledb tables.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/scan.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// scan.c
+// Scan Provider for orioledb tables.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/scan.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -80,7 +80,7 @@ typedef struct OBitmapHeapPath
 set_rel_pathlist_hook_type old_set_rel_pathlist_hook = NULL;
 OEACallsCounters *ea_counters = NULL;
 
-/* custom scan */
+// custom scan
 static Plan *o_plan_custom_path(PlannerInfo *root, RelOptInfo *rel,
 								CustomPath *best_path, List *tlist,
 								List *clauses, List *custom_plans);
@@ -121,14 +121,14 @@ static CustomExecMethods o_scan_exec_methods =
 	o_explain_custom_scan
 };
 
-/* No existing callers */
+// No existing callers
 bool
 is_o_custom_scan(CustomScan *scan)
 {
 	return scan->methods == &o_scan_methods;
 }
 
-/* No existing callers */
+// No existing callers
 bool
 is_o_custom_scan_state(CustomScanState *scan)
 {
@@ -174,7 +174,7 @@ transform_path(Path *src_path, OTableDescr *descr)
 		OIndexDescr *index_descr;
 		OIndexPath *new_path = palloc0(sizeof(OIndexPath));
 
-		/* Find ix_num */
+		// Find ix_num
 		for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 		{
 			index_descr = descr->indices[ix_num];
@@ -221,10 +221,10 @@ orioledb_set_plain_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 
 			if (o_table->has_primary)
 			{
-				/*
-				 * Additional pkey fields are added to index target list so
-				 * that the index only scan is selected
-				 */
+				//
+// Additional pkey fields are added to index target list so
+// that the index only scan is selected
+//
 				nkeyfields = o_table->indices[PrimaryIndexNumber].nkeyfields;
 
 				for (i = 0; i < nkeyfields; i++)
@@ -240,7 +240,7 @@ orioledb_set_plain_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 						bool		member = false;
 						int			ix_num = InvalidIndexNumber;
 
-						/* Don't add additional pkey fields to bridged indices */
+						// Don't add additional pkey fields to bridged indices
 						for (ix_num = 0; ix_num < o_table->nindices; ix_num++)
 						{
 							if (o_table->indices[ix_num].oids.reloid == index->indexoid)
@@ -303,9 +303,9 @@ orioledb_set_plain_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 	return;
 }
 
-/*
- * Removes all index and base relation scan paths for a orioledb TableAm table.
- */
+//
+// Removes all index and base relation scan paths for a orioledb TableAm table.
+//
 void
 orioledb_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 							   Index rti, RangeTblEntry *rte)
@@ -315,7 +315,7 @@ orioledb_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 	{
 		Relation	relation = table_open(rte->relid, NoLock);
 
-		/* orioledb relation */
+		// orioledb relation
 		if (is_orioledb_rel(relation))
 		{
 			OTableDescr *descr;
@@ -324,9 +324,9 @@ orioledb_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 			descr = relation_get_descr(relation);
 			Assert(descr != NULL);
 
-			/*
-			 * transform all postgres scans to custom scans
-			 */
+			//
+// transform all postgres scans to custom scans
+//
 			i = 0;
 			while (i < list_length(rel->pathlist))
 			{
@@ -376,10 +376,10 @@ orioledb_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 			{
 				Path	   *path = list_nth(rel->partial_pathlist, i);
 
-				/*
-				 * TODO: Remove when parallel bitmap heap scan will be
-				 * implemented
-				 */
+				//
+// TODO: Remove when parallel bitmap heap scan will be
+// implemented
+//
 				if (!IsA(path, Path))
 					rel->partial_pathlist = list_delete_nth_cell(rel->partial_pathlist, i);
 				else
@@ -391,17 +391,17 @@ orioledb_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel,
 			table_close(relation, NoLock);
 	}
 
-	/*
-	 * else it is not relation: nothing to do
-	 */
+	//
+// else it is not relation: nothing to do
+//
 
 	if (old_set_rel_pathlist_hook != NULL)
 		old_set_rel_pathlist_hook(root, rel, rti, rte);
 }
 
-/*
- * Creates orioledb CustomScan plan from orioledb CustomPath.
- */
+//
+// Creates orioledb CustomScan plan from orioledb CustomPath.
+//
 static Plan *
 o_plan_custom_path(PlannerInfo *root, RelOptInfo *rel,
 				   CustomPath *best_path, List *tlist,
@@ -429,13 +429,13 @@ o_plan_custom_path(PlannerInfo *root, RelOptInfo *rel,
 	plan->lefttree = NULL;
 	plan->righttree = NULL;
 	plan->initPlan = NULL;
-	/* plan costs will be filled by create_customscan_plan */
+	// plan costs will be filled by create_customscan_plan
 
 	custom_scan->scan.scanrelid = rel->relid;
 	custom_scan->flags = best_path->flags;
 	custom_scan->methods = &o_scan_methods;
 	custom_scan->custom_plans = custom_plans;
-	/* custom_scan->custom_relids will be filled by create_customscan_plan */
+	// custom_scan->custom_relids will be filled by create_customscan_plan
 	custom_scan->custom_relids = NULL;
 
 	Assert(custom_plans);
@@ -467,7 +467,7 @@ o_plan_custom_path(PlannerInfo *root, RelOptInfo *rel,
 
 		custom_scan->custom_exprs = NIL;
 		custom_scan->custom_private =
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 			list_make4(makeInteger(O_IndexPlan),
 					   makeInteger(ix_path->ix_num),
 					   makeInteger(ix_path->scandir),
@@ -483,15 +483,15 @@ o_plan_custom_path(PlannerInfo *root, RelOptInfo *rel,
 			copyObject(bh_scan->scan.plan.targetlist);
 		qpqual = bh_scan->scan.plan.qual;
 
-		/*
-		 * typeoid is consumed only by the single-field uint64 encoding; the
-		 * composite fixed-key path derives everything from the descriptor at
-		 * run time, so a placeholder is fine there.
-		 */
+		//
+// typeoid is consumed only by the single-field uint64 encoding; the
+// composite fixed-key path derives everything from the descriptor at
+// run time, so a placeholder is fine there.
+//
 		typeoid = (o_keybitmap_pk_mode(primary, NULL) == O_KEYBITMAP_UINT64)
 			? primary->fields[0].inputtype : InvalidOid;
 		custom_scan->custom_private =
-		/* cppcheck-suppress unknownEvaluationOrder */
+		// cppcheck-suppress unknownEvaluationOrder
 			list_make2(makeInteger(O_BitmapHeapPlan),
 					   makeInteger(typeoid));
 	}
@@ -501,13 +501,13 @@ o_plan_custom_path(PlannerInfo *root, RelOptInfo *rel,
 	return (Plan *) custom_scan;
 }
 
-/*
- * Custom scan.
- */
+//
+// Custom scan.
+//
 
-/*
- * Creates OCustomScanState.
- */
+//
+// Creates OCustomScanState.
+//
 static Node *
 o_create_custom_scan_state(CustomScan *cscan)
 {
@@ -583,9 +583,9 @@ o_create_custom_scan_state(CustomScan *cscan)
 	return node;
 }
 
-/*
- * Initializes OCustomScanState and prepares for scan.
- */
+//
+// Initializes OCustomScanState and prepares for scan.
+//
 static void
 o_begin_custom_scan(CustomScanState *node, EState *estate, int eflags)
 {
@@ -625,21 +625,21 @@ o_begin_custom_scan(CustomScanState *node, EState *estate, int eflags)
 							  &ix_plan_state->iss_ScanKeys,
 							  &ix_plan_state->iss_NumScanKeys);
 
-		/*
-		 * Keep the index relation open until o_end_custom_scan.
-		 * ostate.scandesc.indexRelation points into it; if we closed here, a
-		 * relcache invalidation could evict the entry before
-		 * _bt_preprocess_keys reads rd_opfamily / rd_indoption through that
-		 * pointer.
-		 */
+		//
+// Keep the index relation open until o_end_custom_scan.
+// ostate.scandesc.indexRelation points into it; if we closed here, a
+// relcache invalidation could evict the entry before
+// _bt_preprocess_keys reads rd_opfamily / rd_indoption through that
+// pointer.
+//
 		ix_plan_state->indexRelation = index;
 
 		ix_plan_state->iss_RuntimeContext = CreateExprContext(estate);
 
-		/*
-		 * If no run-time keys to calculate or they are ready, go ahead and
-		 * pass the scankeys to the index AM.
-		 */
+		//
+// If no run-time keys to calculate or they are ready, go ahead and
+// pass the scankeys to the index AM.
+//
 		if (ix_plan_state->iss_NumRuntimeKeys == 0 || ix_plan_state->iss_RuntimeKeysReady)
 			o_rescan_custom_scan(node);
 	}
@@ -670,9 +670,9 @@ o_begin_custom_scan(CustomScanState *node, EState *estate, int eflags)
 	}
 }
 
-/*
- * Iterates custom scan.
- */
+//
+// Iterates custom scan.
+//
 static TupleTableSlot *
 o_exec_custom_scan(CustomScanState *node)
 {
@@ -690,10 +690,10 @@ o_exec_custom_scan(CustomScanState *node)
 		OIndexPlanState *ix_plan_state =
 			(OIndexPlanState *) ocstate->o_plan_state;
 
-		/*
-		 * If we have runtime keys and they've not already been set up, do it
-		 * now.
-		 */
+		//
+// If we have runtime keys and they've not already been set up, do it
+// now.
+//
 		if (!ix_plan_state->iss_RuntimeKeysReady)
 			o_rescan_custom_scan(node);
 
@@ -704,30 +704,30 @@ o_exec_custom_scan(CustomScanState *node)
 
 			if (epqstate->relsubs_done[scanrelid - 1])
 			{
-				/*
-				 * Return empty slot, as we already performed an EPQ
-				 * substitution for this relation.
-				 */
+				//
+// Return empty slot, as we already performed an EPQ
+// substitution for this relation.
+//
 
 				slot = node->ss.ss_ScanTupleSlot;
 
-				/* Return empty slot, as we already returned a tuple */
+				// Return empty slot, as we already returned a tuple
 				return ExecClearTuple(slot);
 			}
 			else if (epqstate->relsubs_slot[scanrelid - 1] != NULL)
 			{
-				/*
-				 * Return replacement tuple provided by the EPQ caller.
-				 */
+				//
+// Return replacement tuple provided by the EPQ caller.
+//
 
 				slot = epqstate->relsubs_slot[scanrelid - 1];
 
 				Assert(epqstate->relsubs_rowmark[scanrelid - 1] == NULL);
 
-				/* Mark to remember that we shouldn't return more */
+				// Mark to remember that we shouldn't return more
 				epqstate->relsubs_done[scanrelid - 1] = true;
 
-				/* Return empty slot if we haven't got a test tuple */
+				// Return empty slot if we haven't got a test tuple
 				if (TupIsNull(slot))
 					return NULL;
 
@@ -749,14 +749,14 @@ o_exec_custom_scan(CustomScanState *node)
 		OBitmapHeapPlanState *bitmap_state =
 			(OBitmapHeapPlanState *) ocstate->o_plan_state;
 
-		/*
-		 * During EvalPlanQual (e.g. a FOR UPDATE recheck after a concurrent
-		 * update) the executor drives this scan for a single substituted
-		 * tuple.  Honour it exactly as the index-plan branch does; otherwise
-		 * we would re-execute the whole bitmap scan and return its own rows
-		 * (the first being the range minimum) instead of the EPQ tuple,
-		 * duplicating that row and dropping the concurrently-updated one.
-		 */
+		//
+// During EvalPlanQual (e.g. a FOR UPDATE recheck after a concurrent
+// update) the executor drives this scan for a single substituted
+// tuple.  Honour it exactly as the index-plan branch does; otherwise
+// we would re-execute the whole bitmap scan and return its own rows
+// (the first being the range minimum) instead of the EPQ tuple,
+// duplicating that row and dropping the concurrently-updated one.
+//
 		epqstate = node->ss.ps.state->es_epq_active;
 		if (epqstate)
 		{
@@ -806,9 +806,9 @@ o_exec_custom_scan(CustomScanState *node)
 	return slot;
 }
 
-/*
- * Restarts the scan.
- */
+//
+// Restarts the scan.
+//
 static void
 o_rescan_custom_scan(CustomScanState *node)
 {
@@ -865,9 +865,9 @@ o_rescan_custom_scan(CustomScanState *node)
 	}
 }
 
-/*
- * Ends custom scan.
- */
+//
+// Ends custom scan.
+//
 static void
 o_end_custom_scan(CustomScanState *node)
 {
@@ -1065,9 +1065,9 @@ o_explain_node(PlanState *planstate, OExplainContext *ec)
 	return result;
 }
 
-/*
- * Explains custom scan.
- */
+//
+// Explains custom scan.
+//
 void
 o_explain_custom_scan(CustomScanState *node, List *ancestors, ExplainState *es)
 {

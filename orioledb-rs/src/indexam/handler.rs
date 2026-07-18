@@ -1,17 +1,17 @@
-/*-------------------------------------------------------------------------
- *
- * handler.c
- *		Implementation of btree index access method handler and
- *		generic bridged index access method handler
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/indexam/handler.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// handler.c
+// Implementation of btree index access method handler and
+// generic bridged index access method handler
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/indexam/handler.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -247,7 +247,7 @@ orioledb_indexam_routine_hook(Oid tamoid, Oid amhandler)
 }
 
 
-/* Check if name is used */
+// Check if name is used
 
 
 static void
@@ -278,12 +278,12 @@ orioledb_ambuild(Relation heap, Relation index, IndexInfo *indexInfo)
 
 		descr = relation_get_descr(heap);
 
-		/*
-		 * During rewrite we are ignoring first ambuild, because we need descr
-		 * to exist in orioledb_index_build_range_scan, but descr for table
-		 * created later. So we performing new reindex_index in
-		 * redefine_indices after descr created.
-		 */
+		//
+// During rewrite we are ignoring first ambuild, because we need descr
+// to exist in orioledb_index_build_range_scan, but descr for table
+// created later. So we performing new reindex_index in
+// redefine_indices after descr created.
+//
 		if (descr == NULL)
 		{
 			result = (IndexBuildResult *) palloc(sizeof(IndexBuildResult));
@@ -322,7 +322,7 @@ orioledb_ambuild(Relation heap, Relation index, IndexInfo *indexInfo)
 
 		if (index->rd_index->indisprimary && o_table->has_primary)
 		{
-			/* If table already has primary index, redefine it */
+			// If table already has primary index, redefine it
 			drop_primary_index(heap, o_table);
 			redefine_pkey_for_rel(heap);
 		}
@@ -463,7 +463,7 @@ append_rowid_values(OIndexDescr *id,
 
 			pk_from = id->nFields - id->nPrimaryFields;
 
-			/* Amount of index fields checked in o_define_index_validate */
+			// Amount of index fields checked in o_define_index_validate
 			for (i = 0; i < id->nPrimaryFields; i++)
 			{
 				AttrNumber	attnum = id->primaryFieldsAttnums[i] - 1;
@@ -574,7 +574,7 @@ orioledb_aminsert(Relation rel, Datum *values, bool *isnull,
 			result = btinsert(rel, values, isnull, tupleid, heapRel,
 							  checkUnique, indexUnchanged, indexInfo);
 		else
-			result = true;		/* FIXME: Wrong assumption? */
+			result = true;		// FIXME: Wrong assumption?
 
 		return result;
 	}
@@ -591,7 +591,7 @@ orioledb_aminsert(Relation rel, Datum *values, bool *isnull,
 	Assert(index_descr != NULL);
 	descr = o_fetch_table_descr(index_descr->tableOids);
 	Assert(descr != NULL);
-	/* Find ix_num */
+	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
 		OIndexDescr *index;
@@ -609,7 +609,7 @@ orioledb_aminsert(Relation rel, Datum *values, bool *isnull,
 		int			cur_attr;
 		int			i;
 
-		/* Remove duplicate column values to store in our index */
+		// Remove duplicate column values to store in our index
 
 		if (index_descr->duplicates != NIL)
 			lc = list_head(index_descr->duplicates);
@@ -699,21 +699,21 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 	{
 		bool		satisfiesConstraint;
 
-		/*
-		 * Call index_insert here, to mimic non MVCC aware part of
-		 * ExecUpdateIndexTuples
-		 */
-		satisfiesConstraint = index_insert(rel, /* index relation */
-										   values,	/* array of index Datums */
-										   isnull,	/* null flags */
-										   tupleid, /* tid of heap tuple */
-										   heapRel, /* heap relation */
-										   checkUnique, /* type of uniqueness
-														 * check to do */
-										   indexUnchanged,	/* UPDATE without
-															 * logical change? */
-										   indexInfo);	/* index AM may need
-														 * this */
+		//
+// Call index_insert here, to mimic non MVCC aware part of
+// ExecUpdateIndexTuples
+//
+		satisfiesConstraint = index_insert(rel, // index relation
+										   values,	// array of index Datums
+										   isnull,	// null flags
+										   tupleid, // tid of heap tuple
+										   heapRel, // heap relation
+										   checkUnique, // type of uniqueness
+// check to do
+										   indexUnchanged,	// UPDATE without
+// logical change?
+										   indexInfo);	// index AM may need
+// this
 
 		return satisfiesConstraint;
 	}
@@ -728,7 +728,7 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 	descr = o_fetch_table_descr(index_descr->tableOids);
 	Assert(descr != NULL);
 
-	/* Find ix_num */
+	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
 		OIndexDescr *index;
@@ -745,7 +745,7 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 						oldTupleid, valuesOld, isnullOld,
 						&csn, &version);
 	vfree = palloc0(sizeof(bool) * index_descr->leafTupdesc->natts);
-	/* TODO: Probably there is a better way than detoasting here */
+	// TODO: Probably there is a better way than detoasting here
 	detoast_passed_values(index_descr, valuesOld, isnullOld, vfree);
 	old_tuple = o_form_tuple(index_descr->leafTupdesc, &index_descr->leafSpec,
 							 version, valuesOld, isnullOld, NULL);
@@ -784,7 +784,7 @@ orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
 					StringInfo	str = makeStringInfo();
 
 					if (result.failedIxNum == PrimaryIndexNumber)
-						break;	/* it is ok */
+						break;	// it is ok
 
 					appendStringInfo(str, "(");
 					for (i = 0; i < index_descr->nUniqueFields; i++)
@@ -878,7 +878,7 @@ orioledb_amdelete(Relation rel, Datum *values, bool *isnull,
 	descr = o_fetch_table_descr(index_descr->tableOids);
 	Assert(descr != NULL);
 
-	/* Find ix_num */
+	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
 		OIndexDescr *index;
@@ -920,7 +920,7 @@ orioledb_amdelete(Relation rel, Datum *values, bool *isnull,
 					StringInfo	str = makeStringInfo();
 
 					if (result.failedIxNum == PrimaryIndexNumber)
-						break;	/* it is ok */
+						break;	// it is ok
 
 					appendStringInfo(str, "(");
 					for (i = 0; i < index_descr->nUniqueFields; i++)
@@ -983,12 +983,12 @@ orioledb_ambulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 	if (options && !options->orioledb_index)
 		return btbulkdelete(info, stats, callback, callback_state);
 
-	/*
-	 * No-op for orioledb-managed indexes: their MVCC and cleanup happen
-	 * inside the orioledb storage layer, not via the standard ambulkdelete
-	 * path.  We must not error here because parallel vacuum iterates every
-	 * index in the relation.
-	 */
+	//
+// No-op for orioledb-managed indexes: their MVCC and cleanup happen
+// inside the orioledb storage layer, not via the standard ambulkdelete
+// path.  We must not error here because parallel vacuum iterates every
+// index in the relation.
+//
 	return stats;
 }
 
@@ -1014,7 +1014,7 @@ orioledb_amcanreturn(Relation index, int attno)
 	return true;
 }
 
-/* TODO: Rewrite to be more orioledb-specific */
+// TODO: Rewrite to be more orioledb-specific
 static void
 orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 						Cost *indexStartupCost, Cost *indexTotalCost,
@@ -1036,23 +1036,23 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	double		num_sa_scans;
 	ListCell   *lc;
 
-	/*
-	 * For a btree scan, only leading '=' quals plus inequality quals for the
-	 * immediately next attribute contribute to index selectivity (these are
-	 * the "boundary quals" that determine the starting and stopping points of
-	 * the index scan).  Additional quals can suppress visits to the heap, so
-	 * it's OK to count them in indexSelectivity, but they should not count
-	 * for estimating numIndexTuples.  So we must examine the given indexquals
-	 * to find out which ones count as boundary quals.  We rely on the
-	 * knowledge that they are given in index column order.
-	 *
-	 * For a RowCompareExpr, we consider only the first column, just as
-	 * rowcomparesel() does.
-	 *
-	 * If there's a ScalarArrayOpExpr in the quals, we'll actually perform N
-	 * index scans not one, but the ScalarArrayOpExpr's operator can be
-	 * considered to act the same as it normally does.
-	 */
+	//
+// For a btree scan, only leading '=' quals plus inequality quals for the
+// immediately next attribute contribute to index selectivity (these are
+// the "boundary quals" that determine the starting and stopping points of
+// the index scan).  Additional quals can suppress visits to the heap, so
+// it's OK to count them in indexSelectivity, but they should not count
+// for estimating numIndexTuples.  So we must examine the given indexquals
+// to find out which ones count as boundary quals.  We rely on the
+// knowledge that they are given in index column order.
+//
+// For a RowCompareExpr, we consider only the first column, just as
+// rowcomparesel() does.
+//
+// If there's a ScalarArrayOpExpr in the quals, we'll actually perform N
+// index scans not one, but the ScalarArrayOpExpr's operator can be
+// considered to act the same as it normally does.
+//
 	indexBoundQuals = NIL;
 	indexcol = 0;
 	eqQualHere = false;
@@ -1066,16 +1066,16 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 
 		if (indexcol != iclause->indexcol)
 		{
-			/* Beginning of a new column's quals */
+			// Beginning of a new column's quals
 			if (!eqQualHere)
-				break;			/* done if no '=' qual for indexcol */
+				break;			// done if no '=' qual for indexcol
 			eqQualHere = false;
 			indexcol++;
 			if (indexcol != iclause->indexcol)
-				break;			/* no quals at all for indexcol */
+				break;			// no quals at all for indexcol
 		}
 
-		/* Examine each indexqual associated with this index clause */
+		// Examine each indexqual associated with this index clause
 		foreach(lc2, iclause->indexquals)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc2);
@@ -1106,7 +1106,7 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 #endif
 				clause_op = saop->opno;
 				found_saop = true;
-				/* count number of SA scans induced by indexBoundQuals only */
+				// count number of SA scans induced by indexBoundQuals only
 				if (alength > 1)
 					num_sa_scans *= alength;
 			}
@@ -1117,7 +1117,7 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				if (nt->nulltesttype == IS_NULL)
 				{
 					found_is_null_op = true;
-					/* IS NULL is like = for selectivity purposes */
+					// IS NULL is like = for selectivity purposes
 					eqQualHere = true;
 				}
 			}
@@ -1125,12 +1125,12 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				elog(ERROR, "unsupported indexqual type: %d",
 					 (int) nodeTag(clause));
 
-			/* check for equality operator */
+			// check for equality operator
 			if (OidIsValid(clause_op))
 			{
 				op_strategy = get_op_opfamily_strategy(clause_op,
 													   index->opfamily[indexcol]);
-				Assert(op_strategy != 0);	/* not a member of opfamily?? */
+				Assert(op_strategy != 0);	// not a member of opfamily??
 				if (op_strategy == BTEqualStrategyNumber)
 					eqQualHere = true;
 			}
@@ -1139,12 +1139,12 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 		}
 	}
 
-	/*
-	 * If index is unique and we found an '=' clause for each column, we can
-	 * just assume numIndexTuples = 1 and skip the expensive
-	 * clauselist_selectivity calculations.  However, a ScalarArrayOp or
-	 * NullTest invalidates that theory, even though it sets eqQualHere.
-	 */
+	//
+// If index is unique and we found an '=' clause for each column, we can
+// just assume numIndexTuples = 1 and skip the expensive
+// clauselist_selectivity calculations.  However, a ScalarArrayOp or
+// NullTest invalidates that theory, even though it sets eqQualHere.
+//
 	if (index->unique &&
 		indexcol == index->nkeycolumns - 1 &&
 		eqQualHere &&
@@ -1156,11 +1156,11 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 		List	   *selectivityQuals;
 		Selectivity btreeSelectivity;
 
-		/*
-		 * If the index is partial, AND the index predicate with the
-		 * index-bound quals to produce a more accurate idea of the number of
-		 * rows covered by the bound conditions.
-		 */
+		//
+// If the index is partial, AND the index predicate with the
+// index-bound quals to produce a more accurate idea of the number of
+// rows covered by the bound conditions.
+//
 		selectivityQuals = add_predicate_to_index_quals(index, indexBoundQuals);
 
 		btreeSelectivity = clauselist_selectivity(root, selectivityQuals,
@@ -1171,41 +1171,41 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 
 #if PG_VERSION_NUM >= 170000
 
-		/*
-		 * btree automatically combines individual ScalarArrayOpExpr primitive
-		 * index scans whenever the tuples covered by the next set of array
-		 * keys are close to tuples covered by the current set.  That puts a
-		 * natural ceiling on the worst case number of descents -- there
-		 * cannot possibly be more than one descent per leaf page scanned.
-		 *
-		 * Clamp the number of descents to at most 1/3 the number of index
-		 * pages.  This avoids implausibly high estimates with low selectivity
-		 * paths, where scans usually require only one or two descents.  This
-		 * is most likely to help when there are several SAOP clauses, where
-		 * naively accepting the total number of distinct combinations of
-		 * array elements as the number of descents would frequently lead to
-		 * wild overestimates.
-		 *
-		 * We somewhat arbitrarily don't just make the cutoff the total number
-		 * of leaf pages (we make it 1/3 the total number of pages instead) to
-		 * give the btree code credit for its ability to continue on the leaf
-		 * level with low selectivity scans.
-		 */
+		//
+// btree automatically combines individual ScalarArrayOpExpr primitive
+// index scans whenever the tuples covered by the next set of array
+// keys are close to tuples covered by the current set.  That puts a
+// natural ceiling on the worst case number of descents -- there
+// cannot possibly be more than one descent per leaf page scanned.
+//
+// Clamp the number of descents to at most 1/3 the number of index
+// pages.  This avoids implausibly high estimates with low selectivity
+// paths, where scans usually require only one or two descents.  This
+// is most likely to help when there are several SAOP clauses, where
+// naively accepting the total number of distinct combinations of
+// array elements as the number of descents would frequently lead to
+// wild overestimates.
+//
+// We somewhat arbitrarily don't just make the cutoff the total number
+// of leaf pages (we make it 1/3 the total number of pages instead) to
+// give the btree code credit for its ability to continue on the leaf
+// level with low selectivity scans.
+//
 		num_sa_scans = Min(num_sa_scans, ceil(index->pages * 0.3333333));
 		num_sa_scans = Max(num_sa_scans, 1);
 #endif
 
-		/*
-		 * As in genericcostestimate(), we have to adjust for any
-		 * ScalarArrayOpExpr quals included in indexBoundQuals, and then round
-		 * to integer.
-		 */
+		//
+// As in genericcostestimate(), we have to adjust for any
+// ScalarArrayOpExpr quals included in indexBoundQuals, and then round
+// to integer.
+//
 		numIndexTuples = rint(numIndexTuples / num_sa_scans);
 	}
 
-	/*
-	 * Now do generic index cost estimation.
-	 */
+	//
+// Now do generic index cost estimation.
+//
 	costs.numIndexTuples = numIndexTuples;
 #if PG_VERSION_NUM >= 170000
 	costs.num_sa_scans = num_sa_scans;
@@ -1213,49 +1213,49 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 
 	genericcostestimate(root, path, loop_count, &costs);
 
-	/*
-	 * Add a CPU-cost component to represent the costs of initial btree
-	 * descent.  We don't charge any I/O cost for touching upper btree levels,
-	 * since they tend to stay in cache, but we still have to do about log2(N)
-	 * comparisons to descend a btree of N leaf tuples.  We charge one
-	 * cpu_operator_cost per comparison.
-	 *
-	 * If there are ScalarArrayOpExprs, charge this once per SA scan.  The
-	 * ones after the first one are not startup cost so far as the overall
-	 * plan is concerned, so add them only to "total" cost.
-	 */
-	if (index->tuples > 1)		/* avoid computing log(0) */
+	//
+// Add a CPU-cost component to represent the costs of initial btree
+// descent.  We don't charge any I/O cost for touching upper btree levels,
+// since they tend to stay in cache, but we still have to do about log2(N)
+// comparisons to descend a btree of N leaf tuples.  We charge one
+// cpu_operator_cost per comparison.
+//
+// If there are ScalarArrayOpExprs, charge this once per SA scan.  The
+// ones after the first one are not startup cost so far as the overall
+// plan is concerned, so add them only to "total" cost.
+//
+	if (index->tuples > 1)		// avoid computing log(0)
 	{
 		descentCost = ceil(log(index->tuples) / log(2.0)) * cpu_operator_cost;
 		costs.indexStartupCost += descentCost;
 		costs.indexTotalCost += costs.num_sa_scans * descentCost;
 	}
 
-	/*
-	 * Even though we're not charging I/O cost for touching upper btree pages,
-	 * it's still reasonable to charge some CPU cost per page descended
-	 * through.  Moreover, if we had no such charge at all, bloated indexes
-	 * would appear to have the same search cost as unbloated ones, at least
-	 * in cases where only a single leaf page is expected to be visited.  This
-	 * cost is somewhat arbitrarily set at 50x cpu_operator_cost per page
-	 * touched.  The number of such pages is btree tree height plus one (ie,
-	 * we charge for the leaf page too).  As above, charge once per SA scan.
-	 */
+	//
+// Even though we're not charging I/O cost for touching upper btree pages,
+// it's still reasonable to charge some CPU cost per page descended
+// through.  Moreover, if we had no such charge at all, bloated indexes
+// would appear to have the same search cost as unbloated ones, at least
+// in cases where only a single leaf page is expected to be visited.  This
+// cost is somewhat arbitrarily set at 50x cpu_operator_cost per page
+// touched.  The number of such pages is btree tree height plus one (ie,
+// we charge for the leaf page too).  As above, charge once per SA scan.
+//
 	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
 	costs.indexStartupCost += descentCost;
 	costs.indexTotalCost += costs.num_sa_scans * descentCost;
 
-	/*
-	 * If we can get an estimate of the first column's ordering correlation C
-	 * from pg_statistic, estimate the index correlation as C for a
-	 * single-column index, or C * 0.75 for multiple columns. (The idea here
-	 * is that multiple columns dilute the importance of the first column's
-	 * ordering, but don't negate it entirely.  Before 8.0 we divided the
-	 * correlation by the number of columns, but that seems too strong.)
-	 */
+	//
+// If we can get an estimate of the first column's ordering correlation C
+// from pg_statistic, estimate the index correlation as C for a
+// single-column index, or C * 0.75 for multiple columns. (The idea here
+// is that multiple columns dilute the importance of the first column's
+// ordering, but don't negate it entirely.  Before 8.0 we divided the
+// correlation by the number of columns, but that seems too strong.)
+//
 	if (index->indexkeys[0] != 0)
 	{
-		/* Simple variable --- look to stats for the underlying table */
+		// Simple variable --- look to stats for the underlying table
 		RangeTblEntry *rte = planner_rt_fetch(index->rel->relid, root);
 
 		Assert(rte->rtekind == RTE_RELATION);
@@ -1266,10 +1266,10 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 		if (get_relation_stats_hook &&
 			(*get_relation_stats_hook) (root, rte, colnum, &vardata))
 		{
-			/*
-			 * The hook took control of acquiring a stats tuple.  If it did
-			 * supply a tuple, it'd better have supplied a freefunc.
-			 */
+			//
+// The hook took control of acquiring a stats tuple.  If it did
+// supply a tuple, it'd better have supplied a freefunc.
+//
 			if (HeapTupleIsValid(vardata.statsTuple) &&
 				!vardata.freefunc)
 				elog(ERROR, "no function provided to release variable stats with");
@@ -1285,17 +1285,17 @@ orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	}
 	else
 	{
-		/* Expression --- maybe there are stats for the index itself */
+		// Expression --- maybe there are stats for the index itself
 		relid = index->indexoid;
 		colnum = 1;
 
 		if (get_index_stats_hook &&
 			(*get_index_stats_hook) (root, relid, colnum, &vardata))
 		{
-			/*
-			 * The hook took control of acquiring a stats tuple.  If it did
-			 * supply a tuple, it'd better have supplied a freefunc.
-			 */
+			//
+// The hook took control of acquiring a stats tuple.  If it did
+// supply a tuple, it'd better have supplied a freefunc.
+//
 			if (HeapTupleIsValid(vardata.statsTuple) &&
 				!vardata.freefunc)
 				elog(ERROR, "no function provided to release variable stats with");
@@ -1390,7 +1390,7 @@ orioledb_amoptions(Datum reloptions, bool validate)
 								 offsetof(OBTOptions, bt_options) +
 								 offsetof(BTOptions, deduplicate_items));
 
-		/* Options for orioledb tables */
+		// Options for orioledb tables
 		add_local_string_reloption(&relopts, "compress",
 								   "Compression level of a particular index",
 								   NULL, validate_index_compress, NULL,
@@ -1413,15 +1413,15 @@ orioledb_amproperty(Oid index_oid, int attno, IndexAMProperty prop,
 	switch (prop)
 	{
 		case AMPROP_RETURNABLE:
-			/* answer only for columns, not AM or whole index */
+			// answer only for columns, not AM or whole index
 			if (attno == 0)
 				return false;
-			/* otherwise, btree can always return data */
+			// otherwise, btree can always return data
 			*res = true;
 			return true;
 
 		default:
-			return false;		/* punt to generic code */
+			return false;		// punt to generic code
 	}
 }
 
@@ -1476,7 +1476,7 @@ orioledb_ambeginscan(Relation rel, int nkeys, int norderbys)
 
 	o_scan = (OScanState *) palloc0(sizeof(OScanState));
 
-	/* get the scan */
+	// get the scan
 	scan = btbeginscan(rel, nkeys, norderbys);
 	scan->xs_snapshot = NULL;
 	o_scan->scandesc = *scan;
@@ -1494,7 +1494,7 @@ orioledb_ambeginscan(Relation rel, int nkeys, int norderbys)
 	Assert(index_descr != NULL);
 	descr = o_fetch_table_descr(index_descr->tableOids);
 	Assert(descr != NULL);
-	/* Find ix_num */
+	// Find ix_num
 	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
 	{
 		OIndexDescr *index;
@@ -1577,34 +1577,34 @@ fill_hitup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 	tts_orioledb_store_tuple(slot, tuple, descr, tupleCsn, PrimaryIndexNumber, true, hint);
 	if (!scan->xs_rowid.isnull)
 	{
-		/* free previously returned rowid */
+		// free previously returned rowid
 		pfree(DatumGetPointer(scan->xs_rowid.value));
 		scan->xs_rowid.isnull = true;
 	}
 	scan->xs_rowid.value = slot_getsysattr(slot, RowIdAttributeNumber, &scan->xs_rowid.isnull);
 	if (scan->xs_hitup)
 	{
-		/* free previously returned tuple */
+		// free previously returned tuple
 		pfree(scan->xs_hitup);
 		scan->xs_hitup = NULL;
 	}
 	scan->xs_hitup = ExecCopySlotHeapTuple(slot);
 
-	/*
-	 * ExecCopySlotHeapTuple above produced an independent HeapTuple, and
-	 * o_new_rowid() (called via slot_getsysattr) already palloc'd its own
-	 * bytea, so neither xs_hitup nor xs_rowid retains a reference to the
-	 * source tuple buffer.  Clear the slot immediately: store_tuple() above
-	 * was called with shouldfree=true, so tts_orioledb_clear() now pfrees
-	 * tuple.data.  Doing the clear at the end of fill_hitup() (rather than
-	 * deferring to the next store_tuple()) is what makes shouldfree=true safe
-	 * here — descr->oldTuple outlives es_query_cxt, so a stale owning
-	 * pointer in the slot would dangle into a freed context across queries.
-	 */
+	//
+// ExecCopySlotHeapTuple above produced an independent HeapTuple, and
+// o_new_rowid() (called via slot_getsysattr) already palloc'd its own
+// bytea, so neither xs_hitup nor xs_rowid retains a reference to the
+// source tuple buffer.  Clear the slot immediately: store_tuple() above
+// was called with shouldfree=true, so tts_orioledb_clear() now pfrees
+// tuple.data.  Doing the clear at the end of fill_hitup() (rather than
+// deferring to the next store_tuple()) is what makes shouldfree=true safe
+// here — descr->oldTuple outlives es_query_cxt, so a stale owning
+// pointer in the slot would dangle into a freed context across queries.
+//
 	ExecClearTuple(slot);
 }
 
-/* Search all duplicates with same original attrnum */
+// Search all duplicates with same original attrnum
 static inline void
 search_next_dup_range(List *duplicates, int dup_range_lc_id, int *dup_range_start, int *dup_range_end)
 {
@@ -1661,7 +1661,7 @@ o_new_rowid(OIndexDescr *primary, TupleTableSlot *slot,
 		addCtid.csn = tupleCsn;
 		addCtid.version = oslot->version;
 
-		/* Ctid primary key: give hint + tid as rowid */
+		// Ctid primary key: give hint + tid as rowid
 		result_size = MAXALIGN(VARHDRSZ) +
 			MAXALIGN(sizeof(ORowIdAddendumCtid)) +
 			MAXALIGN(sizeof(ItemPointerData));
@@ -1690,9 +1690,9 @@ o_new_rowid(OIndexDescr *primary, TupleTableSlot *slot,
 		TupleDesc	pk_tupdesc = NULL;
 		OTupleFixedFormatSpec *pk_spec = NULL;
 
-		/*
-		 * General-case primary key: prepend tuple with maxaligned hint.
-		 */
+		//
+// General-case primary key: prepend tuple with maxaligned hint.
+//
 
 		result_size = MAXALIGN(VARHDRSZ) + MAXALIGN(sizeof(ORowIdAddendumNonCtid));
 		if (primary->bridging)
@@ -1733,7 +1733,7 @@ o_new_rowid(OIndexDescr *primary, TupleTableSlot *slot,
 }
 
 
-/* TODO: Rewrite */
+// TODO: Rewrite
 static void
 fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 		  CommitSeqNo tupleCsn, BTreeLocationHint *hint)
@@ -1751,10 +1751,10 @@ fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 	tts_orioledb_store_tuple(slot, tuple, descr, tupleCsn, o_scan->ixNum, true, hint);
 	slot_getallattrs(slot);
 
-	/*
-	 * moving values from duplicate field places that will be filled during
-	 * index_form_tuple
-	 */
+	//
+// moving values from duplicate field places that will be filled during
+// index_form_tuple
+//
 	if (index_descr->duplicates != NIL)
 	{
 		int			lc_id = 0;
@@ -1820,9 +1820,9 @@ fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 	{
 		int			i;
 
-		/*
-		 * Amount of index fields checked in o_define_index_validate
-		 */
+		//
+// Amount of index fields checked in o_define_index_validate
+//
 		for (i = 0; i < index_descr->nPrimaryFields; i++)
 		{
 			AttrNumber	attnum = index_descr->primaryFieldsAttnums[i] - 1;
@@ -1831,18 +1831,18 @@ fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 			temp_rowid_isnull[i] = slot->tts_isnull[attnum];
 		}
 
-		/*
-		 * primaryFieldsAttnums covers PK key columns only (see
-		 * add_index_fields(fillPrimary=true), nFields = nkeyfields), but
-		 * o_new_rowid() formats the rowid against primary->nonLeafTupdesc
-		 * whose natts is nkeyfields + nIncludedFields when the PK has INCLUDE
-		 * columns.  Those INCLUDE columns aren't part of the secondary's leaf
-		 * either, so we have no value to plug in -- and refind only matches
-		 * against the key columns anyway.  Fill the tail of
-		 * temp_rowid_isnull[] with `true`s so that o_new_tuple_size doesn't
-		 * read uninitialised memory while computing the rowid tuple's null
-		 * bitmap.
-		 */
+		//
+// primaryFieldsAttnums covers PK key columns only (see
+// add_index_fields(fillPrimary=true), nFields = nkeyfields), but
+// o_new_rowid() formats the rowid against primary->nonLeafTupdesc
+// whose natts is nkeyfields + nIncludedFields when the PK has INCLUDE
+// columns.  Those INCLUDE columns aren't part of the secondary's leaf
+// either, so we have no value to plug in -- and refind only matches
+// against the key columns anyway.  Fill the tail of
+// temp_rowid_isnull[] with `true`s so that o_new_tuple_size doesn't
+// read uninitialised memory while computing the rowid tuple's null
+// bitmap.
+//
 		for (; i < GET_PRIMARY(descr)->nonLeafTupdesc->natts; i++)
 		{
 			temp_rowid_values[i] = (Datum) 0;
@@ -1866,7 +1866,7 @@ fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 
 	if (!scan->xs_rowid.isnull)
 	{
-		/* free previously returned rowid */
+		// free previously returned rowid
 		pfree(DatumGetPointer(scan->xs_rowid.value));
 		scan->xs_rowid.isnull = true;
 	}
@@ -1875,33 +1875,33 @@ fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 
 	if (scan->xs_itup)
 	{
-		/* free previously returned tuple */
+		// free previously returned tuple
 		pfree(scan->xs_itup);
 		scan->xs_itup = NULL;
 	}
 
-	/*--
-	 * OrioleDB's internal itupdesc already matches the planner-side
-	 * indextlist layout in both column count and column order:
-	 *
-	 *   itupdesc = [non-duplicate secondary key cols
-	 *               | non-duplicate INCLUDE cols
-	 *               | duplicate cols (refilled from their source columns)
-	 *               | extra PK key cols not already in the secondary],
-	 *
-	 *   planner indextlist = rd_att (all declared cols, including dups)
-	 *                       + (when has_primary, PK key cols not in
-	 *                          rd_att.indexkeys, added by
-	 *                          set_plain_rel_pathlist_hook()).
-	 *
-	 * Their natts agree because the duplicate slots in itupdesc account
-	 * for exactly the same columns as the duplicates inside rd_att, and
-	 * because scan.c's hook only adds PK *key* cols (matching the
-	 * !primaryIsCtid path that populates the PK tail of itupdesc).  The
-	 * duplicate-slot rearrangement done by the block right above this
-	 * comment leaves slot->tts_values in itupdesc order, so we hand the
-	 * pair directly to index_form_tuple.
-	 */
+	// --
+// OrioleDB's internal itupdesc already matches the planner-side
+// indextlist layout in both column count and column order:
+//
+// itupdesc = [non-duplicate secondary key cols
+// | non-duplicate INCLUDE cols
+// | duplicate cols (refilled from their source columns)
+// | extra PK key cols not already in the secondary],
+//
+// planner indextlist = rd_att (all declared cols, including dups)
+// + (when has_primary, PK key cols not in
+// rd_att.indexkeys, added by
+// set_plain_rel_pathlist_hook()).
+//
+// Their natts agree because the duplicate slots in itupdesc account
+// for exactly the same columns as the duplicates inside rd_att, and
+// because scan.c's hook only adds PK *key* cols (matching the
+// !primaryIsCtid path that populates the PK tail of itupdesc).  The
+// duplicate-slot rearrangement done by the block right above this
+// comment leaves slot->tts_values in itupdesc order, so we hand the
+// pair directly to index_form_tuple.
+//
 	scan->xs_itupdesc = index_descr->itupdesc;
 	scan->xs_itup = index_form_tuple(index_descr->itupdesc,
 									 slot->tts_values,
@@ -1909,18 +1909,18 @@ fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 
 	ItemPointerCopy(&slot->tts_tid, &scan->xs_itup->t_tid);
 
-	/*
-	 * index_form_tuple above produced an independent IndexTuple by copying
-	 * each Datum from slot->tts_values (varlenas are deep-copied by
-	 * heap_compute_data_size/heap_fill_tuple), and o_new_rowid() palloc'd its
-	 * own bytea for xs_rowid.  Neither holds a reference to the source tuple
-	 * buffer.  Clear the slot immediately: store_tuple() above was called
-	 * with shouldfree=true, so tts_orioledb_clear() now pfrees tuple.data.
-	 * Doing the clear at the end of fill_itup() (rather than deferring to the
-	 * next store_tuple()) is what makes shouldfree=true safe here —
-	 * index_descr->index_slot outlives es_query_cxt, so a stale owning
-	 * pointer in the slot would dangle into a freed context across queries.
-	 */
+	//
+// index_form_tuple above produced an independent IndexTuple by copying
+// each Datum from slot->tts_values (varlenas are deep-copied by
+// heap_compute_data_size/heap_fill_tuple), and o_new_rowid() palloc'd its
+// own bytea for xs_rowid.  Neither holds a reference to the source tuple
+// buffer.  Clear the slot immediately: store_tuple() above was called
+// with shouldfree=true, so tts_orioledb_clear() now pfrees tuple.data.
+// Doing the clear at the end of fill_itup() (rather than deferring to the
+// next store_tuple()) is what makes shouldfree=true safe here —
+// index_descr->index_slot outlives es_query_cxt, so a stale owning
+// pointer in the slot would dangle into a freed context across queries.
+//
 	ExecClearTuple(slot);
 }
 
@@ -1952,7 +1952,7 @@ orioledb_amgettuple(IndexScanDesc scan, ScanDirection dir)
 	else
 		O_LOAD_SNAPSHOT(&o_scan->oSnapshot, scan->xs_snapshot);
 
-	/* btree indexes are never lossy */
+	// btree indexes are never lossy
 	scan->xs_recheck = false;
 
 	descr = relation_get_descr(scan->heapRelation);
@@ -1964,19 +1964,19 @@ orioledb_amgettuple(IndexScanDesc scan, ScanDirection dir)
 	{
 		if (!scan->xs_rowid.isnull)
 		{
-			/* free previously returned rowid */
+			// free previously returned rowid
 			pfree(DatumGetPointer(scan->xs_rowid.value));
 			scan->xs_rowid.isnull = true;
 		}
 		if (scan->xs_itup)
 		{
-			/* free previously returned tuple */
+			// free previously returned tuple
 			pfree(scan->xs_itup);
 			scan->xs_itup = NULL;
 		}
 		if (scan->xs_hitup)
 		{
-			/* free previously returned tuple */
+			// free previously returned tuple
 			pfree(scan->xs_hitup);
 			scan->xs_hitup = NULL;
 		}
@@ -2070,12 +2070,12 @@ bridged_ambuild(Relation heap, Relation index, IndexInfo *indexInfo)
 
 	descr = relation_get_descr(heap);
 
-	/*
-	 * During rewrite we are ignoring first ambuild, because we need descr to
-	 * exist in orioledb_index_build_range_scan, but descr for table created
-	 * later. So we performing new reindex_index in redefine_indices after
-	 * descr created.
-	 */
+	//
+// During rewrite we are ignoring first ambuild, because we need descr to
+// exist in orioledb_index_build_range_scan, but descr for table created
+// later. So we performing new reindex_index in redefine_indices after
+// descr created.
+//
 	if (descr == NULL)
 	{
 		result = (IndexBuildResult *) palloc(sizeof(IndexBuildResult));

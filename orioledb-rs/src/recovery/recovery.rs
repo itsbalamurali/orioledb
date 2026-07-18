@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * recovery.c
- *		General routines for orioledb recovery.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/recovery/recovery.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// recovery.c
+// General routines for orioledb recovery.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/recovery/recovery.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -101,22 +101,22 @@ static void recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 static void workers_send_finish(bool send_to_idx_pool);
 static XLogRecPtr recovery_get_current_ptr(void);
 
-/*
- * Recovery worker state in pool.
- */
+//
+// Recovery worker state in pool.
+//
 typedef struct
 {
-	/* Pointer to the worker queue */
+	// Pointer to the worker queue
 	shm_mq_handle *queue;
 	char		queue_buf[RECOVERY_QUEUE_BUF_SIZE];
 	int			queue_buf_len;
-	/* Current oids */
+	// Current oids
 	ORelOids	oids;
-	/* Current oxid */
+	// Current oxid
 	OXid		oxid;
-	/* Current index type */
+	// Current index type
 	OIndexType	type;
-	/* Handle for the worker */
+	// Handle for the worker
 	BackgroundWorkerHandle *handle;
 } RecoveryWorkerState;
 
@@ -124,19 +124,19 @@ static RecoveryWorkerState *workers_pool;
 
 typedef struct
 {
-	ORelOids	oids;			/* hash table key */
+	ORelOids	oids;			// hash table key
 	uint64		position;
 } RecoveryIdxBuildQueueState;
 
-/*
- * Recovery transaction state.
- */
+//
+// Recovery transaction state.
+//
 typedef struct
 {
-	OXid		oxid;			/* hash table key */
+	OXid		oxid;			// hash table key
 
-	TransactionId xid;			/* builtin transaction identifier for joint
-								 * commit */
+	TransactionId xid;			// builtin transaction identifier for joint
+// commit
 
 	bool		needs_wal_flush;
 	UndoLocation retain_locs[(int) UndoLogsCount];
@@ -155,17 +155,17 @@ typedef struct
 	pairingheap_node retain_undo_ph_nodes[(int) UndoLogsCount];
 	pairingheap_node xmin_ph_node;
 
-	/* is any system tree modified by oxid */
+	// is any system tree modified by oxid
 	bool		systree_modified;
-	/* is typecache invalidation needed after this transaction */
+	// is typecache invalidation needed after this transaction
 	bool		invalidate_typcache;
-	/* is oTablesMetaLock held by transaction */
+	// is oTablesMetaLock held by transaction
 	bool		o_tables_meta_locked;
-	/* is provided by checkpoint xids file */
+	// is provided by checkpoint xids file
 	bool		checkpoint_xid;
-	/* is started from wal stream */
+	// is started from wal stream
 	bool		wal_xid;
-	/* usage map */
+	// usage map
 	bool	   *used_by;
 } RecoveryXidState;
 
@@ -196,7 +196,7 @@ typedef struct WorkerUndoTempEntry
 	UndoStackLocations undoStacks[UndoLogsCount];
 	UndoLocation undoRetainLocs[UndoLogsCount];
 	uint32		numCheckpointStacks;
-	/* How many checkpoint stacks follow */
+	// How many checkpoint stacks follow
 } WorkerUndoTempEntry;
 
 typedef struct WorkerUndoTempCheckpointStack
@@ -207,11 +207,11 @@ typedef struct WorkerUndoTempCheckpointStack
 
 PG_FUNCTION_INFO_V1(orioledb_recovery_synchronized);
 
-/*
- * Comparator for undo retain min-heap.
- *
- * See pairingheap.c/pairingheap_comparator description.
- */
+//
+// Comparator for undo retain min-heap.
+//
+// See pairingheap.c/pairingheap_comparator description.
+//
 static int
 retain_undo_pairingheap_cmp(const pairingheap_node *a,
 							const pairingheap_node *b,
@@ -229,11 +229,11 @@ retain_undo_pairingheap_cmp(const pairingheap_node *a,
 		return 0;
 }
 
-/*
- * Comparator for xmin min-heap.
- *
- * See pairingheap.c/pairingheap_comparator description.
- */
+//
+// Comparator for xmin min-heap.
+//
+// See pairingheap.c/pairingheap_comparator description.
+//
 static int
 xmin_pairingheap_cmp(const pairingheap_node *a,
 					 const pairingheap_node *b,
@@ -250,53 +250,53 @@ xmin_pairingheap_cmp(const pairingheap_node *a,
 		return 0;
 }
 
-/* Current recovery transaction state. */
+// Current recovery transaction state.
 static RecoveryXidState *cur_recovery_xid_state = NULL;
 
-/* Recovery transaction hash for the current process. */
+// Recovery transaction hash for the current process.
 static HTAB *recovery_xid_state_hash = NULL;
 
 static HTAB *idxbuild_oids_hash = NULL;
 
-/* Queues of undo retain locations */
+// Queues of undo retain locations
 static pairingheap *retain_undo_queues[(int) UndoLogsCount] =
 {
 	NULL
 };
 static int	retain_undo_queue_numbers[(int) UndoLogsCount];
 
-/* Queue of xmin's */
+// Queue of xmin's
 static pairingheap *xmin_queue = NULL;
 
-/*
- * List of locally finished transaction, which aren't yet knows as finished
- * for every recovery process.
- */
+//
+// List of locally finished transaction, which aren't yet knows as finished
+// for every recovery process.
+//
 static dlist_head finished_list;
 
-/*
- * List of transactions waiting for joint commit with builtin transaction.
- */
+//
+// List of transactions waiting for joint commit with builtin transaction.
+//
 static dlist_head joint_commit_list;
 
-/* orioledb checkpoint number from which we start recovery */
+// orioledb checkpoint number from which we start recovery
 static uint32 startup_chkp_num;
 
-/* is recovery main process has error */
+// is recovery main process has error
 static bool unexpected_worker_detach = false;
 
-/*
- * True if current process is a recovery process (worker or master).
- */
+//
+// True if current process is a recovery process (worker or master).
+//
 static bool iam_recovery = false;
 
-/*
- * In-flight oxids that recovery_finish() aborted in memory.  These were left
- * COMMITSEQNO_INPROGRESS at end-of-redo with no COMMIT/ROLLBACK on the wire,
- * so a streaming standby cannot resolve them on its own.  Captured here for
- * the after-checkpoint hook to flush as WAL_REC_ROLLBACK once
- * LocalSetXLogInsertAllowed() has run (issue #876).
- */
+//
+// In-flight oxids that recovery_finish() aborted in memory.  These were left
+// COMMITSEQNO_INPROGRESS at end-of-redo with no COMMIT/ROLLBACK on the wire,
+// so a streaming standby cannot resolve them on its own.  Captured here for
+// the after-checkpoint hook to flush as WAL_REC_ROLLBACK once
+// LocalSetXLogInsertAllowed() has run (issue #876).
+//
 typedef struct
 {
 	OXid		oxid;
@@ -307,44 +307,44 @@ static RecoveryFinishAbortedOxid *recovery_finish_aborted_oxids = NULL;
 static int	recovery_finish_aborted_count = 0;
 static int	recovery_finish_aborted_capacity = 0;
 
-/*
- * Current orioledb transaction recovery id
- */
+//
+// Current orioledb transaction recovery id
+//
 OXid		recovery_oxid = InvalidOXid;
 
-/*
- * Full size of a recovery queue.
- */
+//
+// Full size of a recovery queue.
+//
 uint64		recovery_queue_data_size = 0;
 
-/*
- * The pointer to a first recovery queue.
- */
+//
+// The pointer to a first recovery queue.
+//
 Pointer		recovery_first_queue = NULL;
 
-/*
- * GUC value, number of recovery workers.
- */
+//
+// GUC value, number of recovery workers.
+//
 int			recovery_pool_size_guc;
 int			recovery_idx_pool_size_guc;
 
-/*
- * GUC value, size of a single recovery queue in KB.
- */
+//
+// GUC value, size of a single recovery queue in KB.
+//
 int			recovery_queue_size_guc;
 
-/*
- * Are TOAST trees consistent with primary indices.
- */
+//
+// Are TOAST trees consistent with primary indices.
+//
 bool		toast_consistent = false;
 
-/*
- * Pending PK->SK fix-ups, populated from XidRecPendingSkFixup records read
- * out of the xid file at recovery start.  The list is drained once the
- * recovery hits the toast-consistent boundary, at which point every entry
- * is turned into synthesised secondary-index modify records.  See
- * record_pending_sk_fixup() / apply_pending_sk_fixups().
- */
+//
+// Pending PK->SK fix-ups, populated from XidRecPendingSkFixup records read
+// out of the xid file at recovery start.  The list is drained once the
+// recovery hits the toast-consistent boundary, at which point every entry
+// is turned into synthesised secondary-index modify records.  See
+// record_pending_sk_fixup() / apply_pending_sk_fixups().
+//
 typedef struct PendingSkFixup
 {
 	OXid		oxid;
@@ -367,13 +367,13 @@ record_pending_sk_fixup(OXid oxid, UndoLocation undoLocation)
 	pending_sk_fixups_head = entry;
 }
 
-/*
- * Apply one PendingSkFixup entry: read the PK undo record back, locate
- * the current PK tuple, and for every secondary index whose key differs
- * between the pre-image and the post-image, dispatch a synthesised
- * DELETE old / INSERT new pair through the recovery_workers' modify
- * path.  Mirrors apply_tbl_update()'s per-SK logic.
- */
+//
+// Apply one PendingSkFixup entry: read the PK undo record back, locate
+// the current PK tuple, and for every secondary index whose key differs
+// between the pre-image and the post-image, dispatch a synthesised
+// DELETE old / INSERT new pair through the recovery_workers' modify
+// path.  Mirrors apply_tbl_update()'s per-SK logic.
+//
 static void
 apply_one_pending_sk_fixup(PendingSkFixup *entry)
 {
@@ -399,16 +399,16 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 	if (!UndoLocationIsValid(tuphdrLoc))
 		return;
 
-	/*
-	 * The marker we recorded is the location of the BTreeLeafTuphdr field
-	 * inside the BTreeModifyUndoStackItem (that's what make_undo_record()
-	 * returns); back up to the start of the item.
-	 */
+	//
+// The marker we recorded is the location of the BTreeLeafTuphdr field
+// inside the BTreeModifyUndoStackItem (that's what make_undo_record()
+// returns); back up to the start of the item.
+//
 	itemLoc = tuphdrLoc - offsetof(BTreeModifyUndoStackItem, tuphdr);
 
 	if (!UNDO_REC_EXISTS(UndoLogRegular, itemLoc))
 	{
-		/* recycled in the meantime; nothing we can do */
+		// recycled in the meantime; nothing we can do
 		elog(DEBUG2,
 			 "pending-SK fix-up: undo record at %X/%X recycled, skipping",
 			 (uint32) (itemLoc >> 32), (uint32) itemLoc);
@@ -419,20 +419,20 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 	if (item.header.type != ModifyUndoItemType)
 		return;
 
-	/*
-	 * Only PK modifications carry SK-side obligations; tuple inserts /
-	 * updates / deletes are the only relevant actions.
-	 */
+	//
+// Only PK modifications carry SK-side obligations; tuple inserts /
+// updates / deletes are the only relevant actions.
+//
 	if (item.action != BTreeOperationUpdate &&
 		item.action != BTreeOperationInsert &&
 		item.action != BTreeOperationDelete)
 		return;
 
-	/*
-	 * item.oids is the PK index's relation OIDs (make_undo_record stores
-	 * desc->oids).  Resolve the table descr through the index descr's
-	 * tableOids back-pointer.
-	 */
+	//
+// item.oids is the PK index's relation OIDs (make_undo_record stores
+// desc->oids).  Resolve the table descr through the index descr's
+// tableOids back-pointer.
+//
 	{
 		OIndexDescr *indexDescr;
 
@@ -446,7 +446,7 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 		return;
 	primary = GET_PRIMARY(descr);
 
-	/* The undo entry stores the pre-image tuple right after the header. */
+	// The undo entry stores the pre-image tuple right after the header.
 	oldTupleSize = item.header.itemSize - sizeof(BTreeModifyUndoStackItem);
 	if (oldTupleSize == 0)
 		return;
@@ -460,25 +460,25 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 	o_btree_load_shmem(&primary->desc);
 	O_TUPLE_SET_NULL(newTuple);
 
-	/*
-	 * The DELETE undo record stores only the PK key (make_undo_record
-	 * extracts the key portion when action == BTreeOperationDelete with
-	 * is_tuple=true), which is not enough to derive secondary-index keys.
-	 * Look the row up on the PK page: at this point in recovery the leaf
-	 * still carries the full tuple data even though tuphdr->deleted is set,
-	 * since neither vacuum nor page compaction has reclaimed it yet.
-	 *
-	 * For INSERT/UPDATE the on-page PK row is the post-image we want to feed
-	 * into the SK loop as newSlot.
-	 *
-	 * For DELETE the on-page row is the row to be removed; we copy it back
-	 * into oldTuple so the SK loop can derive the SK key from full attrs.
-	 */
+	//
+// The DELETE undo record stores only the PK key (make_undo_record
+// extracts the key portion when action == BTreeOperationDelete with
+// is_tuple=true), which is not enough to derive secondary-index keys.
+// Look the row up on the PK page: at this point in recovery the leaf
+// still carries the full tuple data even though tuphdr->deleted is set,
+// since neither vacuum nor page compaction has reclaimed it yet.
+//
+// For INSERT/UPDATE the on-page PK row is the post-image we want to feed
+// into the SK loop as newSlot.
+//
+// For DELETE the on-page row is the row to be removed; we copy it back
+// into oldTuple so the SK loop can derive the SK key from full attrs.
+//
 	if (item.action == BTreeOperationDelete)
 	{
 		OTuple		keyTuple;
 
-		/* oldTuple currently holds just the PK key.  Build a key bound. */
+		// oldTuple currently holds just the PK key.  Build a key bound.
 		keyTuple = oldTuple;
 		o_fill_key_bound(primary, keyTuple, BTreeKeyNonLeafKey, &pkKey);
 	}
@@ -509,15 +509,15 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 
 	BTREE_PAGE_READ_TUPLE(pkOnPage, pkPage, &pageLoc);
 
-	/* Materialise a private copy before releasing the page lock. */
+	// Materialise a private copy before releasing the page lock.
 	newTupleLen = o_btree_len(&primary->desc, pkOnPage, OTupleLength);
 
 	if (item.action == BTreeOperationDelete)
 	{
-		/*
-		 * Swap the key-only oldTuple for the full leaf tuple read off the
-		 * page; we need full column attrs to derive the SK key.
-		 */
+		//
+// Swap the key-only oldTuple for the full leaf tuple read off the
+// page; we need full column attrs to derive the SK key.
+//
 		pfree(oldTuple.data);
 		oldTuple.formatFlags = pkOnPage.formatFlags;
 		oldTuple.data = palloc(newTupleLen);
@@ -535,13 +535,13 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 	newSlot = descr->newTuple;
 	oldSlot = descr->oldTuple;
 
-	/*
-	 * INSERT's undo record carries only the PK key (not a full leaf tuple),
-	 * so feeding it into oldSlot would expose junk to anything that reads
-	 * past the key columns.  Only populate oldSlot when the action actually
-	 * has a pre-image -- UPDATE (full tuple from undo) or DELETE (full tuple
-	 * we just read off the PK page).
-	 */
+	//
+// INSERT's undo record carries only the PK key (not a full leaf tuple),
+// so feeding it into oldSlot would expose junk to anything that reads
+// past the key columns.  Only populate oldSlot when the action actually
+// has a pre-image -- UPDATE (full tuple from undo) or DELETE (full tuple
+// we just read off the PK page).
+//
 	if (!O_TUPLE_IS_NULL(newTuple))
 		tts_orioledb_store_tuple(newSlot, newTuple, descr,
 								 COMMITSEQNO_INPROGRESS, PrimaryIndexNumber,
@@ -551,12 +551,12 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 								 COMMITSEQNO_INPROGRESS, PrimaryIndexNumber,
 								 true, NULL);
 
-	/*
-	 * For each secondary index, DELETE the pre-image entry and INSERT the
-	 * post-image entry when they differ.  Same shape as apply_tbl_update() so
-	 * workers' overwrite callbacks make these idempotent against any later
-	 * WAL records.
-	 */
+	//
+// For each secondary index, DELETE the pre-image entry and INSERT the
+// post-image entry when they differ.  Same shape as apply_tbl_update() so
+// workers' overwrite callbacks make these idempotent against any later
+// WAL records.
+//
 	for (i = 1; i < descr->nIndices; i++)
 	{
 		OIndexDescr *sk = descr->indices[i];
@@ -579,7 +579,7 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 			tts_orioledb_fill_key_bound(oldSlot, sk, &oldSkKey);
 			needDelete = true;
 		}
-		else					/* UPDATE */
+		else					// UPDATE
 		{
 			int			cmp;
 
@@ -629,25 +629,25 @@ apply_one_pending_sk_fixup(PendingSkFixup *entry)
 		}
 	}
 
-	/*
-	 * Both slots took ownership of their tuple data via shouldFree=true, so
-	 * ExecClearTuple is responsible for the pfree -- don't free the local
-	 * OTuple structs again.  For INSERT we never stored oldTuple in the slot,
-	 * so its undo-read buffer is still ours to release.
-	 */
+	//
+// Both slots took ownership of their tuple data via shouldFree=true, so
+// ExecClearTuple is responsible for the pfree -- don't free the local
+// OTuple structs again.  For INSERT we never stored oldTuple in the slot,
+// so its undo-read buffer is still ours to release.
+//
 	ExecClearTuple(newSlot);
 	ExecClearTuple(oldSlot);
 	if (item.action == BTreeOperationInsert)
 		pfree(oldTuple.data);
 }
 
-/*
- * Turn every PendingSkFixup record gathered by record_pending_sk_fixup()
- * into synthesised secondary-index modifications.  Called once, by the
- * master recovery process, at the moment WAL replay first crosses the
- * toast-consistent boundary, so the SK trees catch up to PK before any
- * post-boundary WAL records get applied.
- */
+//
+// Turn every PendingSkFixup record gathered by record_pending_sk_fixup()
+// into synthesised secondary-index modifications.  Called once, by the
+// master recovery process, at the moment WAL replay first crosses the
+// toast-consistent boundary, so the SK trees catch up to PK before any
+// post-boundary WAL records get applied.
+//
 static void
 apply_pending_sk_fixups(void)
 {
@@ -674,19 +674,19 @@ apply_pending_sk_fixups(void)
 		recovery_oxid = InvalidOXid;
 }
 
-/*
- * Checkpoint requests for flushing undo positions and their completion.
- */
+//
+// Checkpoint requests for flushing undo positions and their completion.
+//
 RecoveryUndoLocFlush *recovery_undo_loc_flush;
 
-/*
- * The last xmin we received from primary.
- */
+//
+// The last xmin we received from primary.
+//
 static OXid recovery_xmin = InvalidOXid;
 
-/*
- * Number of successfully finished recovery workers.
- */
+//
+// Number of successfully finished recovery workers.
+//
 pg_atomic_uint32 *worker_finish_count;
 pg_atomic_uint32 *idx_worker_finish_count;
 pg_atomic_uint32 *worker_ptrs_changes;
@@ -702,7 +702,7 @@ static pg_atomic_uint64 *recovery_index_next_pos;
 pg_atomic_uint64 *recovery_index_completed_pos;
 ConditionVariable *recovery_index_cv;
 
-/* TransactionId for system trees modification for using in recovery */
+// TransactionId for system trees modification for using in recovery
 TransactionId recoveryHeapTransactionId = InvalidTransactionId;
 
 static void delay_rels_queued_for_idxbuild(ORelOids oids);
@@ -740,9 +740,9 @@ static inline void spread_idx_modify(BTreeDescr *desc,
 static inline RecoveryMsgType recovery_msg_from_wal_record(WalRecordType rec_type);
 static void recovery_send_init(int worker_num);
 
-/*
- * Returns full size of the shared memory needed to recovery.
- */
+//
+// Returns full size of the shared memory needed to recovery.
+//
 Size
 recovery_shmem_needs(void)
 {
@@ -767,12 +767,12 @@ recovery_shmem_needs(void)
 	return size;
 }
 
-/*
- * Initializes recovery shared memory.
- *
- * Must be called after checkpoint_shmem_init() because it initializes
- * startupCommitSeqNo.
- */
+//
+// Initializes recovery shared memory.
+//
+// Must be called after checkpoint_shmem_init() because it initializes
+// startupCommitSeqNo.
+//
 void
 recovery_shmem_init(Pointer ptr, bool found)
 {
@@ -865,9 +865,9 @@ undo_stack_locations_set_invalid(UndoStackLocations *location)
 	location->onCommitLocation = InvalidUndoLocation;
 }
 
-/*
- * Read information about undo locations of in-progress transactions.
- */
+//
+// Read information about undo locations of in-progress transactions.
+//
 static void
 read_xids(int checkpointnum, bool recovery_single, int worker_id)
 {
@@ -914,8 +914,8 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 			state->xid = InvalidTransactionId;
 			state->needs_wal_flush = false;
 			for (j = 0; j < (int) UndoLogsCount; j++)
-				state->retain_locs[j] = InvalidUndoLocation;	/* undo locations are
-																 * held by checkpoint */
+				state->retain_locs[j] = InvalidUndoLocation;	// undo locations are
+// held by checkpoint
 			state->csn = COMMITSEQNO_INPROGRESS;
 			state->ptr = InvalidXLogRecPtr;
 			state->in_finished_list = false;
@@ -949,11 +949,11 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 
 			if (kind == XidRecPendingSkFixup)
 			{
-				/*
-				 * Stash the pending PK->SK fix-up; it will be turned into
-				 * synthesised secondary-index modify records once the
-				 * recovery hits the toast-consistent boundary.
-				 */
+				//
+// Stash the pending PK->SK fix-up; it will be turned into
+// synthesised secondary-index modify records once the
+// recovery hits the toast-consistent boundary.
+//
 				record_pending_sk_fixup(xidRec.oxid, xidRec.undoLocation.location);
 				offset += sizeof(xidRec);
 				continue;
@@ -966,9 +966,9 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 			dlist_push_tail(&state->checkpoint_undo_stacks, &stack->node);
 			set_oxid_csn(xidRec.oxid, COMMITSEQNO_INPROGRESS);
 
-			/*
-			 * We will probably need to retain this till the next checkpoint.
-			 */
+			//
+// We will probably need to retain this till the next checkpoint.
+//
 			retainUndoLocation = xidRec.retainLocation;
 			if ((int) kind < (int) UndoLogsCount &&
 				retainUndoLocation < state->retain_locs[(UndoLogType) kind])
@@ -1002,12 +1002,12 @@ read_xids(int checkpointnum, bool recovery_single, int worker_id)
 	pfree(xidFilename);
 }
 
-/*
- * Apply undo records "hidden" in undo branches.
- *
- * These records are intended to be already aborted.  But checkpointer could
- * "see" tuples which still reference those records.  This routine is du
- */
+//
+// Apply undo records "hidden" in undo branches.
+//
+// These records are intended to be already aborted.  But checkpointer could
+// "see" tuples which still reference those records.  This routine is du
+//
 static void
 apply_xids_branches(void)
 {
@@ -1046,7 +1046,7 @@ apply_xids_branches(void)
 													stack->undoStack.onCommitLocation,
 													InvalidUndoLocation, recovery_oxid,
 													OUndoCallbackStageCommit, NULL, true);
-				/* NB rewindItem->oxid is not used in recovery */
+				// NB rewindItem->oxid is not used in recovery
 				Assert(!UndoLocationIsValid(location));
 			}
 		}
@@ -1111,9 +1111,9 @@ o_recovery_start_hook(void)
 			workers_pool[i].handle = recovery_worker_register(i);
 			if (workers_pool[i].handle == NULL)
 			{
-				/*
-				 * Not enough slots for background workers.
-				 */
+				//
+// Not enough slots for background workers.
+//
 				for (i--; i >= 0; i--)
 					TerminateBackgroundWorker(workers_pool[i].handle);
 
@@ -1138,11 +1138,11 @@ o_recovery_start_hook(void)
 		}
 	}
 
-/*	if (enable_stopevents)
-	{
-		wait_for_stopevent_enabled(STOPEVENT_RECOVERY_START);
-		STOPEVENT(STOPEVENT_RECOVERY_START, NULL);
-	}*/
+// if (enable_stopevents)
+// {
+// wait_for_stopevent_enabled(STOPEVENT_RECOVERY_START);
+// STOPEVENT(STOPEVENT_RECOVERY_START, NULL);
+// }
 
 	recovery_undo_loc_flush->completedCheckpointNumber = 0;
 
@@ -1166,12 +1166,12 @@ orioledb_redo(XLogReaderState *record)
 
 	if (unlikely(XLogRecPtrIsValid(replay_until_lsn)))
 	{
-		/* Scoped to the lifetime of the Startup process. */
+		// Scoped to the lifetime of the Startup process.
 		static bool needs_init = true;
 		static bool is_stop_lsn_active = true;
 		static bool skip_all_future_records = false;
 
-		/* Short circuit: once the flag is set no further work is required */
+		// Short circuit: once the flag is set no further work is required
 		if (skip_all_future_records)
 		{
 			elog(DEBUG4, "OrioleDB recovery skips WAL container [%X/%X-%X/%X]",
@@ -1180,7 +1180,7 @@ orioledb_redo(XLogReaderState *record)
 			return;
 		}
 
-		/* On the first pass we perform all the necessary sanity checks */
+		// On the first pass we perform all the necessary sanity checks
 		if (unlikely(needs_init))
 		{
 			needs_init = false;
@@ -1222,14 +1222,14 @@ orioledb_redo(XLogReaderState *record)
 
 	if (record->ReadRecPtr >= checkpoint_state->controlToastConsistentPtr && !toast_consistent)
 	{
-		/*
-		 * Before running the PK->SK fix-up pass we need every pre-toast WAL
-		 * record to have been applied to PK by the workers, otherwise the PK
-		 * state we inspect below is stale.  Drain the worker queues up to the
-		 * current point, then process the pending fix-ups, then notify
-		 * workers to start applying records on the post-toast (whole-table)
-		 * path.
-		 */
+		//
+// Before running the PK->SK fix-up pass we need every pre-toast WAL
+// record to have been applied to PK by the workers, otherwise the PK
+// state we inspect below is stale.  Drain the worker queues up to the
+// current point, then process the pending fix-ups, then notify
+// workers to start applying records on the post-toast (whole-table)
+// path.
+//
 		if (!recovery_single)
 			workers_synchronize(record->ReadRecPtr, true);
 
@@ -1289,14 +1289,14 @@ o_recovery_finish_hook(bool cleanup)
 		pfree(workers_pool);
 	}
 
-	/* Release all the locks.  All of them are acquired at statement-level. */
+	// Release all the locks.  All of them are acquired at statement-level.
 	LockReleaseCurrentOwner(NULL, 0);
 
-	/*
-	 * No sense to check recovery_internal_error state, because shm_mq_sendv()
-	 * can return SHM_MQ_DETACHED even if finish message was successfully
-	 * sent.
-	 */
+	//
+// No sense to check recovery_internal_error state, because shm_mq_sendv()
+// can return SHM_MQ_DETACHED even if finish message was successfully
+// sent.
+//
 	if (!recovery_single && pg_atomic_read_u32(worker_finish_count) != num_workers)
 	{
 		elog(ERROR, "orioledb recovery worker died.");
@@ -1316,14 +1316,14 @@ get_workers_commit_ptr(void)
 	static uint64 prev_changes = UINT64_MAX;
 	uint64		old_changes;
 
-	/* fast check - nothing changed */
+	// fast check - nothing changed
 	old_changes = pg_atomic_read_u32(worker_ptrs_changes);
 	if (old_changes == prev_changes)
 		return prev_ptr;
 
 	pg_read_barrier();
 
-	/* we need to find a new ptr */
+	// we need to find a new ptr
 	while (true)
 	{
 		XLogRecPtr	min_ptr;
@@ -1350,15 +1350,15 @@ get_workers_commit_ptr(void)
 	}
 }
 
-/*
- * Returns minimum ptr which is already reached by all recovery workers.
- */
+//
+// Returns minimum ptr which is already reached by all recovery workers.
+//
 static XLogRecPtr
 recovery_get_current_ptr(void)
 {
 	Assert(RecoveryInProgress());
 
-	/* fast check - single process recovery */
+	// fast check - single process recovery
 	if (*recovery_single_process)
 		return pg_atomic_read_u64(recovery_ptr);
 
@@ -1389,17 +1389,17 @@ recovery_check_version(const WalReaderState *r)
 
 	if (r->container.version > ORIOLEDB_WAL_VERSION)
 	{
-		/* Unexpected new WAL record which we cannot read */
+		// Unexpected new WAL record which we cannot read
 		elog(PANIC, "cannot read WAL record of version %u newer than supported %u",
 			 r->container.version, ORIOLEDB_WAL_VERSION);
 
 		return WALPARSE_BAD_VERSION;
 	}
 
-	/*
-	 * If the WAL record is too old just return false and decide not to stop
-	 * applying WAL records further.
-	 */
+	//
+// If the WAL record is too old just return false and decide not to stop
+// applying WAL records further.
+//
 	else if (r->container.version < ORIOLEDB_CONTAINER_FLAGS_WAL_VERSION)
 		return WALPARSE_BAD_VERSION;
 
@@ -1412,21 +1412,21 @@ recovery_on_container(WalReaderState *r)
 	if (r->container.flags & WAL_CONTAINER_HAS_XACT_INFO)
 		return WALPARSE_STOP;
 
-	return WALPARSE_EOF;		/* Stop parser */
+	return WALPARSE_EOF;		// Stop parser
 }
 
 static WalParseResult
 recovery_on_record(WalReaderState *r, WalRecord *rec)
 {
-	return WALPARSE_EOF;		/* Stop parser */
+	return WALPARSE_EOF;		// Stop parser
 }
 
-/*
- * This function is called by the RecoveryStopsHook. It decides whether we want
- * to stop applying WAL records.
- *
- * Returns true if we are stopping, false otherwise.
- */
+//
+// This function is called by the RecoveryStopsHook. It decides whether we want
+// to stop applying WAL records.
+//
+// Returns true if we are stopping, false otherwise.
+//
 bool
 orioledb_recovery_stops_before_hook(XLogReaderState *record,
 									TransactionId *recordXid,
@@ -1448,17 +1448,17 @@ orioledb_recovery_stops_before_hook(XLogReaderState *record,
 		.on_record = recovery_on_record
 	};
 
-	/* Currently we consider ony recovery_target_time */
+	// Currently we consider ony recovery_target_time
 	if (recoveryTarget != RECOVERY_TARGET_TIME)
 		return false;
 
-	/* If for some reason data is empty just exit */
+	// If for some reason data is empty just exit
 	if (XLogRecGetDataLen(record) == 0)
 		return false;
 
 	st = wal_parse_container(&r, true);
 
-	if (st == WALPARSE_STOP)	/* WAL_CONTAINER_HAS_XACT_INFO is present */
+	if (st == WALPARSE_STOP)	// WAL_CONTAINER_HAS_XACT_INFO is present
 	{
 		Assert(r.container.flags & WAL_CONTAINER_HAS_XACT_INFO);
 
@@ -1477,13 +1477,13 @@ orioledb_recovery_stops_before_hook(XLogReaderState *record,
 static XLogRecPtr
 recovery_get_retain_ptr(void)
 {
-	/* fast check - single process recovery */
+	// fast check - single process recovery
 	if (*recovery_single_process)
 	{
 		return pg_atomic_read_u64(recovery_ptr);
 	}
 
-	/* we need to find a new ptr */
+	// we need to find a new ptr
 	while (true)
 	{
 		XLogRecPtr	result;
@@ -1497,9 +1497,9 @@ recovery_get_retain_ptr(void)
 	}
 }
 
-/*
- * Returns true if current process is recovery process.
- */
+//
+// Returns true if current process is recovery process.
+//
 bool
 is_recovery_process(void)
 {
@@ -1522,9 +1522,9 @@ recovery_map_oxid_csn(OXid oxid, bool *found)
 }
 
 
-/*
- * Initializes a new recovery process, recovery transaction support.
- */
+//
+// Initializes a new recovery process, recovery transaction support.
+//
 void
 recovery_init(int worker_id)
 {
@@ -1547,10 +1547,10 @@ recovery_init(int worker_id)
 													 &retain_undo_queue_numbers[i]);
 	}
 
-	/*
-	 * Only the recovery leader maintains the runXmin horizon via xmin_queue;
-	 * recovery workers never touch it, so leave it NULL for them.
-	 */
+	//
+// Only the recovery leader maintains the runXmin horizon via xmin_queue;
+// recovery workers never touch it, so leave it NULL for them.
+//
 	if (worker_id < 0)
 		xmin_queue = pairingheap_allocate(xmin_pairingheap_cmp, NULL);
 	dlist_init(&finished_list);
@@ -1561,28 +1561,28 @@ recovery_init(int worker_id)
 	TopTransactionContext = AllocSetContextCreate(TopMemoryContext,
 												  "orioledb recovery top transaction context",
 												  ALLOCSET_DEFAULT_SIZES);
-	RelationCacheInitialize();	/* needed for OTableDescr invalidation */
+	RelationCacheInitialize();	// needed for OTableDescr invalidation
 	InitCatalogCache();
 
 	o_set_syscache_hooks();
 
-	/*
-	 * Seed recovery_xmin with the checkpoint-era floor *before* read_xids()
-	 * runs its first update_run_xmin().  read_xids() pushes runXmin to
-	 * nextXid when the on-disk xids file is empty -- which it routinely is on
-	 * a streaming standby whose master had only long-running oxids with
-	 * modify records buffered in the master backend's private local_wal
-	 * (never reaching the wire, hence absent from the standby's recovery xid
-	 * hash and its own restartpoint's xids file).  With recovery_xmin left at
-	 * InvalidOXid (effectively unbounded), update_run_xmin's Min(...) cap is
-	 * ineffective and runXmin / globalXmin sail past the real master floor; a
-	 * later WAL_REC_XID(X) + WAL_REC_ROLLBACK(X) then drags globalXmin
-	 * backwards.
-	 *
-	 * Pinning recovery_xmin to checkpointRetainXmin keeps the floor honest
-	 * until a WAL commit/rollback record explicitly bumps it (see the Max()
-	 * in WAL_REC_COMMIT/ROLLBACK / WAL_REC_JOINT_COMMIT).
-	 */
+	//
+// Seed recovery_xmin with the checkpoint-era floor *before* read_xids()
+// runs its first update_run_xmin().  read_xids() pushes runXmin to
+// nextXid when the on-disk xids file is empty -- which it routinely is on
+// a streaming standby whose master had only long-running oxids with
+// modify records buffered in the master backend's private local_wal
+// (never reaching the wire, hence absent from the standby's recovery xid
+// hash and its own restartpoint's xids file).  With recovery_xmin left at
+// InvalidOXid (effectively unbounded), update_run_xmin's Min(...) cap is
+// ineffective and runXmin / globalXmin sail past the real master floor; a
+// later WAL_REC_XID(X) + WAL_REC_ROLLBACK(X) then drags globalXmin
+// backwards.
+//
+// Pinning recovery_xmin to checkpointRetainXmin keeps the floor honest
+// until a WAL commit/rollback record explicitly bumps it (see the Max()
+// in WAL_REC_COMMIT/ROLLBACK / WAL_REC_JOINT_COMMIT).
+//
 	if (worker_id < 0)
 		recovery_xmin = pg_atomic_read_u64(&xid_meta->checkpointRetainXmin);
 
@@ -1620,9 +1620,9 @@ recovery_init(int worker_id)
 
 			if (workers_pool[i].handle == NULL)
 			{
-				/*
-				 * Not enough slots for background workers.
-				 */
+				//
+// Not enough slots for background workers.
+//
 				for (i--; i >= index_build_first_worker; i--)
 					TerminateBackgroundWorker(workers_pool[i].handle);
 
@@ -1691,9 +1691,9 @@ walk_checkpoint_stacks(RecoveryXidState *recovery_xid_state, CommitSeqNo csn,
 	}
 }
 
-/*
- * Finishes a recovery process, close all recovery transactions.
- */
+//
+// Finishes a recovery process, close all recovery transactions.
+//
 void
 recovery_finish(int worker_id)
 {
@@ -1739,12 +1739,12 @@ recovery_finish(int worker_id)
 								   InvalidSubTransactionId,
 								   flush_undo_pos);
 
-			/*
-			 * Remember this oxid so the after-checkpoint hook can emit a
-			 * WAL_REC_ROLLBACK for it once XLog inserts are allowed. Workers
-			 * don't write WAL: only the main recovery process does. See issue
-			 * #876.
-			 */
+			//
+// Remember this oxid so the after-checkpoint hook can emit a
+// WAL_REC_ROLLBACK for it once XLog inserts are allowed. Workers
+// don't write WAL: only the main recovery process does. See issue
+// #876.
+//
 			if (worker_id < 0)
 			{
 				if (cur_state->oxid >= recovery_xmin)
@@ -1805,22 +1805,22 @@ recovery_finish(int worker_id)
 	if (worker_id < 0)
 		pairingheap_free(xmin_queue);
 
-	/*
-	 * Do NOT advance runXmin here.  Recovery has just aborted in-flight oxids
-	 * in memory; if recovery_finish_aborted_oxids is non-empty, the
-	 * after-checkpoint hook will emit a WAL_REC_ROLLBACK for each, stamping
-	 * the record's xmin with the current runXmin.  If we advanced runXmin to
-	 * nextXid here, the post-recovery checkpoint that runs between
-	 * recovery_finish() and o_emit_recovery_finish_rollbacks() would persist
-	 * the advanced horizon as control.checkpointRetainXmin, and the standby
-	 * would replay that checkpoint before seeing the ROLLBACK records that
-	 * justify it.  After the standby's globalXmin slid forward, the ROLLBACK
-	 * records would then drag it back across slots already stamped FROZEN,
-	 * breaking oxid_get_csn()'s fast-path (orioledb/orioledb#889).
-	 * free_run_xmin() is deferred to o_emit_recovery_finish_rollbacks() so
-	 * the WAL records and the runXmin advance are atomic with respect to
-	 * checkpoint observers.
-	 */
+	//
+// Do NOT advance runXmin here.  Recovery has just aborted in-flight oxids
+// in memory; if recovery_finish_aborted_oxids is non-empty, the
+// after-checkpoint hook will emit a WAL_REC_ROLLBACK for each, stamping
+// the record's xmin with the current runXmin.  If we advanced runXmin to
+// nextXid here, the post-recovery checkpoint that runs between
+// recovery_finish() and o_emit_recovery_finish_rollbacks() would persist
+// the advanced horizon as control.checkpointRetainXmin, and the standby
+// would replay that checkpoint before seeing the ROLLBACK records that
+// justify it.  After the standby's globalXmin slid forward, the ROLLBACK
+// records would then drag it back across slots already stamped FROZEN,
+// breaking oxid_get_csn()'s fast-path (orioledb/orioledb#889).
+// free_run_xmin() is deferred to o_emit_recovery_finish_rollbacks() so
+// the WAL records and the runXmin advance are atomic with respect to
+// checkpoint observers.
+//
 	if (worker_id >= 0)
 		pg_atomic_write_u64(&worker_ptrs[worker_id].retainPtr,
 							pg_atomic_read_u64(&worker_ptrs[worker_id].commitPtr));
@@ -1840,16 +1840,16 @@ recovery_finish(int worker_id)
 	o_unset_syscache_hooks();
 }
 
-/*
- * Emit a WAL_REC_ROLLBACK for every oxid that recovery_finish() aborted in
- * memory.  Called from the after_checkpoint_cleanup_hook at end of recovery,
- * once LocalSetXLogInsertAllowed() has run so XLogInsert is permitted.
- *
- * Without this, streaming standbys that eagerly applied the in-flight txn's
- * modify records hold the oxid INPROGRESS forever, and any later replayed
- * modify targeting the same row spins in o_btree_modify_handle_conflicts
- * (issue #876).
- */
+//
+// Emit a WAL_REC_ROLLBACK for every oxid that recovery_finish() aborted in
+// memory.  Called from the after_checkpoint_cleanup_hook at end of recovery,
+// once LocalSetXLogInsertAllowed() has run so XLogInsert is permitted.
+//
+// Without this, streaming standbys that eagerly applied the in-flight txn's
+// modify records hold the oxid INPROGRESS forever, and any later replayed
+// modify targeting the same row spins in o_btree_modify_handle_conflicts
+// (issue #876).
+//
 void
 o_emit_recovery_finish_rollbacks(void)
 {
@@ -1871,20 +1871,20 @@ o_emit_recovery_finish_rollbacks(void)
 		recovery_finish_aborted_capacity = 0;
 	}
 
-	/*
-	 * Now that every WAL_REC_ROLLBACK has been stamped with the
-	 * checkpoint-era runXmin, it is safe to lift the horizon to nextXid.
-	 * Deferred from recovery_finish() so the post-recovery checkpoint (which
-	 * sits between the two phases) observes the original floor and standbys
-	 * never see a checkpointRetainXmin that gets out from under the ROLLBACK
-	 * records that explain it (orioledb/orioledb#889).
-	 */
+	//
+// Now that every WAL_REC_ROLLBACK has been stamped with the
+// checkpoint-era runXmin, it is safe to lift the horizon to nextXid.
+// Deferred from recovery_finish() so the post-recovery checkpoint (which
+// sits between the two phases) observes the original floor and standbys
+// never see a checkpointRetainXmin that gets out from under the ROLLBACK
+// records that explain it (orioledb/orioledb#889).
+//
 	free_run_xmin();
 }
 
-/*
- * Switches recovery process to other orioledb transaction.
- */
+//
+// Switches recovery process to other orioledb transaction.
+//
 void
 recovery_switch_to_oxid(OXid oxid, int worker_id)
 {
@@ -1945,10 +1945,10 @@ recovery_switch_to_oxid(OXid oxid, int worker_id)
 			cur_state->in_joint_commit_list = false;
 			cur_state->needs_feedback = false;
 
-			/*
-			 * undo_stacks might be copied into a temp file, so initialize it
-			 * with InvalidUndoLocation.
-			 */
+			//
+// undo_stacks might be copied into a temp file, so initialize it
+// with InvalidUndoLocation.
+//
 			memset(cur_state->undo_stacks, 0, sizeof(cur_state->undo_stacks));
 			for (i = 0; i < (int) UndoLogsCount; i++)
 				undo_stack_locations_set_invalid(&cur_state->undo_stacks[i]);
@@ -1976,10 +1976,10 @@ recovery_switch_to_oxid(OXid oxid, int worker_id)
 	}
 }
 
-/*
- * Delete recovery xid item if it's already deleted from both retain undo
- * location heap and finished list.
- */
+//
+// Delete recovery xid item if it's already deleted from both retain undo
+// location heap and finished list.
+//
 static void
 check_delete_xid_state(RecoveryXidState *state, int worker_id)
 {
@@ -2040,9 +2040,9 @@ flush_current_undo_stack(void)
 	}
 }
 
-/*
- * Finishes the current recovery transaction for the current recovery process.
- */
+//
+// Finishes the current recovery transaction for the current recovery process.
+//
 void
 recovery_finish_current_oxid(CommitSeqNo csn, XLogRecPtr ptr,
 							 int worker_id, bool sync)
@@ -2102,11 +2102,11 @@ recovery_finish_current_oxid(CommitSeqNo csn, XLogRecPtr ptr,
 			}
 			else
 			{
-				/*
-				 * Postpone transaction abort until it will be aborted by all
-				 * the workers.  Otherwise, workers can consider it as
-				 * committed due to runXmin.
-				 */
+				//
+// Postpone transaction abort until it will be aborted by all
+// the workers.  Otherwise, workers can consider it as
+// committed due to runXmin.
+//
 				cur_recovery_xid_state->in_finished_list = true;
 				dlist_push_tail(&finished_list,
 								&cur_recovery_xid_state->finished_list_node);
@@ -2327,9 +2327,9 @@ recovery_insert_deleted_systree_callback(BTreeDescr *descr,
 	return OBTreeCallbackActionUpdate;
 }
 
-/*
- * Applies modify recovery record to the BTree.
- */
+//
+// Applies modify recovery record to the BTree.
+//
 bool
 apply_btree_modify_record(BTreeDescr *tree, RecoveryMsgType type,
 						  OTuple ptr, OXid oxid, CommitSeqNo csn)
@@ -2460,7 +2460,7 @@ replay_erase_bridge_item(OIndexDescr *bridge, ItemPointer iptr)
 	unlock_page(context.items[context.index].blkno);
 }
 
-/* Insert WAL record always stores one tuple, not a key. */
+// Insert WAL record always stores one tuple, not a key.
 OTuple
 recovery_rec_insert(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
 {
@@ -2469,10 +2469,10 @@ recovery_rec_insert(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
 	return tuple;
 }
 
-/*
- *  Update WAL record always stores tuples, not keys. For REPLICA_IDENTITY_FULL
- *  new and old tuples, otherwise only new tuple.
- */
+//
+// Update WAL record always stores tuples, not keys. For REPLICA_IDENTITY_FULL
+// new and old tuples, otherwise only new tuple.
+//
 OTuple
 recovery_rec_update(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
 {
@@ -2481,10 +2481,10 @@ recovery_rec_update(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size)
 	return tuple;
 }
 
-/*
- *  This function should be used for WAL recording for real tables that can be logically replicated.
- *  For them it depends on replica identity what should be contained in wal record: key or full tuple.
- */
+//
+// This function should be used for WAL recording for real tables that can be logically replicated.
+// For them it depends on replica identity what should be contained in wal record: key or full tuple.
+//
 OTuple
 recovery_rec_delete(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size, char relreplident)
 {
@@ -2504,10 +2504,10 @@ recovery_rec_delete(BTreeDescr *desc, OTuple tuple, bool *allocated, int *size, 
 	}
 }
 
-/*
- * This function could be used only for system trees and bridge indices, that could not be logically
- * replicated and can't have replica identity.
- */
+//
+// This function could be used only for system trees and bridge indices, that could not be logically
+// replicated and can't have replica identity.
+//
 OTuple
 recovery_rec_delete_key(BTreeDescr *desc, OTuple key, bool *allocated, int *size)
 {
@@ -2516,10 +2516,10 @@ recovery_rec_delete_key(BTreeDescr *desc, OTuple key, bool *allocated, int *size
 	return key;
 }
 
-/*
- * Debug method checks is recovery main process and recovery workers
- * transactions is synchronized.
- */
+//
+// Debug method checks is recovery main process and recovery workers
+// transactions is synchronized.
+//
 Datum
 orioledb_recovery_synchronized(PG_FUNCTION_ARGS)
 {
@@ -2542,22 +2542,22 @@ orioledb_recovery_synchronized(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
-/*
- * Recompute and publish xid_meta->runXmin from the recovery leader's in-flight
- * oxids.
- *
- * Must be called only by the recovery leader (worker_id < 0).  It reads and
- * mutates the leader-only xmin_queue / retain_undo_queues and is the single
- * writer of runXmin during recovery; recovery workers never touch these
- * structures, so calling it from a worker would corrupt the horizon.
- *
- * This is invoked after every transaction finishes and after every
- * recovery_xmin shift, so the published horizon is kept continuously
- * up to date.  There is deliberately no full "scan the whole queue" pass:
- * the queue is a pairing heap with no cheap ordered traversal, so we only
- * ever inspect its top and advance the horizon as far as the current
- * recovery_xmin allows.
- */
+//
+// Recompute and publish xid_meta->runXmin from the recovery leader's in-flight
+// oxids.
+//
+// Must be called only by the recovery leader (worker_id < 0).  It reads and
+// mutates the leader-only xmin_queue / retain_undo_queues and is the single
+// writer of runXmin during recovery; recovery workers never touch these
+// structures, so calling it from a worker would corrupt the horizon.
+//
+// This is invoked after every transaction finishes and after every
+// recovery_xmin shift, so the published horizon is kept continuously
+// up to date.  There is deliberately no full "scan the whole queue" pass:
+// the queue is a pairing heap with no cheap ordered traversal, so we only
+// ever inspect its top and advance the horizon as far as the current
+// recovery_xmin allows.
+//
 static void
 update_run_xmin(void)
 {
@@ -2565,23 +2565,23 @@ update_run_xmin(void)
 	int			i;
 	bool		found;
 
-	/* Leader-only: xmin_queue is allocated only when worker_id < 0. */
+	// Leader-only: xmin_queue is allocated only when worker_id < 0.
 	Assert(xmin_queue != NULL);
 
-	/*
-	 * Drain any fast-path-aborted oxids off the top of xmin_queue.  An entry
-	 * that is in xmin_queue because the checkpoint's xids file named it
-	 * (state->checkpoint_xid) but for which no WAL_REC_XID ever streamed
-	 * (!state->wal_xid), and whose oxid lies below recovery_xmin, can only be
-	 * a wal_rollback() fast-path abort on the master: the abort wrote no WAL
-	 * record and a later WAL_REC_COMMIT/ROLLBACK has since carried the
-	 * master's post-abort runXmin past its oxid.  Mark it ABORTED in shmem so
-	 * visibility checks see a settled txn rather than the
-	 * COMMITSEQNO_INPROGRESS that read_xids() stamped, apply any
-	 * checkpoint_undo_stacks the master captured (lock-only undo can be
-	 * present even though the abort took the no-WAL fast path), and drop it
-	 * from the heap so it stops pinning runXmin.
-	 */
+	//
+// Drain any fast-path-aborted oxids off the top of xmin_queue.  An entry
+// that is in xmin_queue because the checkpoint's xids file named it
+// (state->checkpoint_xid) but for which no WAL_REC_XID ever streamed
+// (!state->wal_xid), and whose oxid lies below recovery_xmin, can only be
+// a wal_rollback() fast-path abort on the master: the abort wrote no WAL
+// record and a later WAL_REC_COMMIT/ROLLBACK has since carried the
+// master's post-abort runXmin past its oxid.  Mark it ABORTED in shmem so
+// visibility checks see a settled txn rather than the
+// COMMITSEQNO_INPROGRESS that read_xids() stamped, apply any
+// checkpoint_undo_stacks the master captured (lock-only undo can be
+// present even though the abort took the no-WAL fast path), and drop it
+// from the heap so it stops pinning runXmin.
+//
 	while (!pairingheap_is_empty(xmin_queue))
 	{
 		RecoveryXidState *state;
@@ -2589,18 +2589,18 @@ update_run_xmin(void)
 		state = pairingheap_container(RecoveryXidState, xmin_ph_node,
 									  pairingheap_first(xmin_queue));
 
-		/*
-		 * Only oxids strictly below recovery_xmin may be settled here: an
-		 * oxid below recovery_xmin is guaranteed finished on the primary
-		 * (recovery_xmin tracks the primary's advanced runXmin) and no
-		 * further WAL will arrive for it.  The heap top is the smallest oxid,
-		 * so once it reaches recovery_xmin there is nothing left to drain --
-		 * stop.  We never scan deeper into the heap: it is a pairing heap
-		 * with no cheap ordered traversal, and since update_run_xmin() runs
-		 * after every transaction finish and recovery_xmin shift, draining
-		 * just the eligible prefix each time keeps runXmin continuously up to
-		 * date.
-		 */
+		//
+// Only oxids strictly below recovery_xmin may be settled here: an
+// oxid below recovery_xmin is guaranteed finished on the primary
+// (recovery_xmin tracks the primary's advanced runXmin) and no
+// further WAL will arrive for it.  The heap top is the smallest oxid,
+// so once it reaches recovery_xmin there is nothing left to drain --
+// stop.  We never scan deeper into the heap: it is a pairing heap
+// with no cheap ordered traversal, and since update_run_xmin() runs
+// after every transaction finish and recovery_xmin shift, draining
+// just the eligible prefix each time keeps runXmin continuously up to
+// date.
+//
 		if (state->oxid >= recovery_xmin)
 			break;
 		if (!state->checkpoint_xid || state->wal_xid)
@@ -2608,15 +2608,15 @@ update_run_xmin(void)
 
 		set_oxid_csn(state->oxid, COMMITSEQNO_ABORTED);
 
-		/*
-		 * walk_checkpoint_stacks() clobbers recovery_oxid /
-		 * curUndoLocations[] / oxid_needs_wal_flush, but update_run_xmin()
-		 * can be re-entered from inside apply_wal_record() (via the
-		 * o_handle_startup_proc_interrupts_hook ->
-		 * update_proc_retain_undo_location -> check_delete_xid_state path)
-		 * while another oxid is being applied -- so save those globals around
-		 * the call and put them back.
-		 */
+		//
+// walk_checkpoint_stacks() clobbers recovery_oxid /
+// curUndoLocations[] / oxid_needs_wal_flush, but update_run_xmin()
+// can be re-entered from inside apply_wal_record() (via the
+// o_handle_startup_proc_interrupts_hook ->
+// update_proc_retain_undo_location -> check_delete_xid_state path)
+// while another oxid is being applied -- so save those globals around
+// the call and put them back.
+//
 		{
 			OXid		saved_recovery_oxid = recovery_oxid;
 			bool		saved_oxid_needs_wal_flush = oxid_needs_wal_flush;
@@ -2637,17 +2637,17 @@ update_run_xmin(void)
 			oxid_needs_wal_flush = saved_oxid_needs_wal_flush;
 		}
 
-		/*
-		 * The entry is a pure checkpoint-only oxid (checkpoint_xid &&
-		 * !wal_xid) that has now been settled as ABORTED;
-		 * checkpoint_undo_stacks is empty (walk_checkpoint_stacks emptied
-		 * it), and in_finished_list / in_joint_commit_list are necessarily
-		 * false (those flags are only raised by WAL_REC_COMMIT /
-		 * WAL_REC_ROLLBACK / WAL_REC_JOINT_COMMIT processing, which never
-		 * touched this oxid).  Tear the entry down fully so nothing --
-		 * recovery_finish(), update_proc_retain_undo_location(), or anything
-		 * else iterating the hash -- has to consider it again.
-		 */
+		//
+// The entry is a pure checkpoint-only oxid (checkpoint_xid &&
+// !wal_xid) that has now been settled as ABORTED;
+// checkpoint_undo_stacks is empty (walk_checkpoint_stacks emptied
+// it), and in_finished_list / in_joint_commit_list are necessarily
+// false (those flags are only raised by WAL_REC_COMMIT /
+// WAL_REC_ROLLBACK / WAL_REC_JOINT_COMMIT processing, which never
+// touched this oxid).  Tear the entry down fully so nothing --
+// recovery_finish(), update_proc_retain_undo_location(), or anything
+// else iterating the hash -- has to consider it again.
+//
 		state->csn = COMMITSEQNO_ABORTED;
 		for (i = 0; i < (int) UndoLogsCount; i++)
 		{
@@ -2680,14 +2680,14 @@ update_run_xmin(void)
 	xmin = Min(xmin, recovery_xmin);
 	pg_atomic_write_u64(&xid_meta->runXmin, xmin);
 
-	/*
-	 * globalXmin must move monotonically forward.  The pre-existing "write
-	 * down if xmin < globalXmin" branch existed to publish the checkpoint-era
-	 * floor on the first read_xids() call, but checkpoint_shmem_init() now
-	 * seeds globalXmin from control.checkpointRetainXmin -- the same floor --
-	 * so any later downward move would be a regression we must never publish.
-	 * Make monotonicity an explicit invariant instead.
-	 */
+	//
+// globalXmin must move monotonically forward.  The pre-existing "write
+// down if xmin < globalXmin" branch existed to publish the checkpoint-era
+// floor on the first read_xids() call, but checkpoint_shmem_init() now
+// seeds globalXmin from control.checkpointRetainXmin -- the same floor --
+// so any later downward move would be a regression we must never publish.
+// Make monotonicity an explicit invariant instead.
+//
 	Assert(xmin >= pg_atomic_read_u64(&xid_meta->globalXmin));
 }
 
@@ -2699,22 +2699,22 @@ free_run_xmin(void)
 	xmin = pg_atomic_read_u64(&xid_meta->nextXid);
 	pg_atomic_write_u64(&xid_meta->runXmin, xmin);
 
-	/*
-	 * globalXmin is the actual horizon, including any live read-only sessions
-	 * that survive a promote -- their oProcData[].xmin can sit well below
-	 * nextXid.  Pulling globalXmin down to nextXid here would publish a
-	 * horizon higher than the real floor and break MVCC for those sessions.
-	 * Leave globalXmin alone; advance_global_xmin() will bring it forward
-	 * (only upward) once proc xmins clear.
-	 */
+	//
+// globalXmin is the actual horizon, including any live read-only sessions
+// that survive a promote -- their oProcData[].xmin can sit well below
+// nextXid.  Pulling globalXmin down to nextXid here would publish a
+// horizon higher than the real floor and break MVCC for those sessions.
+// Leave globalXmin alone; advance_global_xmin() will bring it forward
+// (only upward) once proc xmins clear.
+//
 	Assert(xmin >= pg_atomic_read_u64(&xid_meta->globalXmin));
 }
 
-/*
- * Update process transactionUndoRetainLocation according to the state of
- * retain_undo_queues[undoType].  Removes finished transactions from the top
- * of the heap when appropriate.
- */
+//
+// Update process transactionUndoRetainLocation according to the state of
+// retain_undo_queues[undoType].  Removes finished transactions from the top
+// of the heap when appropriate.
+//
 static bool
 update_retain_location_with_heap(UndoLogType undoType, int worker_id,
 								 XLogRecPtr recoveryPtr)
@@ -2744,10 +2744,10 @@ update_retain_location_with_heap(UndoLogType undoType, int worker_id,
 	}
 }
 
-/*
- * Updates advanceReservedLocation for a recovery process. Searches min
- * transactionUndoRetainLocation for active transactions.
- */
+//
+// Updates advanceReservedLocation for a recovery process. Searches min
+// transactionUndoRetainLocation for active transactions.
+//
 void
 update_proc_retain_undo_location(int worker_id)
 {
@@ -2761,10 +2761,10 @@ update_proc_retain_undo_location(int worker_id)
 
 	if (cur_recovery_xid_state != NULL)
 	{
-		/*
-		 * Update current recovery Xid state with retain undo locations if
-		 * needed.
-		 */
+		//
+// Update current recovery Xid state with retain undo locations if
+// needed.
+//
 		for (i = 0; i < (int) UndoLogsCount; i++)
 		{
 			if (!UndoLocationIsValid(cur_recovery_xid_state->retain_locs[i]) &&
@@ -2815,17 +2815,17 @@ update_proc_retain_undo_location(int worker_id)
 	{
 		pg_atomic_write_u64(recovery_finished_list_ptr, recoveryPtr);
 
-		/*
-		 * If at least one transaction required feedback to the primary, wake
-		 * up WAL receiver to provide it.
-		 */
+		//
+// If at least one transaction required feedback to the primary, wake
+// up WAL receiver to provide it.
+//
 		if (needsFeedback)
 			WalRcvForceReply();
 	}
 
-	/*
-	 * Remove transactions, visible for all, from the retain queue.
-	 */
+	//
+// Remove transactions, visible for all, from the retain queue.
+//
 	for (i = 0; i < (int) UndoLogsCount; i++)
 	{
 		if (pairingheap_is_empty(retain_undo_queues[i]))
@@ -2971,9 +2971,9 @@ update_undo_loc_flush_completed_number(bool single)
 	recovery_undo_loc_flush->completedCheckpointNumber = completedNumber;
 }
 
-/*
- * Handles immediate undo positions flush request from checkpointer.
- */
+//
+// Handles immediate undo positions flush request from checkpointer.
+//
 void
 update_recovery_undo_loc_flush(bool single, int worker_id)
 {
@@ -2989,9 +2989,9 @@ update_recovery_undo_loc_flush(bool single, int worker_id)
 	else
 		myCompletedNumber = worker_ptrs[worker_id].flushedUndoLocCompletedCheckpointNumber;
 
-	/*
-	 * Process immediate request if any.
-	 */
+	//
+// Process immediate request if any.
+//
 	if (myCompletedNumber < requestNumber)
 		recovery_write_to_xids_queue(worker_id, requestNumber);
 
@@ -3001,9 +3001,9 @@ update_recovery_undo_loc_flush(bool single, int worker_id)
 	update_undo_loc_flush_completed_number(single);
 }
 
-/*
- * Save the recovery worker state to the temporary file.
- */
+//
+// Save the recovery worker state to the temporary file.
+//
 static void
 save_state_to_file(int worker_id)
 {
@@ -3014,7 +3014,7 @@ save_state_to_file(int worker_id)
 	RecoveryXidState *state;
 	off_t		offset = sizeof(header);
 
-	/* Create worker-specific temp file */
+	// Create worker-specific temp file
 	filename = psprintf(WORKER_UNDO_TEMP_FILE, worker_id);
 	tempFile = PathNameOpenFile(filename, O_WRONLY | O_CREAT | O_TRUNC | PG_BINARY);
 	if (tempFile < 0)
@@ -3022,7 +3022,7 @@ save_state_to_file(int worker_id)
 				(errcode_for_file_access(),
 				 errmsg("could not open file %s: %m", filename)));
 
-	/* Write header */
+	// Write header
 	memset(&header, 0, sizeof(header));
 	header.worker_id = worker_id;
 	header.num_transactions = hash_get_num_entries(recovery_xid_state_hash);
@@ -3033,7 +3033,7 @@ save_state_to_file(int worker_id)
 				 errmsg("could not write recovery worker undo header to file \"%s\": %m",
 						filename)));
 
-	/* Update current undo locations if needed */
+	// Update current undo locations if needed
 	if (cur_recovery_xid_state != NULL)
 	{
 		for (int i = 0; i < UndoLogsCount; i++)
@@ -3051,14 +3051,14 @@ save_state_to_file(int worker_id)
 		}
 	}
 
-	/* Write all transaction states */
+	// Write all transaction states
 	hash_seq_init(&hash_seq, recovery_xid_state_hash);
 	while ((state = hash_seq_search(&hash_seq)) != NULL)
 	{
 		WorkerUndoTempEntry entry;
 		dlist_iter	iter;
 
-		/* Save complete transaction state */
+		// Save complete transaction state
 		memset(&entry, 0, sizeof(entry));
 		entry.oxid = state->oxid;
 		entry.csn = state->csn;
@@ -3078,7 +3078,7 @@ save_state_to_file(int worker_id)
 							filename)));
 		offset += sizeof(entry);
 
-		/* Also write checkpoint stacks */
+		// Also write checkpoint stacks
 		dlist_foreach(iter, &state->checkpoint_undo_stacks)
 		{
 			CheckpointUndoStack *stack = dlist_container(CheckpointUndoStack,
@@ -3109,9 +3109,9 @@ save_state_to_file(int worker_id)
 	pfree(filename);
 }
 
-/*
- * Read the recovery worker state from the temporary file.
- */
+//
+// Read the recovery worker state from the temporary file.
+//
 void
 recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 {
@@ -3129,7 +3129,7 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 		return;
 	}
 
-	/* Read header */
+	// Read header
 	if (OFileRead(tempFile, (char *) &header, sizeof(header), 0,
 				  WAIT_EVENT_DATA_FILE_READ) != sizeof(header))
 		ereport(FATAL,
@@ -3139,12 +3139,12 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 
 	offset = sizeof(header);
 
-	/* Process each transaction entry */
+	// Process each transaction entry
 	for (int i = 0; i < header.num_transactions; i++)
 	{
 		WorkerUndoTempEntry entry;
 
-		/* Read main entry */
+		// Read main entry
 		if (OFileRead(tempFile, (char *) &entry, sizeof(entry), offset,
 					  WAIT_EVENT_DATA_FILE_READ) != sizeof(entry))
 			ereport(FATAL,
@@ -3153,15 +3153,15 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 							filename)));
 		offset += sizeof(entry);
 
-		/* Skip if transaction is finished */
+		// Skip if transaction is finished
 		if (!COMMITSEQNO_IS_INPROGRESS(entry.csn))
 		{
-			/* Still need to skip checkpoint stack entries */
+			// Still need to skip checkpoint stack entries
 			offset += entry.numCheckpointStacks * sizeof(CheckpointUndoStack);
 			continue;
 		}
 
-		/* Process main undo stacks (Regular, PageLevel, System) */
+		// Process main undo stacks (Regular, PageLevel, System)
 		for (int j = 0; j < UndoLogsCount; j++)
 		{
 			XidFileRec	rec;
@@ -3173,7 +3173,7 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 			write_to_xids_queue(&rec);
 		}
 
-		/* Process checkpoint stacks */
+		// Process checkpoint stacks
 		for (int j = 0; j < entry.numCheckpointStacks; j++)
 		{
 			XidFileRec	rec;
@@ -3187,7 +3187,7 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 								filename)));
 			offset += sizeof(stack);
 
-			/* Write checkpoint stack to XID queue */
+			// Write checkpoint stack to XID queue
 			rec.oxid = entry.oxid;
 			rec.kind = stack.kind;
 			rec.undoLocation = stack.undoStack;
@@ -3200,10 +3200,10 @@ recovery_load_state_from_file(int worker_id, uint32 chkpnum, bool shutdown)
 
 	FileClose(tempFile);
 
-	/*
-	 * We no longer need the temporary file if it's shutdown (last)
-	 * checkpoint. So, cleanup.
-	 */
+	//
+// We no longer need the temporary file if it's shutdown (last)
+// checkpoint. So, cleanup.
+//
 	if (shutdown)
 		unlink(filename);
 	pfree(filename);
@@ -3217,12 +3217,12 @@ recovery_on_proc_exit(int code, Datum arg)
 	if (!recovery_xid_state_hash)
 		return;
 
-	/*
-	 * The startup process (worker_id < 0) is not a recovery worker and
-	 * doesn't use worker_ptrs[].  save_state_to_file() and hasTempFile are
-	 * only meaningful for actual recovery workers whose state needs to be
-	 * picked up by the checkpointer.
-	 */
+	//
+// The startup process (worker_id < 0) is not a recovery worker and
+// doesn't use worker_ptrs[].  save_state_to_file() and hasTempFile are
+// only meaningful for actual recovery workers whose state needs to be
+// picked up by the checkpointer.
+//
 	if (worker_id < 0)
 		return;
 
@@ -3230,7 +3230,7 @@ recovery_on_proc_exit(int code, Datum arg)
 
 	save_state_to_file(worker_id);
 
-	/* Mark worker as having saved state and exited */
+	// Mark worker as having saved state and exited
 	pg_atomic_test_set_flag(&worker_ptrs[worker_id].hasTempFile);
 }
 
@@ -3277,10 +3277,10 @@ abort_recovery(RecoveryWorkerState *workers_pool, bool send_to_idx_pool)
 	elog(LOG, "orioledb recovery finished: abort recovery.");
 }
 
-/*
- * WaitForBackgroundWorkerShutdown() does not work in this context. We need
- * an analog.
- */
+//
+// WaitForBackgroundWorkerShutdown() does not work in this context. We need
+// an analog.
+//
 static void
 worker_wait_shutdown(RecoveryWorkerState *worker)
 {
@@ -3360,19 +3360,19 @@ cleanup_tablespace_old_files(char *path, uint32 chkp_num, bool before_recovery)
 			{
 				if (before_recovery)
 				{
-					/*---
-					 * Before recovery we should cleanup:
-					 *
-					 * 1. *.map and *.tmp files which were not created by
-					 * checkpointer.
-					 * 2. All free extents tree files.
-					 *
-					 * Otherwise:
-					 *
-					 * 1. In some cases wrong *.map files will be created.
-					 * (if size of old *.map or *.tmp file is more than will
-					 * be created by checkpointer).
-					 */
+					// ---
+// Before recovery we should cleanup:
+//
+// 1. *.map and *.tmp files which were not created by
+// checkpointer.
+// 2. All free extents tree files.
+//
+// Otherwise:
+//
+// 1. In some cases wrong *.map files will be created.
+// (if size of old *.map or *.tmp file is more than will
+// be created by checkpointer).
+//
 					if (!strcmp(ext, "tmp"))
 					{
 						cleanup = (file_chkp > chkp_num);
@@ -3401,10 +3401,10 @@ cleanup_tablespace_old_files(char *path, uint32 chkp_num, bool before_recovery)
 				}
 				else
 				{
-					/*
-					 * After recovery we should cleanup old *.tmp and *.map
-					 * files.
-					 */
+					//
+// After recovery we should cleanup old *.tmp and *.map
+// files.
+//
 					if (!strcmp(ext, "tmp"))
 					{
 						cleanup = (file_chkp <= chkp_num);
@@ -3423,9 +3423,9 @@ cleanup_tablespace_old_files(char *path, uint32 chkp_num, bool before_recovery)
 			else if (before_recovery &&
 					 sscanf(dbFile->d_name, "%10u", &file_reloid) == 1)
 			{
-				/*
-				 * Removes free extents tree data files.
-				 */
+				//
+// Removes free extents tree data files.
+//
 				ORelOids	oids = {dbOid, file_reloid, file_reloid};
 
 				cleanup = IS_SYS_TREE_OIDS(oids) && sys_tree_get_storage_type(oids.relnode) == BTreeStorageTemporary;
@@ -3482,7 +3482,7 @@ recovery_cleanup_old_files(uint32 chkp_num, bool before_recovery)
 		struct stat st;
 		int			rllen;
 
-		/* Skip special stuff */
+		// Skip special stuff
 		if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0)
 			continue;
 
@@ -3540,12 +3540,12 @@ o_indices_get_trees(Pointer tuple, ORelOids *tableOids)
 	if (chunk.key.chunknum != 0)
 		return NULL;
 
-	/*
-	 * The serialized OIndex blob starts at OIndex.tableOids (the key fields
-	 * indexOids/indexType/indexVersion are stored in OIndexChunkKey).
-	 * tablespace must lie after tableOids in the struct so the subtraction
-	 * below is positive and the field lands in the first chunk.
-	 */
+	//
+// The serialized OIndex blob starts at OIndex.tableOids (the key fields
+// indexOids/indexType/indexVersion are stored in OIndexChunkKey).
+// tablespace must lie after tableOids in the struct so the subtraction
+// below is positive and the field lands in the first chunk.
+//
 	StaticAssertStmt(offsetof(OIndex, tablespace) > offsetof(OIndex, tableOids),
 					 "OIndex.tablespace must follow OIndex.tableOids");
 	Assert(chunk.dataLength >= sizeof(*tableOids));
@@ -3574,8 +3574,8 @@ clean_workers_oids(void)
 static void
 recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 						  uint32 o_table_version,
-						  ORelOids old_oids, uint32 old_o_table_version,	/* Non-zero only for
-																			 * rebuild */
+						  ORelOids old_oids, uint32 old_o_table_version,	// Non-zero only for
+// rebuild
 						  bool isrebuild)
 {
 	RecoveryMsgLeaderIdxBuild msg;
@@ -3595,7 +3595,7 @@ recovery_send_leader_oids(ORelOids oids, OIndexNumber ix_num,
 
 	Assert(o_tables_get_extended(oids, build_fetch_context(&o_non_deleted_snapshot, o_table_version)) != NULL);
 
-	/* Remember oids of index build added to a queue in a hash table */
+	// Remember oids of index build added to a queue in a hash table
 	state = (RecoveryIdxBuildQueueState *) hash_search(idxbuild_oids_hash,
 													   &oids,
 													   HASH_ENTER,
@@ -3646,11 +3646,11 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 {
 	if (!cur_recovery_xid_state->o_tables_meta_locked)
 	{
-		/*
-		 * It might happen that we didn't replay WAL_REC_O_TABLES_META_LOCK
-		 * wal record.  That means we've finished index build before
-		 * checkpoint of a tree was actually started.
-		 */
+		//
+// It might happen that we didn't replay WAL_REC_O_TABLES_META_LOCK
+// wal record.  That means we've finished index build before
+// checkpoint of a tree was actually started.
+//
 		return;
 	}
 
@@ -3673,7 +3673,7 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 		{
 			uint32		version;
 
-			/* new_o_table->version may be 0 */
+			// new_o_table->version may be 0
 			if (new_o_table->version == O_TABLE_INVALID_VERSION || new_o_table->version == 0)
 			{
 				version = O_TABLE_INVALID_VERSION;
@@ -3720,15 +3720,15 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 
 					Assert(is_recovery_in_progress());
 
-					/*
-					 * In main recovery worker send message to main index
-					 * creation worker in dedicated recovery workers pool and
-					 * exit
-					 */
+					//
+// In main recovery worker send message to main index
+// creation worker in dedicated recovery workers pool and
+// exit
+//
 					if (!*recovery_single_process)
 					{
 						Assert(new_o_table->nindices == nindices);
-						/* Send recovery message to become a leader */
+						// Send recovery message to become a leader
 						recovery_send_leader_oids(oids, InvalidIndexNumber,
 												  new_o_table->version,
 												  old_o_table->oids,
@@ -3753,16 +3753,16 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 
 				Assert(is_recovery_in_progress());
 
-				/*
-				 * In main recovery worker send message to main index creation
-				 * worker in dedicated recovery workers pool and exit
-				 */
+				//
+// In main recovery worker send message to main index creation
+// worker in dedicated recovery workers pool and exit
+//
 				if (!*recovery_single_process)
 				{
 					ORelOids	old_oids;
 
 					Assert(new_o_table->nindices == nindices);
-					/* Send recovery message to become a leader */
+					// Send recovery message to become a leader
 					ORelOidsSetInvalid(old_oids);
 					if (changed_tablespace)
 						old_oids.relnode = old_o_table->oids.relnode;
@@ -3792,14 +3792,14 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 						rebuild_indices_insert_placeholders(&tmp_descr);
 					o_tables_meta_unlock_no_wal();
 
-					/*
-					 * In main recovery worker send message to main index
-					 * creation worker in dedicated recovery workers pool and
-					 * exit
-					 */
+					//
+// In main recovery worker send message to main index
+// creation worker in dedicated recovery workers pool and
+// exit
+//
 					if (!*recovery_single_process)
 					{
-						/* Send recovery message to become a leader */
+						// Send recovery message to become a leader
 						recovery_send_leader_oids(oids, InvalidIndexNumber,
 												  new_o_table->version,
 												  old_o_table->oids,
@@ -3824,15 +3824,15 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 		else if (ORelOidsIsValid(new_o_table->bridge_oids) !=
 				 ORelOidsIsValid(old_o_table->bridge_oids))
 		{
-			/*
-			 * Bridge index was added or dropped.  The table data is stored
-			 * under new OIDs, so we need a full rebuild.
-			 *
-			 * On a replica, the intermediate table created by
-			 * recreate_o_table() has no data because rebuild_indices() writes
-			 * directly without WAL.  Check primary index oids first, then
-			 * fall back to table oids.
-			 */
+			//
+// Bridge index was added or dropped.  The table data is stored
+// under new OIDs, so we need a full rebuild.
+//
+// On a replica, the intermediate table created by
+// recreate_o_table() has no data because rebuild_indices() writes
+// directly without WAL.  Check primary index oids first, then
+// fall back to table oids.
+//
 			OTableDescr tmp_descr;
 			ORelOids	srcOids;
 			Oid			srcTablespace;
@@ -3844,11 +3844,11 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 				old_o_table->indices[PrimaryIndexNumber].tablespace :
 				old_o_table->tablespace;
 
-			/*
-			 * o_fill_tmp_table_descr() already initializes shared root info
-			 * for the new trees via o_btree_try_use_shmem(), so we must not
-			 * call rebuild_indices_insert_placeholders() afterwards.
-			 */
+			//
+// o_fill_tmp_table_descr() already initializes shared root info
+// for the new trees via o_btree_try_use_shmem(), so we must not
+// call rebuild_indices_insert_placeholders() afterwards.
+//
 			o_fill_tmp_table_descr(&tmp_descr, new_o_table);
 			if (tbl_data_exists(&srcOids, srcTablespace))
 			{
@@ -3886,15 +3886,15 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 			{
 				Assert(is_recovery_in_progress());
 
-				/*
-				 * In main recovery worker send message to main index creation
-				 * worker in dedicated recovery workers pool and exit
-				 */
+				//
+// In main recovery worker send message to main index creation
+// worker in dedicated recovery workers pool and exit
+//
 				if (!*recovery_single_process)
 				{
 					ORelOids	invalid_oids;
 
-					/* Send recovery message to become a leader */
+					// Send recovery message to become a leader
 					ORelOidsSetInvalid(invalid_oids);
 					recovery_send_leader_oids(oids, ix_num, new_o_table->version,
 											  invalid_oids, 0, false);
@@ -3932,9 +3932,9 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 	List	   *evicted = NIL;
 	ListCell   *lc;
 
-	/*
-	 * Prepare stage of moving: check destination directory.
-	 */
+	//
+// Prepare stage of moving: check destination directory.
+//
 	o_get_prefixes_for_tablespace(dbOid, src_tblspcoid, NULL, &src_dbpath);
 	o_get_prefixes_for_tablespace(dbOid, dst_tblspcoid, &dst_prefix, &dst_dbpath);
 
@@ -3956,10 +3956,10 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 
 		FreeDir(dstdir);
 
-		/*
-		 * The directory exists but is empty. We must remove it before using
-		 * the copydir function.
-		 */
+		//
+// The directory exists but is empty. We must remove it before using
+// the copydir function.
+//
 		if (rmdir(dst_dbpath) != 0)
 			elog(ERROR, "could not remove directory \"%s\": %m",
 				 dst_dbpath);
@@ -3967,33 +3967,33 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 
 	if (InHotStandby)
 	{
-		/*
-		 * Lock database while we resolve conflicts to ensure that
-		 * InitPostgres() cannot fully re-execute concurrently. This avoids
-		 * backends re-connecting automatically to same database, which can
-		 * happen in some cases.
-		 *
-		 * This will lock out walsenders trying to connect to db-specific
-		 * slots for logical decoding too, so it's safe for us to drop slots.
-		 */
+		//
+// Lock database while we resolve conflicts to ensure that
+// InitPostgres() cannot fully re-execute concurrently. This avoids
+// backends re-connecting automatically to same database, which can
+// happen in some cases.
+//
+// This will lock out walsenders trying to connect to db-specific
+// slots for logical decoding too, so it's safe for us to drop slots.
+//
 		LockSharedObjectForSession(DatabaseRelationId, dbOid, 0, AccessExclusiveLock);
 		ResolveRecoveryConflictWithDatabase(dbOid);
 	}
 
-	/*
-	 * Evict all relation related to the moved database. As soon as all
-	 * backends are terminated and LockSharedObjectForSession is acquired, no
-	 * new pages will appear in page pool till the and of moving database.
-	 */
+	//
+// Evict all relation related to the moved database. As soon as all
+// backends are terminated and LockSharedObjectForSession is acquired, no
+// new pages will appear in page pool till the and of moving database.
+//
 	dst_prefix_copy = pstrdup(dst_prefix);
 	o_tables_evict(dbOid, &evicted);
 
 	o_verify_dir_exists_or_create(dst_prefix_copy, NULL, NULL);
 	copydir(src_dbpath, dst_dbpath, false);
 
-	/*
-	 * Change tablespace in evicted meta data as well.
-	 */
+	//
+// Change tablespace in evicted meta data as well.
+//
 	foreach(lc, evicted)
 	{
 		EvictedTreeData *evicted_data = NULL;
@@ -4015,13 +4015,13 @@ handle_movedb(Oid dbOid, Oid src_tblspcoid, Oid dst_tblspcoid)
 
 	if (InHotStandby)
 	{
-		/*
-		 * Release locks prior to commit. XXX There is a race condition here
-		 * that may allow backends to reconnect, but the window for this is
-		 * small because the gap between here and commit is mostly fairly
-		 * small and it is unlikely that people will be dropping databases
-		 * that we are trying to connect to anyway.
-		 */
+		//
+// Release locks prior to commit. XXX There is a race condition here
+// that may allow backends to reconnect, but the window for this is
+// small because the gap between here and commit is mostly fairly
+// small and it is unlikely that people will be dropping databases
+// that we are trying to connect to anyway.
+//
 		UnlockSharedObjectForSession(DatabaseRelationId, dbOid, 0, AccessExclusiveLock);
 	}
 	pfree(dst_prefix_copy);
@@ -4038,9 +4038,9 @@ invalidate_typcache(void)
 	msg.cc.dbId = InvalidOid;
 	msg.cc.hashValue = 0;
 
-	/*
-	 * check AddCatcacheInvalidationMessage() for an explanation
-	 */
+	//
+// check AddCatcacheInvalidationMessage() for an explanation
+//
 	VALGRIND_MAKE_MEM_DEFINED(&msg, sizeof(msg));
 
 	SendSharedInvalidMessages(&msg, 1);
@@ -4053,7 +4053,7 @@ replay_check_version(const WalReaderState *r)
 
 	if (r->container.version > ORIOLEDB_WAL_VERSION)
 	{
-		/* WAL from future version */
+		// WAL from future version
 		return WALPARSE_BAD_VERSION;
 	}
 
@@ -4067,11 +4067,11 @@ replay_on_container(WalReaderState *r)
 {
 	if (r->container.flags & WAL_CONTAINER_HAS_XACT_INFO)
 	{
-		/*
-		 * Store PG xid from WAL_CONTAINER_XACT_INFO to build
-		 * SYS_TREES_CATALOG_XID_UNDO_LOCATION mapping in recovery for
-		 * following logical decoding
-		 */
+		//
+// Store PG xid from WAL_CONTAINER_XACT_INFO to build
+// SYS_TREES_CATALOG_XID_UNDO_LOCATION mapping in recovery for
+// following logical decoding
+//
 		recoveryHeapTransactionId = r->container.xact_info.xid;
 	}
 
@@ -4080,12 +4080,12 @@ replay_on_container(WalReaderState *r)
 
 typedef struct
 {
-	/* Input params */
+	// Input params
 	bool		single;
 	XLogRecPtr	xlogRecPtr;
 	XLogRecPtr	xlogRecEndPtr;
 
-	/* Replay state params */
+	// Replay state params
 	int			sys_tree_num;
 	OTableDescr *descr;
 	OIndexDescr *indexDescr;
@@ -4101,20 +4101,20 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 
 	elog(DEBUG4, "[%s] GET RTYPE %d `%s`", __func__, rec->type, wal_type_name(rec->type));
 
-	/*
-	 * Stall hook for the
-	 * test_checkpoint_abort_snapshot_resurrects_aborted_oxid). Blocking the
-	 * recovery leader here stops WAL dispatch to the recovery workers while
-	 * the walreceiver keeps writing the incoming stream to disk, so a backlog
-	 * accumulates.  When released, the leader bursts through the backlog
-	 * (dispatch is cheap) far ahead of the workers (apply is not), so
-	 * get_workers_commit_ptr() stays low and the finished_list drain cannot
-	 * remove a resurrected in-flight oxid before the deferred
-	 * WAL_REC_ROLLBACK re-finds it (found=1) on the leader.  The test only
-	 * needs to park on the next record after arming, so no params are pushed;
-	 * arm match-all with pg_stopevent_set('replay_on_record', 'true').
-	 * Runtime-gated by orioledb.enable_stopevents (off in production).
-	 */
+	//
+// Stall hook for the
+// test_checkpoint_abort_snapshot_resurrects_aborted_oxid). Blocking the
+// recovery leader here stops WAL dispatch to the recovery workers while
+// the walreceiver keeps writing the incoming stream to disk, so a backlog
+// accumulates.  When released, the leader bursts through the backlog
+// (dispatch is cheap) far ahead of the workers (apply is not), so
+// get_workers_commit_ptr() stays low and the finished_list drain cannot
+// remove a resurrected in-flight oxid before the deferred
+// WAL_REC_ROLLBACK re-finds it (found=1) on the leader.  The test only
+// needs to park on the next record after arming, so no params are pushed;
+// arm match-all with pg_stopevent_set('replay_on_record', 'true').
+// Runtime-gated by orioledb.enable_stopevents (off in production).
+//
 	STOPEVENT(STOPEVENT_REPLAY_ON_RECORD, NULL);
 
 	switch (rec->type)
@@ -4125,7 +4125,7 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 			break;
 
 		case WAL_REC_SWITCH_LOGICAL_XID:
-			/* Ignore */
+			// Ignore
 			break;
 
 		case WAL_REC_COMMIT:
@@ -4264,7 +4264,7 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 			}
 
 		case WAL_REC_RELREPLIDENT:
-			/* Unused yet */
+			// Unused yet
 			break;
 
 		case WAL_REC_O_TABLES_META_LOCK:
@@ -4340,7 +4340,7 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 			{
 				if (ctx->indexDescr == NULL)
 				{
-					/* nothing to do here */
+					// nothing to do here
 					return WALPARSE_OK;
 				}
 
@@ -4415,16 +4415,16 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 								char	   *prefix;
 								char	   *db_prefix;
 
-								/*
-								 * Ensure the per-tablespace and per-database
-								 * orioledb data directories exist.  On the
-								 * primary these are created in indices.c
-								 * before the first btree file is opened.  On
-								 * the replica we must do it here when
-								 * replaying the SYS_TREES_O_INDICES INSERT
-								 * that accompanies CREATE TABLE / CREATE
-								 * INDEX.
-								 */
+								//
+// Ensure the per-tablespace and per-database
+// orioledb data directories exist.  On the
+// primary these are created in indices.c
+// before the first btree file is opened.  On
+// the replica we must do it here when
+// replaying the SYS_TREES_O_INDICES INSERT
+// that accompanies CREATE TABLE / CREATE
+// INDEX.
+//
 								o_get_prefixes_for_tablespace(trees->oids.datoid,
 															  trees->tablespace,
 															  &prefix, &db_prefix);
@@ -4439,7 +4439,7 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (ctx->sys_tree_num > 0 || ctx->indexDescr == NULL)
 				{
-					/* nothing to do here */
+					// nothing to do here
 					break;
 				}
 
@@ -4450,7 +4450,7 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 
 				Assert(!O_TUPLE_IS_NULL(tuple1.tuple));
 
-				/* Reinsert is processed as DELETE + INSERT */
+				// Reinsert is processed as DELETE + INSERT
 				if (rec->type == WAL_REC_REINSERT)
 				{
 					Assert(type == RecoveryMsgTypeReinsert);
@@ -4460,10 +4460,10 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 					{
 						bool		allocated;
 
-						/*
-						 * tuple2 (old tuple) representation is full tuple,
-						 * not a key. We need to rewrite it with a key.
-						 */
+						//
+// tuple2 (old tuple) representation is full tuple,
+// not a key. We need to rewrite it with a key.
+//
 						tuple2.tuple = o_btree_tuple_make_key(&(GET_PRIMARY(ctx->descr))->desc, tuple2.tuple, tuple2.tuple.data, true, &allocated);
 						Assert(!allocated);
 					}
@@ -4480,8 +4480,8 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 						spread_idx_modify(&ctx->indexDescr->desc, RecoveryMsgTypeInsert, tuple1.tuple);
 					}
 				}
-				else			/* WAL_REC_INSERT, WAL_REC_UPDATE or
-								 * WAL_REC_DELETE */
+				else			// WAL_REC_INSERT, WAL_REC_UPDATE or
+// WAL_REC_DELETE
 				{
 					if (rec->relreplident == REPLICA_IDENTITY_FULL)
 					{
@@ -4489,20 +4489,20 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 						{
 							bool		allocated;
 
-							/*
-							 * tuple1 representation is full tuple, not a key.
-							 * We need to rewrite it with a key.
-							 */
+							//
+// tuple1 representation is full tuple, not a key.
+// We need to rewrite it with a key.
+//
 							tuple1.tuple = o_btree_tuple_make_key(&(GET_PRIMARY(ctx->descr))->desc, tuple1.tuple, tuple1.tuple.data, true, &allocated);
 							Assert(!allocated);
 							Assert(O_TUPLE_IS_NULL(tuple2.tuple));
 						}
 						else if (rec->type == WAL_REC_UPDATE)
 						{
-							/*
-							 * tuple2 from WAL record could be safely ignored
-							 * (it's needed only for logical decoding).
-							 */
+							//
+// tuple2 from WAL record could be safely ignored
+// (it's needed only for logical decoding).
+//
 							Assert(!O_TUPLE_IS_NULL(tuple2.tuple));
 						}
 						else
@@ -4536,9 +4536,9 @@ replay_on_record(WalReaderState *r, WalRecord *rec)
 	return WALPARSE_OK;
 }
 
-/*
- * Replays a single orioledb WAL container.
- */
+//
+// Replays a single orioledb WAL container.
+//
 static bool
 replay_container(Pointer startPtr, Pointer endPtr,
 				 bool single, XLogRecPtr xlogRecPtr, XLogRecPtr xlogRecEndPtr)
@@ -4572,9 +4572,9 @@ replay_container(Pointer startPtr, Pointer endPtr,
 	return true;
 }
 
-/*
- * Hook for replaying builtin commit record.  Performs joint commit.
- */
+//
+// Hook for replaying builtin commit record.  Performs joint commit.
+//
 void
 o_xact_redo_hook(TransactionId xid, XLogRecPtr lsn, bool commit)
 {
@@ -4626,9 +4626,9 @@ o_xact_redo_hook(TransactionId xid, XLogRecPtr lsn, bool commit)
 	}
 }
 
-/*
- * Sends the message to a worker.
- */
+//
+// Sends the message to a worker.
+//
 static void
 worker_send_msg(int worker_id, Pointer msg, uint64 msg_size)
 {
@@ -4652,10 +4652,10 @@ delay_if_queued_for_idxbuild(void)
 		HASH_SEQ_STATUS hash_seq;
 		RecoveryIdxBuildQueueState *cur;
 
-		/*
-		 * This function might be called by a startup process and by a
-		 * recovery worker, therefore check in which worker we are.
-		 */
+		//
+// This function might be called by a startup process and by a
+// recovery worker, therefore check in which worker we are.
+//
 		if (AmStartupProcess())
 #if PG_VERSION_NUM >= 180000
 			ProcessStartupProcInterrupts();
@@ -4665,7 +4665,7 @@ delay_if_queued_for_idxbuild(void)
 		else
 			o_worker_handle_interrupts();
 
-		/* Remove hash entries for completed indexes */
+		// Remove hash entries for completed indexes
 		hash_seq_init(&hash_seq, idxbuild_oids_hash);
 		while ((cur = (RecoveryIdxBuildQueueState *) hash_seq_search(&hash_seq)) != NULL)
 		{
@@ -4673,15 +4673,15 @@ delay_if_queued_for_idxbuild(void)
 				hash_search(idxbuild_oids_hash, &cur->oids, HASH_REMOVE, NULL);
 		}
 
-		/* All completed ? */
+		// All completed ?
 		if (hash_get_num_entries(idxbuild_oids_hash) == 0)
 			break;
 
-		/*
-		 * We wait on a condition variable that will wake us as soon as the
-		 * pause ends, but we use a timeout so we can check the
-		 * HandleStartupProcInterrupts() periodically too.
-		 */
+		//
+// We wait on a condition variable that will wake us as soon as the
+// pause ends, but we use a timeout so we can check the
+// HandleStartupProcInterrupts() periodically too.
+//
 		ConditionVariableTimedSleep(recovery_index_cv, 1000,
 									WAIT_EVENT_PARALLEL_CREATE_INDEX_SCAN);
 	}
@@ -4694,16 +4694,16 @@ delay_rels_queued_for_idxbuild(ORelOids oids)
 	RecoveryIdxBuildQueueState *hash_elem;
 	bool		found;
 
-	/*
-	 * Delay modify requests if indexes for the relation are requested to be
-	 * build but haven't been built yet
-	 */
+	//
+// Delay modify requests if indexes for the relation are requested to be
+// build but haven't been built yet
+//
 	while (true)
 	{
-		/*
-		 * This function might be called by a startup process and by a
-		 * recovery worker, therefore check in which worker we are.
-		 */
+		//
+// This function might be called by a startup process and by a
+// recovery worker, therefore check in which worker we are.
+//
 		if (AmStartupProcess())
 #if PG_VERSION_NUM >= 180000
 			ProcessStartupProcInterrupts();
@@ -4725,7 +4725,7 @@ delay_rels_queued_for_idxbuild(ORelOids oids)
 
 		if (hash_elem->position <= pg_atomic_read_u64(recovery_index_completed_pos))
 		{
-			/* Remove completed index build and repeat hash search */
+			// Remove completed index build and repeat hash search
 			hash_elem = (RecoveryIdxBuildQueueState *) hash_search(idxbuild_oids_hash,
 																   &oids,
 																   HASH_REMOVE,
@@ -4733,11 +4733,11 @@ delay_rels_queued_for_idxbuild(ORelOids oids)
 		}
 		else
 		{
-			/*
-			 * We wait on a condition variable that will wake us as soon as
-			 * the pause ends, but we use a timeout so we can check the
-			 * HandleStartupProcInterrupts() periodically too.
-			 */
+			//
+// We wait on a condition variable that will wake us as soon as
+// the pause ends, but we use a timeout so we can check the
+// HandleStartupProcInterrupts() periodically too.
+//
 			ConditionVariableTimedSleep(recovery_index_cv, 1000,
 										WAIT_EVENT_PARALLEL_CREATE_INDEX_SCAN);
 		}
@@ -4745,9 +4745,9 @@ delay_rels_queued_for_idxbuild(ORelOids oids)
 	ConditionVariableCancelSleep();
 }
 
-/*
- * Sends modify message to a worker.
- */
+//
+// Sends modify message to a worker.
+//
 static void
 worker_send_modify(int worker_id, BTreeDescr *desc,
 				   RecoveryMsgType recType,
@@ -4850,9 +4850,9 @@ worker_send_modify(int worker_id, BTreeDescr *desc,
 	Assert(state->queue_buf_len <= RECOVERY_QUEUE_BUF_SIZE);
 }
 
-/*
- * Sends recovery finish message to all workers in the pool.
- */
+//
+// Sends recovery finish message to all workers in the pool.
+//
 static void
 workers_send_finish(bool send_to_idx_pool)
 {
@@ -4888,9 +4888,9 @@ workers_send_finish(bool send_to_idx_pool)
 	}
 }
 
-/*
- * Sends savepoint message to workers with active the oxid in the pool.
- */
+//
+// Sends savepoint message to workers with active the oxid in the pool.
+//
 static void
 workers_send_savepoint(SubTransactionId parentSubId)
 {
@@ -4915,16 +4915,16 @@ workers_send_savepoint(SubTransactionId parentSubId)
 
 			if (EnableHotStandby)
 			{
-				/* we need to apply recovery records as fast as we can */
+				// we need to apply recovery records as fast as we can
 				worker_queue_flush(i);
 			}
 		}
 	}
 }
 
-/*
- * Sends rollback to savepoint message to workers with active the oxid in the pool.
- */
+//
+// Sends rollback to savepoint message to workers with active the oxid in the pool.
+//
 static void
 workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 								   SubTransactionId parentSubId)
@@ -4951,7 +4951,7 @@ workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 
 			if (EnableHotStandby)
 			{
-				/* we need to apply recovery records as fast as we can */
+				// we need to apply recovery records as fast as we can
 				worker_queue_flush(i);
 			}
 		}
@@ -4959,9 +4959,9 @@ workers_send_rollback_to_savepoint(XLogRecPtr ptr,
 	pg_atomic_write_u64(recovery_ptr, ptr);
 }
 
-/*
- * Sends commit or rollback message to workers with active the oxid in the pool.
- */
+//
+// Sends commit or rollback message to workers with active the oxid in the pool.
+//
 static void
 workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback, bool commit)
 {
@@ -4976,31 +4976,31 @@ workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback, bool commit)
 
 	for (i = 0; i < recovery_pool_size_guc; i++)
 	{
-		/*
-		 * Notify workers who participated in the current transaction.  For
-		 * transactions that participated in the checkpoint xids file, we
-		 * notify them by phone because all the works read the xids file and
-		 * need to update their local hashes.
-		 */
+		//
+// Notify workers who participated in the current transaction.  For
+// transactions that participated in the checkpoint xids file, we
+// notify them by phone because all the works read the xids file and
+// need to update their local hashes.
+//
 		if (cur_recovery_xid_state->used_by[i] ||
 			cur_recovery_xid_state->checkpoint_xid)
 		{
 			state = &workers_pool[i];
 
-			/*
-			 * Unconditionally reset cached oxid.  The worker will call
-			 * recovery_switch_to_oxid() when processing this message,
-			 * changing its recovery_oxid regardless of what was cached. We
-			 * must invalidate our cache to match, so that the next modify
-			 * message always sends the oxid explicitly.
-			 */
+			//
+// Unconditionally reset cached oxid.  The worker will call
+// recovery_switch_to_oxid() when processing this message,
+// changing its recovery_oxid regardless of what was cached. We
+// must invalidate our cache to match, so that the next modify
+// message always sends the oxid explicitly.
+//
 			state->oxid = InvalidOXid;
 
 			worker_send_msg(i, (Pointer) &oxid_ptr_record, sizeof(oxid_ptr_record));
 
 			if (EnableHotStandby)
 			{
-				/* we need to apply recovery records as fast as we can */
+				// we need to apply recovery records as fast as we can
 				worker_queue_flush(i);
 			}
 		}
@@ -5008,13 +5008,13 @@ workers_send_oxid_finish(XLogRecPtr ptr, bool needsFeedback, bool commit)
 	pg_atomic_write_u64(recovery_ptr, ptr);
 }
 
-/*
- * Synchronize execution with workers.
- *
- * Actually used only before delete a relnode. We can hold a list of relnodes
- * used by workers and synchronize only with needed workers. But we assume that
- * it does not happen too often and we can use this simple solution.
- */
+//
+// Synchronize execution with workers.
+//
+// Actually used only before delete a relnode. We can hold a list of relnodes
+// used by workers and synchronize only with needed workers. But we assume that
+// it does not happen too often and we can use this simple solution.
+//
 static void
 workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 {
@@ -5061,9 +5061,9 @@ workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 }
 
 
-/*
- * Notify workers that toast reached consistent state.
- */
+//
+// Notify workers that toast reached consistent state.
+//
 static void
 workers_notify_toast_consistent(void)
 {
@@ -5079,9 +5079,9 @@ workers_notify_toast_consistent(void)
 	}
 }
 
-/*
- * Flushes a queue buffer to the queue.
- */
+//
+// Flushes a queue buffer to the queue.
+//
 static void
 worker_queue_flush(int worker_id)
 {
@@ -5099,14 +5099,14 @@ worker_queue_flush(int worker_id)
 	Assert(result == SHM_MQ_SUCCESS);
 }
 
-/*
- * Applies recovery record to o_tables.
- *
- * We do it by master process to avoid concurrent issues such as:
- *
- * Worker can not fetch table description because another worker does not
- * commit transaction yet.
- */
+//
+// Applies recovery record to o_tables.
+//
+// We do it by master process to avoid concurrent issues such as:
+//
+// Worker can not fetch table description because another worker does not
+// commit transaction yet.
+//
 static bool
 apply_sys_tree_modify_record(int sys_tree_num, uint16 type, OTuple tup,
 							 OXid oxid, CommitSeqNo csn)
@@ -5119,12 +5119,12 @@ apply_sys_tree_modify_record(int sys_tree_num, uint16 type, OTuple tup,
 	return result;
 }
 
-/*
- * Spreads the index modify recovery record to the recovery workers pool.
- *
- * Tuples with a same key will be processed by a same worker. This approach
- * helps to apply recovery records for tuples in the right order.
- */
+//
+// Spreads the index modify recovery record to the recovery workers pool.
+//
+// Tuples with a same key will be processed by a same worker. This approach
+// helps to apply recovery records for tuples in the right order.
+//
 static inline void
 spread_idx_modify(BTreeDescr *desc, RecoveryMsgType recType, OTuple rec)
 {
@@ -5160,9 +5160,9 @@ spread_idx_modify(BTreeDescr *desc, RecoveryMsgType recType, OTuple rec)
 	}
 }
 
-/*
- * Converts wal record type to recovery message type.
- */
+//
+// Converts wal record type to recovery message type.
+//
 static inline RecoveryMsgType
 recovery_msg_from_wal_record(WalRecordType rec_type)
 {
@@ -5178,16 +5178,16 @@ recovery_msg_from_wal_record(WalRecordType rec_type)
 			return RecoveryMsgTypeBridgeErase;
 		case WAL_REC_REINSERT:
 
-			/*
-			 * Temporary one for convenience. Splits down to
-			 * RecoveryMsgTypeInsert + RecoveryMsgTypeDelete
-			 */
+			//
+// Temporary one for convenience. Splits down to
+// RecoveryMsgTypeInsert + RecoveryMsgTypeDelete
+//
 			return RecoveryMsgTypeReinsert;
 		default:
 			Assert(false);
 			elog(ERROR, "Wrong WAL record modify type %d", rec_type);
 	}
-	return (uint16) 0;			/* keep compiler quiet */
+	return (uint16) 0;			// keep compiler quiet
 }
 
 static bool
@@ -5204,9 +5204,9 @@ is_process_running(pid_t pid)
 		return false;
 }
 
-/*
- * Check from non-recovery process that recovery workers are finished.
- */
+//
+// Check from non-recovery process that recovery workers are finished.
+//
 bool
 check_recovery_workers_finished(void)
 {

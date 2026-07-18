@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * btree.c
- *		Routines for OrioleDB B-tree initialization and cleanup.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/btree.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// btree.c
+// Routines for OrioleDB B-tree initialization and cleanup.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/btree.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -59,11 +59,11 @@ o_btree_init(BTreeDescr *desc)
 	unlock_page(desc->rootInfo.rootPageBlkno);
 	init_meta_page(desc->rootInfo.metaPageBlkno, 1);
 
-	/*
-	 * Always mark root page dirty so that the first checkpoint writes the
-	 * .map file header.  Without this, a tree that gets evicted before
-	 * checkpoint would leave a .map file with an unwritten header.
-	 */
+	//
+// Always mark root page dirty so that the first checkpoint writes the
+// .map file header.  Without this, a tree that gets evicted before
+// checkpoint would leave a .map file with an unwritten header.
+//
 	MARK_DIRTY(desc, desc->rootInfo.rootPageBlkno);
 }
 
@@ -92,10 +92,10 @@ retry:
 
 	if (O_PAGE_GET_CHANGE_COUNT(p) != pageChangeCount)
 	{
-		/*
-		 * It seems that page has been evicted concurrently.  So, nothing to
-		 * do.
-		 */
+		//
+// It seems that page has been evicted concurrently.  So, nothing to
+// do.
+//
 		unlock_page(blkno);
 		return false;
 	}
@@ -125,10 +125,10 @@ retry:
 	return true;
 }
 
-/*
- * Recursively sets O_BTREE_FLAG_PRE_CLEANUP to the given page and all its
- * children.
- */
+//
+// Recursively sets O_BTREE_FLAG_PRE_CLEANUP to the given page and all its
+// children.
+//
 static void
 mark_page_pre_cleanup(OInMemoryBlkno blkno, uint32 pageChangeCount)
 {
@@ -158,9 +158,9 @@ mark_page_pre_cleanup(OInMemoryBlkno blkno, uint32 pageChangeCount)
 							  childPageChangeCounts[i]);
 }
 
-/*
- * Frees given page and all of its children recursively.
- */
+//
+// Frees given page and all of its children recursively.
+//
 static void
 free_page(PagePool *pool, OInMemoryBlkno blkno, uint32 pageChangeCount)
 {
@@ -211,30 +211,30 @@ free_meta_page(PagePool *pool, OInMemoryBlkno metaPageBlkno)
 		}
 	}
 
-	/*
-	 * Additional protection: the resource owner might not have released its
-	 * seq scans yet (other transactions are excluded by locks).  Defer
-	 * freeing the meta page until the last scan is released.
-	 */
+	//
+// Additional protection: the resource owner might not have released its
+// seq scans yet (other transactions are excluded by locks).  Defer
+// freeing the meta page until the last scan is released.
+//
 	if (meta_page_get_num_seq_scans(metaPageBlkno) == 0)
 		ppool_free_page(pool, metaPageBlkno, false);
 	else
 		meta_page->toBeFreedOnSeqScanRelease = true;
 }
 
-/*
- * Two phase algorithm for pages cleanup, which can run concurrently
- * to walk_page().
- *
- * The first phase sets O_BTREE_FLAG_PRE_CLEANUP preventing walk_page() from
- * evicting or writing these pages.
- *
- * The second phase cleans pages previously marked with
- * O_BTREE_FLAG_PRE_CLEANUP flag from bottom to top.
- *
- * Therefore walk_page() never gets in trouble trying to find parent page
- * using find_page().
- */
+//
+// Two phase algorithm for pages cleanup, which can run concurrently
+// to walk_page().
+//
+// The first phase sets O_BTREE_FLAG_PRE_CLEANUP preventing walk_page() from
+// evicting or writing these pages.
+//
+// The second phase cleans pages previously marked with
+// O_BTREE_FLAG_PRE_CLEANUP flag from bottom to top.
+//
+// Therefore walk_page() never gets in trouble trying to find parent page
+// using find_page().
+//
 void
 o_btree_cleanup_pages(OInMemoryBlkno rootPageBlkno, OInMemoryBlkno metaPageBlkno, uint32 rootPageChangeCount)
 {

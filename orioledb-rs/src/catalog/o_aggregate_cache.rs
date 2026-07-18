@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_aggregate_cache.c
- *		Routines for orioledb aggregate cache.
- *
- * aggregate_cache is tree that contains cached metadata from pg_aggregate.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_aggregate_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_aggregate_cache.c
+// Routines for orioledb aggregate cache.
+//
+// aggregate_cache is tree that contains cached metadata from pg_aggregate.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_aggregate_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -73,9 +73,9 @@ static OSysCacheFuncs aggregate_cache_funcs =
 	.toast_deserialize_entry = o_aggregate_cache_deserialize_entry,
 };
 
-/*
- * Initializes the type sys cache memory.
- */
+//
+// Initializes the type sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(aggregate_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -105,7 +105,7 @@ o_aggregate_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
 	aggform = (Form_pg_aggregate) GETSTRUCT(aggtup);
 
 	prev_context = MemoryContextSwitchTo(aggregate_cache->mcxt);
-	if (o_agg != NULL)			/* Existed o_agg updated */
+	if (o_agg != NULL)			// Existed o_agg updated
 	{
 		Assert(false);
 	}

@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * undo.c
- *		Implementation of OrioleDB undo log.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/transam/undo.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// undo.c
+// Implementation of OrioleDB undo log.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/transam/undo.c
+//
+// -------------------------------------------------------------------------
+//
 #include "c.h"
 #include "postgres.h"
 
@@ -85,7 +85,7 @@ static pairingheap retainUndoLocHeaps[(int) UndoLogsCount] =
 	}
 };
 
-/* A minimal subtransaction id, where OrioleDB got involved */
+// A minimal subtransaction id, where OrioleDB got involved
 static SubTransactionId minParentSubId = InvalidSubTransactionId;
 static XLogRecPtr xidless_commit_lsn = InvalidXLogRecPtr;
 
@@ -108,14 +108,14 @@ static void o_rewind_relfilenode_item_callback(UndoLogType undoType,
 											   OUndoCallbackStage stage,
 											   bool changeCountsValid);
 
-/*
- * Descriptor of undo item type.
- */
+//
+// Descriptor of undo item type.
+//
 typedef struct
 {
 	UndoItemType type;
-	bool		callOnCommit;	/* call the callback on commit */
-	UndoCallback callback;		/* callback to be called on transaction finish */
+	bool		callOnCommit;	// call the callback on commit
+	UndoCallback callback;		// callback to be called on transaction finish
 } UndoItemTypeDescr;
 
 typedef struct
@@ -192,19 +192,19 @@ static Size o_undo_circular_sizes[(int) UndoLogsCount] =
 	0
 };
 
-/*
- * Per-page dirty bitmap, one entry per undo log type.  A single bit covers
- * one ORIOLEDB_BLCKSZ-sized page of the circular buffer at offset
- * (page * ORIOLEDB_BLCKSZ); the page is at address
- *   o_undo_buffers[type] + (loc % circular_size) where loc is page-aligned.
- *
- * Set with release semantics by writers AFTER they have stored data into
- * the page.  Cleared with acquire semantics by the checkpoint-time flush
- * (flush_dirty_undo_range), and also cleared by evict_undo_to_disk() once
- * the page has been pushed out to o_buffers.  A late-setting writer (set
- * bit after the checkpointer cleared it) leaves the bit set, so the next
- * flush catches the update; worst case is one redundant page write.
- */
+//
+// Per-page dirty bitmap, one entry per undo log type.  A single bit covers
+// one ORIOLEDB_BLCKSZ-sized page of the circular buffer at offset
+// (page * ORIOLEDB_BLCKSZ); the page is at address
+// o_undo_buffers[type] + (loc % circular_size) where loc is page-aligned.
+//
+// Set with release semantics by writers AFTER they have stored data into
+// the page.  Cleared with acquire semantics by the checkpoint-time flush
+// (flush_dirty_undo_range), and also cleared by evict_undo_to_disk() once
+// the page has been pushed out to o_buffers.  A late-setting writer (set
+// bit after the checkpointer cleared it) leaves the bit set, so the next
+// flush catches the update; worst case is one redundant page write.
+//
 static pg_atomic_uint32 *o_undo_dirty_bitmaps[(int) UndoLogsCount] =
 {
 	NULL
@@ -214,11 +214,11 @@ static Size o_undo_dirty_words[(int) UndoLogsCount] =
 	0
 };
 
-/* # of pages of size ORIOLEDB_BLCKSZ in undoType's circular buffer. */
+// # of pages of size ORIOLEDB_BLCKSZ in undoType's circular buffer.
 #define UNDO_BUFFER_NPAGES(undoType) \
 	(o_undo_circular_sizes[(int) (undoType)] / ORIOLEDB_BLCKSZ)
 
-/* Ring-relative page index for a location. */
+// Ring-relative page index for a location.
 #define UNDO_PAGE_INDEX(undoType, location) \
 	(((location) % o_undo_circular_sizes[(int) (undoType)]) / ORIOLEDB_BLCKSZ)
 
@@ -227,19 +227,19 @@ mark_undo_page_dirty(UndoLogType undoType, uint32 page)
 {
 	uint32		mask = 1U << (page % 32);
 
-	/*
-	 * Release fence so the writer's preceding store in the page is visible to
-	 * a checkpointer that observes the bit set via the fetch_and.
-	 */
+	//
+// Release fence so the writer's preceding store in the page is visible to
+// a checkpointer that observes the bit set via the fetch_and.
+//
 	pg_atomic_fetch_or_u32(&o_undo_dirty_bitmaps[(int) undoType][page / 32],
 						   mask);
 }
 
-/*
- * Mark every page touched by an undo record at [location, location+size)
- * as dirty.  Most records sit within a single page; cross-page writes are
- * rare but still possible at the boundary, so handle both.
- */
+//
+// Mark every page touched by an undo record at [location, location+size)
+// as dirty.  Most records sit within a single page; cross-page writes are
+// rare but still possible at the boundary, so handle both.
+//
 static inline void
 mark_undo_range_dirty(UndoLogType undoType, UndoLocation location, Size size)
 {
@@ -248,17 +248,17 @@ mark_undo_range_dirty(UndoLogType undoType, UndoLocation location, Size size)
 
 	Assert(size > 0);
 	Assert(size <= o_undo_circular_sizes[(int) undoType]);
-	/* Walk page-aligned locations covering [location, end). */
+	// Walk page-aligned locations covering [location, end).
 	for (pageLoc = location - (location % ORIOLEDB_BLCKSZ);
 		 pageLoc < end;
 		 pageLoc += ORIOLEDB_BLCKSZ)
 		mark_undo_page_dirty(undoType, UNDO_PAGE_INDEX(undoType, pageLoc));
 }
 
-/*
- * Atomic test-and-clear of one page's dirty bit.  Returns true if the bit
- * was set (caller must persist the page to disk).
- */
+//
+// Atomic test-and-clear of one page's dirty bit.  Returns true if the bit
+// was set (caller must persist the page to disk).
+//
 static inline bool
 test_clear_undo_page_dirty(UndoLogType undoType, uint32 page)
 {
@@ -269,11 +269,11 @@ test_clear_undo_page_dirty(UndoLogType undoType, uint32 page)
 	return (old & mask) != 0;
 }
 
-/*
- * Non-destructive read of one page's dirty bit.  Used for partial boundary
- * pages, whose bit must be left intact (their tail may still belong to undo
- * records beyond the range being written).
- */
+//
+// Non-destructive read of one page's dirty bit.  Used for partial boundary
+// pages, whose bit must be left intact (their tail may still belong to undo
+// records beyond the range being written).
+//
 static inline bool
 undo_page_dirty(UndoLogType undoType, uint32 page)
 {
@@ -307,10 +307,10 @@ static OBuffersDesc undoBuffersDesc =
 static void wait_for_reserved_location(UndoLogType undoType,
 									   UndoLocation undoLocationToWait);
 
-/*
- * Assign a durable WAL lsn for an independent Oriole commit.
- * Valid xidless_commit_lsn is never changed at repeated calls.
- */
+//
+// Assign a durable WAL lsn for an independent Oriole commit.
+// Valid xidless_commit_lsn is never changed at repeated calls.
+//
 static XLogRecPtr
 assign_xidless_commit_lsn(OXid oxid, bool *wrote_xlog)
 {
@@ -327,14 +327,14 @@ assign_xidless_commit_lsn(OXid oxid, bool *wrote_xlog)
 	return xidless_commit_lsn;
 }
 
-/*
- * Supply PG with the durable local commit LSN for the current xid-less,
- * top-level non-autonomous Oriole transaction that participate in logical
- * apply/origin tracking. Returns InvalidXLogRecPtr otherwise.
- *
- * Autonomous transactions use their own commit path and must
- * stay invisible to this hook.
- */
+//
+// Supply PG with the durable local commit LSN for the current xid-less,
+// top-level non-autonomous Oriole transaction that participate in logical
+// apply/origin tracking. Returns InvalidXLogRecPtr otherwise.
+//
+// Autonomous transactions use their own commit path and must
+// stay invisible to this hook.
+//
 XLogRecPtr
 orioledb_get_xidless_commit_lsn(bool *wrote_xlog)
 {
@@ -349,16 +349,16 @@ orioledb_get_xidless_commit_lsn(bool *wrote_xlog)
 		return InvalidXLogRecPtr;
 }
 
-/*
- * A sorted array comprising a map from CommandId to the UndoLocation of the
- * first undo record for that command.  It is used to determine visibility
- * within the same transaction and to detect "self-updated" tuples.  That is
- * a bit tricky, assuming PostgreSQL can switch execution between commands.
- * However, that could only happen for "subcommands," such as trigger
- * execution.  However, the execution of a command finishes after all of its
- * subcommands, so a comparison of undo positions should be fine for checking
- * if the given change belongs to some of the previous commands.
- */
+//
+// A sorted array comprising a map from CommandId to the UndoLocation of the
+// first undo record for that command.  It is used to determine visibility
+// within the same transaction and to detect "self-updated" tuples.  That is
+// a bit tricky, assuming PostgreSQL can switch execution between commands.
+// However, that could only happen for "subcommands," such as trigger
+// execution.  However, the execution of a command finishes after all of its
+// subcommands, so a comparison of undo positions should be fine for checking
+// if the given change belongs to some of the previous commands.
+//
 typedef struct
 {
 	CommandId	cid;
@@ -371,16 +371,16 @@ static int	commandIndex = -1,
 			commandInfosLength = lengthof(commandInfosStatic);
 static CommandId currentCommandId;
 
-/*
- * For better caching ReplicationRetainUndoTuple we remember
- * both last queried xmin for strict equaltity check and last
- * output xid that could be greater or equal to the queried xmin.
- *
- * At repeated query xmin we output last output xid that could
- * be the least xid in system mapping greater or equal than xmin
- * queried. Without remembering both values we could do only
- * equality comparison which is less efficient.
- */
+//
+// For better caching ReplicationRetainUndoTuple we remember
+// both last queried xmin for strict equaltity check and last
+// output xid that could be greater or equal to the queried xmin.
+//
+// At repeated query xmin we output last output xid that could
+// be the least xid in system mapping greater or equal than xmin
+// queried. Without remembering both values we could do only
+// equality comparison which is less efficient.
+//
 typedef struct
 {
 	TransactionId queried_xmin;
@@ -418,7 +418,7 @@ undo_shmem_needs(void)
 	size = add_size(size, o_undo_circular_sizes[UndoLogRegularPageLevel]);
 	size = add_size(size, o_undo_circular_sizes[UndoLogSystem]);
 
-	/* Dirty bitmaps, one cacheline-aligned chunk per undo log type. */
+	// Dirty bitmaps, one cacheline-aligned chunk per undo log type.
 	{
 		int			t;
 
@@ -508,7 +508,7 @@ init_undo_meta(UndoMeta *meta, bool found)
 		LWLockInitialize(&meta->undoWriteLock,
 						 meta->undoWriteTrancheId);
 
-		/* Undo locations are initialized in checkpoint_shmem_init() */
+		// Undo locations are initialized in checkpoint_shmem_init()
 	}
 	LWLockRegisterTranche(meta->undoWriteTrancheId,
 						  "OUndoWriteTranche");
@@ -554,11 +554,11 @@ get_undo_type_name(UndoLogType undoType)
 	}
 }
 
-/*
- * In case of undoEviction the function increments writeInProgressChangeCount,
- * but doesn't release minUndoLocationsMutex. Releasing this mutex should be
- * done by a caller.
- */
+//
+// In case of undoEviction the function increments writeInProgressChangeCount,
+// but doesn't release minUndoLocationsMutex. Releasing this mutex should be
+// done by a caller.
+//
 void
 update_min_undo_locations(UndoLogType undoType,
 						  bool undoEviction, bool do_cleanup)
@@ -622,9 +622,9 @@ update_min_undo_locations(UndoLogType undoType,
 			minRetainLocation = Min(minRetainLocation, replicationCatalogUndoRetainLocation);
 	}
 
-	/*
-	 * Make sure none of calculated variables goes backwards.
-	 */
+	//
+// Make sure none of calculated variables goes backwards.
+//
 	minRetainLocation = Max(pg_atomic_read_u64(&meta->minProcRetainLocation),
 							minRetainLocation);
 	minTransactionRetainLocation = Max(pg_atomic_read_u64(&meta->minProcTransactionRetainLocation),
@@ -698,23 +698,23 @@ update_min_undo_locations(UndoLogType undoType,
 		Assert(oldCheckpointStartLocation <= oldCheckpointEndLocation);
 		Assert(newCheckpointStartLocation <= newCheckpointEndLocation);
 
-		/*
-		 * After recovery, transactions that were in-progress during the
-		 * previous checkpoint have their retain locations in the
-		 * [checkpointRetainStartLocation, checkpointRetainEndLocation] range.
-		 * These get loaded into minProcRetainLocation during recovery replay,
-		 * which can push minRetainLocation below oldCleanedLocation (which
-		 * was initialized from the control file's lastUndoLocation). This is
-		 * safe because the undo files in the checkpoint retain range were
-		 * persisted during the previous checkpoint and were never cleaned.
-		 */
+		//
+// After recovery, transactions that were in-progress during the
+// previous checkpoint have their retain locations in the
+// [checkpointRetainStartLocation, checkpointRetainEndLocation] range.
+// These get loaded into minProcRetainLocation during recovery replay,
+// which can push minRetainLocation below oldCleanedLocation (which
+// was initialized from the control file's lastUndoLocation). This is
+// safe because the undo files in the checkpoint retain range were
+// persisted during the previous checkpoint and were never cleaned.
+//
 		Assert(oldCleanedLocation / UNDO_FILE_SIZE <= minRetainLocation / UNDO_FILE_SIZE ||
 			   minRetainLocation / UNDO_FILE_SIZE >= oldCheckpointStartLocation / UNDO_FILE_SIZE);
 
-		/*
-		 * Old active retain that's no longer retained. Capped at the new
-		 * active retain start, since [minRetainLocation, +inf) is still kept.
-		 */
+		//
+// Old active retain that's no longer retained. Capped at the new
+// active retain start, since [minRetainLocation, +inf) is still kept.
+//
 		unlink_unretained_o_buffers(&undoBuffersDesc, (uint32) undoType,
 									ORIOLEDB_BLCKSZ,
 									oldCleanedLocation, minRetainLocation,
@@ -722,7 +722,7 @@ update_min_undo_locations(UndoLogType undoType,
 									newCheckpointEndLocation,
 									minRetainLocation);
 
-		/* Old checkpoint retain range that's no longer retained. */
+		// Old checkpoint retain range that's no longer retained.
 		unlink_unretained_o_buffers(&undoBuffersDesc, (uint32) undoType,
 									ORIOLEDB_BLCKSZ,
 									oldCheckpointStartLocation,
@@ -733,9 +733,9 @@ update_min_undo_locations(UndoLogType undoType,
 	}
 }
 
-/*
- * Guarantees that concurrent update_min_undo_locations() finishes.
- */
+//
+// Guarantees that concurrent update_min_undo_locations() finishes.
+//
 static void
 wait_for_even_min_undo_locations_changecount(UndoMeta *meta)
 {
@@ -750,9 +750,9 @@ wait_for_even_min_undo_locations_changecount(UndoMeta *meta)
 	finish_spin_delay(&status);
 }
 
-/*
- * Guarantees that concurrent update_min_undo_locations() finishes.
- */
+//
+// Guarantees that concurrent update_min_undo_locations() finishes.
+//
 static void
 wait_for_even_write_in_progress_changecount(UndoMeta *meta)
 {
@@ -767,11 +767,11 @@ wait_for_even_write_in_progress_changecount(UndoMeta *meta)
 	finish_spin_delay(&status);
 }
 
-/*
- * Get undoLocation from SYS_TREES_CATALOG_XID_UNDO_LOCATION mapping with
- * xid greater or equal than xmin provided. Delete items with xid
- * less than xmin from the mapping.
- */
+//
+// Get undoLocation from SYS_TREES_CATALOG_XID_UNDO_LOCATION mapping with
+// xid greater or equal than xmin provided. Delete items with xid
+// less than xmin from the mapping.
+//
 static UndoLocation
 read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted, bool nocheck)
 {
@@ -792,12 +792,12 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 
 	*ndeleted = 0;
 
-	/*
-	 * Try fast path. Output from cache. Don't cleanup actual system tree. At
-	 * repeated query of some xmin we output the same value of undoLocation
-	 * from the element of mapping with cached_output_xid which is the least
-	 * xid in the mapping greater or equal than xmin.
-	 */
+	//
+// Try fast path. Output from cache. Don't cleanup actual system tree. At
+// repeated query of some xmin we output the same value of undoLocation
+// from the element of mapping with cached_output_xid which is the least
+// xid in the mapping greater or equal than xmin.
+//
 	cached_output_xid = cachedReplicationRetainUndoTuple.output_xid;
 	cached_queried_xmin = cachedReplicationRetainUndoTuple.queried_xmin;
 	cached_change_count = cachedReplicationRetainUndoTuple.change_count;
@@ -811,11 +811,11 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 
 		LWLockRelease(&xid_meta->sysXidUndoLocationLock);
 
-		/*
-		 * If counter is not modified since last call by a concurrent
-		 * insert_replication_catalog_retain_undo_location(), we output
-		 * locally cached last value without reading actual system tree.
-		 */
+		//
+// If counter is not modified since last call by a concurrent
+// insert_replication_catalog_retain_undo_location(), we output
+// locally cached last value without reading actual system tree.
+//
 		if (change_count == cached_change_count)
 		{
 			Assert(UndoLocationIsValid(cachedReplicationRetainUndoTuple.undoLocation));
@@ -823,7 +823,7 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 		}
 	}
 
-	/* Slow path */
+	// Slow path
 	keyTuple.formatFlags = 0;
 	keyTuple.data = (Pointer) &xmin;
 
@@ -841,7 +841,7 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 			findResult = find_page(&context, NULL, BTreeKeyNone, 0);
 			if (findResult != OFindPageResultSuccess)
 			{
-				/* Empty mapping */
+				// Empty mapping
 				result = InvalidUndoLocation;
 				break;
 			}
@@ -855,16 +855,16 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 		{
 			if (O_PAGE_IS(p, RIGHTMOST))
 			{
-				/*
-				 * End of mapping but still haven't got a xid >= xmin
-				 * condition
-				 */
+				//
+// End of mapping but still haven't got a xid >= xmin
+// condition
+//
 				result = InvalidUndoLocation;
 				break;
 			}
 			else
 			{
-				/* Next page */
+				// Next page
 				unlock_page(context.items[context.index].blkno);
 				have_page = false;
 				continue;
@@ -876,12 +876,12 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 						&tuple, BTreeKeyLeafTuple,
 						&keyTuple, BTreeKeyNonLeafKey) >= 0)
 		{
-			/* First occurrence of xid >= xmin condition */
+			// First occurrence of xid >= xmin condition
 			result = ((ReplicationRetainUndoTuple *) tuple.data)->undoLocation;
 			break;
 		}
 
-		/* Delete tuple with xid < xmin */
+		// Delete tuple with xid < xmin
 		START_CRIT_SECTION();
 		page_block_reads(item->blkno);
 		page_locator_delete_item(p, &item->locator);
@@ -896,10 +896,10 @@ read_replication_catalog_retain_undo_location(TransactionId xmin, int *ndeleted,
 	if (change_count_needs_update)
 		cachedReplicationRetainUndoTuple.change_count = change_count;
 
-	/*
-	 * Cache value for next calls. Invalidate last cached value if system tree
-	 * doesn't containg an element with xid greater or equal to queried).
-	 */
+	//
+// Cache value for next calls. Invalidate last cached value if system tree
+// doesn't containg an element with xid greater or equal to queried).
+//
 	if (UndoLocationIsValid(result))
 	{
 		cachedReplicationRetainUndoTuple.output_xid = ((ReplicationRetainUndoTuple *) tuple.data)->xid;
@@ -942,10 +942,10 @@ get_current_replication_catalog_retain_undo_location(void)
 	return result;
 }
 
-/*
- * Insert the item into SYS_TREES_CATALOG_XID_UNDO_LOCATION. If item with this xid exists
- * update it only if this update decreases undoLocation. Skip otherwise.
- */
+//
+// Insert the item into SYS_TREES_CATALOG_XID_UNDO_LOCATION. If item with this xid exists
+// update it only if this update decreases undoLocation. Skip otherwise.
+//
 static void
 insert_replication_catalog_retain_undo_location(TransactionId xid, UndoLocation undoLocation, bool nocheck)
 {
@@ -970,21 +970,21 @@ insert_replication_catalog_retain_undo_location(TransactionId xid, UndoLocation 
 	{
 		if (((ReplicationRetainUndoTuple *) existing_tuple.data)->undoLocation > undoLocation)
 		{
-			/* Update item if this moves undoLocation backwards */
+			// Update item if this moves undoLocation backwards
 			LWLockAcquire(&xid_meta->sysXidUndoLocationLock, LW_SHARED);
 			(xid_meta->sysXidUndoLocationChangeCount)++;
 			LWLockRelease(&xid_meta->sysXidUndoLocationLock);
 			success = o_btree_autonomous_delete(get_sys_tree(SYS_TREES_CATALOG_XID_UNDO_LOCATION),
 												keyTuple, BTreeKeyNonLeafKey, NULL);
 			Assert(success);
-			/* fall through */
+			// fall through
 		}
 		else
 		{
-			/*
-			 * Don't update item if this leaves undoLocation unchanged or
-			 * moves forward
-			 */
+			//
+// Don't update item if this leaves undoLocation unchanged or
+// moves forward
+//
 			return;
 		}
 	}
@@ -1005,7 +1005,7 @@ insert_replication_catalog_retain_undo_location(TransactionId xid, UndoLocation 
 	Assert(success);
 }
 
-/* Test functions */
+// Test functions
 Datum
 orioledb_read_sys_xid_undo_location(PG_FUNCTION_ARGS)
 {
@@ -1042,24 +1042,24 @@ orioledb_insert_sys_xid_undo_location(PG_FUNCTION_ARGS)
 }
 
 
-/*
- * Reserve an undo location for the current process.  Called from
- * get_undo_record() before actually allocating the undo record.
- *
- * Sets reservedUndoLocation to prevent concurrent
- * update_min_undo_locations() from advancing past our position.
- *
- * If transactionUndoRetainLocation is not yet set (first undo record in
- * this transaction for this undoType), we also set it.  In that case the
- * undo stack must be empty — otherwise the retain location and the undo
- * stack are out of sync, which means something wrote to our undo stack
- * without setting the retain location (a bug).
- *
- * Note: transactionUndoRetainLocation is per-process (not per nesting
- * level), while the undo stack is indexed by autonomousNestingLevel.
- * Both can be set by another process via add_new_undo_stack_item_to_process()
- * during the group insert optimization.
- */
+//
+// Reserve an undo location for the current process.  Called from
+// get_undo_record() before actually allocating the undo record.
+//
+// Sets reservedUndoLocation to prevent concurrent
+// update_min_undo_locations() from advancing past our position.
+//
+// If transactionUndoRetainLocation is not yet set (first undo record in
+// this transaction for this undoType), we also set it.  In that case the
+// undo stack must be empty — otherwise the retain location and the undo
+// stack are out of sync, which means something wrote to our undo stack
+// without setting the retain location (a bug).
+//
+// Note: transactionUndoRetainLocation is per-process (not per nesting
+// level), while the undo stack is indexed by autonomousNestingLevel.
+// Both can be set by another process via add_new_undo_stack_item_to_process()
+// during the group insert optimization.
+//
 static void
 set_my_reserved_location(UndoLogType undoType)
 {
@@ -1071,11 +1071,11 @@ set_my_reserved_location(UndoLogType undoType)
 
 	Assert(!UndoLocationIsValid(pg_atomic_read_u64(&shared->reservedUndoLocation)));
 
-	/*
-	 * If transactionUndoRetainLocation is invalid on start - overwrite it on
-	 * continue, else if transactionUndoRetainLocation is valid on start - do
-	 * not modify.
-	 */
+	//
+// If transactionUndoRetainLocation is invalid on start - overwrite it on
+// continue, else if transactionUndoRetainLocation is valid on start - do
+// not modify.
+//
 	overwriteTransactionRetainUndoLoc = !UndoLocationIsValid(pg_atomic_read_u64(&shared->transactionUndoRetainLocation));
 
 	while (true)
@@ -1086,10 +1086,10 @@ set_my_reserved_location(UndoLogType undoType)
 
 		if (overwriteTransactionRetainUndoLoc)
 		{
-			/*
-			 * We're going to setup our retain undo location.  Our transaction
-			 * undo chain must be empty at the moment.
-			 */
+			//
+// We're going to setup our retain undo location.  Our transaction
+// undo chain must be empty at the moment.
+//
 			Assert(!UndoLocationIsValid(pg_atomic_read_u64(&GET_CUR_UNDO_STACK_LOCATIONS(undoType)->location)));
 			pg_atomic_write_u64(&shared->transactionUndoRetainLocation, lastUsedLocation);
 		}
@@ -1100,11 +1100,11 @@ set_my_reserved_location(UndoLogType undoType)
 
 		pg_read_barrier();
 
-		/*
-		 * Retry if minimal positions run higher due to concurrent
-		 * update_min_undo_locations(). Protection for write operation:
-		 * prevent starting write op on busy locations.
-		 */
+		//
+// Retry if minimal positions run higher due to concurrent
+// update_min_undo_locations(). Protection for write operation:
+// prevent starting write op on busy locations.
+//
 		if (pg_atomic_read_u64(&meta->minProcReservedLocation) > lastUsedLocation)
 			continue;
 		if (pg_atomic_read_u64(&meta->minProcTransactionRetainLocation) > lastUsedLocation)
@@ -1137,10 +1137,10 @@ set_my_snapshot_retain_location(UndoLogType undoType)
 
 		wait_for_even_min_undo_locations_changecount(meta);
 
-		/*
-		 * Retry if minimal positions run higher due to concurrent
-		 * update_min_undo_locations().
-		 */
+		//
+// Retry if minimal positions run higher due to concurrent
+// update_min_undo_locations().
+//
 		if (pg_atomic_read_u64(&meta->minProcRetainLocation) > retainUndoLocation)
 			continue;
 
@@ -1290,9 +1290,9 @@ o_add_branch_undo_item(UndoLogType undoType, UndoLocation newLocation)
 	return location;
 }
 
-/*
- * Walk through the undo stack calling the callbacks for each item.
- */
+//
+// Walk through the undo stack calling the callbacks for each item.
+//
 static UndoLocation
 walk_undo_range(UndoLogType undoType,
 				UndoLocation location, UndoLocation toLoc, UndoItemBuf *buf,
@@ -1309,10 +1309,10 @@ walk_undo_range(UndoLogType undoType,
 		descr->callback(undoType, location, item, oxid,
 						stage, changeCountsValid);
 
-		/*
-		 * Update location of the last item, which needs an action on commit,
-		 * if needed.
-		 */
+		//
+// Update location of the last item, which needs an action on commit,
+// if needed.
+//
 		if (onCommitLocation && *onCommitLocation == location)
 		{
 			OnCommitUndoStackItem *fItem = (OnCommitUndoStackItem *) item;
@@ -1320,10 +1320,10 @@ walk_undo_range(UndoLogType undoType,
 			*onCommitLocation = fItem->onCommitLocation;
 		}
 
-		/*
-		 * On commit/precommit, we only walk through the specific items. On
-		 * abort, we walk through all the items.
-		 */
+		//
+// On commit/precommit, we only walk through the specific items. On
+// abort, we walk through all the items.
+//
 		if (stage != OUndoCallbackStageAbort)
 		{
 			OnCommitUndoStackItem *fItem = (OnCommitUndoStackItem *) item;
@@ -1358,11 +1358,11 @@ walk_undo_range_with_buf(UndoLogType undoType,
 }
 
 
-/*
- * Apply undo branches: parts of transaction undo chain, which should be already
- * aborted.  This is used during recovery: despite some parts of chain are
- * already aborted, checkpointed items could still reference them.
- */
+//
+// Apply undo branches: parts of transaction undo chain, which should be already
+// aborted.  This is used during recovery: despite some parts of chain are
+// already aborted, checkpointed items could still reference them.
+//
 void
 apply_undo_branches(UndoLogType undoType, OXid oxid)
 {
@@ -1387,10 +1387,10 @@ apply_undo_branches(UndoLogType undoType, OXid oxid)
 
 
 
-/*
- * Walk transaction undo stack chain during (sub)transaction abort or
- * transaction commit.
- */
+//
+// Walk transaction undo stack chain during (sub)transaction abort or
+// transaction commit.
+//
 static void
 walk_undo_stack(UndoLogType undoType, OXid oxid,
 				UndoStackLocations *toLocation, bool abortTrx,
@@ -1415,10 +1415,10 @@ walk_undo_stack(UndoLogType undoType, OXid oxid,
 
 	if (!abortTrx)
 	{
-		/*
-		 * One could only do the "on commit" action for the whole transaction
-		 * chain.
-		 */
+		//
+// One could only do the "on commit" action for the whole transaction
+// chain.
+//
 		Assert(!toLocation);
 		location = pg_atomic_read_u64(&sharedLocations->onCommitLocation);
 
@@ -1430,10 +1430,10 @@ walk_undo_stack(UndoLogType undoType, OXid oxid,
 	}
 	else
 	{
-		/*
-		 * Abort can relate to part of transactio chain.  "On commit" location
-		 * needs to be updated accordingly.
-		 */
+		//
+// Abort can relate to part of transactio chain.  "On commit" location
+// needs to be updated accordingly.
+//
 		location = pg_atomic_read_u64(&sharedLocations->location);
 		newOnCommitLocation = pg_atomic_read_u64(&sharedLocations->onCommitLocation);
 		location = walk_undo_range_with_buf(undoType, location,
@@ -1442,9 +1442,9 @@ walk_undo_stack(UndoLogType undoType, OXid oxid,
 											changeCountsValid);
 	}
 
-	/*
-	 * Create special branch item, which allows finding aborted items.
-	 */
+	//
+// Create special branch item, which allows finding aborted items.
+//
 	if (toLocation)
 		location = o_add_branch_undo_item(undoType, location);
 
@@ -1452,10 +1452,10 @@ walk_undo_stack(UndoLogType undoType, OXid oxid,
 	if (toLocation)
 		pg_atomic_write_u64(&sharedLocations->branchLocation, location);
 
-	/*
-	 * Flush undo location to checkpoint if concurrent checkpointing requires
-	 * that.
-	 */
+	//
+// Flush undo location to checkpoint if concurrent checkpointing requires
+// that.
+//
 	if (!toLocation && curProcData->flushUndoLocations)
 	{
 		XidFileRec	rec;
@@ -1530,18 +1530,18 @@ get_snapshot_retained_undo_location(UndoLogType undoType)
 	return pg_atomic_read_u64(&curProcData->undoRetainLocations[(int) undoType].snapshotRetainUndoLocation);
 }
 
-/*
- * Clear transactionUndoRetainLocation for the given undo type.  This allows
- * update_min_undo_locations() to advance past our previously retained
- * position.
- *
- * Note: this does NOT clear the undo stack (undoStackLocations[...].location).
- * Callers are responsible for ensuring the undo stack is already empty (e.g.,
- * via apply_undo_stack / on_commit_undo_stack / reset_cur_undo_locations)
- * before calling this.  If the undo stack still has items while the retain
- * location is cleared, a subsequent set_my_reserved_location() will hit an
- * assertion failure.
- */
+//
+// Clear transactionUndoRetainLocation for the given undo type.  This allows
+// update_min_undo_locations() to advance past our previously retained
+// position.
+//
+// Note: this does NOT clear the undo stack (undoStackLocations[...].location).
+// Callers are responsible for ensuring the undo stack is already empty (e.g.,
+// via apply_undo_stack / on_commit_undo_stack / reset_cur_undo_locations)
+// before calling this.  If the undo stack still has items while the retain
+// location is cleared, a subsequent set_my_reserved_location() will hit an
+// assertion failure.
+//
 void
 free_retained_undo_location(UndoLogType undoType)
 {
@@ -1587,14 +1587,14 @@ write_undo_range(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
 						false, false);
 }
 
-/*
- * Like write_undo_range(), but for a page whose dirty bit is already clear:
- * the page is durable on disk (a checkpoint-time flush pushed it out), so we
- * only refresh the o_buffers cache copy as clean.  Without this, eviction
- * would skip the page entirely and a stale partial copy left in the cache by
- * an earlier eviction could be read back after writtenLocation advances past
- * it.
- */
+//
+// Like write_undo_range(), but for a page whose dirty bit is already clear:
+// the page is durable on disk (a checkpoint-time flush pushed it out), so we
+// only refresh the o_buffers cache copy as clean.  Without this, eviction
+// would skip the page entirely and a stale partial copy left in the cache by
+// an earlier eviction could be read back after writtenLocation advances past
+// it.
+//
 static void
 write_undo_range_clean(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
 					   UndoLocation minLoc, UndoLocation maxLoc)
@@ -1631,27 +1631,27 @@ read_undo_range_if_exists(OBuffersDesc *desc, Pointer buf, UndoLogType undoType,
 						  maxLoc - minLoc, true);
 }
 
-/*
- * Walk pages overlapping [fromLoc, toLoc) and write to disk any whose dirty
- * bit is set, leaving the ring buffer untouched (slots keep their data,
- * writtenLocation does not advance).  This is the checkpoint-time flush:
- * it makes the on-disk copy current without forcing future undo_read() of
- * the same locations onto the slow disk path.
- *
- * Pages whose bit was clear by the time we look at them are already on
- * disk (or were never written since the last flush) and are skipped.  A
- * writer that re-sets the bit after we cleared it leaves it set, so the
- * next flush catches the update.
- *
- * The function works in short batches of UNDO_FLUSH_BATCH_PAGES under
- * undoWriteLock in EXCLUSIVE mode, releasing the lock between batches.
- * This keeps us serialised with the slot-pressure eviction path
- * (evict_undo_to_disk), which mutates the same pages and writtenLocation
- * and would otherwise produce torn snapshots; at the same time the brief
- * release windows let backends waiting on the lock (eviction triggered by
- * reserve_undo_size_extended, or set_my_reserved_location waiters) make
- * progress instead of stalling for the whole flush.
- */
+//
+// Walk pages overlapping [fromLoc, toLoc) and write to disk any whose dirty
+// bit is set, leaving the ring buffer untouched (slots keep their data,
+// writtenLocation does not advance).  This is the checkpoint-time flush:
+// it makes the on-disk copy current without forcing future undo_read() of
+// the same locations onto the slow disk path.
+//
+// Pages whose bit was clear by the time we look at them are already on
+// disk (or were never written since the last flush) and are skipped.  A
+// writer that re-sets the bit after we cleared it leaves it set, so the
+// next flush catches the update.
+//
+// The function works in short batches of UNDO_FLUSH_BATCH_PAGES under
+// undoWriteLock in EXCLUSIVE mode, releasing the lock between batches.
+// This keeps us serialised with the slot-pressure eviction path
+// (evict_undo_to_disk), which mutates the same pages and writtenLocation
+// and would otherwise produce torn snapshots; at the same time the brief
+// release windows let backends waiting on the lock (eviction triggered by
+// reserve_undo_size_extended, or set_my_reserved_location waiters) make
+// progress instead of stalling for the whole flush.
+//
 #define UNDO_FLUSH_BATCH_PAGES 128
 static void
 flush_dirty_undo_range(UndoLogType undoType,
@@ -1664,7 +1664,7 @@ flush_dirty_undo_range(UndoLogType undoType,
 				alignedFrom,
 				alignedTo;
 
-	/* Enforced in undo_shmem_needs() via TYPEALIGN. */
+	// Enforced in undo_shmem_needs() via TYPEALIGN.
 	Assert(circularBufferSize % ORIOLEDB_BLCKSZ == 0);
 
 	if (fromLoc >= toLoc)
@@ -1674,7 +1674,7 @@ flush_dirty_undo_range(UndoLogType undoType,
 	alignedTo = ((toLoc + ORIOLEDB_BLCKSZ - 1) / ORIOLEDB_BLCKSZ)
 		* ORIOLEDB_BLCKSZ;
 
-	/* Cap to ring size: revisiting the same physical page is pointless. */
+	// Cap to ring size: revisiting the same physical page is pointless.
 	if (alignedTo - alignedFrom > circularBufferSize)
 		alignedTo = alignedFrom + circularBufferSize;
 
@@ -1694,27 +1694,27 @@ flush_dirty_undo_range(UndoLogType undoType,
 			if (!test_clear_undo_page_dirty(undoType, page))
 				continue;
 
-			/*
-			 * Pages in [fromLoc, toLoc) are stable while we copy them:
-			 * fsync_undo_range() called check_reserved_undo_location() with
-			 * toLoc + ring_size before invoking us, which waits until every
-			 * backend's reserved location is >= toLoc, so no backend can be
-			 * appending into our range concurrently.  That lets us hand the
-			 * ring-buffer page straight to the write without staging.
-			 *
-			 * In-place undo_write_internal writes (BTreeLeafTuphdr fixups)
-			 * may still race; they are loss-tolerant -- 8-byte halves are
-			 * atomic, WAL replay rebuilds the affected fields.
-			 *
-			 * Bypass the o_buffers cache: future reads of these locations
-			 * answer from the ring (writtenLocation does not advance), so
-			 * populating the cache here would only duplicate the bytes.
-			 *
-			 * The acquire pairing with mark_undo_range_dirty() lives inside
-			 * test_clear_undo_page_dirty()'s fetch_and; the page we read
-			 * below reflects every store the writer made before it set the
-			 * bit.
-			 */
+			//
+// Pages in [fromLoc, toLoc) are stable while we copy them:
+// fsync_undo_range() called check_reserved_undo_location() with
+// toLoc + ring_size before invoking us, which waits until every
+// backend's reserved location is >= toLoc, so no backend can be
+// appending into our range concurrently.  That lets us hand the
+// ring-buffer page straight to the write without staging.
+//
+// In-place undo_write_internal writes (BTreeLeafTuphdr fixups)
+// may still race; they are loss-tolerant -- 8-byte halves are
+// atomic, WAL replay rebuilds the affected fields.
+//
+// Bypass the o_buffers cache: future reads of these locations
+// answer from the ring (writtenLocation does not advance), so
+// populating the cache here would only duplicate the bytes.
+//
+// The acquire pairing with mark_undo_range_dirty() lives inside
+// test_clear_undo_page_dirty()'s fetch_and; the page we read
+// below reflects every store the writer made before it set the
+// bit.
+//
 			if (STOPEVENTS_ENABLED())
 				STOPEVENT(STOPEVENT_UNDO_FLUSH, NULL);
 			o_buffers_write_page_direct(&undoBuffersDesc,
@@ -1728,9 +1728,9 @@ flush_dirty_undo_range(UndoLogType undoType,
 	}
 }
 
-/*
- * Evict some part of undo to the disk.
- */
+//
+// Evict some part of undo to the disk.
+//
 void
 evict_undo_to_disk(UndoLogType undoType,
 				   UndoLocation targetUndoLocation,
@@ -1766,7 +1766,7 @@ evict_undo_to_disk(UndoLogType undoType,
 	if (targetUndoLocation <= retainUndoLocation ||
 		targetUndoLocation <= pg_atomic_read_u64(&meta->writtenLocation))
 	{
-		/* We don't have to really write undo. */
+		// We don't have to really write undo.
 		if (pg_atomic_read_u64(&meta->writeInProgressLocation) < retainUndoLocation)
 		{
 			pg_atomic_write_u64(&meta->writeInProgressLocation, retainUndoLocation);
@@ -1783,7 +1783,7 @@ evict_undo_to_disk(UndoLogType undoType,
 		return;
 	}
 
-	/* Try to write 5% of the whole undo size if possible */
+	// Try to write 5% of the whole undo size if possible
 	writtenLocation = pg_atomic_read_u64(&meta->writtenLocation);
 	retainUndoLocation = Max(retainUndoLocation, writtenLocation);
 	targetUndoLocation = Max(targetUndoLocation, writtenLocation + circularBufferSize / 20);
@@ -1804,25 +1804,25 @@ evict_undo_to_disk(UndoLogType undoType,
 		wait_for_reserved_location(undoType, targetUndoLocation + circularBufferSize);
 
 
-	/*
-	 * Persist [retainUndoLocation, targetUndoLocation) page by page.  A page
-	 * whose dirty bit is set is written to o_buffers dirty as usual.  A page
-	 * whose bit is already clear was pushed straight to disk by a
-	 * checkpoint-time flush (flush_dirty_undo_range), so its on-disk copy is
-	 * current; we still write it into the o_buffers cache as *clean* rather
-	 * than skipping it, so that a stale partial copy an earlier eviction may
-	 * have left resident is refreshed to the ring's current bytes before
-	 * writtenLocation advances past it (otherwise a later read could return
-	 * that stale copy).  A single page never wraps the ring -- pages are
-	 * ORIOLEDB_BLCKSZ-aligned and the ring is a whole number of pages -- so
-	 * each maps to a contiguous slice of the circular buffer.
-	 *
-	 * For a fully covered page consume the bit (test-and-clear) so a later
-	 * flush can skip it.  A partial boundary page is only peeked and left
-	 * dirty: its tail may still belong to undo records beyond
-	 * targetUndoLocation that other backends are actively writing, and
-	 * clearing the bit could mask their updates.
-	 */
+	//
+// Persist [retainUndoLocation, targetUndoLocation) page by page.  A page
+// whose dirty bit is set is written to o_buffers dirty as usual.  A page
+// whose bit is already clear was pushed straight to disk by a
+// checkpoint-time flush (flush_dirty_undo_range), so its on-disk copy is
+// current; we still write it into the o_buffers cache as *clean* rather
+// than skipping it, so that a stale partial copy an earlier eviction may
+// have left resident is refreshed to the ring's current bytes before
+// writtenLocation advances past it (otherwise a later read could return
+// that stale copy).  A single page never wraps the ring -- pages are
+// ORIOLEDB_BLCKSZ-aligned and the ring is a whole number of pages -- so
+// each maps to a contiguous slice of the circular buffer.
+//
+// For a fully covered page consume the bit (test-and-clear) so a later
+// flush can skip it.  A partial boundary page is only peeked and left
+// dirty: its tail may still belong to undo records beyond
+// targetUndoLocation that other backends are actively writing, and
+// clearing the bit could mask their updates.
+//
 	{
 		UndoLocation loc;
 
@@ -1882,10 +1882,10 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 
 	if (undoType == UndoLogSystem && wal_level >= WAL_LEVEL_LOGICAL)
 	{
-		/*
-		 * Add element to mapping (xid -> transactionUndoRetainLocation) for
-		 * system tree modification in logical decoding.
-		 */
+		//
+// Add element to mapping (xid -> transactionUndoRetainLocation) for
+// system tree modification in logical decoding.
+//
 		TransactionId xid;
 		static TransactionId insertedXid = InvalidTransactionId;
 
@@ -1898,12 +1898,12 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 		{
 			UndoLocation lastUsedLocation = pg_atomic_read_u64(&meta->lastUsedLocation);
 
-			/*
-			 * Don't need to do
-			 * insert_replication_catalog_retain_undo_location() for page
-			 * merges.  Only when we're preparing to do a material change in
-			 * system trees.
-			 */
+			//
+// Don't need to do
+// insert_replication_catalog_retain_undo_location() for page
+// merges.  Only when we're preparing to do a material change in
+// system trees.
+//
 			if (UndoLocationIsValid(lastUsedLocation) && waitForUndoLocation)
 			{
 				Assert(!have_locked_pages());
@@ -1933,25 +1933,25 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 									  &minProcReservedLocation,
 									  waitForUndoLocation))
 	{
-		/*
-		 * we add size to reserver_undo_size and meta->advanceReservedLocation
-		 * and must revert this action
-		 */
+		//
+// we add size to reserver_undo_size and meta->advanceReservedLocation
+// and must revert this action
+//
 		pg_atomic_fetch_sub_u64(&meta->advanceReservedLocation, size);
 		reserved_undo_sizes[(int) undoType] -= size;
 		return false;
 	}
 
-	/* Recheck if the required location was already written */
+	// Recheck if the required location was already written
 	if (location + size <=
 		pg_atomic_read_u64(&meta->writtenLocation) + circularBufferSize)
 		return true;
 
 	if (!waitForUndoLocation)
 	{
-		/*
-		 * No more chances to succeed without waiting.
-		 */
+		//
+// No more chances to succeed without waiting.
+//
 		pg_atomic_fetch_sub_u64(&meta->advanceReservedLocation, size);
 		reserved_undo_sizes[(int) undoType] -= size;
 		return false;
@@ -1960,15 +1960,15 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 	if (location + size <=
 		pg_atomic_read_u64(&meta->writeInProgressLocation) + circularBufferSize)
 	{
-		/*
-		 * Current in-progress undo write should cover our required location.
-		 * It should be enough to just wait for current in-progress write to
-		 * be finished.
-		 */
+		//
+// Current in-progress undo write should cover our required location.
+// It should be enough to just wait for current in-progress write to
+// be finished.
+//
 		LWLockAcquire(&meta->undoWriteLock, LW_SHARED);
 		LWLockRelease(&meta->undoWriteLock);
 
-		/* TODO: consider removing lock if assers are disabled */
+		// TODO: consider removing lock if assers are disabled
 		SpinLockAcquire(&meta->minUndoLocationsMutex);
 		Assert(location + size <= pg_atomic_read_u64(&meta->writtenLocation) + circularBufferSize);
 		SpinLockRelease(&meta->minUndoLocationsMutex);
@@ -1982,10 +1982,10 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 	return true;
 }
 
-/*
- * "Owns" undo size reserved by another process.  That process is intended to
- * call giveup_reserved_undo_size().
- */
+//
+// "Owns" undo size reserved by another process.  That process is intended to
+// call giveup_reserved_undo_size().
+//
 void
 steal_reserved_undo_size(UndoLogType undoType, Size size)
 {
@@ -1994,10 +1994,10 @@ steal_reserved_undo_size(UndoLogType undoType, Size size)
 	reserved_undo_sizes[(int) undoType] += size;
 }
 
-/*
- * "Forgets" reserved by this process, because another process calls
- * steal_reserved_undo_size().
- */
+//
+// "Forgets" reserved by this process, because another process calls
+// steal_reserved_undo_size().
+//
 void
 giveup_reserved_undo_size(UndoLogType undoType)
 {
@@ -2024,18 +2024,18 @@ fsync_undo_range(UndoLogType undoType,
 										&minProcReservedLocation,
 										true);
 
-	/*
-	 * Push dirty pages overlapping [fromLoc, toLoc) out to o_buffers without
-	 * touching the ring or advancing writtenLocation.  Pages already on disk
-	 * (bit cleared by a prior eviction or flush) are skipped.
-	 *
-	 * Locations below writtenLocation are guaranteed on disk already, so we
-	 * clamp fromLoc up to writtenLocation to avoid pointless bit scans. The
-	 * flush internally acquires undoWriteLock in EXCLUSIVE mode in short
-	 * batches and releases it between them; that keeps it serialised with
-	 * evict_undo_to_disk() while letting concurrent eviction make progress
-	 * instead of waiting for the whole flush.
-	 */
+	//
+// Push dirty pages overlapping [fromLoc, toLoc) out to o_buffers without
+// touching the ring or advancing writtenLocation.  Pages already on disk
+// (bit cleared by a prior eviction or flush) are skipped.
+//
+// Locations below writtenLocation are guaranteed on disk already, so we
+// clamp fromLoc up to writtenLocation to avoid pointless bit scans. The
+// flush internally acquires undoWriteLock in EXCLUSIVE mode in short
+// batches and releases it between them; that keeps it serialised with
+// evict_undo_to_disk() while letting concurrent eviction make progress
+// instead of waiting for the whole flush.
+//
 	writtenLocation = pg_atomic_read_u64(&meta->writtenLocation);
 	flush_dirty_undo_range(undoType,
 						   Max(fromLoc, writtenLocation),
@@ -2069,26 +2069,26 @@ get_undo_record(UndoLogType undoType, UndoLocation *undoLocation, Size size)
 		location = pg_atomic_fetch_add_u64(&meta->lastUsedLocation, size);
 		reserved_undo_sizes[(int) undoType] -= size;
 
-		/*
-		 * We might hit the boundary of circular buffer.  If so then just
-		 * retry. Thankfully we've reserved twice more space than required.
-		 *
-		 * This situation shouldn't happen twice, since we've reserved undo
-		 * location.
-		 */
+		//
+// We might hit the boundary of circular buffer.  If so then just
+// retry. Thankfully we've reserved twice more space than required.
+//
+// This situation shouldn't happen twice, since we've reserved undo
+// location.
+//
 		if ((location + size) % circularBufferSize >
 			location % circularBufferSize)
 		{
-			/*
-			 * Publish the pages this record occupies as dirty so a later
-			 * checkpoint-time flush or slot-pressure eviction persists them.
-			 * Marking ahead of the caller's payload write is safe: our
-			 * reserved location pins [location, location+size) until
-			 * release_reserved_undo_location(), and both the flush and the
-			 * eviction wait for every backend's reserved location to advance
-			 * past their range before touching it -- so neither can read
-			 * these pages until the payload is in place.
-			 */
+			//
+// Publish the pages this record occupies as dirty so a later
+// checkpoint-time flush or slot-pressure eviction persists them.
+// Marking ahead of the caller's payload write is safe: our
+// reserved location pins [location, location+size) until
+// release_reserved_undo_location(), and both the flush and the
+// eviction wait for every backend's reserved location to advance
+// past their range before touching it -- so neither can read
+// these pages until the payload is in place.
+//
 			mark_undo_range_dirty(undoType, location, size);
 			*undoLocation = location;
 			return GET_UNDO_REC(undoType, location);
@@ -2157,29 +2157,29 @@ add_new_undo_stack_item(UndoLogType undoType, UndoLocation location)
 		pg_atomic_write_u64(&sharedLocations->onCommitLocation, location);
 	}
 
-	/* The item's pages were marked dirty when get_undo_record() allocated it. */
+	// The item's pages were marked dirty when get_undo_record() allocated it.
 	release_reserved_undo_location(undoType);
 }
 
-/*
- * Add an undo stack item on behalf of another process (identified by
- * pgprocno).  Called by the group insert optimization when the lock holder
- * inserts tuples for waiting processes.
- *
- * The undo record has already been written by the current process via
- * get_undo_record(), but the stack item must be linked into the target
- * process's undo chain, not ours.
- *
- * autonomousNestingLevel selects which undoStackLocations slot to use for
- * the target process — this must be the value captured from the target
- * process when it queued as a waiter.  GET_CUR_UNDO_STACK_LOCATIONS()
- * indexes by autonomousNestingLevel, so we must use the same index here
- * to keep the undo chain consistent.
- *
- * Also sets transactionUndoRetainLocation on the target process if it
- * wasn't set yet, so that the undo data is retained until the target
- * process's transaction completes.
- */
+//
+// Add an undo stack item on behalf of another process (identified by
+// pgprocno).  Called by the group insert optimization when the lock holder
+// inserts tuples for waiting processes.
+//
+// The undo record has already been written by the current process via
+// get_undo_record(), but the stack item must be linked into the target
+// process's undo chain, not ours.
+//
+// autonomousNestingLevel selects which undoStackLocations slot to use for
+// the target process — this must be the value captured from the target
+// process when it queued as a waiter.  GET_CUR_UNDO_STACK_LOCATIONS()
+// indexes by autonomousNestingLevel, so we must use the same index here
+// to keep the undo chain consistent.
+//
+// Also sets transactionUndoRetainLocation on the target process if it
+// wasn't set yet, so that the undo data is retained until the target
+// process's transaction completes.
+//
 void
 add_new_undo_stack_item_to_process(UndoLogType undoType,
 								   UndoLocation location,
@@ -2199,7 +2199,7 @@ add_new_undo_stack_item_to_process(UndoLogType undoType,
 	if (!UndoLocationIsValid(pg_atomic_read_u64(&oProcData[pgprocno].undoRetainLocations[undoType].transactionUndoRetainLocation)))
 		pg_atomic_write_u64(&oProcData[pgprocno].undoRetainLocations[undoType].transactionUndoRetainLocation, location);
 
-	/* The item's pages were marked dirty when get_undo_record() allocated it. */
+	// The item's pages were marked dirty when get_undo_record() allocated it.
 	release_reserved_undo_location(undoType);
 }
 
@@ -2343,15 +2343,15 @@ undo_xact_callback(XactEvent event, void *arg)
 	XLogRecPtr	flushPos;
 	LogicalXidCtx logicalXidContext;
 
-	/* elog(LOG, "UNDO XACT CALLBACK"); */
+	// elog(LOG, "UNDO XACT CALLBACK");
 	isParallelWorker = (MyProc->lockGroupLeader != NULL &&
 						MyProc->lockGroupLeader != MyProc) ||
 		IsInParallelMode();
 
-	/*
-	 * Cleanup EXPLAIN ANALYZE counters pointer to handle case when execution
-	 * of node was interrupted by exception.
-	 */
+	//
+// Cleanup EXPLAIN ANALYZE counters pointer to handle case when execution
+// of node was interrupted by exception.
+//
 	ea_counters = NULL;
 
 	if (event == XACT_EVENT_COMMIT || event == XACT_EVENT_ABORT)
@@ -2420,32 +2420,32 @@ undo_xact_callback(XactEvent event, void *arg)
 			}
 		}
 
-		/*
-		 * Transaction cases:
-		 *
-		 * h - h : independent heap transaction
-		 *
-		 * o - o : independent Oriole transaction
-		 *
-		 * h - o - o - h : SWITCH_LOGICAL_XID H2O: Oriole txn acts as a
-		 * sub-txn of a top heap txn
-		 *
-		 * o - h - o - h : SWITCH_LOGICAL_XID O2H: Oriole txn acts as a
-		 * sub-txn of a top heap txn
-		 */
+		//
+// Transaction cases:
+//
+// h - h : independent heap transaction
+//
+// o - o : independent Oriole transaction
+//
+// h - o - o - h : SWITCH_LOGICAL_XID H2O: Oriole txn acts as a
+// sub-txn of a top heap txn
+//
+// o - h - o - h : SWITCH_LOGICAL_XID O2H: Oriole txn acts as a
+// sub-txn of a top heap txn
+//
 
 		Assert(!RecoveryInProgress());
 		switch (event)
 		{
 			case XACT_EVENT_PRE_COMMIT:
 
-				/*
-				 * PRE_COMMIT means that Oriole transaction is going to be
-				 * committed BEFORE corresponding heap transaction. This can
-				 * only happen in a case when Oriole transaction acts as
-				 * sub-transaction of heap transaction. This is the case for
-				 * SWITCH_LOGICAL_XID.
-				 */
+				//
+// PRE_COMMIT means that Oriole transaction is going to be
+// committed BEFORE corresponding heap transaction. This can
+// only happen in a case when Oriole transaction acts as
+// sub-transaction of heap transaction. This is the case for
+// SWITCH_LOGICAL_XID.
+//
 
 				elog(DEBUG4, "XACT_EVENT_PRE_COMMIT oxid " UINT64_FORMAT " logicalXid %u top heapXid %u current heapXid %u useHeap %d",
 					 oxid, logicalXidContext.xid, heapXid,
@@ -2481,29 +2481,29 @@ undo_xact_callback(XactEvent event, void *arg)
 					 oxid, logicalXidContext.xid, heapXid,
 					 GetCurrentTransactionIdIfAny(), logicalXidContext.useHeap);
 
-				/*
-				 * Critical section wraps the code of commit flow that appears
-				 * to be not fully durable, but already partly visible for
-				 * replica. WAL_COMMIT record already in wal, but primary's
-				 * side commit flow not yet finished. So any error within that
-				 * section mast not lead to primary-replica desync.
-				 */
+				//
+// Critical section wraps the code of commit flow that appears
+// to be not fully durable, but already partly visible for
+// replica. WAL_COMMIT record already in wal, but primary's
+// side commit flow not yet finished. So any error within that
+// section mast not lead to primary-replica desync.
+//
 				START_CRIT_SECTION();
 
 				if (!TransactionIdIsValid(heapXid))
 				{
 					bool		wrote_xlog;
 
-					/* Commit o - o : independent Oriole transaction */
+					// Commit o - o : independent Oriole transaction
 					flushPos = Max(assign_xidless_commit_lsn(oxid, &wrote_xlog), XactLastCommitEnd);
 
-					/* Flush WAL if needed */
+					// Flush WAL if needed
 					if (!XLogRecPtrIsInvalid(flushPos) &&
 						(synchronous_commit > SYNCHRONOUS_COMMIT_OFF ||
 						 oxid_needs_wal_flush))
 						XLogFlush(flushPos);
 
-					/* Wait for synchronous replication if needed */
+					// Wait for synchronous replication if needed
 					if (!XLogRecPtrIsInvalid(flushPos))
 						SyncRepWaitForLSN(flushPos, true);
 				}
@@ -2511,9 +2511,9 @@ undo_xact_callback(XactEvent event, void *arg)
 				{
 					Assert(TransactionIdIsValid(heapXid));
 
-					/*
-					 * Case h - h : independent heap transaction
-					 */
+					//
+// Case h - h : independent heap transaction
+//
 
 					set_oxid_xlog_ptr(oxid, XactLastCommitEnd);
 				}
@@ -2551,10 +2551,10 @@ undo_xact_callback(XactEvent event, void *arg)
 				xidless_commit_lsn = InvalidXLogRecPtr;
 				minParentSubId = InvalidSubTransactionId;
 
-				/*
-				 * TODO: Find a better place or add a hook at the end of
-				 * heap_truncate_one_rel
-				 */
+				//
+// TODO: Find a better place or add a hook at the end of
+// heap_truncate_one_rel
+//
 				in_nontransactional_truncate = false;
 
 				break;
@@ -2570,38 +2570,38 @@ undo_xact_callback(XactEvent event, void *arg)
 				if (!RecoveryInProgress())
 					wal_rollback(oxid, logicalXidContext.xid, false);
 
-				/*
-				 * If current_oxid_precommit() / current_oxid_xlog_precommit()
-				 * ran but we reached XACT_EVENT_ABORT before
-				 * current_oxid_commit() got a chance to write the actual CSN,
-				 * the in-buffer CSN for our oxid is still flagged with
-				 * COMMITSEQNO_STATUS_CSN_COMMITTING (and the xlog ptr with
-				 * XLOG_PTR_COMMITTING).  Every other backend that finds a
-				 * tuple modified by us busy-spins in oxid_get_csn() /
-				 * oxid_match_snapshot() / oxid_get_xlog_ptr() until that bit
-				 * clears.  apply_undo_stack() below acquires page-content
-				 * locks held by such spinners, closing the cycle: A holds
-				 * page P, spins on our COMMITTING bit; we wait for page P
-				 * inside apply_undo_stack(). A's spin runs out of NUM_DELAYS
-				 * budget and the cluster PANICs at oxid_get_csn /
-				 * oxid_match_snapshot.
-				 *
-				 * Reverting the bit back to IN_PROGRESS here releases every
-				 * spinner before we go after their page locks.  We don't jump
-				 * straight to COMMITSEQNO_ABORTED because the actual abort
-				 * sequencing (advance_run_xmin, undo cleanup) still needs to
-				 * run.  current_oxid_abort() below performs that final flip
-				 * in its proper place.
-				 */
+				//
+// If current_oxid_precommit() / current_oxid_xlog_precommit()
+// ran but we reached XACT_EVENT_ABORT before
+// current_oxid_commit() got a chance to write the actual CSN,
+// the in-buffer CSN for our oxid is still flagged with
+// COMMITSEQNO_STATUS_CSN_COMMITTING (and the xlog ptr with
+// XLOG_PTR_COMMITTING).  Every other backend that finds a
+// tuple modified by us busy-spins in oxid_get_csn() /
+// oxid_match_snapshot() / oxid_get_xlog_ptr() until that bit
+// clears.  apply_undo_stack() below acquires page-content
+// locks held by such spinners, closing the cycle: A holds
+// page P, spins on our COMMITTING bit; we wait for page P
+// inside apply_undo_stack(). A's spin runs out of NUM_DELAYS
+// budget and the cluster PANICs at oxid_get_csn /
+// oxid_match_snapshot.
+//
+// Reverting the bit back to IN_PROGRESS here releases every
+// spinner before we go after their page locks.  We don't jump
+// straight to COMMITSEQNO_ABORTED because the actual abort
+// sequencing (advance_run_xmin, undo cleanup) still needs to
+// run.  current_oxid_abort() below performs that final flip
+// in its proper place.
+//
 				current_oxid_clear_committing();
 
 				for (i = 0; i < (int) UndoLogsCount; i++)
 					apply_undo_stack((UndoLogType) i, oxid, NULL, true);
 
-				/*
-				 * XACT_EVENT_ABORT may follow XACT_EVENT_PRE_COMMIT.  So we
-				 * still need the cleanup.
-				 */
+				//
+// XACT_EVENT_ABORT may follow XACT_EVENT_PRE_COMMIT.  So we
+// still need the cleanup.
+//
 				wal_after_commit();
 
 				reset_cur_undo_locations();
@@ -2611,16 +2611,16 @@ undo_xact_callback(XactEvent event, void *arg)
 				oxid_needs_wal_flush = false;
 				xidless_commit_lsn = InvalidXLogRecPtr;
 
-				/*
-				 * TODO: Find a better place or add a hook at the end of
-				 * heap_truncate_one_rel
-				 */
+				//
+// TODO: Find a better place or add a hook at the end of
+// heap_truncate_one_rel
+//
 				in_nontransactional_truncate = false;
 
-				/*
-				 * Remove registered snapshot one-by-one, so that we can avoid
-				 * double removing in undo_snapshot_deregister_hook().
-				 */
+				//
+// Remove registered snapshot one-by-one, so that we can avoid
+// double removing in undo_snapshot_deregister_hook().
+//
 				for (i = 0; i < (int) UndoLogsCount; i++)
 					while (!pairingheap_is_empty(&retainUndoLocHeaps[i]))
 						pairingheap_remove_first(&retainUndoLocHeaps[i]);
@@ -2840,10 +2840,10 @@ undo_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 	int			i;
 	LogicalXidCtx logicalXidContext;
 
-	/*
-	 * Cleanup EXPLAIN ANALYZE counters pointer to handle case when execution
-	 * of node was interrupted by exception.
-	 */
+	//
+// Cleanup EXPLAIN ANALYZE counters pointer to handle case when execution
+// of node was interrupted by exception.
+//
 	ea_counters = NULL;
 
 	switch (event)
@@ -2888,11 +2888,11 @@ undo_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 					}
 				}
 
-				/*
-				 * It might happen that we've released some row-level locks.
-				 * Some waiters must be woken up.  We currently can't
-				 * distinguish them and just wake up everybody.
-				 */
+				//
+// It might happen that we've released some row-level locks.
+// Some waiters must be woken up.  We currently can't
+// distinguish them and just wake up everybody.
+//
 				oxid_notify_all();
 			}
 
@@ -2905,9 +2905,9 @@ undo_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 	oxid_subxact_callback(event, mySubid, parentSubid, arg);
 }
 
-/*
- * Check if the current transaction has items in undo chain of given type.
- */
+//
+// Check if the current transaction has items in undo chain of given type.
+//
 bool
 have_current_undo(UndoLogType undoType)
 {
@@ -3018,10 +3018,10 @@ finish_autonomous_transaction(OAutonomousTxState *state)
 		for (i = 0; i < (int) UndoLogsCount; i++)
 			precommit_undo_stack((UndoLogType) i, oxid, true);
 
-		/*
-		 * Wraps the commit flow until full durability. See comment inside
-		 * undo_xact_callback:XACT_EVENT_COMMIT
-		 */
+		//
+// Wraps the commit flow until full durability. See comment inside
+// undo_xact_callback:XACT_EVENT_COMMIT
+//
 		START_CRIT_SECTION();
 
 		if (!is_recovery_process())
@@ -3087,11 +3087,11 @@ undo_read(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 	}
 }
 
-/*
- * Like undo_read(), but tolerates a concurrently cleaned undo record.
- * Does not create files that don't exist.  Returns false if the undo
- * record was cleaned (the buffer contents are unreliable).
- */
+//
+// Like undo_read(), but tolerates a concurrently cleaned undo record.
+// Does not create files that don't exist.  Returns false if the undo
+// record was cleaned (the buffer contents are unreliable).
+//
 bool
 undo_read_if_exists(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 {
@@ -3132,29 +3132,29 @@ undo_read_if_exists(UndoLogType undoType, UndoLocation location, Size size, Poin
 			return false;
 	}
 
-	/*
-	 * Re-check after read: if the undo was cleaned concurrently, the data we
-	 * just read may be garbage from a reused circular buffer.
-	 */
+	//
+// Re-check after read: if the undo was cleaned concurrently, the data we
+// just read may be garbage from a reused circular buffer.
+//
 	if (!UNDO_REC_EXISTS(undoType, location))
 		return false;
 
 	return true;
 }
 
-/*
- * Write buffer to the given undo location.
- */
+//
+// Write buffer to the given undo location.
+//
 void
 undo_write(UndoLogType undoType, UndoLocation location, Size size, Pointer buf)
 {
 	undo_write_internal(undoType, location, size, buf, true);
 }
 
-/*
- * Like undo_write(), but tolerates a concurrently cleaned undo record.
- * Returns false without writing if the location is no longer retained.
- */
+//
+// Like undo_write(), but tolerates a concurrently cleaned undo record.
+// Returns false without writing if the location is no longer retained.
+//
 bool
 undo_write_if_exists(UndoLogType undoType, UndoLocation location,
 					 Size size, Pointer buf)
@@ -3185,27 +3185,27 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 		writeInProgressLocation = pg_atomic_read_u64(&meta->writeInProgressLocation);
 		if (writeInProgressLocation >= location + size)
 		{
-			/* Nothing we can write to the memory */
+			// Nothing we can write to the memory
 			memoryUndoLocation = location + size;
 			break;
 		}
 
-		/* Reserve the location we're going to write into */
+		// Reserve the location we're going to write into
 		memoryUndoLocation = Max(location, writeInProgressLocation);
 		Assert(pg_atomic_read_u64(&sharedLocations->reservedUndoLocation) == InvalidUndoLocation);
 		pg_atomic_write_u64(&sharedLocations->reservedUndoLocation, memoryUndoLocation);
 
 		pg_memory_barrier();
 
-		/*
-		 * This ensures there is no concurrent process updating
-		 * writeInProgressLocation.  After this point, anybody trying to
-		 * update writeInProgressLocation will notice our
-		 * reservedUndoLocation.
-		 */
+		//
+// This ensures there is no concurrent process updating
+// writeInProgressLocation.  After this point, anybody trying to
+// update writeInProgressLocation will notice our
+// reservedUndoLocation.
+//
 		wait_for_even_write_in_progress_changecount(meta);
 
-		/* Recheck if writeInProgressLocation was advanced concurrently */
+		// Recheck if writeInProgressLocation was advanced concurrently
 		writeInProgressLocation = pg_atomic_read_u64(&meta->writeInProgressLocation);
 		if (writeInProgressLocation > memoryUndoLocation)
 		{
@@ -3213,14 +3213,14 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 			continue;
 		}
 
-		/*
-		 * At this point we should either detect concurrent writing of undo
-		 * log. Or concurrent writing of undo log should wait for our reserved
-		 * location.  So, it should be safe to write to the memory.
-		 *
-		 * Loss-tolerant in-place path: a concurrent flush may tear the pair
-		 * we write; WAL replay reconstructs the affected tuphdr fields.
-		 */
+		//
+// At this point we should either detect concurrent writing of undo
+// log. Or concurrent writing of undo log should wait for our reserved
+// location.  So, it should be safe to write to the memory.
+//
+// Loss-tolerant in-place path: a concurrent flush may tear the pair
+// we write; WAL replay reconstructs the affected tuphdr fields.
+//
 		memcpy(GET_UNDO_REC(undoType, memoryUndoLocation),
 			   buf + (memoryUndoLocation - location),
 			   size - (memoryUndoLocation - location));
@@ -3233,11 +3233,11 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 
 	if (memoryUndoLocation == location)
 	{
-		/* Everything is written to the in-memory buffer */
+		// Everything is written to the in-memory buffer
 		return true;
 	}
 
-	/* Wait for in-progress write if needed */
+	// Wait for in-progress write if needed
 	if (pg_atomic_read_u64(&meta->writtenLocation) < memoryUndoLocation)
 	{
 		LWLockAcquire(&meta->undoWriteLock, LW_SHARED);
@@ -3245,7 +3245,7 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 		Assert(pg_atomic_read_u64(&meta->writtenLocation) >= memoryUndoLocation);
 	}
 
-	/* Finally perform writing to the file */
+	// Finally perform writing to the file
 	if (must_exist)
 	{
 		write_undo_range(&undoBuffersDesc, buf, undoType,
@@ -3261,10 +3261,10 @@ undo_write_internal(UndoLogType undoType, UndoLocation location,
 	return true;
 }
 
-/*
- * Comparison function for retainUndoLocHeap.  Smallest undo location at the
- * top.
- */
+//
+// Comparison function for retainUndoLocHeap.  Smallest undo location at the
+// top.
+//
 static int
 undoLocCmp(const pairingheap_node *a, const pairingheap_node *b, void *arg)
 {
@@ -3290,9 +3290,9 @@ undo_snapshot_register_hook(Snapshot snapshot)
 void
 undo_snapshot_deregister_hook(Snapshot snapshot)
 {
-	/*
-	 * Skip if it was already removed during transaction abort.
-	 */
+	//
+// Skip if it was already removed during transaction abort.
+//
 	if (snapshot->undoRegularRowLocationPhNode.ph_node.prev_or_parent != NULL ||
 		&snapshot->undoRegularRowLocationPhNode.ph_node == retainUndoLocHeaps[UndoLogRegular].ph_root)
 		pairingheap_remove(&retainUndoLocHeaps[UndoLogRegular], &snapshot->undoRegularRowLocationPhNode.ph_node);
@@ -3316,11 +3316,11 @@ orioledb_snapshot_hook(Snapshot snapshot)
 	ODBProcData *curProcData = GET_CUR_PROCDATA();
 	int			i;
 
-	/*
-	 * It means that there was a crash recovery and we need to cleanup. This
-	 * is probably not the best place for this kind of work, but here we can
-	 * do truncate of unlogged tables.
-	 */
+	//
+// It means that there was a crash recovery and we need to cleanup. This
+// is probably not the best place for this kind of work, but here we can
+// do truncate of unlogged tables.
+//
 	if (*was_in_recovery &&
 		!pg_atomic_exchange_u32(after_recovery_cleaned, true))
 	{
@@ -3347,10 +3347,10 @@ orioledb_snapshot_hook(Snapshot snapshot)
 	if (!OXidIsValid(curXmin))
 		pg_atomic_write_u64(&curProcData->xmin, xmin);
 
-	/*
-	 * Snapshot CSN could be newer than retained location, not older.  Enforce
-	 * this with barrier.
-	 */
+	//
+// Snapshot CSN could be newer than retained location, not older.  Enforce
+// this with barrier.
+//
 	pg_read_barrier();
 
 	snapshot->csnSnapshotData.snapshotcsn = pg_atomic_read_u64(&TRANSAM_VARIABLES->nextCommitSeqNo);
@@ -3377,23 +3377,23 @@ reset_command_undo_locations(void)
 	commandInfosLength = lengthof(commandInfosStatic);
 }
 
-/*
- * Return the undo location for the first entry of commandInfos whose cid is
- * greater than or equal to the requested `cid`.
- *
- * If every stored `cid` is smaller than the requested one,
- * `MaxUndoLocation` is returned.
- */
+//
+// Return the undo location for the first entry of commandInfos whose cid is
+// greater than or equal to the requested `cid`.
+//
+// If every stored `cid` is smaller than the requested one,
+// `MaxUndoLocation` is returned.
+//
 CommandId
 undo_location_get_command(UndoLocation location)
 {
-	int			lo = 0;			/* left bound (inclusive)  */
-	int			hi = commandIndex + 1;	/* right bound (not inclusive) */
+	int			lo = 0;			// left bound (inclusive)
+	int			hi = commandIndex + 1;	// right bound (not inclusive)
 
-	/*
-	 * XXX: Parallel workers don't have valid commandInfos array.  Do they
-	 * need it?
-	 */
+	//
+// XXX: Parallel workers don't have valid commandInfos array.  Do they
+// need it?
+//
 	if (IsParallelWorker())
 		return 0;
 
@@ -3534,10 +3534,10 @@ o_add_rewind_relfilenode_undo_item(RelFileNode *onCommit, RelFileNode *onAbort,
 	}
 }
 
-/*
- * Output OrioleDB undo sizes per each undo type.
- * There is a single undo dir for all tablespaces and databasess.
- */
+//
+// Output OrioleDB undo sizes per each undo type.
+// There is a single undo dir for all tablespaces and databasess.
+//
 Datum
 orioledb_undo_size(PG_FUNCTION_ARGS)
 {
@@ -3716,7 +3716,7 @@ orioledb_get_proc_retain_undo_locations(PG_FUNCTION_ARGS)
 			transaction = pg_atomic_read_u64(&oProcData[i].undoRetainLocations[j].transactionUndoRetainLocation);
 			snapshot = pg_atomic_read_u64(&oProcData[i].undoRetainLocations[j].snapshotRetainUndoLocation);
 
-			/* Skip rows where all locations are InvalidUndoLocation */
+			// Skip rows where all locations are InvalidUndoLocation
 			if (!UndoLocationIsValid(reserved) &&
 				!UndoLocationIsValid(transaction) &&
 				!UndoLocationIsValid(snapshot))
@@ -3731,7 +3731,7 @@ orioledb_get_proc_retain_undo_locations(PG_FUNCTION_ARGS)
 			values[4] = Int64GetDatum(transaction);
 			values[5] = Int64GetDatum(snapshot);
 
-			/* Show the effective minimum retain for this proc/type */
+			// Show the effective minimum retain for this proc/type
 			{
 				UndoLocation effective = InvalidUndoLocation;
 

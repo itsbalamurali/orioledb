@@ -1,18 +1,18 @@
-/*-------------------------------------------------------------------------
- *
- *  o_operator_cache.c
- *		Routines for orioledb operator cache.
- *
- * operator_cache is tree that contains cached metadata from pg_operator.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/catalog/o_operator_cache.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_operator_cache.c
+// Routines for orioledb operator cache.
+//
+// operator_cache is tree that contains cached metadata from pg_operator.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/catalog/o_operator_cache.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -42,9 +42,9 @@ static OSysCacheFuncs operator_cache_funcs =
 	.fill_entry = o_operator_cache_fill_entry
 };
 
-/*
- * Initializes the type sys cache memory.
- */
+//
+// Initializes the type sys cache memory.
+//
 O_SYS_CACHE_INIT_FUNC(operator_cache)
 {
 	Oid			keytypes[] = {OIDOID};
@@ -71,7 +71,7 @@ o_operator_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	operform = (Form_pg_operator) GETSTRUCT(opertup);
 
 	prev_context = MemoryContextSwitchTo(operator_cache->mcxt);
-	if (o_operator != NULL)		/* Existed o_operator updated */
+	if (o_operator != NULL)		// Existed o_operator updated
 	{
 		Assert(false);
 	}
@@ -134,9 +134,9 @@ o_operator_cache_get_oprcode(Oid operoid)
 	return o_operator->oprcode;
 }
 
-/*
- * A tuple print function for o_print_btree_pages()
- */
+//
+// A tuple print function for o_print_btree_pages()
+//
 void
 o_operator_cache_tup_print(BTreeDescr *desc, StringInfo buf,
 						   OTuple tup, Pointer arg)

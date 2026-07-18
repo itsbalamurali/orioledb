@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * requests.c
- *		Implementation for S3 requests.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/requests.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// requests.c
+// Implementation for S3 requests.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/requests.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -47,9 +47,9 @@ hmac_sha256(char *input, char *output, char *secretkey, int secretkeylen)
 	Assert(len == 32);
 }
 
-/*
- * Make the hex representation of the binary string.
- */
+//
+// Make the hex representation of the binary string.
+//
 static char *
 hex_string(Pointer data, int len)
 {
@@ -61,9 +61,9 @@ hex_string(Pointer data, int len)
 	return result;
 }
 
-/*
- * Calculate the checksum of canonical request according to AWS4-HMAC-SHA256.
- */
+//
+// Calculate the checksum of canonical request according to AWS4-HMAC-SHA256.
+//
 static char *
 canonical_request_checksum(char *method, char *datetime, char *objectname,
 						   char *contentchecksum)
@@ -88,10 +88,10 @@ canonical_request_checksum(char *method, char *datetime, char *objectname,
 	return hex_string((Pointer) checksumbuf, sizeof(checksumbuf));
 }
 
-/*
- * Construct signed string for the Authorization header,
- * following the Amazon S3 REST API spec.
- */
+//
+// Construct signed string for the Authorization header,
+// following the Amazon S3 REST API spec.
+//
 static char *
 s3_signature(char *method, char *datetimestring, char *datestring,
 			 char *objectname, char *secretkey, char *checksumstring)
@@ -125,9 +125,9 @@ s3_signature(char *method, char *datetimestring, char *datestring,
 	return hex_string(checksumbuf, 32);
 }
 
-/*
- * Constructs GMT-style string for date.
- */
+//
+// Constructs GMT-style string for date.
+//
 static char *
 httpdate(time_t *timer)
 {
@@ -142,9 +142,9 @@ httpdate(time_t *timer)
 	return datetimestring;
 }
 
-/*
- * Constructs GMT-style string for date and time.
- */
+//
+// Constructs GMT-style string for date and time.
+//
 static char *
 httpdatetime(time_t *timer)
 {
@@ -159,9 +159,9 @@ httpdatetime(time_t *timer)
 	return datetimestring;
 }
 
-/*
- * Curl callback, which appends data to String Info.
- */
+//
+// Curl callback, which appends data to String Info.
+//
 static size_t
 write_data_to_buf(void *buffer, size_t size, size_t nmemb, void *userp)
 {
@@ -173,11 +173,11 @@ write_data_to_buf(void *buffer, size_t size, size_t nmemb, void *userp)
 	return segsize;
 }
 
-/*
- * Get the binary content of an object from S3 into 'str'.
- *
- * Returns HTTP status code.
- */
+//
+// Get the binary content of an object from S3 into 'str'.
+//
+// Returns HTTP status code.
+//
 long
 s3_get_object(char *objectname, StringInfo str, bool missing_ok)
 {
@@ -241,7 +241,7 @@ s3_get_object(char *objectname, StringInfo str, bool missing_ok)
 	{
 		if (missing_ok && http_code == S3_RESPONSE_NOT_FOUND)
 		{
-			/* Do nothing just return http_code */
+			// Do nothing just return http_code
 		}
 		else
 			ereport(FATAL, (errcode(ERRCODE_CONNECTION_EXCEPTION),
@@ -264,10 +264,10 @@ s3_get_object(char *objectname, StringInfo str, bool missing_ok)
 	return http_code;
 }
 
-/*
- * A SQL function to get object from S3.  Currently only used for debugging
- * purposes.
- */
+//
+// A SQL function to get object from S3.  Currently only used for debugging
+// purposes.
+//
 Datum
 s3_get(PG_FUNCTION_ARGS)
 {
@@ -280,9 +280,9 @@ s3_get(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(cstring_to_text(buf.data));
 }
 
-/*
- * Delete an object from an S3 bucket.
- */
+//
+// Delete an object from an S3 bucket.
+//
 void
 s3_delete_object(char *objectname)
 {
@@ -365,10 +365,10 @@ s3_delete_object(char *objectname)
 	pfree(checksumstringbuf);
 }
 
-/*
- * Reads the part of the file 'filename' from 'offset' with length 'maxSize'.
- * The actual length might appear to be lower, it's to be written to '*size'.
- */
+//
+// Reads the part of the file 'filename' from 'offset' with length 'maxSize'.
+// The actual length might appear to be lower, it's to be written to '*size'.
+//
 static Pointer
 read_file_part(const char *filename, uint64 offset,
 			   uint64 maxSize, uint64 *size)
@@ -429,9 +429,9 @@ read_file_part(const char *filename, uint64 offset,
 	return buffer;
 }
 
-/*
- * Writes the part of the file 'filename' from 'offset' with length 'size'.
- */
+//
+// Writes the part of the file 'filename' from 'offset' with length 'size'.
+//
 static void
 write_file_part(const char *filename, uint64 offset,
 				Pointer data, uint64 size)
@@ -463,31 +463,31 @@ write_file_part(const char *filename, uint64 offset,
 	FileClose(file);
 }
 
-/*
- * Read the whole file.
- */
+//
+// Read the whole file.
+//
 Pointer
 read_file(const char *filename, uint64 *size)
 {
 	return read_file_part(filename, 0, UINT64_MAX, size);
 }
 
-/*
- * Write the whole file.
- */
+//
+// Write the whole file.
+//
 static void
 write_file(const char *filename, Pointer data, uint64 size)
 {
 	write_file_part(filename, 0, data, size);
 }
 
-/*
- * Put object with given binary contents to S3.
- *
- * If dataChecksum is NULL the function calculates checksum of the content.
- *
- * Returns HTTP status code.
- */
+//
+// Put object with given binary contents to S3.
+//
+// If dataChecksum is NULL the function calculates checksum of the content.
+//
+// Returns HTTP status code.
+//
 long
 s3_put_object_with_contents(char *objectname, Pointer data, uint64 dataSize,
 							char *dataChecksum, bool ifNoneMatch)
@@ -569,14 +569,14 @@ s3_put_object_with_contents(char *objectname, Pointer data, uint64 dataSize,
 
 	if (sc != 0 || http_code != S3_RESPONSE_OK || strlen(buf.data) != 0)
 	{
-		/*
-		 * Return false if PUT failed to upload object it already exists in
-		 * the bucket.
-		 */
+		//
+// Return false if PUT failed to upload object it already exists in
+// the bucket.
+//
 		if (ifNoneMatch && (http_code == S3_RESPONSE_CONDITION_FAILED ||
 							http_code == S3_RESPONSE_CONDITION_CONFLICT))
 		{
-			/* Do nothing just return http_code */
+			// Do nothing just return http_code
 		}
 		else
 			ereport(FATAL, (errcode(ERRCODE_CONNECTION_EXCEPTION),
@@ -601,9 +601,9 @@ s3_put_object_with_contents(char *objectname, Pointer data, uint64 dataSize,
 	return http_code;
 }
 
-/*
- * Put the whole file as S3 object.
- */
+//
+// Put the whole file as S3 object.
+//
 long
 s3_put_file(char *objectname, char *filename, bool ifNoneMatch)
 {
@@ -622,9 +622,9 @@ s3_put_file(char *objectname, char *filename, bool ifNoneMatch)
 	return res;
 }
 
-/*
- * Get the whole file from S3 object.
- */
+//
+// Get the whole file from S3 object.
+//
 void
 s3_get_file(char *objectname, char *filename)
 {
@@ -640,9 +640,9 @@ s3_get_file(char *objectname, char *filename)
 	pfree(buf.data);
 }
 
-/*
- * Put the file part as S3 object.
- */
+//
+// Put the file part as S3 object.
+//
 long
 s3_put_file_part(char *objectname, char *filename, int partnum)
 {
@@ -663,9 +663,9 @@ s3_put_file_part(char *objectname, char *filename, int partnum)
 	return res;
 }
 
-/*
- * Get the file part from S3 object.
- */
+//
+// Get the file part from S3 object.
+//
 void
 s3_get_file_part(char *objectname, char *filename, int partnum)
 {
@@ -682,19 +682,19 @@ s3_get_file_part(char *objectname, char *filename, int partnum)
 	pfree(buf.data);
 }
 
-/*
- * Put empty dir as S3 object.
- */
+//
+// Put empty dir as S3 object.
+//
 void
 s3_put_empty_dir(char *objectname)
 {
 	s3_put_object_with_contents(objectname, NULL, 0, NULL, false);
 }
 
-/*
- * A SQL function to put object to S3.  Currently only used for debugging
- * purposes.
- */
+//
+// A SQL function to put object to S3.  Currently only used for debugging
+// purposes.
+//
 Datum
 s3_put(PG_FUNCTION_ARGS)
 {

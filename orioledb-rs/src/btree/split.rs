@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * split.c
- *		Routines for implementation of splitting B-tree page.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/split.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// split.c
+// Routines for implementation of splitting B-tree page.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/split.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -69,11 +69,11 @@ make_split_items(BTreeDescr *desc, Page page,
 		if (!BTREE_PAGE_LOCATOR_IS_VALID(page, &loc))
 			break;
 
-		/*
-		 * In leaf pages, get rid of tuples deleted by finished transactions.
-		 * Also, resize tuples to minimal size.  In non-leaf pages, copy
-		 * tuples as-is.
-		 */
+		//
+// In leaf pages, get rid of tuples deleted by finished transactions.
+// Also, resize tuples to minimal size.  In non-leaf pages, copy
+// tuples as-is.
+//
 		if (leaf)
 		{
 			BTreeLeafTuphdr *tupHdr;
@@ -129,26 +129,26 @@ perform_page_compaction(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 	Assert(O_PAGE_IS(p, LEAF));
 
-	/* Make a page-level undo item if needed */
+	// Make a page-level undo item if needed
 	if (needsUndo)
 	{
 		undoLocation = page_add_image_to_undo(desc, p, csn, NULL, 0);
 
-		/*
-		 * Start page modification.  It contains the required memory barrier
-		 * between making undo image and setting the undo location.
-		 */
+		//
+// Start page modification.  It contains the required memory barrier
+// between making undo image and setting the undo location.
+//
 		page_block_reads(blkno);
 
-		/* Update the old page meta-data */
+		// Update the old page meta-data
 
 		header->undoLocation = undoLocation;
 		header->prevInsertOffset = MaxOffsetNumber;
 
-		/*
-		 * Memory barrier between write undo location and csn.  See comment in
-		 * the o_btree_read_page() for details.
-		 */
+		//
+// Memory barrier between write undo location and csn.  See comment in
+// the o_btree_read_page() for details.
+//
 		pg_write_barrier();
 
 		header->csn = csn;
@@ -177,11 +177,11 @@ perform_page_compaction(BTreeDescr *desc, OInMemoryBlkno blkno,
 	END_CRIT_SECTION();
 }
 
-/*
- * Check if all split items fit on a single page.  Used after
- * make_split_items() reclaims deleted tuples to determine whether compaction
- * is sufficient instead of a page split.
- */
+//
+// Check if all split items fit on a single page.  Used after
+// make_split_items() reclaims deleted tuples to determine whether compaction
+// is sufficient instead of a page split.
+//
 bool
 split_items_fit_single_page(BTreeSplitItems *items)
 {
@@ -202,19 +202,19 @@ split_items_fit_single_page(BTreeSplitItems *items)
 	return spaceAvailable >= 0;
 }
 
-/*
- * Shared core of the page-split partitioning algorithm.  Walk the items
- * placing them onto the prospective left or right page (chosen by
- * targetLocation / spaceRatio, with overflowed sides forced opposite),
- * until the boundary settles at a single location.  Returns true and
- * writes that location through *splitLocation on success; returns false
- * if no valid two-page split exists (first/last item doesn't fit its
- * page, or both sides exhaust simultaneously mid-loop).
- *
- * Both btree_page_split_location() (which expects a valid split and
- * asserts on failure) and btree_page_split_can_succeed() (used by
- * merge_waited_tuples() as a non-asserting dry-run) call this.
- */
+//
+// Shared core of the page-split partitioning algorithm.  Walk the items
+// placing them onto the prospective left or right page (chosen by
+// targetLocation / spaceRatio, with overflowed sides forced opposite),
+// until the boundary settles at a single location.  Returns true and
+// writes that location through *splitLocation on success; returns false
+// if no valid two-page split exists (first/last item doesn't fit its
+// page, or both sides exhaust simultaneously mid-loop).
+//
+// Both btree_page_split_location() (which expects a valid split and
+// asserts on failure) and btree_page_split_can_succeed() (used by
+// merge_waited_tuples() as a non-asserting dry-run) call this.
+//
 static bool
 btree_page_split_find_location(BTreeSplitItems *items,
 							   OffsetNumber targetLocation,
@@ -236,39 +236,39 @@ btree_page_split_find_location(BTreeSplitItems *items,
 		Max(items->hikeysEnd,
 			MAXALIGN(sizeof(BTreePageHeader)) + items->hikeySize);
 
-	/*
-	 * Left page must contain at least one item and leave at least one for the
-	 * right page.
-	 */
+	//
+// Left page must contain at least one item and leave at least one for the
+// right page.
+//
 	minLeftPageItemsCount = 1;
 	maxLeftPageItemsCount = items->itemsCount - 1;
 	leftPageSpaceLeft -= items->items[0].size + MAXALIGN(sizeof(LocationIndex));
 	rightPageSpaceLeft -= items->items[items->itemsCount - 1].size +
 		MAXALIGN(sizeof(LocationIndex));
 
-	/* First / last items must individually fit their respective pages. */
+	// First / last items must individually fit their respective pages.
 	if (leftPageSpaceLeft < 0 || rightPageSpaceLeft < 0)
 		return false;
 
-	/*
-	 * Shift minimal and maximal left-page item counts until they are equal.
-	 */
+	//
+// Shift minimal and maximal left-page item counts until they are equal.
+//
 	while (minLeftPageItemsCount != maxLeftPageItemsCount)
 	{
 		Assert(minLeftPageItemsCount < maxLeftPageItemsCount);
 
-		/*
-		 * Choose page to add item.  At first only we try place new item to
-		 * the page that have a space yet.  Then, we try to follow
-		 * `targetLocation`.  If `targetLocation` isn't given, then follow
-		 * `spaceRatio`.
-		 */
+		//
+// Choose page to add item.  At first only we try place new item to
+// the page that have a space yet.  Then, we try to follow
+// `targetLocation`.  If `targetLocation` isn't given, then follow
+// `spaceRatio`.
+//
 		if (rightPageSpaceLeft <= 0 || (leftPageSpaceLeft > 0 &&
 										(targetLocation == 0 ?
 										 (float4) leftPageSpaceLeft * spaceRatio > (float4) rightPageSpaceLeft * (1.0f - spaceRatio) :
 										 minLeftPageItemsCount < targetLocation)))
 		{
-			/* Place item on the left page. */
+			// Place item on the left page.
 			if (leftPageSpaceLeft <= 0)
 				return false;
 			leftPageSpaceLeft -= items->items[minLeftPageItemsCount].size +
@@ -280,7 +280,7 @@ btree_page_split_find_location(BTreeSplitItems *items,
 		}
 		else
 		{
-			/* Place item on the right page. */
+			// Place item on the right page.
 			if (rightPageSpaceLeft <= 0)
 				return false;
 			rightPageSpaceLeft -= items->items[maxLeftPageItemsCount - 1].size +
@@ -299,27 +299,27 @@ btree_page_split_find_location(BTreeSplitItems *items,
 	return true;
 }
 
-/*
- * Non-asserting test for whether btree_page_split_location() would
- * succeed on `items` — a valid two-page split exists.  Used by
- * merge_waited_tuples() as the post-pass gate after greedy waiter
- * acceptance: drop the most recently accepted waiter and re-check
- * until this returns true.
- */
+//
+// Non-asserting test for whether btree_page_split_location() would
+// succeed on `items` — a valid two-page split exists.  Used by
+// merge_waited_tuples() as the post-pass gate after greedy waiter
+// acceptance: drop the most recently accepted waiter and re-check
+// until this returns true.
+//
 bool
 btree_page_split_can_succeed(BTreeSplitItems *items)
 {
 	return btree_page_split_find_location(items, 0, 0.5f, NULL);
 }
 
-/*
- * Find the location for B-tree page split.  This function take into accouint
- * insertion of new tuple or replacement of existing one.  It tries to keep
- * as close as possible to `targetLocation`, or if `targetLocation == 0` close
- * to `spaceRatio`.  Also, this function takes advantage of reclaiming unused
- * space according to `csn`.  Returns number of items in new left page and
- * sets the first tuple of right page to `*split_item`.
- */
+//
+// Find the location for B-tree page split.  This function take into accouint
+// insertion of new tuple or replacement of existing one.  It tries to keep
+// as close as possible to `targetLocation`, or if `targetLocation == 0` close
+// to `spaceRatio`.  Also, this function takes advantage of reclaiming unused
+// space according to `csn`.  Returns number of items in new left page and
+// sets the first tuple of right page to `*split_item`.
+//
 OffsetNumber
 btree_page_split_location(BTreeDescr *desc,
 						  BTreeSplitItems *items,
@@ -358,18 +358,18 @@ btree_get_split_left_count(BTreeDescr *desc, Page page,
 	float4		fillfactorRatio = ((float4) desc->fillfactor) / 100.0f;
 	OTuple		split_item;
 
-	/* The default target is to split the page 50%/50% */
+	// The default target is to split the page 50%/50%
 	targetCount = 0;
 	spaceRatio = 0.5f;
 
-	/*
-	 * Try to autodetect ordered inserts and split near the insertion point.
-	 * If we're close to the end of the page, split already inserted data away
-	 * from the insertion point (if it gives at least 90% utilization).
-	 * Otherwise, place already inserted data together with the insertion
-	 * point. Hopefuly, we still have many tuple to insert and that will give
-	 * us the good utilization.
-	 */
+	//
+// Try to autodetect ordered inserts and split near the insertion point.
+// If we're close to the end of the page, split already inserted data away
+// from the insertion point (if it gives at least 90% utilization).
+// Otherwise, place already inserted data together with the insertion
+// point. Hopefuly, we still have many tuple to insert and that will give
+// us the good utilization.
+//
 	if (offset == header->prevInsertOffset + 1)
 	{
 		if ((float) offset / (float) header->itemsCount > fillfactorRatio)
@@ -390,19 +390,19 @@ btree_get_split_left_count(BTreeDescr *desc, Page page,
 			targetCount = offset;
 	}
 
-	/*
-	 * If we don't autodetect the insertion order, we still assume TOAST and
-	 * rightmost inserts are always assumed to be ordered ascendingly.
-	 */
+	//
+// If we don't autodetect the insertion order, we still assume TOAST and
+// rightmost inserts are always assumed to be ordered ascendingly.
+//
 	else if ((desc->type == oIndexToast && O_PAGE_IS(page, LEAF)) || O_PAGE_IS(page, RIGHTMOST))
 		spaceRatio = fillfactorRatio;
 
 	result = btree_page_split_location(desc, items, targetCount, spaceRatio,
 									   &split_item);
 
-	/*
-	 * Fill the split key.  Convert tuple to key if needed.
-	 */
+	//
+// Fill the split key.  Convert tuple to key if needed.
+//
 	if (split_key)
 	{
 		bool		allocated = true;
@@ -427,12 +427,12 @@ btree_get_split_left_count(BTreeDescr *desc, Page page,
 	return result;
 }
 
-/*
- * Split B-tree page into two.
- *
- * Returns OInvalidInMemoryBlkno if the page can not be split due to the fact that
- * it is under processing by the checkpointer worker.
- */
+//
+// Split B-tree page into two.
+//
+// Returns OInvalidInMemoryBlkno if the page can not be split due to the fact that
+// it is under processing by the checkpointer worker.
+//
 void
 perform_page_split(BTreeDescr *desc, OInMemoryBlkno blkno,
 				   OInMemoryBlkno new_blkno,
@@ -475,20 +475,20 @@ perform_page_split(BTreeDescr *desc, OInMemoryBlkno blkno,
 					 items->itemsCount - left_count,
 					 hikeySize, hikey);
 
-	/*
-	 * Start page modification.  It contains the required memory barrier
-	 * between making undo image and setting the undo location.
-	 */
+	//
+// Start page modification.  It contains the required memory barrier
+// between making undo image and setting the undo location.
+//
 	page_block_reads(blkno);
 
-	/* Link undo record with pages */
+	// Link undo record with pages
 	left_header->undoLocation = undoLoc;
 	right_header->undoLocation = undoLoc;
 
-	/*
-	 * Memory barrier between write undo location and csn.  See comment in the
-	 * o_btree_read_page() for details.
-	 */
+	//
+// Memory barrier between write undo location and csn.  See comment in the
+// o_btree_read_page() for details.
+//
 	pg_write_barrier();
 
 	left_header->csn = csn;

@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * func.c
- *		SQL functions implementation for orioledb module.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/func.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// func.c
+// SQL functions implementation for orioledb module.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/func.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -62,7 +62,7 @@ PG_FUNCTION_INFO_V1(orioledb_tree_stat);
 
 extern void log_btree(BTreeDescr *desc);
 
-/* Maximum length for truncated values (when 't' option is used) */
+// Maximum length for truncated values (when 't' option is used)
 #define TRUNCATE_VALUE_LEN 40
 
 static void
@@ -143,7 +143,7 @@ init_print_options(BTreePrintOptions *printOptions, VarChar *optionsArg)
 	int			optionsSize = VARSIZE(optionsArg) - VARHDRSZ;
 	char	   *options = (char *) VARDATA(optionsArg);
 
-	/* parse options argument and update options */
+	// parse options argument and update options
 	for (i = 0; i < optionsSize; i++)
 	{
 		switch (options[i])
@@ -224,10 +224,10 @@ print_unloaded_tree(StringInfoData *buf, BTreeDescr *td, const char *treeName,
 									 td->oids.relnode,
 									 false);
 
-	/*
-	 * If found in eviction hash then use cached file_header to initialize
-	 * tree
-	 */
+	//
+// If found in eviction hash then use cached file_header to initialize
+// tree
+//
 	if (evicted_data != NULL)
 	{
 		file_header = evicted_data->file_header;
@@ -369,7 +369,7 @@ orioledb_tbl_structure(PG_FUNCTION_ARGS)
 
 	init_print_options(&printOptions, optionsArg);
 
-	/* index trees + toast tree */
+	// index trees + toast tree
 	for (treen = 0; treen < descr->nIndices; treen++)
 		tree_structure(&buf, descr->indices[treen], printOptions, depth);
 	if (descr->bridge)
@@ -474,10 +474,10 @@ append_bits(StringInfo str, Page p, OffsetNumber *offset,
 
 
 
-/*
- * Print contents of give B-tree page.  If non-leaf page is given, recursively
- * print childredn.
- */
+//
+// Print contents of give B-tree page.  If non-leaf page is given, recursively
+// print childredn.
+//
 static void
 print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 						 int *NLRPageNumber, Pointer printArg,
@@ -498,18 +498,18 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 	appendStringInfo(outbuf, "\n");
 	appendStringInfo(outbuf, "BTreePageHeader(%zu)\n",
 					 sizeof(BTreePageHeader));
-	level++;					/* BTreePageHeader BEGIN */
+	level++;					// BTreePageHeader BEGIN
 
 	appendStringInfoSpaces(outbuf, level * 4);
 	appendStringInfo(outbuf, "o_header: OrioleDBPageHeader(%zu)\n",
 					 sizeof(OrioleDBPageHeader));
-	level++;					/* o_header BEGIN */
+	level++;					// o_header BEGIN
 
 	APPEND_FIELD("state", pg_atomic_uint64);
 	APPEND_FIELD("usageCount", pg_atomic_uint32);
 	APPEND_FIELD("checkpointNum", uint32);
 
-	level--;					/* o_header END */
+	level--;					// o_header END
 
 	APPEND_FIELD("undoLocation", UndoLocation);
 	APPEND_FIELD("csn", CommitSeqNo);
@@ -532,14 +532,14 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 	appendStringInfoSpaces(outbuf, level * 4);
 	appendStringInfo(outbuf, "chunkDesc: ARRAY:\n");
-	level++;					/* chunkDesc BEGIN */
+	level++;					// chunkDesc BEGIN
 
 	for (i = 0; i < header->chunksCount; i++)
 	{
 		appendStringInfoSpaces(outbuf, level * 4);
 		appendStringInfo(outbuf, "[%d]: BTreePageChunkDesc(%lu)\n", i,
 						 sizeof(BTreePageChunkDesc));
-		level++;				/* chunkDesc[i] BEGIN */
+		level++;				// chunkDesc[i] BEGIN
 
 		bit_offset = 0;
 		APPEND_BIT_FIELD("shortLocation", 12);
@@ -548,9 +548,9 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 		APPEND_BIT_FIELD("chunkKeysFixed", 1);
 		APPEND_BIT_FIELD("hikeyFlags", 2);
 		Assert(bit_offset == sizeof(uint32) * BITS_PER_BYTE);
-		level--;				/* chunkDesc[i] END */
+		level--;				// chunkDesc[i] END
 	}
-	level--;					/* chunkDesc END */
+	level--;					// chunkDesc END
 
 	appendStringInfoSpaces(outbuf, level * 4);
 	appendStringInfo(outbuf, "BTreePageHeader REST (%lu)\n",
@@ -561,7 +561,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 	Assert(MAXALIGN(offsetof(BTreePageHeader, chunkDesc) +
 					header->chunksCount * sizeof(BTreePageChunkDesc)) == offset);
 
-	level--;					/* BTreePageHeader END */
+	level--;					// BTreePageHeader END
 
 	appendStringInfo(outbuf, "HIKEY DATA (%u) \n", header->hikeysEnd - offset);
 	append_bytes(outbuf, p, &offset, header->hikeysEnd - offset,
@@ -574,7 +574,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 				 level, print_bytes);
 
 	appendStringInfo(outbuf, "CHUNKS: ARRAY:\n");
-	level++;					/* CHUNKS BEGIN */
+	level++;					// CHUNKS BEGIN
 	for (i = 0; i < header->chunksCount; i++)
 	{
 		OffsetNumber chunkItemsCount;
@@ -600,22 +600,22 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 		appendStringInfoSpaces(outbuf, level * 4);
 		appendStringInfo(outbuf, "[%d]: %d\n", i, chunkSize);
-		level++;				/* CHUNKS[i] BEGIN */
+		level++;				// CHUNKS[i] BEGIN
 
 		appendStringInfoSpaces(outbuf, level * 4);
 		appendStringInfo(outbuf, "ITEMS: ARRAY:\n");
-		level++;				/* ITEMS BEGIN */
+		level++;				// ITEMS BEGIN
 		for (j = 0; j < chunkItemsCount; j++)
 		{
 			appendStringInfoSpaces(outbuf, level * 4);
 			appendStringInfo(outbuf, "[%d]: LocationIndex(%zu)\n", j,
 							 sizeof(LocationIndex));
-			level++;			/* ITEMS[j] BEGIN */
+			level++;			// ITEMS[j] BEGIN
 			append_bytes(outbuf, p, &offset, sizeof(LocationIndex), level,
 						 print_bytes);
-			level--;			/* ITEMS[j] END */
+			level--;			// ITEMS[j] END
 		}
-		level--;				/* ITEMS END */
+		level--;				// ITEMS END
 
 		align = MAXALIGN(sizeof(LocationIndex) * chunkItemsCount) -
 			sizeof(LocationIndex) * chunkItemsCount;
@@ -628,7 +628,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 		appendStringInfoSpaces(outbuf, level * 4);
 		appendStringInfo(outbuf, "ITEM DATA: ARRAY\n");
-		level++;				/* ITEM DATA BEGIN */
+		level++;				// ITEM DATA BEGIN
 
 		for (j = 0; j < chunkItemsCount; j++)
 		{
@@ -652,12 +652,12 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 				appendStringInfoSpaces(outbuf, level * 4);
 				appendStringInfo(outbuf, "[%d]: %d\n", j, len);
-				level++;		/* ITEM DATA[j] BEGIN */
+				level++;		// ITEM DATA[j] BEGIN
 
 				appendStringInfoSpaces(outbuf, level * 4);
 				appendStringInfo(outbuf, "BTreeLeafTuphdr(%zu)\n",
 								 sizeof(BTreeLeafTuphdr));
-				level++;		/* Leaf tuple header BEGIN */
+				level++;		// Leaf tuple header BEGIN
 
 				bit_offset = 0;
 				APPEND_BIT_FIELD("xactInfo", 61);
@@ -670,7 +670,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 				APPEND_BIT_FIELD("formatFlags", 2);
 				Assert(bit_offset == sizeof(UndoLocation) * BITS_PER_BYTE);
 
-				level--;		/* Leaf tuple header END */
+				level--;		// Leaf tuple header END
 				len -= sizeof(BTreeLeafTuphdr);
 
 				tup.data = &p[offset];
@@ -682,7 +682,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 					appendStringInfoSpaces(outbuf, level * 4);
 					appendStringInfo(outbuf, "OTupleHeader(%zu)\n",
 									 sizeof(OTupleHeader));
-					level++;	/* Tuple header BEGIN */
+					level++;	// Tuple header BEGIN
 
 					bit_offset = 0;
 					APPEND_BIT_FIELD("hasnulls", 1);
@@ -692,7 +692,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 					APPEND_FIELD("natts", uint16);
 					APPEND_FIELD("version", uint32);
 
-					level--;	/* Tuple header END */
+					level--;	// Tuple header END
 					len -= sizeof(OTupleHeader);
 
 					if (reader.hasnulls)
@@ -713,7 +713,7 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 					appendStringInfoSpaces(outbuf, level * 4);
 					appendStringInfo(outbuf, "Tuple data: %d\n", len);
-					level++;	/* Tuple data BEGIN */
+					level++;	// Tuple data BEGIN
 					for (k = 0; k < opaque->desc->natts; k++)
 					{
 						OTupleAttrFull *atti = OTupleDescAttrSlow(opaque->desc, k);
@@ -747,11 +747,11 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 										 atti->attalign);
 						if (atti->attlen == -1)
 						{
-							level++;	/* LONG DATA BEGIN */
+							level++;	// LONG DATA BEGIN
 							appendStringInfoSpaces(outbuf, level * 4);
 							appendStringInfo(outbuf, "LONG DATA\n");
 							offset += next_off - off;
-							level--;	/* LONG DATA END */
+							level--;	// LONG DATA END
 						}
 						else
 						{
@@ -768,19 +768,19 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 						append_bytes(outbuf, p, &offset, align, level,
 									 print_bytes);
 					}
-					level--;	/* Tuple data END */
+					level--;	// Tuple data END
 				}
 
-				level--;		/* ITEM DATA[j] END */
+				level--;		// ITEM DATA[j] END
 			}
 			else
 			{
 			}
 		}
-		level--;				/* ITEM DATA END */
-		level--;				/* CHUNKS[j] END */
+		level--;				// ITEM DATA END
+		level--;				// CHUNKS[j] END
 	}
-	level--;					/* CHUNKS END */
+	level--;					// CHUNKS END
 
 
 	if (!O_PAGE_IS(p, LEAF))
@@ -853,7 +853,7 @@ tree_bin_structure(StringInfo buf, OIndexDescr *id, bool print_bytes,
 	}
 }
 
-/* Only supports leaf pages of simple indices for now */
+// Only supports leaf pages of simple indices for now
 Datum
 orioledb_tbl_bin_structure(PG_FUNCTION_ARGS)
 {
@@ -884,7 +884,7 @@ orioledb_tbl_bin_structure(PG_FUNCTION_ARGS)
 
 	initStringInfo(&buf);
 
-	/* index trees + toast tree */
+	// index trees + toast tree
 	for (treen = 0; treen < descr->nIndices; treen++)
 		tree_bin_structure(&buf, descr->indices[treen], print_bytes, depth);
 	tree_bin_structure(&buf, descr->toast, print_bytes, depth);
@@ -923,7 +923,7 @@ orioledb_idx_structure(PG_FUNCTION_ARGS)
 
 	init_print_options(&printOptions, optionsArg);
 
-	/* index trees + toast tree */
+	// index trees + toast tree
 	for (treen = 0; treen < descr->nIndices; treen++)
 	{
 		if (!strcmp(treeName, NameStr(descr->indices[treen]->name)))
@@ -940,7 +940,7 @@ orioledb_idx_structure(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(result);
 }
 
-/* No existing callers */
+// No existing callers
 void
 log_btree(BTreeDescr *desc)
 {
@@ -1100,7 +1100,7 @@ orioledb_table_pages(PG_FUNCTION_ARGS)
 	int			treen;
 	AttrNumber	attnum;
 
-	/* check to see if caller supports us returning a tuplestore */
+	// check to see if caller supports us returning a tuplestore
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1110,7 +1110,7 @@ orioledb_table_pages(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("materialize mode required, but it is not allowed in this context")));
 
-	/* The tupdesc and tuplestore must be created in ecxt_per_query_memory */
+	// The tupdesc and tuplestore must be created in ecxt_per_query_memory
 	oldcontext = MemoryContextSwitchTo(rsinfo->econtext->ecxt_per_query_memory);
 
 	tupdesc = CreateTemplateTupleDesc(4);
@@ -1267,10 +1267,10 @@ orioledb_tbl_check(PG_FUNCTION_ARGS)
 
 	orioledb_check_shmem();
 
-	/*
-	 * ExclusiveLock helps to avoid changes in map/tmp files and concurrent
-	 * eviction by bgwriter
-	 */
+	//
+// ExclusiveLock helps to avoid changes in map/tmp files and concurrent
+// eviction by bgwriter
+//
 	rel = relation_open(relid, AccessExclusiveLock);
 	descr = relation_get_descr(rel);
 
@@ -1296,12 +1296,12 @@ orioledb_tbl_check(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(result);
 }
 
-/*
- * amcheck entry point: verify all b-trees of the orioledb relation and emit
- * one row per failed index.  `thorough_check` forces the on-disk map check.
- * wait_for_checkpoint=true makes check_btree retry across checkpointer
- * overlap rather than report it as corruption.
- */
+//
+// amcheck entry point: verify all b-trees of the orioledb relation and emit
+// one row per failed index.  `thorough_check` forces the on-disk map check.
+// wait_for_checkpoint=true makes check_btree retry across checkpointer
+// overlap rather than report it as corruption.
+//
 Datum
 verify_orioledb(PG_FUNCTION_ARGS)
 {
@@ -1376,11 +1376,11 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 
 	Assert(PG_NARGS() == 3);
 
-	/* checks compression lvl arg */
+	// checks compression lvl arg
 	if (compression_lvl < 0 || compression_lvl > o_compress_max_lvl())
 		elog(ERROR, "Compression level must be between 0 and %d", o_compress_max_lvl());
 
-	/* checks relation arg */
+	// checks relation arg
 	orioledb_check_shmem();
 
 	rel = relation_open(relid, AccessShareLock);
@@ -1390,7 +1390,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 	if (descr == NULL)
 		elog(ERROR, "orioledb relation not found.");
 
-	/* checks range array arg */
+	// checks range array arg
 	if (PG_ARGISNULL(2))
 		elog(ERROR, "ranges array must be not NULL");
 
@@ -1401,7 +1401,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 	narray = ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array));
 	values = (int32 *) ARR_DATA_PTR(array);
 
-	/* fills stats */
+	// fills stats
 	stats.errors = 0;
 	stats.oversize = 0;
 	stats.totalSize = 0;
@@ -1409,7 +1409,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 	stats.nranges = narray + 1;
 	stats.ranges = palloc(sizeof(BTreeCompressRange) * stats.nranges);
 
-	/* fills ranges */
+	// fills ranges
 	next_from = 0;
 	for (i = 0; i < narray; i++)
 	{
@@ -1430,7 +1430,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 	stats.ranges[narray].leaf_count = 0;
 	stats.ranges[narray].node_count = 0;
 
-	/* collect stats for each BTree loop */
+	// collect stats for each BTree loop
 	initStringInfo(&result);
 	for (i = 0; i <= descr->nIndices; i++)
 	{
@@ -1458,7 +1458,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 		appendStringInfo(&result, "Total compressed size = " INT64_FORMAT "\n", stats.totalCompressedSize);
 		appendStringInfo(&result, "Ratio = %lf\n", (double) stats.totalCompressedSize / (double) stats.totalSize);
 
-		/* nodes */
+		// nodes
 		appendStringInfo(&result, "\nCompressed pages size for nodes:\n");
 		for (j = 0; j < stats.nranges; j++)
 		{
@@ -1468,7 +1468,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 							 stats.ranges[j].node_count);
 		}
 
-		/* leafs */
+		// leafs
 		appendStringInfo(&result, "\nCompressed pages size for leafs:\n");
 		for (j = 0; j < stats.nranges; j++)
 		{
@@ -1478,7 +1478,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 							 stats.ranges[j].leaf_count);
 		}
 
-		/* summary */
+		// summary
 		appendStringInfo(&result, "\nCompressed pages size summary:\n");
 		for (j = 0; j < stats.nranges; j++)
 		{
@@ -1488,7 +1488,7 @@ orioledb_tbl_compression_check(PG_FUNCTION_ARGS)
 							 stats.ranges[j].node_count + stats.ranges[j].leaf_count);
 		}
 
-		/* reset stats before next BTree */
+		// reset stats before next BTree
 		for (j = 0; j < stats.nranges; j++)
 		{
 			stats.ranges[j].leaf_count = 0;
@@ -1603,10 +1603,10 @@ orioledb_tbl_indices(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(result);
 }
 
-/*
- * Includes table (primary index), TOAST and secondary indices
- * Deprecated. Use pg_total_relation_size() instead
- */
+//
+// Includes table (primary index), TOAST and secondary indices
+// Deprecated. Use pg_total_relation_size() instead
+//
 Datum
 orioledb_relation_size(PG_FUNCTION_ARGS)
 {
@@ -1769,7 +1769,7 @@ orioledb_tree_stat(PG_FUNCTION_ARGS)
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-	/* Build a tuple descriptor for our result type */
+	// Build a tuple descriptor for our result type
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 

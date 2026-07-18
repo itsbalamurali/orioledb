@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * merge.c
- *		Routines for implementation of B-tree pages merge.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/merge.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// merge.c
+// Routines for implementation of B-tree pages merge.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/merge.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -27,15 +27,15 @@
 
 #include "miscadmin.h"
 
-/*
- * If the ratio of free to total space on a leaf page is greater than the value
- * then we will try to merge the node page.
- */
+//
+// If the ratio of free to total space on a leaf page is greater than the value
+// then we will try to merge the node page.
+//
 #define O_MERGE_LEAF_FREE_RATIO (0.7)
-/*
- * If the ratio of free to total space on a node page is greater than the value
- * then we will try to merge the node page.
- */
+//
+// If the ratio of free to total space on a node page is greater than the value
+// then we will try to merge the node page.
+//
 #define O_MERGE_NODE_FREE_RATIO (0.7)
 
 static bool can_be_merged(BTreeDescr *desc, Page left, Page right,
@@ -44,11 +44,11 @@ static void merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 						Page right, CommitSeqNo csn);
 
 
-/*
- * Try to merge right page to the left page.  Returns true iff succeed.
- *
- * On success, all pages are unlocked.  On failure, all locks are held.
- */
+//
+// Try to merge right page to the left page.  Returns true iff succeed.
+//
+// On success, all pages are unlocked.  On failure, all locks are held.
+//
 bool
 btree_try_merge_pages(BTreeDescr *desc,
 					  OInMemoryBlkno parent_blkno, OFixedKey *parent_hikey,
@@ -74,16 +74,16 @@ btree_try_merge_pages(BTreeDescr *desc,
 
 	if (RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(right)))
 	{
-		/* concurrent split in progress */
+		// concurrent split in progress
 		return false;
 	}
 
 	if (!get_checkpoint_number(desc, right_blkno,
 							   &checkpoint_number, &copy_blkno))
 	{
-		/*
-		 * page is concurrent to in progress checkpoint and can not be merged
-		 */
+		//
+// page is concurrent to in progress checkpoint and can not be merged
+//
 		return false;
 	}
 
@@ -102,22 +102,22 @@ btree_try_merge_pages(BTreeDescr *desc,
 		return false;
 	}
 
-	/* all checks are done, errors do not expected after this line */
+	// all checks are done, errors do not expected after this line
 	START_CRIT_SECTION();
 
-	/* deletes downlink to right page from the parent node */
+	// deletes downlink to right page from the parent node
 	page_block_reads(parent_blkno);
 
 	page_locator_delete_item(parent, right_loc);
 	MARK_DIRTY_EXTENDED(desc, parent_blkno, checkpoint);
 
-	/* unlocks the parent page */
+	// unlocks the parent page
 	if (*merge_parent && is_page_too_sparse(desc, parent))
 	{
-		/*
-		 * We can try to merge thr parent page in the loop.  No undo is
-		 * required for non-leaf pages.
-		 */
+		//
+// We can try to merge thr parent page in the loop.  No undo is
+// required for non-leaf pages.
+//
 		if (!O_PAGE_IS(parent, RIGHTMOST))
 			copy_fixed_hikey(desc, parent_hikey, parent);
 		else
@@ -126,31 +126,31 @@ btree_try_merge_pages(BTreeDescr *desc,
 	}
 	else
 	{
-		/* no need to merge parent page */
+		// no need to merge parent page
 		unlock_page(parent_blkno);
 		parent_blkno = OInvalidInMemoryBlkno;
 		*merge_parent = false;
 	}
 
-	/*
-	 * Make a page-level undo item if needed.
-	 *
-	 * Like a no-drop split, a no-drop merge is invisible to readers: it only
-	 * moves the right page's tuples onto the left page without removing any.
-	 * The only reason to keep a page-level image is then to reconstruct the
-	 * pre-merge pages for a reader whose snapshot predates the merge; when
-	 * neither page's own undo location is still retained (or both are
-	 * invalid), no such reader exists.  In that case we write no image at all
-	 * and freeze the merged page with an invalid undo location: every reader
-	 * reads it live and per-tuple MVCC handles visibility (see
-	 * o_btree_insert_split()).
-	 *
-	 * If the merge physically drops a tuple, we must keep an image:
-	 * droppability is xid-based (deleting xid < runXmin), so an active
-	 * snapshot whose csn precedes the delete's commit still needs the tuple,
-	 * and only the image preserves it.  A concurrent sequential scan is the
-	 * other exception, as for a split.
-	 */
+	//
+// Make a page-level undo item if needed.
+//
+// Like a no-drop split, a no-drop merge is invisible to readers: it only
+// moves the right page's tuples onto the left page without removing any.
+// The only reason to keep a page-level image is then to reconstruct the
+// pre-merge pages for a reader whose snapshot predates the merge; when
+// neither page's own undo location is still retained (or both are
+// invalid), no such reader exists.  In that case we write no image at all
+// and freeze the merged page with an invalid undo location: every reader
+// reads it live and per-tuple MVCC handles visibility (see
+// o_btree_insert_split()).
+//
+// If the merge physically drops a tuple, we must keep an image:
+// droppability is xid-based (deleting xid < runXmin), so an active
+// snapshot whose csn precedes the delete's commit still needs the tuple,
+// and only the image preserves it.  A concurrent sequential scan is the
+// other exception, as for a split.
+//
 	headerCsn = csn;
 	if (needsUndo)
 	{
@@ -178,10 +178,10 @@ btree_try_merge_pages(BTreeDescr *desc,
 			undo_loc = make_merge_undo_image(desc, left, right, csn);
 			Assert(UndoLocationIsValid(undo_loc));
 
-			/*
-			 * Memory barrier between making undo image and setting the undo
-			 * location.
-			 */
+			//
+// Memory barrier between making undo image and setting the undo
+// location.
+//
 			pg_write_barrier();
 		}
 	}
@@ -190,24 +190,24 @@ btree_try_merge_pages(BTreeDescr *desc,
 		undo_loc = InvalidUndoLocation;
 	}
 
-	/*
-	 * Merge the pages and remove rightlink to the right page.
-	 *
-	 * It contains the required memory barrier between making undo image and
-	 * setting the undo location.
-	 */
+	//
+// Merge the pages and remove rightlink to the right page.
+//
+// It contains the required memory barrier between making undo image and
+// setting the undo location.
+//
 	merge_pages(desc, left_blkno, right, csn);
 	btree_page_update_max_key_len(desc, left);
 	MARK_DIRTY_EXTENDED(desc, left_blkno, checkpoint);
 
-	/* the right page can not be found in B-Tree after this line */
+	// the right page can not be found in B-Tree after this line
 
 	left_header->undoLocation = undo_loc;
 
-	/*
-	 * Memory barrier between write undo location and csn.  See comment in the
-	 * o_btree_read_page() for details.
-	 */
+	//
+// Memory barrier between write undo location and csn.  See comment in the
+// o_btree_read_page() for details.
+//
 	pg_write_barrier();
 	left_header->csn = headerCsn;
 
@@ -222,17 +222,17 @@ btree_try_merge_pages(BTreeDescr *desc,
 
 	CLEAN_DIRTY(desc->ppool, right_blkno);
 
-	/*
-	 * Block reads on the right page before retiring it.  Throughout the merge
-	 * the right page is only locked, never read-blocked, so its unlock inside
-	 * ppool_free_page() would otherwise not bump the page-state change count
-	 * (unlock_page() bumps it only when reads were blocked).  Without that
-	 * bump, a concurrent lock-free reader that already holds an in-memory
-	 * downlink to the right page can't tell from the state bits that the page
-	 * is gone, and has to rely solely on pageChangeCount.  Setting NO_READ
-	 * here makes the change count advance as well -- symmetric with how the
-	 * parent and left pages are handled.
-	 */
+	//
+// Block reads on the right page before retiring it.  Throughout the merge
+// the right page is only locked, never read-blocked, so its unlock inside
+// ppool_free_page() would otherwise not bump the page-state change count
+// (unlock_page() bumps it only when reads were blocked).  Without that
+// bump, a concurrent lock-free reader that already holds an in-memory
+// downlink to the right page can't tell from the state bits that the page
+// is gone, and has to rely solely on pageChangeCount.  Setting NO_READ
+// here makes the change count advance as well -- symmetric with how the
+// parent and left pages are handled.
+//
 	page_block_reads(right_blkno);
 	O_PAGE_CHANGE_COUNT_INC(right);
 
@@ -253,9 +253,9 @@ btree_try_merge_pages(BTreeDescr *desc,
 }
 
 
-/*
- * Returns true if page is successfully merged to the left or to the right.
- */
+//
+// Returns true if page is successfully merged to the left or to the right.
+//
 bool
 btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 						   bool nested, bool wait_io)
@@ -278,21 +278,21 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 	bool		success = false;
 	bool		needsUndo = desc->undoType != UndoLogNone;
 
-	/*
-	 * Reserve the required undo size.  We are holding the page lock, so we
-	 * can only do this with 'wait == false'.
-	 */
+	//
+// Reserve the required undo size.  We are holding the page lock, so we
+// can only do this with 'wait == false'.
+//
 	if (needsUndo && !reserve_undo_size_extended(GET_PAGE_LEVEL_UNDO_TYPE(desc->undoType),
 												 2 * O_MERGE_UNDO_IMAGE_SIZE,
 												 false))
 	{
-		/* unable to reserve undo location, no opportunity to resume */
+		// unable to reserve undo location, no opportunity to resume
 		unlock_page(blkno);
 		Assert(!have_locked_pages());
 		return false;
 	}
 
-	/* Step 1: get all the information from the parent page */
+	// Step 1: get all the information from the parent page
 	level = PAGE_GET_LEVEL(target);
 
 	Assert(page_is_locked(blkno) || O_PAGE_IS_LOCAL(blkno));
@@ -303,26 +303,26 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 	page_block_reads(blkno);
 
-	/* copy hikey of current page */
+	// copy hikey of current page
 	if (!O_PAGE_IS(target, RIGHTMOST))
 		copy_fixed_hikey(desc, &key, target);
 	else
 		O_TUPLE_SET_NULL(key.tuple);
 
-	/* unlock current page */
+	// unlock current page
 	unlock_page(blkno);
 
-	/*
-	 * Step 2: refind the parent.  We did release the target lock first: locks
-	 * shouldn't go bottom-up.
-	 */
+	//
+// Step 2: refind the parent.  We did release the target lock first: locks
+// shouldn't go bottom-up.
+//
 	init_page_find_context(&find_context, desc,
 						   COMMITSEQNO_INPROGRESS,
 						   BTREE_PAGE_FIND_MODIFY |
 						   BTREE_PAGE_FIND_NO_FIX_SPLIT |
 						   BTREE_PAGE_FIND_DOWNLINK_LOCATION);
 
-	/* get a full find context for parent page and lock it */
+	// get a full find context for parent page and lock it
 	if (!O_TUPLE_IS_NULL(key.tuple))
 		find_page(&find_context, &key.tuple, BTreeKeyPageHiKey, level + 1);
 	else
@@ -342,7 +342,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 		{
 			OFindPageResult result PG_USED_FOR_ASSERTS_ONLY;
 
-			/* refind parent page if needed */
+			// refind parent page if needed
 			if (!O_TUPLE_IS_NULL(key.tuple))
 				result = refind_page(&find_context, &key.tuple,
 									 BTreeKeyPageHiKey, level + 1,
@@ -354,7 +354,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 			Assert(result == OFindPageResultSuccess);
 		}
 
-		/* Step 3: do all the checks with parent and target */
+		// Step 3: do all the checks with parent and target
 		parent_change_count = find_context.items[find_context.index].pageChangeCount;
 		parent_blkno = find_context.items[find_context.index].blkno;
 		Assert(page_is_locked(parent_blkno) || O_PAGE_IS_LOCAL(parent_blkno));
@@ -365,17 +365,17 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 		if (!DOWNLINK_IS_IN_MEMORY(target_tuph->downlink))
 		{
-			/*
-			 * Page with O_BTREE_FLAG_UNDER_MERGE can not be evicted. But it
-			 * can be split or merged and evicted.
-			 */
+			//
+// Page with O_BTREE_FLAG_UNDER_MERGE can not be evicted. But it
+// can be split or merged and evicted.
+//
 			unlock_page(parent_blkno);
 			break;
 		}
 
 		target_blkno = DOWNLINK_GET_IN_MEMORY_BLKNO(target_tuph->downlink);
 
-		/* all ok, lock target page */
+		// all ok, lock target page
 		lock_page(target_blkno);
 		target = O_GET_IN_MEMORY_PAGE(target_blkno);
 		Assert((level == 0) == O_PAGE_IS(target, LEAF));
@@ -383,10 +383,10 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 		if (BTREE_PAGE_ITEMS_COUNT(parent) == 1 ||
 			RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(target)))
 		{
-			/*
-			 * The target page is a single child of parent node or concurrent
-			 * split in progress.
-			 */
+			//
+// The target page is a single child of parent node or concurrent
+// split in progress.
+//
 			unlock_page(parent_blkno);
 			unlock_page(target_blkno);
 			break;
@@ -395,7 +395,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 		if (page_is_under_checkpoint(desc, parent_blkno, true)
 			|| (level > 0 && page_is_under_checkpoint(desc, target_blkno, true)))
 		{
-			/* pages merge is concurrent to in progress checkpoint */
+			// pages merge is concurrent to in progress checkpoint
 			unlock_page(parent_blkno);
 			unlock_page(target_blkno);
 			break;
@@ -403,10 +403,10 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 
 		merge_parent = (nested && find_context.index > 0);
 
-		/*
-		 * Step 4: try to merge to the right.  On success, all page lock are
-		 * released.  On failure, target and parent page locks are held.
-		 */
+		//
+// Step 4: try to merge to the right.  On success, all page lock are
+// released.  On failure, target and parent page locks are held.
+//
 		if (BTREE_PAGE_LOCATOR_GET_OFFSET(parent, &target_loc) + 1 <
 			BTREE_PAGE_ITEMS_COUNT(parent))
 		{
@@ -415,7 +415,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 			right_tuph = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(parent, &right_loc);
 			if (DOWNLINK_IS_IN_IO(right_tuph->downlink) && wait_io)
 			{
-				/* Wait till IO completion and retry */
+				// Wait till IO completion and retry
 				uint32		io_num = DOWNLINK_GET_IO_LOCKNUM(right_tuph->downlink);
 
 				unlock_page(parent_blkno);
@@ -464,10 +464,10 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 			}
 		}
 
-		/*
-		 * Step 5: try to merge to the left.  On success, all page lock are
-		 * released.  On failure, target and parent page locks are held.
-		 */
+		//
+// Step 5: try to merge to the left.  On success, all page lock are
+// released.  On failure, target and parent page locks are held.
+//
 		if (!merged && BTREE_PAGE_LOCATOR_GET_OFFSET(parent, &target_loc) > 0)
 		{
 			left_loc = target_loc;
@@ -475,7 +475,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 			left_tuph = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(parent, &left_loc);
 			if (DOWNLINK_IS_IN_IO(left_tuph->downlink) && wait_io)
 			{
-				/* Wait till IO completion and retry */
+				// Wait till IO completion and retry
 				uint32		io_num = DOWNLINK_GET_IO_LOCKNUM(left_tuph->downlink);
 
 				unlock_page(parent_blkno);
@@ -491,12 +491,12 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 				Assert(DOWNLINK_IS_IN_MEMORY(left_tuph->downlink));
 				left_blkno = DOWNLINK_GET_IN_MEMORY_BLKNO(left_tuph->downlink);
 
-				/*
-				 * Lock order right => left is dangerous for deadlocks.  So,
-				 * we don't wait here, but just optimistically try to lock.
-				 * Other lock waiters would need some time to wake-up and grab
-				 * the lock.  So, give up and give them a chance.
-				 */
+				//
+// Lock order right => left is dangerous for deadlocks.  So,
+// we don't wait here, but just optimistically try to lock.
+// Other lock waiters would need some time to wake-up and grab
+// the lock.  So, give up and give them a chance.
+//
 				if (!try_lock_page(left_blkno))
 				{
 					unlock_page(parent_blkno);
@@ -561,7 +561,7 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 		{
 			break;
 		}
-		/* else we will try to merge the parent page in the loop */
+		// else we will try to merge the parent page in the loop
 	}
 
 	if (needsUndo)
@@ -571,9 +571,9 @@ btree_try_merge_and_unlock(BTreeDescr *desc, OInMemoryBlkno blkno,
 	return success;
 }
 
-/*
- * Checks is pages can be merged.
- */
+//
+// Checks is pages can be merged.
+//
 static bool
 can_be_merged(BTreeDescr *desc, Page left, Page right, CommitSeqNo csn)
 {
@@ -587,15 +587,15 @@ can_be_merged(BTreeDescr *desc, Page left, Page right, CommitSeqNo csn)
 	space_free = BTREE_PAGE_FREE_SPACE(left);
 	space_needed = ORIOLEDB_BLCKSZ - BTREE_PAGE_FREE_SPACE(right);
 
-	/* we can not compact a node */
+	// we can not compact a node
 	if (!is_leaf)
 		return space_free >= space_needed;
 
-	/* no need to compact page */
+	// no need to compact page
 	if (space_free >= space_needed)
 		return true;
 
-	/* we can merge pages after the pages compaction */
+	// we can merge pages after the pages compaction
 	if (space_free + PAGE_GET_N_VACATED(left) +
 		PAGE_GET_N_VACATED(right) < space_needed)
 		return false;
@@ -604,13 +604,13 @@ can_be_merged(BTreeDescr *desc, Page left, Page right, CommitSeqNo csn)
 		page_get_vacated_space(desc, right, csn) >= space_needed)
 		return true;
 
-	/* we can not merge this pages */
+	// we can not merge this pages
 	return false;
 }
 
-/*
- * Merges pages and writes result to the left page.
- */
+//
+// Merges pages and writes result to the left page.
+//
 static void
 merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 			Page right, CommitSeqNo csn)
@@ -742,25 +742,25 @@ merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 	left_header->prevInsertOffset = InvalidOffsetNumber;
 }
 
-/*
- * Returns true if page is too sparse and we can try to merge it.
- */
+//
+// Returns true if page is too sparse and we can try to merge it.
+//
 bool
 is_page_too_sparse(BTreeDescr *desc, Page p)
 {
 	LocationIndex space_free;
 
-	/* we can not merge rootPageBlkno page */
+	// we can not merge rootPageBlkno page
 	if (O_PAGE_IS(p, RIGHTMOST) && O_PAGE_IS(p, LEFTMOST))
 		return false;
 
-	/* page should not be under split */
+	// page should not be under split
 	if (RightLinkIsValid(BTREE_PAGE_GET_RIGHTLINK(p)))
 		return false;
 
 	if (O_PAGE_IS(p, LEAF))
 	{
-		/* if leaf have no items */
+		// if leaf have no items
 		if (BTREE_PAGE_ITEMS_COUNT(p) == 0)
 			return true;
 
@@ -773,7 +773,7 @@ is_page_too_sparse(BTreeDescr *desc, Page p)
 	}
 	else
 	{
-		/* if node have only one downlink */
+		// if node have only one downlink
 		if (BTREE_PAGE_ITEMS_COUNT(p) == 1)
 			return true;
 

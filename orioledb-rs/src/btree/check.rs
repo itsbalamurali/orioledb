@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * check.c
- *		Routines for checking OrioleDB B-tree.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/check.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// check.c
+// Routines for checking OrioleDB B-tree.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/check.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -33,18 +33,18 @@
 #include "access/transam.h"
 #include "storage/latch.h"
 
-/*
- * Dynamic array of file extents.
- */
+//
+// Dynamic array of file extents.
+//
 typedef struct
 {
-	/* array of extents */
+	// array of extents
 	FileExtent *extents;
-	/* number of allocated extents */
+	// number of allocated extents
 	uint64		allocated;
-	/* number of valid extents in the array */
+	// number of valid extents in the array
 	uint64		size;
-	/* number of blocks in file containing by extents in the array */
+	// number of blocks in file containing by extents in the array
 	uint64		blocksCount;
 } ExtentsArray;
 
@@ -83,7 +83,7 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
 	BTreeCheckStatus status;
 	ExtentsArray free_extents;
-	uint64		data_file_len = pg_atomic_read_u64(&metaPageBlkno->datafileLength[0]);	/* Fix for S3 mode */
+	uint64		data_file_len = pg_atomic_read_u64(&metaPageBlkno->datafileLength[0]);	// Fix for S3 mode
 	bool		is_compressed = OCompressIsValid(desc->compress);
 	uint32		checkpoint_number = 0;
 	bool		copy_blkno;
@@ -91,23 +91,23 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 	memset(&status, 0, sizeof(BTreeCheckStatus));
 	memset(&free_extents, 0, sizeof(ExtentsArray));
 
-	/* get busy file extents */
+	// get busy file extents
 	status.desc = desc;
 	status.hasError = false;
 
-	/*
-	 * Legacy debug entry points (wait_for_checkpoint == false) keep the
-	 * BROKEN_SPLIT NOTICE; the user-facing verify_orioledb path stays silent
-	 * on that transient.
-	 */
+	//
+// Legacy debug entry points (wait_for_checkpoint == false) keep the
+// BROKEN_SPLIT NOTICE; the user-facing verify_orioledb path stays silent
+// on that transient.
+//
 	status.emit_transient_notices = !wait_for_checkpoint;
 	init_page_find_context(&status.context, desc, COMMITSEQNO_INPROGRESS, BTREE_PAGE_FIND_MODIFY);
 
-	/*
-	 * get_checkpoint_number() returns false while the checkpointer holds the
-	 * per-tree state.  With wait_for_checkpoint, retry until it moves past;
-	 * otherwise the caller is a debug entry point and gets the legacy NOTICE.
-	 */
+	//
+// get_checkpoint_number() returns false while the checkpointer holds the
+// per-tree state.  With wait_for_checkpoint, retry until it moves past;
+// otherwise the caller is a debug entry point and gets the legacy NOTICE.
+//
 	while (!get_checkpoint_number(desc, desc->rootInfo.rootPageBlkno,
 								  &checkpoint_number, &copy_blkno))
 	{
@@ -117,11 +117,11 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 			return false;
 		}
 
-		/*
-		 * Holding the per-tree lock here would block the checkpointer we are
-		 * waiting on, so drop it across the latch wait and reacquire after.
-		 * Sys trees serialize against the checkpointer via oSysTreesLock.
-		 */
+		//
+// Holding the per-tree lock here would block the checkpointer we are
+// waiting on, so drop it across the latch wait and reacquire after.
+// Sys trees serialize against the checkpointer via oSysTreesLock.
+//
 		if (is_sys_tree)
 			LWLockRelease(&checkpoint_state->oSysTreesLock);
 		else
@@ -147,14 +147,14 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 	if (desc->storageType != BTreeStoragePersistence)
 		return true;
 
-	/* get free file extents */
+	// get free file extents
 	get_free_extents(desc, &free_extents, force_file_check,
 					 checkpoint_number - 1);
 
 	if (status.hasError)
 		return false;
 
-	/* check extents */
+	// check extents
 	status.hasError = !check_extents(&status.busy, &free_extents);
 
 	if (status.hasError)
@@ -175,7 +175,7 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 		status.hasError = true;
 	}
 
-	/* frees allocated bytes */
+	// frees allocated bytes
 	if (status.busy.size > 0)
 	{
 		Assert(status.busy.extents != NULL);
@@ -190,7 +190,7 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 
 	if (checkpoint_number > 1)
 	{
-		/* file extents sort check */
+		// file extents sort check
 		SeqBufTag	tag;
 		ExtentsArray map_extents,
 					tmp_extents;
@@ -257,9 +257,9 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 	return !status.hasError;
 }
 
-/*
- * Appends extent into the extents array.
- */
+//
+// Appends extent into the extents array.
+//
 static void
 foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
 {
@@ -268,9 +268,9 @@ foreach_extent_append(BTreeDescr *desc, FileExtent extent, void *arg)
 	add_extent(arr, extent);
 }
 
-/*
- * Gets free file extents for an index.
- */
+//
+// Gets free file extents for an index.
+//
 static void
 get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 				 bool force_file_check, uint32 chkp_num)
@@ -285,9 +285,9 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 	{
 		bool		found;
 
-		/*
-		 * Reads free blocks from map file.
-		 */
+		//
+// Reads free blocks from map file.
+//
 		chkp_tag.type = 'm';
 		chkp_tag.num = o_get_latest_chkp_num(desc->oids.datoid,
 											 desc->oids.relnode,
@@ -299,9 +299,9 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 	}
 	else if (!is_compressed)
 	{
-		/*
-		 * Reads free blocks as normal process for uncompressed index.
-		 */
+		//
+// Reads free blocks as normal process for uncompressed index.
+//
 		off_t		freebuf_offset;
 		uint32		num;
 
@@ -310,22 +310,22 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 
 		get_free_extents_from_file(&chkp_tag, freebuf_offset, free_extents, false, false);
 
-		/*
-		 * Read every .tmp file whose data could still feed the free-extent
-		 * stream: anything written for the previous checkpoint (already
-		 * flushed) up to chkp_num + 1 (the "next" checkpoint accepting fresh
-		 * frees from in-flight merges and from copy-blkno page rewrites).
-		 * Mirrors the compressed branch below, which already extends the
-		 * range to chkp_num + 1.  Stopping at chkp_num leaves out frees that
-		 * are sitting in chkp.{chkp_num+1}.tmp and produces a phantom "Extent
-		 * ... is neither free or busy" report.
-		 *
-		 * For each .tmp file we also drain the matching desc->tmpBuf[] in
-		 * shared memory.  free_extent_for_checkpoint() buffers small writes
-		 * in an 8 KB seq_buf page; until the chunk fills or the checkpoint
-		 * finalises, the bytes are not visible via the on-disk file read.
-		 * Appending them here closes that read-side race.
-		 */
+		//
+// Read every .tmp file whose data could still feed the free-extent
+// stream: anything written for the previous checkpoint (already
+// flushed) up to chkp_num + 1 (the "next" checkpoint accepting fresh
+// frees from in-flight merges and from copy-blkno page rewrites).
+// Mirrors the compressed branch below, which already extends the
+// range to chkp_num + 1.  Stopping at chkp_num leaves out frees that
+// are sitting in chkp.{chkp_num+1}.tmp and produces a phantom "Extent
+// ... is neither free or busy" report.
+//
+// For each .tmp file we also drain the matching desc->tmpBuf[] in
+// shared memory.  free_extent_for_checkpoint() buffers small writes
+// in an 8 KB seq_buf page; until the chunk fills or the checkpoint
+// finalises, the bytes are not visible via the on-disk file read.
+// Appending them here closes that read-side race.
+//
 		for (num = chkp_tag.num; num <= chkp_num; num++)
 		{
 			chkp_tag.num = num + 1;
@@ -338,12 +338,12 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 	}
 	else
 	{
-		/*
-		 * Reads free blocks as normal process for compressed index.
-		 * foreach_free_extent reads from in-memory free extent trees, which
-		 * contain extents from consumed .tmp files.  We also need to read any
-		 * unconsumed .tmp files.
-		 */
+		//
+// Reads free blocks as normal process for compressed index.
+// foreach_free_extent reads from in-memory free extent trees, which
+// contain extents from consumed .tmp files.  We also need to read any
+// unconsumed .tmp files.
+//
 		BTreeMetaPage *metaPage = BTREE_GET_META(desc);
 		uint32		num;
 		uint32		consumed_num = metaPage->freeBuf.tag.num;
@@ -354,7 +354,7 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 			chkp_tag.num = num;
 			chkp_tag.type = 't';
 			get_free_extents_from_file(&chkp_tag, 0, free_extents, true, false);
-			/* Mirror the uncompressed-path append (see comment above). */
+			// Mirror the uncompressed-path append (see comment above).
 			get_free_extents_from_seqbuf_pending(&desc->tmpBuf[num % 2],
 												 &chkp_tag, free_extents,
 												 true);
@@ -362,11 +362,11 @@ get_free_extents(BTreeDescr *desc, ExtentsArray *free_extents,
 	}
 }
 
-/*
- * Decode a buffer of contiguous extent records into the free_extents array.
- * `len` is the number of bytes in `buf` to decode and must be a multiple of
- * the on-disk record size for this index.
- */
+//
+// Decode a buffer of contiguous extent records into the free_extents array.
+// `len` is the number of bytes in `buf` to decode and must be a multiple of
+// the on-disk record size for this index.
+//
 static void
 decode_free_extent_buf(const char *buf, Size len, ExtentsArray *free_extents,
 					   bool compressed)
@@ -393,9 +393,9 @@ decode_free_extent_buf(const char *buf, Size len, ExtentsArray *free_extents,
 	}
 }
 
-/*
- * Appends file extents from file to the free extents array.
- */
+//
+// Appends file extents from file to the free extents array.
+//
 static void
 get_free_extents_from_file(SeqBufTag *tag, off_t offset,
 						   ExtentsArray *free_extents, bool compressed,
@@ -429,12 +429,12 @@ get_free_extents_from_file(SeqBufTag *tag, off_t offset,
 	pfree(filename);
 }
 
-/*
- * Appends in-memory free-extent records that have been written to the given
- * write-mode seq_buf but are not yet flushed to its on-disk file.  Pair with
- * get_free_extents_from_file() to cover both halves of the stream when the
- * caller wants a snapshot that includes mid-checkpoint writes.
- */
+//
+// Appends in-memory free-extent records that have been written to the given
+// write-mode seq_buf but are not yet flushed to its on-disk file.  Pair with
+// get_free_extents_from_file() to cover both halves of the stream when the
+// caller wants a snapshot that includes mid-checkpoint writes.
+//
 static void
 get_free_extents_from_seqbuf_pending(SeqBufDescPrivate *seqBuf,
 									 SeqBufTag *expected_tag,
@@ -456,10 +456,10 @@ get_free_extents_from_seqbuf_pending(SeqBufDescPrivate *seqBuf,
 	pfree(buf);
 }
 
-/*
- * Returns true if the busy and free extents array do not intersect and have no
- * holes.
- */
+//
+// Returns true if the busy and free extents array do not intersect and have no
+// holes.
+//
 static bool
 check_extents(ExtentsArray *busy, ExtentsArray *free)
 {
@@ -528,9 +528,9 @@ check_extents(ExtentsArray *busy, ExtentsArray *free)
 	return result;
 }
 
-/*
- * (off, len) sort comparator
- */
+//
+// (off, len) sort comparator
+//
 static int
 file_extent_cmp(const void *p1, const void *p2)
 {
@@ -544,9 +544,9 @@ file_extent_cmp(const void *p1, const void *p2)
 	return 0;
 }
 
-/*
- * Returns false if the array is sorted by off order.
- */
+//
+// Returns false if the array is sorted by off order.
+//
 static bool
 is_sorted_by_off(ExtentsArray *array)
 {
@@ -574,9 +574,9 @@ is_sorted_by_off(ExtentsArray *array)
 	return sorted;
 }
 
-/*
- * Returns true if the array is sorted by (reverse len, off) order.
- */
+//
+// Returns true if the array is sorted by (reverse len, off) order.
+//
 static bool
 is_sorted_by_len_off(ExtentsArray *array)
 {
@@ -607,9 +607,9 @@ is_sorted_by_len_off(ExtentsArray *array)
 	return sorted;
 }
 
-/*
- * Appends the extent to the array.
- */
+//
+// Appends the extent to the array.
+//
 static void
 add_extent(ExtentsArray *arr, FileExtent extent)
 {

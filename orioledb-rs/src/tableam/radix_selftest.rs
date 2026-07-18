@@ -1,17 +1,17 @@
-/*-------------------------------------------------------------------------
- *
- * radix_selftest.c
- *		Runtime self-test for the fixed-length-key variant of the vendored
- *		radix tree (include/lib/o_radixtree.h with RT_KEY_SIZE).
- *
- *		Exposed as SQL function orioledb_radixtree_selftest(nkeys int).
- *		Returns 'ok' on success or a description of the first failure.
- *		Dev-only helper; not part of the shipped SQL.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// radix_selftest.c
+// Runtime self-test for the fixed-length-key variant of the vendored
+// radix tree (include/lib/o_radixtree.h with RT_KEY_SIZE).
+//
+// Exposed as SQL function orioledb_radixtree_selftest(nkeys int).
+// Returns 'ok' on success or a description of the first failure.
+// Dev-only helper; not part of the shipped SQL.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -22,7 +22,7 @@
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 
-/* Two instances: a multiple-of-8 length and an odd length. */
+// Two instances: a multiple-of-8 length and an odd length.
 #define RT_PREFIX rtst12
 #define RT_SCOPE static
 #define RT_DECLARE
@@ -48,11 +48,11 @@ typedef struct
 PG_FUNCTION_INFO_V1(orioledb_radixtree_selftest);
 PG_FUNCTION_INFO_V1(orioledb_encode_selftest);
 
-/*
- * Order-preserving big-endian encoding of an unsigned integer of nbytes into
- * out.  For signed values the caller flips the sign bit first, so that the
- * unsigned byte ordering matches signed ordering.
- */
+//
+// Order-preserving big-endian encoding of an unsigned integer of nbytes into
+// out.  For signed values the caller flips the sign bit first, so that the
+// unsigned byte ordering matches signed ordering.
+//
 static void
 enc_be(uint64 u, int nbytes, uint8 *out)
 {
@@ -67,7 +67,7 @@ enc_be(uint64 u, int nbytes, uint8 *out)
 
 #define ENC_MAX 32
 
-/* one test tuple: (int4 a, int8 b, int2 c) */
+// one test tuple: (int4 a, int8 b, int2 c)
 typedef struct
 {
 	int32		a;
@@ -90,10 +90,10 @@ enc_tuple_cmp(const void *x, const void *y)
 	return 0;
 }
 
-/*
- * Encode (a,b,c) order-preservingly, right-aligned into a fixed ENC_MAX-byte
- * buffer with a zero high-pad, matching the composite-PK keybitmap scheme.
- */
+//
+// Encode (a,b,c) order-preservingly, right-aligned into a fixed ENC_MAX-byte
+// buffer with a zero high-pad, matching the composite-PK keybitmap scheme.
+//
 static void
 enc_tuple(const EncTuple *t, uint8 *out)
 {
@@ -122,7 +122,7 @@ orioledb_encode_selftest(PG_FUNCTION_ARGS)
 	for (i = 0; i < nkeys; i++)
 	{
 		rng = rng * UINT64CONST(6364136223846793005) + 1;
-		tuples[i].a = (int32) (rng >> 33) - 100;	/* include negatives */
+		tuples[i].a = (int32) (rng >> 33) - 100;	// include negatives
 		rng = rng * UINT64CONST(6364136223846793005) + 1;
 		tuples[i].b = (int64) (rng >> 20) - 1000000;
 		rng = rng * UINT64CONST(6364136223846793005) + 1;
@@ -135,10 +135,10 @@ orioledb_encode_selftest(PG_FUNCTION_ARGS)
 	for (i = 0; i < nkeys; i++)
 		enc_tuple(&tuples[i], encs + (size_t) i * ENC_MAX);
 
-	/*
-	 * encodings must be non-decreasing, and strictly increasing iff tuples
-	 * differ
-	 */
+	//
+// encodings must be non-decreasing, and strictly increasing iff tuples
+// differ
+//
 	for (i = 1; i < nkeys; i++)
 	{
 		int			tc = enc_tuple_cmp(&tuples[i - 1], &tuples[i]);
@@ -168,10 +168,10 @@ rtst_memcmp(const void *a, const void *b, void *arg)
 	return memcmp(a, b, n);
 }
 
-/*
- * Generate `count` pseudo-random keys of `n` bytes into `buf` using a
- * deterministic LCG seeded from `seed`, so runs are reproducible.
- */
+//
+// Generate `count` pseudo-random keys of `n` bytes into `buf` using a
+// deterministic LCG seeded from `seed`, so runs are reproducible.
+//
 static void
 rtst_gen(unsigned char *buf, int count, int n, uint64 seed)
 {
@@ -190,11 +190,11 @@ rtst_gen(unsigned char *buf, int count, int n, uint64 seed)
 	}
 }
 
-/*
- * Body of the test for a given instance/length.  Returns NULL on success or a
- * palloc'd failure description.  Generated per (PREFIX, N) so the exact same
- * logic exercises every key length.
- */
+//
+// Body of the test for a given instance/length.  Returns NULL on success or a
+// palloc'd failure description.  Generated per (PREFIX, N) so the exact same
+// logic exercises every key length.
+//
 #define DEFINE_RTST_RUN(PREFIX, N)											\
 static char *																\
 PREFIX##_run(int nkeys, uint64 seed)										\
@@ -215,7 +215,7 @@ PREFIX##_run(int nkeys, uint64 seed)										\
 	PREFIX##_key ik;													\
 	RtstVal    *pv;														\
 																			\
-	/* silence unused-function for API entry points this test doesn't call */ \
+	// silence unused-function for API entry points this test doesn't call \
 	(void) PREFIX##_free;												\
 	(void) PREFIX##_memory_usage;										\
 	rtst_gen(keys, nkeys, (N), seed);									\
@@ -227,7 +227,7 @@ PREFIX##_run(int nkeys, uint64 seed)										\
 		v.id = i;													\
 		(void) PREFIX##_set(tree, k, &v);							\
 	}																	\
-	/* find roundtrip */												\
+	// find roundtrip												\
 	for (i = 0; i < nkeys; i++)											\
 	{																	\
 		PREFIX##_key k;												\
@@ -238,11 +238,11 @@ PREFIX##_run(int nkeys, uint64 seed)										\
 		if (memcmp(keys + (size_t) pv->id * (N), k.data, (N)) != 0)	\
 		{ err = psprintf("N=%d find wrong value at %d", (N), i); goto done; } \
 	}																	\
-	/* build sorted-distinct reference */								\
+	// build sorted-distinct reference								\
 	memcpy(sorted, keys, (size_t) nkeys * (N));						\
 	qsort_arg(sorted, nkeys, (N), rtst_memcmp, &nsz);				\
 	ndistinct = qunique_arg(sorted, nkeys, (N), rtst_memcmp, &nsz);	\
-	/* iterate: strictly ascending, matches sorted-distinct exactly */	\
+	// iterate: strictly ascending, matches sorted-distinct exactly	\
 	it = PREFIX##_begin_iterate(tree);									\
 	cnt = 0;															\
 	while ((pv = PREFIX##_iterate_next(it, &ik)) != NULL)				\
@@ -259,7 +259,7 @@ PREFIX##_run(int nkeys, uint64 seed)										\
 	PREFIX##_end_iterate(it);											\
 	if (cnt != ndistinct)												\
 	{ err = psprintf("N=%d iter count %d != distinct %d", (N), cnt, ndistinct); goto done; } \
-	/* delete half, re-check find */									\
+	// delete half, re-check find									\
 	for (i = 0; i < nkeys; i += 2)										\
 	{																	\
 		PREFIX##_key k;												\
@@ -301,7 +301,7 @@ fkey_cmp(const void *a, const void *b, void *arg)
 	return memcmp(a, b, OKBM_FIXED_BYTES);
 }
 
-/* big-endian increment of an OKBM_FIXED_BYTES key; returns false on overflow */
+// big-endian increment of an OKBM_FIXED_BYTES key; returns false on overflow
 static bool
 fkey_inc(uint8 *key)
 {
@@ -335,7 +335,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 	uint8		out[OKBM_FIXED_BYTES];
 	char	   *err = NULL;
 
-	/* random keys, using only the low 12 bytes so collisions/order both occur */
+	// random keys, using only the low 12 bytes so collisions/order both occur
 	for (i = 0; i < nkeys; i++)
 	{
 		int			b;
@@ -361,7 +361,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 	qsort_arg(sorted, nkeys, OKBM_FIXED_BYTES, fkey_cmp, &nsz);
 	ndistinct = qunique_arg(sorted, nkeys, OKBM_FIXED_BYTES, fkey_cmp, &nsz);
 
-	/* ordered walk via get_next_key must reproduce sorted-distinct exactly */
+	// ordered walk via get_next_key must reproduce sorted-distinct exactly
 	memset(cur, 0, OKBM_FIXED_BYTES);
 	cnt = 0;
 	while (o_keybitmap_get_next_key(bm, cur, out))
@@ -392,7 +392,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 		goto done;
 	}
 
-	/* intersect with self is a no-op; union with empty is a no-op */
+	// intersect with self is a no-op; union with empty is a no-op
 	o_keybitmap_intersect(bm, bm);
 	for (i = 0; i < nkeys; i++)
 		if (!o_keybitmap_test_key(bm, keys + (size_t) i * OKBM_FIXED_BYTES))
@@ -401,7 +401,7 @@ orioledb_keybitmap_selftest(PG_FUNCTION_ARGS)
 			goto done;
 		}
 
-	/* intersect with disjoint (empty bm2) -> empty */
+	// intersect with disjoint (empty bm2) -> empty
 	o_keybitmap_intersect(bm, bm2);
 	if (!o_keybitmap_is_empty(bm))
 	{

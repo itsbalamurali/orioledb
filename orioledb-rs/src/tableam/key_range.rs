@@ -1,17 +1,17 @@
-/*-------------------------------------------------------------------------
- *
- * key_range.c
- *		Function dealing with key ranges for planning and execution stage
- *		in OrioleDB.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/key_range.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// key_range.c
+// Function dealing with key ranges for planning and execution stage
+// in OrioleDB.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/key_range.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -215,10 +215,10 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 
 #if PG_VERSION_NUM >= 180000
 
-			/*
-			 * Handle skip scan keys (PG18+). They use dynamic ranges instead
-			 * of specific array elements.
-			 */
+			//
+// Handle skip scan keys (PG18+). They use dynamic ranges instead
+// of specific array elements.
+//
 			if (key->sk_flags & SK_BT_SKIP)
 			{
 				bool		have_minval = (key->sk_flags & SK_BT_MINVAL) != 0;
@@ -230,12 +230,12 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 
 				Assert(arrayKeys->num_elems == -1);
 
-				/*
-				 * Post-advancement state: SkipSupport produced a concrete
-				 * next leading value (no MINVAL/MAXVAL, no NEXT/PRIOR, no
-				 * ISNULL).  Pin both bounds to sk_argument so the iterator
-				 * visits only the tuples for this distinct value.
-				 */
+				//
+// Post-advancement state: SkipSupport produced a concrete
+// next leading value (no MINVAL/MAXVAL, no NEXT/PRIOR, no
+// ISNULL).  Pin both bounds to sk_argument so the iterator
+// visits only the tuples for this distinct value.
+//
 				if (!sentinel && !have_next && !have_prior)
 				{
 					low.flags = O_VALUE_BOUND_LOWER | O_VALUE_BOUND_INCLUSIVE;
@@ -249,25 +249,25 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 					continue;
 				}
 
-				/*
-				 * Sentinel (MINVAL/MAXVAL/SearchNull-initial) or NEXT/PRIOR
-				 * transition.  Use the global low_compare/high_compare
-				 * bounds, lifting them past sk_argument when NEXT/PRIOR
-				 * signals an exclusive advance from the just-visited value.
-				 *
-				 * Note: SK_ISNULL appears here as a *sentinel* state too --
-				 * _bt_start_array_keys uses it when the direction-appropriate
-				 * sentinel of a skip array with null_elem=true falls on the
-				 * NULL band of the leading column (e.g. backward scan +
-				 * nulls-last). Without tuple-aware advancement OrioleDB can't
-				 * tell that apart from a real NULL position, so we keep the
-				 * same broad bound behavior the pre-skip-scan path used --
-				 * the trailing-column predicate inside is_tuple_valid() then
-				 * filters the actual rows.
-				 */
+				//
+// Sentinel (MINVAL/MAXVAL/SearchNull-initial) or NEXT/PRIOR
+// transition.  Use the global low_compare/high_compare
+// bounds, lifting them past sk_argument when NEXT/PRIOR
+// signals an exclusive advance from the just-visited value.
+//
+// Note: SK_ISNULL appears here as a *sentinel* state too --
+// _bt_start_array_keys uses it when the direction-appropriate
+// sentinel of a skip array with null_elem=true falls on the
+// NULL band of the leading column (e.g. backward scan +
+// nulls-last). Without tuple-aware advancement OrioleDB can't
+// tell that apart from a real NULL position, so we keep the
+// same broad bound behavior the pre-skip-scan path used --
+// the trailing-column predicate inside is_tuple_valid() then
+// filters the actual rows.
+//
 				if (have_next)
 				{
-					low.flags = O_VALUE_BOUND_LOWER;	/* exclusive */
+					low.flags = O_VALUE_BOUND_LOWER;	// exclusive
 					o_fill_key_bounds(key->sk_argument,
 									  OidIsValid(key->sk_subtype) ? key->sk_subtype : field->inputtype,
 									  &low, NULL, field);
@@ -287,20 +287,20 @@ o_key_data_to_key_range(OBTreeKeyRange *res, ScanKeyData *keyData,
 				}
 				else if (!arrayKeys->null_elem && field->nullfirst)
 				{
-					/*
-					 * IS NOT NULL on the leading column gets rewritten by
-					 * _bt_preprocess_keys into a skip array with
-					 * null_elem=false and no low/high_compare; mirror the
-					 * SK_SEARCHNOTNULL handling so we still cap the scan
-					 * boundary just past the NULL band.
-					 */
+					//
+// IS NOT NULL on the leading column gets rewritten by
+// _bt_preprocess_keys into a skip array with
+// null_elem=false and no low/high_compare; mirror the
+// SK_SEARCHNOTNULL handling so we still cap the scan
+// boundary just past the NULL band.
+//
 					res->low.keys[attnum].flags =
 						O_VALUE_BOUND_LOWER | O_VALUE_BOUND_NULL;
 				}
 
 				if (have_prior)
 				{
-					high.flags = O_VALUE_BOUND_UPPER;	/* exclusive */
+					high.flags = O_VALUE_BOUND_UPPER;	// exclusive
 					o_fill_key_bounds(key->sk_argument,
 									  OidIsValid(key->sk_subtype) ? key->sk_subtype : field->inputtype,
 									  NULL, &high, field);

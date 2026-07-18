@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * logical.c
- *		Support for logical decoding of OrioleDB tables.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/recovery/logical.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// logical.c
+// Support for logical decoding of OrioleDB tables.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/recovery/logical.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -35,9 +35,9 @@
 
 static inline bool FilterByOrigin(LogicalDecodingContext *ctx, RepOriginId origin_id);
 
-/*
- * Copy identity attributes from srcSlot to dstSlot.
- */
+//
+// Copy identity attributes from srcSlot to dstSlot.
+//
 static void
 tts_copy_identity(TupleTableSlot *srcSlot, TupleTableSlot *dstSlot,
 				  OIndexDescr *idx)
@@ -73,9 +73,9 @@ tts_copy_identity(TupleTableSlot *srcSlot, TupleTableSlot *dstSlot,
 	dstSlot->tts_flags &= ~TTS_FLAG_EMPTY;
 }
 
-/*
- * Saves the heap tuple to the reorder buffer.
- */
+//
+// Saves the heap tuple to the reorder buffer.
+//
 static REORDER_BUFFER_TUPLE_TYPE
 record_buffer_tuple(ReorderBuffer *reorder, HeapTuple htup, bool freeHtup)
 {
@@ -103,9 +103,9 @@ record_buffer_tuple(ReorderBuffer *reorder, HeapTuple htup, bool freeHtup)
 	return result;
 }
 
-/*
- * Saves the tuple from the slot to the reorder buffer.
- */
+//
+// Saves the tuple from the slot to the reorder buffer.
+//
 static REORDER_BUFFER_TUPLE_TYPE
 record_buffer_tuple_slot(ReorderBuffer *reorder, TupleTableSlot *slot)
 {
@@ -117,7 +117,7 @@ record_buffer_tuple_slot(ReorderBuffer *reorder, TupleTableSlot *slot)
 	return record_buffer_tuple(reorder, htup, freeHtup);
 }
 
-/* entry for a hash table we use to map from xid to our transaction state */
+// entry for a hash table we use to map from xid to our transaction state
 typedef struct ReorderBufferTXNByIdEnt
 {
 	TransactionId xid;
@@ -134,7 +134,7 @@ get_reorder_buffer_txn(ReorderBuffer *rb, TransactionId xid)
 		rb->by_txn_last_xid == xid)
 		return rb->by_txn_last_txn;
 
-	/* search the lookup table */
+	// search the lookup table
 	ent = (ReorderBufferTXNByIdEnt *)
 		hash_search(rb->by_txn, &xid, HASH_FIND, &found);
 	if (found)
@@ -143,10 +143,10 @@ get_reorder_buffer_txn(ReorderBuffer *rb, TransactionId xid)
 		return NULL;
 }
 
-/*
- * Convert tuples from the main relation from OrioleDB to heap format with
- * conversion of TOAST pointers to PG format.
- */
+//
+// Convert tuples from the main relation from OrioleDB to heap format with
+// conversion of TOAST pointers to PG format.
+//
 static HeapTuple
 o_convert_toast_pointers(OTableDescr *descr, OIndexDescr *indexDescr,
 						 OTuple tuple)
@@ -162,9 +162,9 @@ o_convert_toast_pointers(OTableDescr *descr, OIndexDescr *indexDescr,
 	if (indexDescr->bridging)
 		ctid_off++;
 
-	/*
-	 * Decode original tuple. Drop ctid attribute if exists.
-	 */
+	//
+// Decode original tuple. Drop ctid attribute if exists.
+//
 	Assert(descr->toast);
 	for (int i = 0; i < natts; i++)
 	{
@@ -175,7 +175,7 @@ o_convert_toast_pointers(OTableDescr *descr, OIndexDescr *indexDescr,
 		new_values[i] = old_values[i];
 	}
 
-	/* Convert TOAST pointers */
+	// Convert TOAST pointers
 	for (int i = 0; i < descr->ntoastable; i++)
 	{
 		int			toast_attn = descr->toastable[i] - ctid_off;
@@ -224,10 +224,10 @@ static bool
 set_snapshot(LogicalDecodingContext *ctx,
 			 TransactionId logicalXid, XLogRecPtr changeXLogPtr)
 {
-	/*
-	 * If the reorderbuffer doesn't yet have a snapshot, add one now, it will
-	 * be needed to decode the change we're currently processing.
-	 */
+	//
+// If the reorderbuffer doesn't yet have a snapshot, add one now, it will
+// be needed to decode the change we're currently processing.
+//
 	if (!ReorderBufferXidHasBaseSnapshot(ctx->reorder, logicalXid))
 	{
 		Snapshot	snap;
@@ -245,17 +245,17 @@ set_snapshot(LogicalDecodingContext *ctx,
 	return true;
 }
 
-/*
- * Make reorder buffer tuple from OrioleDB tuple. Convert toast pointers is needed.
- *
- * If caller requests force_store_to_slot it warrantied that tuple is also stored into provided
- * heap slot. Also heaptuple filled by this function is left valid as the slot can depend on
- * tuple contents. heaptuple should be freed by the caller but only after the slot is not needed
- * anymore.
- *
- * If store to slot is not requested, HeapTuple is freed inside o_convert_non_toast_tuple() and this
- * function only returns reodrer buffer tuple without any side effects.
- */
+//
+// Make reorder buffer tuple from OrioleDB tuple. Convert toast pointers is needed.
+//
+// If caller requests force_store_to_slot it warrantied that tuple is also stored into provided
+// heap slot. Also heaptuple filled by this function is left valid as the slot can depend on
+// tuple contents. heaptuple should be freed by the caller but only after the slot is not needed
+// anymore.
+//
+// If store to slot is not requested, HeapTuple is freed inside o_convert_non_toast_tuple() and this
+// function only returns reodrer buffer tuple without any side effects.
+//
 static REORDER_BUFFER_TUPLE_TYPE
 o_convert_non_toast_tuple(ReorderBuffer *reorderbuf, OTableDescr *descr, OIndexDescr *indexDescr, OTuple tuple, bool force_store_to_slot, TupleTableSlot *store_slot, HeapTuple *heaptuple, bool leafTuple)
 {
@@ -265,19 +265,19 @@ o_convert_non_toast_tuple(ReorderBuffer *reorderbuf, OTableDescr *descr, OIndexD
 	{
 		if (descr->ntoastable > 0)
 		{
-			/*
-			 * Primary table can have TOAST pointers. Convert them from Oriole
-			 * to heap format
-			 */
+			//
+// Primary table can have TOAST pointers. Convert them from Oriole
+// to heap format
+//
 			elog(DEBUG4, "Convert LEAF NON-TOAST toastable");
 
 			*heaptuple = o_convert_toast_pointers(descr, indexDescr, tuple);
 			if (force_store_to_slot)
 			{
-				/*
-				 * Caller should free heaptuple after slot is not needed
-				 * anymore
-				 */
+				//
+// Caller should free heaptuple after slot is not needed
+// anymore
+//
 				ExecForceStoreHeapTuple(*heaptuple, store_slot, false);
 				result = record_buffer_tuple(reorderbuf, *heaptuple, false);
 			}
@@ -288,7 +288,7 @@ o_convert_non_toast_tuple(ReorderBuffer *reorderbuf, OTableDescr *descr, OIndexD
 		}
 		else
 		{
-			/* Primary table without TOASTable attrs */
+			// Primary table without TOASTable attrs
 			elog(DEBUG4, "Convert LEAF NON-TOAST plain");
 
 			tts_orioledb_store_tuple(store_slot, tuple,
@@ -298,8 +298,8 @@ o_convert_non_toast_tuple(ReorderBuffer *reorderbuf, OTableDescr *descr, OIndexD
 			result = record_buffer_tuple_slot(reorderbuf, store_slot);
 		}
 	}
-	else						/* Non-leaf tuple in a primary table can't
-								 * have TOAST pointers */
+	else						// Non-leaf tuple in a primary table can't
+// have TOAST pointers
 	{
 		elog(DEBUG4, "Convert NON-LEAF");
 		tts_orioledb_store_non_leaf_tuple(store_slot, tuple,
@@ -312,7 +312,7 @@ o_convert_non_toast_tuple(ReorderBuffer *reorderbuf, OTableDescr *descr, OIndexD
 	return result;
 }
 
-/* Convert chunk in a TOAST relation from OrioleDB format to reorder buffer (heap) format */
+// Convert chunk in a TOAST relation from OrioleDB format to reorder buffer (heap) format
 static REORDER_BUFFER_TUPLE_TYPE
 o_convert_toast_chunk(ReorderBuffer *reorderbuf, OIndexDescr *indexDescr,
 					  OTuple tuple, TupleDescData *o_toast_tupDesc,
@@ -320,8 +320,8 @@ o_convert_toast_chunk(ReorderBuffer *reorderbuf, OIndexDescr *indexDescr,
 {
 	uint16		attnum;
 	uint32		chunk_seq;
-	uint32		old_chunk_size, /* without header */
-				new_chunk_size; /* without header */
+	uint32		old_chunk_size, // without header
+				new_chunk_size; // without header
 	Pointer		old_chunk;
 	Pointer		new_chunk = NULL;
 	HeapTuple	toasttup;
@@ -340,15 +340,15 @@ o_convert_toast_chunk(ReorderBuffer *reorderbuf, OIndexDescr *indexDescr,
 	Assert((!attnum_isnull) && (!chunk_seq_isnull));
 	Assert(attnum > 0);
 
-	/* Toast chunk in VARATT_4B uncompressed format */
+	// Toast chunk in VARATT_4B uncompressed format
 	old_chunk = o_fastgetattr_ptr(tuple, pk_natts + DATA_POS, o_toast_tupDesc, &indexDescr->leafSpec);
 	old_chunk_size = VARSIZE(old_chunk) - VARHDRSZ;
 
-	/*
-	 * ReorderBufferToastReplace() expects first toasted chunk without the
-	 * header of the whole toasted value and reconstructs it itself. Cut this
-	 * extra header from OrioleDB toasted chunk.
-	 */
+	//
+// ReorderBufferToastReplace() expects first toasted chunk without the
+// header of the whole toasted value and reconstructs it itself. Cut this
+// extra header from OrioleDB toasted chunk.
+//
 	if (chunk_seq == 0)
 	{
 		int			extra_header_size;
@@ -413,7 +413,7 @@ o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
 		change->action = REORDER_BUFFER_CHANGE_INSERT;
 		Assert(O_TUPLE_IS_NULL(tuple2));
 
-		/* Decode TOAST chunks */
+		// Decode TOAST chunks
 		if (ix_type == oIndexToast)
 		{
 			elog(DEBUG4, "WAL_REC_INSERT TOAST");
@@ -428,7 +428,7 @@ o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
 			Assert(ix_type != oIndexToast);
 
 			elog(DEBUG4, "WAL_REC_INSERT NON-TOAST");
-			/* Store full new tuple into reorderbuffer */
+			// Store full new tuple into reorderbuffer
 			change->data.tp.newtuple = o_convert_non_toast_tuple(reorderbuf, descr, indexDescr, tuple1, false, descr->newTuple, &newheaptuple, true);
 			change->data.tp.clear_toast_afterwards = true;
 		}
@@ -451,7 +451,7 @@ o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
 
 			elog(DEBUG4, "WAL_REC_UPDATE OLDTUPLE REPLIDENT FULL");
 
-			/* Store full old tuple into reorderbuffer */
+			// Store full old tuple into reorderbuffer
 			Assert(!O_TUPLE_IS_NULL(tuple2));
 			change->data.tp.oldtuple = o_convert_non_toast_tuple(reorderbuf, descr, indexDescr, tuple2, false, descr->oldTuple, &oldheaptuple, true);
 		}
@@ -459,10 +459,10 @@ o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
 		{
 			elog(DEBUG4, "WAL_REC_UPDATE OLDTUPLE REPLIDENT DEFAULT");
 
-			/*
-			 * Reconstruct old tuple key from new tuple and store into
-			 * reorderbuffer
-			 */
+			//
+// Reconstruct old tuple key from new tuple and store into
+// reorderbuffer
+//
 			tts_copy_identity(descr->newTuple, descr->oldTuple, GET_PRIMARY(descr));
 			change->data.tp.oldtuple = record_buffer_tuple_slot(reorderbuf, descr->oldTuple);
 
@@ -509,9 +509,9 @@ o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
 
 		elog(DEBUG4, "WAL_REC_REINSERT");
 
-		/* Store old tuple or key into reorderbuffer */
+		// Store old tuple or key into reorderbuffer
 		change->data.tp.oldtuple = o_convert_non_toast_tuple(reorderbuf, descr, indexDescr, tuple2, false, descr->oldTuple, &oldheaptuple, (relreplident == REPLICA_IDENTITY_FULL));
-		/* Store full new tuple into reorderbuffer */
+		// Store full new tuple into reorderbuffer
 		change->data.tp.newtuple = o_convert_non_toast_tuple(reorderbuf, descr, indexDescr, tuple1, false, descr->newTuple, &newheaptuple, true);
 	}
 	else
@@ -520,20 +520,20 @@ o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,
 	}
 }
 
-/*
- * create_skipped_dml()
- *
- * Ensure that the "skipped DML" hash exists.
- *
- * Implementation notes:
- * - The hash lives in TopMemoryContext on purpose, because orioledb_decode()
- *   is called many times and we need the state to survive between calls.
- * - Key and entry are both uint64 (OXid).  We only need presence/absence, so
- *   the entry does not carry additional payload.
- * - The expected cardinality is small: typically only transactions whose DML
- *   cannot be decoded due to missing historical metadata (e.g. rolled back and
- *   already cleaned from undo).  Initial size is intentionally tiny.
- */
+//
+// create_skipped_dml()
+//
+// Ensure that the "skipped DML" hash exists.
+//
+// Implementation notes:
+// - The hash lives in TopMemoryContext on purpose, because orioledb_decode()
+// is called many times and we need the state to survive between calls.
+// - Key and entry are both uint64 (OXid).  We only need presence/absence, so
+// the entry does not carry additional payload.
+// - The expected cardinality is small: typically only transactions whose DML
+// cannot be decoded due to missing historical metadata (e.g. rolled back and
+// already cleaned from undo).  Initial size is intentionally tiny.
+//
 static void
 create_skipped_dml(HTAB **cache)
 {
@@ -552,16 +552,16 @@ create_skipped_dml(HTAB **cache)
 	}
 }
 
-/*
- * register_skipped_dml()
- *
- * Mark that logical decoding had to skip at least one DML record for the given
- * Oriole transaction (OXID).
- *
- * This is a best-effort mechanism: it does not attempt to recover the missing
- * historical metadata.  Instead, it records the fact of skipping so that the
- * finish record handling can emit diagnostics and clean up the cache entry.
- */
+//
+// register_skipped_dml()
+//
+// Mark that logical decoding had to skip at least one DML record for the given
+// Oriole transaction (OXID).
+//
+// This is a best-effort mechanism: it does not attempt to recover the missing
+// historical metadata.  Instead, it records the fact of skipping so that the
+// finish record handling can emit diagnostics and clean up the cache entry.
+//
 static void
 register_skipped_dml(HTAB **cache, uint64 oxid)
 {
@@ -570,17 +570,17 @@ register_skipped_dml(HTAB **cache, uint64 oxid)
 	hash_search(*cache, &oxid, HASH_ENTER, NULL);
 }
 
-/*
- * remove_skipped_dml()
- *
- * Remove the "skipped DML" marker for the given OXID.
- *
- * Returns true if an entry existed (i.e. we previously skipped some DML for this
- * transaction), false otherwise.
- *
- * Called when we observe a transaction boundary record (COMMIT/ROLLBACK/etc.)
- * to ensure the state does not leak across transactions.
- */
+//
+// remove_skipped_dml()
+//
+// Remove the "skipped DML" marker for the given OXID.
+//
+// Returns true if an entry existed (i.e. we previously skipped some DML for this
+// transaction), false otherwise.
+//
+// Called when we observe a transaction boundary record (COMMIT/ROLLBACK/etc.)
+// to ensure the state does not leak across transactions.
+//
 static bool
 remove_skipped_dml(HTAB **cache, uint64 oxid)
 {
@@ -592,39 +592,39 @@ remove_skipped_dml(HTAB **cache, uint64 oxid)
 	return found;
 }
 
-/*
- * Per-process cache of "skipped DML" flags for Oriole transactions
- * (OXID).
- *
- * Why this exists: During ABORT/ROLLBACK OrioleDB actively walks the undo
- * chain and removes aborted versions.  Logical decoding, however, may
- * still receive Oriole WAL records for such a transaction and might need
- * to fetch "historical" descriptors (OTable/OIndex) to decode tuples.  If
- * the transaction was rolled back, those historical versions can become
- * unreachable because the corresponding undo chain has already been
- * cleaned.
- *
- * In that case we intentionally skip decoding individual DML records
- * (INSERT/UPDATE/DELETE/REINSERT) because we cannot reliably reconstruct
- * the relation/index descriptors for the required historical snapshot.
- *
- * We must remember that we have skipped at least one DML record for a
- * given OXID, so that when the transaction finishes we can: - log/report
- * this fact, and/or - ensure the flag does not leak to subsequent
- * transactions.
- *
- * Lifetime: The cache is allocated in TopMemoryContext and stored in a
- * static pointer so it survives across multiple invocations of
- * orioledb_decode() within the same decoding backend.  (Logical decoding
- * calls decode repeatedly for many records; we need state that outlives a
- * single call.)
- *
- * Scope / semantics: The cache is local to the decoding process; it is
- * not shared between backends and not persisted.  Entries are inserted
- * when we skip a DML record for an OXID and removed when we observe the
- * transaction finish record
- * (COMMIT/ROLLBACK/ROLLBACK_TO_SAVEPOINT/JOIN_COMMIT as applicable).
- */
+//
+// Per-process cache of "skipped DML" flags for Oriole transactions
+// (OXID).
+//
+// Why this exists: During ABORT/ROLLBACK OrioleDB actively walks the undo
+// chain and removes aborted versions.  Logical decoding, however, may
+// still receive Oriole WAL records for such a transaction and might need
+// to fetch "historical" descriptors (OTable/OIndex) to decode tuples.  If
+// the transaction was rolled back, those historical versions can become
+// unreachable because the corresponding undo chain has already been
+// cleaned.
+//
+// In that case we intentionally skip decoding individual DML records
+// (INSERT/UPDATE/DELETE/REINSERT) because we cannot reliably reconstruct
+// the relation/index descriptors for the required historical snapshot.
+//
+// We must remember that we have skipped at least one DML record for a
+// given OXID, so that when the transaction finishes we can: - log/report
+// this fact, and/or - ensure the flag does not leak to subsequent
+// transactions.
+//
+// Lifetime: The cache is allocated in TopMemoryContext and stored in a
+// static pointer so it survives across multiple invocations of
+// orioledb_decode() within the same decoding backend.  (Logical decoding
+// calls decode repeatedly for many records; we need state that outlives a
+// single call.)
+//
+// Scope / semantics: The cache is local to the decoding process; it is
+// not shared between backends and not persisted.  Entries are inserted
+// when we skip a DML record for an OXID and removed when we observe the
+// transaction finish record
+// (COMMIT/ROLLBACK/ROLLBACK_TO_SAVEPOINT/JOIN_COMMIT as applicable).
+//
 static HTAB *skippedDMLHash = NULL;
 
 static WalParseResult
@@ -634,7 +634,7 @@ decode_check_version(const WalReaderState *r)
 
 	if (r->container.version > ORIOLEDB_WAL_VERSION)
 	{
-		/* WAL from future version */
+		// WAL from future version
 		elog(ERROR,
 			 "Can't logically decode WAL version %u that is newer than supported %u",
 			 r->container.version, ORIOLEDB_WAL_VERSION);
@@ -646,13 +646,13 @@ decode_check_version(const WalReaderState *r)
 
 typedef struct
 {
-	/* Input params */
+	// Input params
 	XLogRecPtr	xlogRecPtr;
 	XLogRecPtr	xlogRecEndPtr;
 	LogicalDecodingContext *decodeCtx;
 	XLogRecordBuffer *decodeBuf;
 
-	/* Decoder state params */
+	// Decoder state params
 	OTableDescr *descr;
 	OIndexDescr *indexDescr;
 	OIndexType	ix_type;
@@ -702,11 +702,11 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 				}
 				else
 				{
-					/*
-					 * Oriole logical xid stays invalid for an autonomous
-					 * transactions (internal Oriole's mechanism intended for
-					 * independed commit of Oriole system catalog changes)
-					 */
+					//
+// Oriole logical xid stays invalid for an autonomous
+// transactions (internal Oriole's mechanism intended for
+// independed commit of Oriole system catalog changes)
+//
 					elog(DEBUG4, "IGNORED record type %d (%s) invalid logicalXid for oxid " UINT64_FORMAT,
 						 rec->type, recname, rec->oxid);
 				}
@@ -744,15 +744,15 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!TransactionIdIsValid(rec->logicalXid))
 				{
-					/*
-					 * Oriole logical xid stays invalid for an autonomous
-					 * transactions
-					 */
+					//
+// Oriole logical xid stays invalid for an autonomous
+// transactions
+//
 					elog(DEBUG4, "IGNORED record type %d (%s) invalid logicalXid for oxid " UINT64_FORMAT,
 						 rec->type, recname, rec->oxid);
 
 					UpdateDecodingStats(ctx->decodeCtx);
-					/* Skip */
+					// Skip
 					break;
 				}
 
@@ -763,7 +763,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!set_snapshot(ctx->decodeCtx, rec->logicalXid, xlogPtr))
 				{
-					/* Skip */
+					// Skip
 					break;
 				}
 
@@ -775,7 +775,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 						 rec->type, recname, rec->oxid, rec->logicalXid);
 				}
 
-				/* unknown transaction, nothing to replay */
+				// unknown transaction, nothing to replay
 				if (txn != NULL)
 				{
 					Assert(TransactionIdIsValid(rec->logicalXid));
@@ -784,24 +784,24 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 					{
 						if (remove_skipped_dml(&skippedDMLHash, rec->oxid))
 						{
-							/*
-							 * We have skipped at least one DML record for
-							 * this transaction due to missing historical
-							 * metadata (typically after undo cleanup on
-							 * rollback paths). A COMMIT with skipped changes
-							 * is unexpected from the consumer's perspective:
-							 * it means we are about to finalize a transaction
-							 * without having emitted some of its changes.
-							 */
+							//
+// We have skipped at least one DML record for
+// this transaction due to missing historical
+// metadata (typically after undo cleanup on
+// rollback paths). A COMMIT with skipped changes
+// is unexpected from the consumer's perspective:
+// it means we are about to finalize a transaction
+// without having emitted some of its changes.
+//
 							elog(ERROR, "SKIPPED DML for record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
 								 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
 						}
 
-						/*
-						 * SnapBuildXactNeedsSkip() does strict comparison.
-						 * So, subtract xlogRecEndPtr by one to fit snapshot
-						 * just taken after commit.
-						 */
+						//
+// SnapBuildXactNeedsSkip() does strict comparison.
+// So, subtract xlogRecEndPtr by one to fit snapshot
+// just taken after commit.
+//
 						if (SnapBuildXactNeedsSkip(ctx->decodeCtx->snapshot_builder, ctx->xlogRecEndPtr - 1) || ctx->decodeCtx->fast_forward)
 						{
 							elog(DEBUG4, "FORGET record type %d (%s) oxid " UINT64_FORMAT " logicalXid %u heapXid %u",
@@ -821,14 +821,14 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 							rec->oxid = InvalidOXid;
 							rec->logicalXid = InvalidTransactionId;
 
-							/* Skip processing of this transaction */
+							// Skip processing of this transaction
 							break;
 						}
 
-						/*
-						 * Proceed to commit this transaction and
-						 * subtransactions
-						 */
+						//
+// Proceed to commit this transaction and
+// subtransactions
+//
 						dlist_foreach(cur_txn_i, &txn->subtxns)
 						{
 							ReorderBufferTXN *cur_txn;
@@ -854,14 +854,14 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 						if (remove_skipped_dml(&skippedDMLHash, rec->oxid))
 						{
-							/*
-							 * Skipped DML is expected on abort paths: if we
-							 * couldn't decode some DML records (e.g. due to
-							 * missing historical descriptors), and the
-							 * transaction ends up rolled back, there is
-							 * nothing to emit to the output plugin. We still
-							 * must clear the cache to avoid leaking state.
-							 */
+							//
+// Skipped DML is expected on abort paths: if we
+// couldn't decode some DML records (e.g. due to
+// missing historical descriptors), and the
+// transaction ends up rolled back, there is
+// nothing to emit to the output plugin. We still
+// must clear the cache to avoid leaking state.
+//
 							elog(DEBUG4, "SKIPPED DML for record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
 								 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
 						}
@@ -898,29 +898,29 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!TransactionIdIsValid(rec->logicalXid))
 				{
-					/*
-					 * Oriole logical xid stays invalid for an autonomous
-					 * transactions
-					 */
+					//
+// Oriole logical xid stays invalid for an autonomous
+// transactions
+//
 					elog(DEBUG4, "IGNORED record type %d (%s) invalid logicalXid for oxid " UINT64_FORMAT,
 						 rec->type, recname, rec->oxid);
 
 					UpdateDecodingStats(ctx->decodeCtx);
-					/* Skip */
+					// Skip
 					break;
 				}
 
 				if (remove_skipped_dml(&skippedDMLHash, rec->oxid))
 				{
-					/*
-					 * We have skipped at least one DML record for this
-					 * transaction due to missing historical metadata
-					 * (typically after undo cleanup on rollback paths).  A
-					 * COMMIT with skipped changes is unexpected from the
-					 * consumer's perspective: it means we are about to
-					 * finalize a transaction without having emitted some of
-					 * its changes.
-					 */
+					//
+// We have skipped at least one DML record for this
+// transaction due to missing historical metadata
+// (typically after undo cleanup on rollback paths).  A
+// COMMIT with skipped changes is unexpected from the
+// consumer's perspective: it means we are about to
+// finalize a transaction without having emitted some of
+// its changes.
+//
 					elog(ERROR, "SKIPPED DML for record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u",
 						 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
 				}
@@ -932,11 +932,11 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!set_snapshot(ctx->decodeCtx, rec->logicalXid, xlogPtr))
 				{
-					/* Skip */
+					// Skip
 					break;
 				}
 
-				/* Skip actual commit processing */
+				// Skip actual commit processing
 				if (SnapBuildXactNeedsSkip(ctx->decodeCtx->snapshot_builder, ctx->xlogRecEndPtr - 1) || ctx->decodeCtx->fast_forward)
 				{
 					elog(DEBUG4, "FORGET record type %d (%s) oxid " UINT64_FORMAT " logicalXid %u heapXid %u",
@@ -948,10 +948,10 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 				{
 					if (TransactionIdIsValid(rec->heapXid) && TransactionIdIsValid(rec->logicalXid))
 					{
-						/*
-						 * Oriole txn acts as a sub-txn to heap txn, needs
-						 * ReorderBufferCommitChild
-						 */
+						//
+// Oriole txn acts as a sub-txn to heap txn, needs
+// ReorderBufferCommitChild
+//
 						elog(DEBUG4, "ReorderBufferCommitChild on record type %d (%s) oxid " UINT64_FORMAT " logicalXid %u heapXid %u",
 							 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
 
@@ -987,17 +987,17 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!TransactionIdIsValid(rec->logicalXid))
 				{
-					/*
-					 * Oriole logical xid stays invalid for an autonomous
-					 * transactions
-					 */
+					//
+// Oriole logical xid stays invalid for an autonomous
+// transactions
+//
 					elog(DEBUG4,
 						 "IGNORED record type %d (%s) invalid logicalXid for oxid " UINT64_FORMAT,
 						 rec->type, recname, rec->oxid);
 					break;
 				}
 
-				/* Skip actual relation processing in fast_forward mode */
+				// Skip actual relation processing in fast_forward mode
 				if (ctx->decodeCtx->fast_forward)
 				{
 					elog(DEBUG4,
@@ -1014,7 +1014,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 				if (sys_tree_num > 0)
 				{
 					ctx->descr = NULL;
-					/* indexDescr = NULL; */
+					// indexDescr = NULL;
 					Assert(sys_tree_get_storage_type(sys_tree_num) == BTreeStoragePersistence);
 				}
 				else if (ctx->ix_type == oIndexInvalid)
@@ -1058,16 +1058,16 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 						ctx->o_toast_tupDesc = ctx->descr->toast->leafTupdesc;
 					}
 
-					/* Init heap tupledesc for toast table */
+					// Init heap tupledesc for toast table
 					ctx->heap_toast_tupDesc = CreateTemplateTupleDesc(3);
 					o_tables_tupdesc_init_builtin(ctx->heap_toast_tupDesc, (AttrNumber) 1, "chunk_id", OIDOID);
 					o_tables_tupdesc_init_builtin(ctx->heap_toast_tupDesc, (AttrNumber) 2, "chunk_seq", INT4OID);
 					o_tables_tupdesc_init_builtin(ctx->heap_toast_tupDesc, (AttrNumber) 3, "chunk_data", BYTEAOID);
-					/* Ensure that the toast table doesn't itself get toasted */
+					// Ensure that the toast table doesn't itself get toasted
 					TupleDescAttr(ctx->heap_toast_tupDesc, 0)->attstorage = TYPSTORAGE_PLAIN;
 					TupleDescAttr(ctx->heap_toast_tupDesc, 1)->attstorage = TYPSTORAGE_PLAIN;
 					TupleDescAttr(ctx->heap_toast_tupDesc, 2)->attstorage = TYPSTORAGE_PLAIN;
-					/* Toast field should not be compressed */
+					// Toast field should not be compressed
 					TupleDescAttr(ctx->heap_toast_tupDesc, 0)->attcompression = InvalidCompressionMethod;
 					TupleDescAttr(ctx->heap_toast_tupDesc, 1)->attcompression = InvalidCompressionMethod;
 					TupleDescAttr(ctx->heap_toast_tupDesc, 2)->attcompression = InvalidCompressionMethod;
@@ -1097,7 +1097,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 		case WAL_REC_O_TABLES_META_UNLOCK:
 		case WAL_REC_TRUNCATE:
 		case WAL_REC_BRIDGE_ERASE:
-			/* Skip */
+			// Skip
 			break;
 
 		case WAL_REC_SAVEPOINT:
@@ -1118,7 +1118,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (r->container.version < 17)
 				{
-					/* Skip */
+					// Skip
 					break;
 				}
 
@@ -1129,12 +1129,12 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (remove_skipped_dml(&skippedDMLHash, rec->oxid))
 				{
-					/*
-					 * This transaction performed a rollback-to-savepoint, so
-					 * previously skipped changes may now be irrelevant
-					 * (rolled back).  Clear the cache to keep per-OXID state
-					 * consistent.
-					 */
+					//
+// This transaction performed a rollback-to-savepoint, so
+// previously skipped changes may now be irrelevant
+// (rolled back).  Clear the cache to keep per-OXID state
+// consistent.
+//
 					elog(DEBUG4,
 						 "SKIPPED DML for record type %d (%s) oxid " UINT64_FORMAT " logicalXId %u heapXid %u parentSubid %u",
 						 rec->type, recname, rec->oxid, rec->logicalXid,
@@ -1143,16 +1143,16 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!TransactionIdIsValid(rec->logicalXid))
 				{
-					/*
-					 * Oriole logical xid stays invalid for an autonomous
-					 * transactions
-					 */
+					//
+// Oriole logical xid stays invalid for an autonomous
+// transactions
+//
 					elog(DEBUG4,
 						 "IGNORED record type %d (%s) invalid logicalXid for oxid " UINT64_FORMAT,
 						 rec->type, recname, rec->oxid);
 
 					UpdateDecodingStats(ctx->decodeCtx);
-					/* Skip */
+					// Skip
 					break;
 				}
 
@@ -1163,7 +1163,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!set_snapshot(ctx->decodeCtx, rec->logicalXid, xlogPtr))
 				{
-					/* Skip */
+					// Skip
 					break;
 				}
 
@@ -1176,7 +1176,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 						 rec->type, recname, rec->oxid, rec->logicalXid, rec->heapXid);
 				}
 
-				/* unknown transaction, nothing to replay */
+				// unknown transaction, nothing to replay
 				if (txn != NULL)
 				{
 					Assert(TransactionIdIsValid(rec->logicalXid));
@@ -1223,20 +1223,20 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 
 				if (!TransactionIdIsValid(rec->logicalXid))
 				{
-					/*
-					 * Oriole logical xid stays invalid for an autonomous
-					 * transactions
-					 */
+					//
+// Oriole logical xid stays invalid for an autonomous
+// transactions
+//
 					elog(DEBUG4,
 						 "IGNORED record type %d (%s) invalid logicalXid for oxid " UINT64_FORMAT,
 						 rec->type, recname, rec->oxid);
-					/* Skip */
+					// Skip
 					break;
 				}
 
 				ReorderBufferProcessXid(ctx->decodeCtx->reorder, rec->logicalXid, xlogPtr);
 
-				/* If the origin is defined and filtering is enabled, Skip */
+				// If the origin is defined and filtering is enabled, Skip
 				if (ctx->has_origin &&
 					FilterByOrigin(ctx->decodeCtx, r->container.origin_info.id))
 				{
@@ -1244,12 +1244,12 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 						 "IGNORED record type %d (%s) for oxid " UINT64_FORMAT " due to origin filtering (origin_id=%u)",
 						 rec->type, recname, rec->oxid,
 						 r->container.origin_info.id);
-					/* Skip */
+					// Skip
 					break;
 				}
 
 				if (SnapBuildCurrentState(ctx->decodeCtx->snapshot_builder) < SNAPBUILD_FULL_SNAPSHOT)
-					/* Skip */
+					// Skip
 					break;
 
 				(void) set_snapshot(ctx->decodeCtx, rec->logicalXid, xlogPtr);
@@ -1257,7 +1257,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 				txn = get_reorder_buffer_txn(ctx->decodeCtx->reorder, rec->logicalXid);
 				txn->txn_flags |= RBTXN_DISTR_SKIP_CLEANUP;
 
-				/* Skip actual record processing in fast_forward mode */
+				// Skip actual record processing in fast_forward mode
 				if (ctx->decodeCtx->fast_forward)
 					break;
 
@@ -1266,18 +1266,18 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 				{
 					if (!ctx->descr || !ctx->indexDescr)
 					{
-						/*
-						 * We cannot decode this change because we failed to
-						 * obtain the required relation/index descriptors for
-						 * the historical snapshot of this record.
-						 *
-						 * One common reason is that the transaction has been
-						 * rolled back and Oriole's undo cleanup removed the
-						 * historical versions needed to resolve metadata at
-						 * this point.  Record the fact that we skipped DML
-						 * for this OXID so that the finish record handler can
-						 * report it and clear the flag.
-						 */
+						//
+// We cannot decode this change because we failed to
+// obtain the required relation/index descriptors for
+// the historical snapshot of this record.
+//
+// One common reason is that the transaction has been
+// rolled back and Oriole's undo cleanup removed the
+// historical versions needed to resolve metadata at
+// this point.  Record the fact that we skipped DML
+// for this OXID so that the finish record handler can
+// report it and clear the flag.
+//
 						register_skipped_dml(&skippedDMLHash, rec->oxid);
 					}
 					else
@@ -1306,7 +1306,7 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 				}
 				else
 				{
-					/* Do nothing */
+					// Do nothing
 					elog(DEBUG4, "Logical decoding modify ix_type, %u", ctx->ix_type);
 				}
 
@@ -1320,9 +1320,9 @@ decode_on_record(WalReaderState *r, WalRecord *rec)
 	return WALPARSE_OK;
 }
 
-/*
- * Handle OrioleDB records for LogicalDecodingProcessRecord().
- */
+//
+// Handle OrioleDB records for LogicalDecodingProcessRecord().
+//
 void
 orioledb_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 {
@@ -1362,7 +1362,7 @@ orioledb_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 
 	WalParseResult st;
 
-	/* do our best to disable streaming */
+	// do our best to disable streaming
 	ctx->streaming = false;
 
 	elog(DEBUG4, "OrioleDB decode started startXLogPtr %X/%X endXLogPtr %X/%X",

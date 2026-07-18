@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * handler.c
- *		Implementation of table access method handler
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/tableam/handler.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// handler.c
+// Implementation of table access method handler
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/tableam/handler.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include <math.h>
@@ -83,60 +83,60 @@ bool		in_nontransactional_truncate = false;
 
 typedef struct OScanDescData
 {
-	TableScanDescData rs_base;	/* AM independent part of the descriptor */
+	TableScanDescData rs_base;	// AM independent part of the descriptor
 	BTreeSeqScan *scan;
 	OSnapshot	o_snapshot;
 	ItemPointerData iptr;
 } OScanDescData;
 typedef OScanDescData *OScanDesc;
 
-/*
- * Operation with indices. It does not update TOAST BTree. Implementations
- * are in tableam_handler.c.
- */
+//
+// Operation with indices. It does not update TOAST BTree. Implementations
+// are in tableam_handler.c.
+//
 static void get_keys_from_rowid(OIndexDescr *primary, Datum pkDatum, OBTreeKeyBound *key,
 								BTreeLocationHint *hint, CommitSeqNo *csn,
 								uint32 *version, ItemPointer *bridge_ctid);
 static void rowid_set_csn(OIndexDescr *id, Datum pkDatum, CommitSeqNo csn);
 
-/* ------------------------------------------------------------------------
- * SQL functions
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// SQL functions
+// ------------------------------------------------------------------------
+//
 Datum		orioledb_tableam_handler(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(orioledb_tableam_handler);
 
-/* ------------------------------------------------------------------------
- * Slot related callbacks for heap AM
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// Slot related callbacks for heap AM
+// ------------------------------------------------------------------------
+//
 
 static const TupleTableSlotOps *
 orioledb_slot_callbacks(Relation relation)
 {
-	/* TODO: Create own TupleTableSlotOps */
+	// TODO: Create own TupleTableSlotOps
 	return &TTSOpsOrioleDB;
 }
 
-/* ------------------------------------------------------------------------
- * Index Scan Callbacks for orioledb AM
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// Index Scan Callbacks for orioledb AM
+// ------------------------------------------------------------------------
+//
 
-/*
- * Descriptor for fetches from orioledb table.
- */
+//
+// Descriptor for fetches from orioledb table.
+//
 typedef struct OrioledbIndexFetchData
 {
-	IndexFetchTableData xs_base;	/* AM independent part of the descriptor */
+	IndexFetchTableData xs_base;	// AM independent part of the descriptor
 	bool		bridged_tuple;
 } OrioledbIndexFetchData;
 
-/*
- * Returns NULL to prevent index scan from inside of standard_planner
- * for greater and lower where clauses.
- */
+//
+// Returns NULL to prevent index scan from inside of standard_planner
+// for greater and lower where clauses.
+//
 static IndexFetchTableData *
 orioledb_index_fetch_begin(Relation rel, Relation indexRel)
 {
@@ -260,7 +260,7 @@ orioledb_index_fetch_tuple(struct IndexFetchTableData *scan,
 							 PrimaryIndexNumber, true, &hint);
 	slot->tts_tableOid = descr->oids.reloid;
 
-	/* FIXME? */
+	// FIXME?
 	if (snapshot->snapshot_type == SNAPSHOT_DIRTY)
 		snapshot->xmin = snapshot->xmax = InvalidTransactionId;
 
@@ -268,10 +268,10 @@ orioledb_index_fetch_tuple(struct IndexFetchTableData *scan,
 }
 
 
-/* ------------------------------------------------------------------------
- * Callbacks for non-modifying operations on individual tuples for heap AM
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// Callbacks for non-modifying operations on individual tuples for heap AM
+// ------------------------------------------------------------------------
+//
 
 static TupleFetchCallbackResult
 fetch_row_version_callback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
@@ -293,9 +293,9 @@ fetch_row_version_callback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
 }
 
 
-/*
- * Fetches last committed row version for given tupleid.
- */
+//
+// Fetches last committed row version for given tupleid.
+//
 static bool
 orioledb_fetch_row_version(Relation relation,
 						   Datum tupleid,
@@ -362,7 +362,7 @@ orioledb_set_tidrange(TableScanDesc sscan, ItemPointer mintid, ItemPointer maxti
 			 errmsg("orioledb does not support TID range scan")));
 }
 
-/* Just to be safe. Normally this function should not be called before orioledb_set_tidrange. */
+// Just to be safe. Normally this function should not be called before orioledb_set_tidrange.
 static bool
 orioledb_getnextslot_tidrange(TableScanDesc sscan, ScanDirection direction,
 							  TupleTableSlot *slot)
@@ -411,7 +411,7 @@ orioledb_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot,
 }
 
 #if PG_VERSION_NUM >= 180000
-/* OrioleDB doesn't store xmin in tuples, just return false */
+// OrioleDB doesn't store xmin in tuples, just return false
 static bool
 orioledb_tuple_get_transaction_info(TupleTableSlot *slot, TransactionId *xmin,
 									RepOriginId *originid, TimestampTz *ts)
@@ -424,10 +424,10 @@ orioledb_tuple_get_transaction_info(TupleTableSlot *slot, TransactionId *xmin,
 #endif
 
 
-/* ----------------------------------------------------------------------------
- *  Functions for manipulations of physical tuples for heap AM.
- * ----------------------------------------------------------------------------
- */
+// ----------------------------------------------------------------------------
+// Functions for manipulations of physical tuples for heap AM.
+// ----------------------------------------------------------------------------
+//
 
 static RowRefType
 orioledb_get_row_ref_type(Relation rel)
@@ -437,17 +437,17 @@ orioledb_get_row_ref_type(Relation rel)
 	descr = relation_get_descr(rel);
 	if (!descr)
 	{
-		/*
-		 * It happens during relation creation.  Should be safe to assume
-		 * we've TID identifiers at this point.
-		 */
+		//
+// It happens during relation creation.  Should be safe to assume
+// we've TID identifiers at this point.
+//
 		return ROW_REF_TID;
 	}
 
-	/*
-	 * Always use rowid identifieds.  If even we use ctid as primary key, we
-	 * still prepend it with page location hint.
-	 */
+	//
+// Always use rowid identifieds.  If even we use ctid as primary key, we
+// still prepend it with page location hint.
+//
 	return ROW_REF_ROWID;
 }
 
@@ -476,15 +476,15 @@ orioledb_row_ref_equals(Relation rel, Datum tupleidDatum1, Datum tupleidDatum2)
 	return is_keys_eq(&GET_PRIMARY(descr)->desc, &rowid1, &rowid2);
 }
 
-/*
- * Called by the executor after every per-row INSERT/UPDATE/DELETE has had
- * its secondary indices updated (i.e. after ExecInsertIndexTuples()).  We
- * clear the pendingSkUndoLoc marker that was set right after the PK
- * btree_modify in o_tbl_indices_overwrite() / o_tbl_indices_reinsert() /
- * o_tbl_insert() / o_tbl_indices_delete().  Once cleared the row no longer
- * has a PK-applied/SK-pending fix-up obligation for the checkpointer to
- * emit.
- */
+//
+// Called by the executor after every per-row INSERT/UPDATE/DELETE has had
+// its secondary indices updated (i.e. after ExecInsertIndexTuples()).  We
+// clear the pendingSkUndoLoc marker that was set right after the PK
+// btree_modify in o_tbl_indices_overwrite() / o_tbl_indices_reinsert() /
+// o_tbl_insert() / o_tbl_indices_delete().  Once cleared the row no longer
+// has a PK-applied/SK-pending fix-up obligation for the checkpointer to
+// emit.
+//
 static void
 orioledb_tuple_complete_modification(Relation rel)
 {
@@ -758,7 +758,7 @@ orioledb_tuple_update(Relation relation, Datum tupleid, TupleTableSlot *slot,
 	if (mres.success && mres.action == BTreeOperationLock)
 	{
 		if (TupIsNull(oldSlot))
-			/* Tuple not passing quals anymore, exiting... */
+			// Tuple not passing quals anymore, exiting...
 			return TM_Deleted;
 
 		return TM_Updated;
@@ -859,14 +859,14 @@ orioledb_tuple_lock(Relation rel, Datum tupleid, Snapshot snapshot,
 static void
 orioledb_finish_bulk_insert(Relation relation, int options)
 {
-	/* Do nothing here */
+	// Do nothing here
 }
 
 
-/* ------------------------------------------------------------------------
- * DDL related callbacks for heap AM.
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// DDL related callbacks for heap AM.
+// ------------------------------------------------------------------------
+//
 
 static void
 orioledb_relation_set_new_filenode(Relation rel,
@@ -877,7 +877,7 @@ orioledb_relation_set_new_filenode(Relation rel,
 {
 	SMgrRelation srel;
 
-	/* TRUNCATE case */
+	// TRUNCATE case
 	if (rel->rd_rel->oid != 0 &&
 		rel->rd_rel->relkind != RELKIND_TOASTVALUE &&
 		!is_in_indexes_rebuild())
@@ -896,7 +896,7 @@ orioledb_relation_set_new_filenode(Relation rel,
 		bool		is_temp;
 		Oid			toast_relid;
 
-		/* If toast relation exists, set new filenode for it */
+		// If toast relation exists, set new filenode for it
 		toast_relid = rel->rd_rel->reltoastrelid;
 		if (OidIsValid(toast_relid))
 		{
@@ -924,12 +924,12 @@ orioledb_relation_set_new_filenode(Relation rel,
 											 old_o_table->index_bridging);
 		o_cache_table_types(new_o_table);
 
-		/* Copy compression settings from old table */
+		// Copy compression settings from old table
 		new_o_table->default_compress = old_o_table->default_compress;
 		new_o_table->primary_compress = old_o_table->primary_compress;
 		new_o_table->toast_compress = old_o_table->toast_compress;
 
-		/* Setup bridging if it was set on old table */
+		// Setup bridging if it was set on old table
 		if (old_o_table->index_bridging)
 		{
 			new_o_table->index_bridging = true;
@@ -951,21 +951,21 @@ orioledb_relation_set_new_filenode(Relation rel,
 
 		fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
-		/*
-		 * COMMITSEQNO_INPROGRESS because there might be already committed
-		 * concurrent truncate before function start and old_oids will be
-		 * pointing to a not existed before this transaction table and will
-		 * not be visible otherwise. There should not be concurrent access to
-		 * old table during delete below, because of held locks
-		 */
+		//
+// COMMITSEQNO_INPROGRESS because there might be already committed
+// concurrent truncate before function start and old_oids will be
+// pointing to a not existed before this transaction table and will
+// not be visible otherwise. There should not be concurrent access to
+// old table during delete below, because of held locks
+//
 		o_tables_drop_by_oids(old_oids, oxid, COMMITSEQNO_INPROGRESS);
 		o_tables_add(new_o_table, oxid, oSnapshot.csn);
 
-		/*
-		 * Pass NULL and InvalidOid as we don't want recovery to trigger an
-		 * index (re)build.  But take care we don't issue a WAL-record if
-		 * o_tables_table_meta_lock() didn't
-		 */
+		//
+// Pass NULL and InvalidOid as we don't want recovery to trigger an
+// index (re)build.  But take care we don't issue a WAL-record if
+// o_tables_table_meta_lock() didn't
+//
 		if (new_o_table->persistence != RELPERSISTENCE_TEMP)
 			o_tables_table_meta_unlock(NULL, InvalidOid);
 		else
@@ -1042,7 +1042,7 @@ orioledb_relation_nontransactional_truncate(Relation rel)
 	o_truncate_table(oids, false);
 
 	drop_indices_for_rel(rel, false);
-	/* drop primary after all indices to not rebuild them */
+	// drop primary after all indices to not rebuild them
 	drop_indices_for_rel(rel, true);
 
 	if (RelationIsPermanent(rel))
@@ -1054,10 +1054,10 @@ orioledb_relation_copy_data(Relation rel, const RelFileNode *new_relfilenode)
 {
 	SMgrRelation dstrel;
 
-	/*
-	 * Code from heapam_relation_copy_data just to create storage and new
-	 * relfilenode
-	 */
+	//
+// Code from heapam_relation_copy_data just to create storage and new
+// relfilenode
+//
 	FlushRelationBuffers(rel);
 	dstrel = RelationCreateStorage(*new_relfilenode, rel->rd_rel->relpersistence, true);
 	RelationDropStorage(rel);
@@ -1169,35 +1169,35 @@ orioledb_index_build_range_scan(Relation heapRelation,
 		Datum		values[INDEX_MAX_KEYS];
 		bool		isnull[INDEX_MAX_KEYS];
 
-		/*
-		 * Need an EState for evaluation of index expressions and
-		 * partial-index predicates.  Also a slot to hold the current tuple.
-		 */
+		//
+// Need an EState for evaluation of index expressions and
+// partial-index predicates.  Also a slot to hold the current tuple.
+//
 		estate = CreateExecutorState();
 		econtext = GetPerTupleExprContext(estate);
 
-		/* Set up execution state for predicate, if any. */
+		// Set up execution state for predicate, if any.
 		predicate = ExecPrepareQual(indexInfo->ii_Predicate, estate);
 
 		descr = relation_get_descr(heapRelation);
 		Assert(descr != NULL);
 
-		/*
-		 * In a parallel index build PG hands us a TableScanDesc whose
-		 * rs_parallel was allocated by table_parallelscan_initialize and
-		 * sized by orioledb_parallelscan_estimate to fit a
-		 * ParallelOScanDescData.  Pass it down to make_btree_seq_scan so
-		 * workers coordinate on the same primary tree instead of each
-		 * scanning the whole tree independently (which would lead to
-		 * duplicate bridge_ctid emissions and trip PG's GIN parallel-merge
-		 * AssertCheckItemPointers / GinBufferStoreTuple invariants on PG18).
-		 */
+		//
+// In a parallel index build PG hands us a TableScanDesc whose
+// rs_parallel was allocated by table_parallelscan_initialize and
+// sized by orioledb_parallelscan_estimate to fit a
+// ParallelOScanDescData.  Pass it down to make_btree_seq_scan so
+// workers coordinate on the same primary tree instead of each
+// scanning the whole tree independently (which would lead to
+// duplicate bridge_ctid emissions and trip PG's GIN parallel-merge
+// AssertCheckItemPointers / GinBufferStoreTuple invariants on PG18).
+//
 		seq_scan = make_btree_seq_scan(&GET_PRIMARY(descr)->desc,
 									   &o_in_progress_snapshot,
 									   scan ? (ParallelOScanDesc) scan->rs_parallel : NULL);
 		primarySlot = MakeSingleTupleTableSlot(descr->tupdesc, &TTSOpsOrioleDB);
 
-		/* Arrange for econtext's scan tuple to be the tuple under test */
+		// Arrange for econtext's scan tuple to be the tuple under test
 		econtext->ecxt_scantuple = primarySlot;
 
 		heap_tuples = 0;
@@ -1212,10 +1212,10 @@ orioledb_index_build_range_scan(Relation heapRelation,
 
 			MemoryContextReset(econtext->ecxt_per_tuple_memory);
 
-			/*
-			 * In a partial index, discard tuples that don't satisfy the
-			 * predicate.
-			 */
+			//
+// In a partial index, discard tuples that don't satisfy the
+// predicate.
+//
 			if (predicate != NULL)
 			{
 				if (!ExecQual(predicate, econtext))
@@ -1225,30 +1225,30 @@ orioledb_index_build_range_scan(Relation heapRelation,
 				}
 			}
 
-			/*
-			 * For the current heap tuple, extract all the attributes we use
-			 * in this index, and note which are null.  This also performs
-			 * evaluation of any expressions needed.
-			 */
+			//
+// For the current heap tuple, extract all the attributes we use
+// in this index, and note which are null.  This also performs
+// evaluation of any expressions needed.
+//
 			FormIndexDatum(indexInfo,
 						   primarySlot,
 						   estate,
 						   values,
 						   isnull);
 
-			/* Call the AM's callback routine to process the tuple */
+			// Call the AM's callback routine to process the tuple
 			callback(indexRelation, &oslot->bridge_ctid, values, isnull, true, callback_state);
 
 			ExecClearTuple(primarySlot);
 		}
 
-		/*
-		 * TableScanDesc scan is unused in this function but could be passed
-		 * by a caller (e.g in a case of parallel bridged index build) We need
-		 * to close it here, same as in heapam_index_build_range_scan.
-		 * Otherwise BTreeSeqScan leaks until ResourceOwner release warns
-		 * "resource was not closed".
-		 */
+		//
+// TableScanDesc scan is unused in this function but could be passed
+// by a caller (e.g in a case of parallel bridged index build) We need
+// to close it here, same as in heapam_index_build_range_scan.
+// Otherwise BTreeSeqScan leaks until ResourceOwner release warns
+// "resource was not closed".
+//
 		if (scan)
 			table_endscan(scan);
 
@@ -1257,7 +1257,7 @@ orioledb_index_build_range_scan(Relation heapRelation,
 		free_btree_seq_scan(seq_scan);
 
 
-		/* These may have been pointing to the now-gone estate */
+		// These may have been pointing to the now-gone estate
 		indexInfo->ii_ExpressionsState = NIL;
 		indexInfo->ii_PredicateState = NULL;
 		return heap_tuples;
@@ -1276,25 +1276,25 @@ orioledb_index_validate_scan(Relation heapRelation,
 }
 
 
-/* ------------------------------------------------------------------------
- * Miscellaneous callbacks for the heap AM
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// Miscellaneous callbacks for the heap AM
+// ------------------------------------------------------------------------
+//
 
-/*
- * Calculate size of table according to a requested method if Orioledb table is provided.
- * Calculate size of index disregarding method.
- *
- * Methods:
- * TOTAL_SIZE - table (primary index), TOAST and secondary indices
- * INDEXES_SIZE - only secondary indices
- * TABLE_SIZE - table (primary index) and TOAST
- * TOAST_TABLE_SIZE - only TOAST (implemented but unused for now)
- * DEFAULT_SIZE and RELATION_SIZE - only main table (primary index tree). There is no difference between DEFAULT_SIZE and RELATION_SIZE
- * for OrioleDB tables. Though other table AM that don't support different methods should return -1 at any method except DEFAULT_SIZE.
- *
- * ForkNumber is disregarded for OrioleDB relations.
- */
+//
+// Calculate size of table according to a requested method if Orioledb table is provided.
+// Calculate size of index disregarding method.
+//
+// Methods:
+// TOTAL_SIZE - table (primary index), TOAST and secondary indices
+// INDEXES_SIZE - only secondary indices
+// TABLE_SIZE - table (primary index) and TOAST
+// TOAST_TABLE_SIZE - only TOAST (implemented but unused for now)
+// DEFAULT_SIZE and RELATION_SIZE - only main table (primary index tree). There is no difference between DEFAULT_SIZE and RELATION_SIZE
+// for OrioleDB tables. Though other table AM that don't support different methods should return -1 at any method except DEFAULT_SIZE.
+//
+// ForkNumber is disregarded for OrioleDB relations.
+//
 int64
 orioledb_calculate_relation_size(Relation rel, ForkNumber forkNumber, uint8 method)
 {
@@ -1328,13 +1328,13 @@ orioledb_calculate_relation_size(Relation rel, ForkNumber forkNumber, uint8 meth
 		}
 		else if (method == INDEXES_SIZE)
 		{
-			/*
-			 * TODO: Bridged indexes are not counted here if referenced by
-			 * table relation. This would need exposing static function
-			 * calculate_relation_size() in a patchset and call it from here.
-			 * Though now they are counted if referenced as index relations
-			 * (see below).
-			 */
+			//
+// TODO: Bridged indexes are not counted here if referenced by
+// table relation. This would need exposing static function
+// calculate_relation_size() in a patchset and call it from here.
+// Though now they are counted if referenced as index relations
+// (see below).
+//
 			for (i = 0; i < descr->nIndices; i++)
 			{
 				if (i == PrimaryIndexNumber)
@@ -1382,11 +1382,11 @@ orioledb_calculate_relation_size(Relation rel, ForkNumber forkNumber, uint8 meth
 	}
 	else if (rel->rd_rel->relkind == RELKIND_INDEX)
 	{
-		/*
-		 * If index relation provided, specifying different methods doesn't
-		 * matter, counting method is always similar to RELATION_SIZE for
-		 * table, but we need to load parent relation for this index first.
-		 */
+		//
+// If index relation provided, specifying different methods doesn't
+// matter, counting method is always similar to RELATION_SIZE for
+// table, but we need to load parent relation for this index first.
+//
 		Relation	tbl;
 		ORelOids	tblOids;
 		ORelOids	idxOids;
@@ -1414,10 +1414,10 @@ orioledb_calculate_relation_size(Relation rel, ForkNumber forkNumber, uint8 meth
 		ixnum = find_tree_in_descr(table_desc, idxOids);
 		if (ixnum == InvalidIndexNumber)
 		{
-			/*
-			 * Bridged index is an index of a table, but it's not OrioleDB
-			 * index and its size should be determined by PG internal routine
-			 */
+			//
+// Bridged index is an index of a table, but it's not OrioleDB
+// index and its size should be determined by PG internal routine
+//
 			relation_close(tbl, AccessShareLock);
 			return -1;
 		}
@@ -1442,10 +1442,10 @@ orioledb_relation_toast_am(Relation rel)
 	return HEAP_TABLE_AM_OID;
 }
 
-/* ------------------------------------------------------------------------
- * Planner related callbacks for the heap AM
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// Planner related callbacks for the heap AM
+// ------------------------------------------------------------------------
+//
 
 static void
 orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
@@ -1458,48 +1458,48 @@ orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
 	BlockNumber relallvisible;
 	double		density;
 
-	/* it has storage, ok to call the smgr */
+	// it has storage, ok to call the smgr
 	curpages = RelationGetNumberOfBlocks(rel);
 
-	/* coerce values in pg_class to more desirable types */
+	// coerce values in pg_class to more desirable types
 	relpages = (BlockNumber) rel->rd_rel->relpages;
 	reltuples = (double) rel->rd_rel->reltuples;
 	relallvisible = (BlockNumber) rel->rd_rel->relallvisible;
 
-	/*
-	 * HACK: if the relation has never yet been vacuumed, use a minimum size
-	 * estimate of 10 pages.  The idea here is to avoid assuming a
-	 * newly-created table is really small, even if it currently is, because
-	 * that may not be true once some data gets loaded into it.  Once a vacuum
-	 * or analyze cycle has been done on it, it's more reasonable to believe
-	 * the size is somewhat stable.
-	 *
-	 * (Note that this is only an issue if the plan gets cached and used again
-	 * after the table has been filled.  What we're trying to avoid is using a
-	 * nestloop-type plan on a table that has grown substantially since the
-	 * plan was made.  Normally, autovacuum/autoanalyze will occur once enough
-	 * inserts have happened and cause cached-plan invalidation; but that
-	 * doesn't happen instantaneously, and it won't happen at all for cases
-	 * such as temporary tables.)
-	 *
-	 * We approximate "never vacuumed" by "has relpages = 0", which means this
-	 * will also fire on genuinely empty relations.  Not great, but
-	 * fortunately that's a seldom-seen case in the real world, and it
-	 * shouldn't degrade the quality of the plan too much anyway to err in
-	 * this direction.
-	 *
-	 * If the table has inheritance children, we don't apply this heuristic.
-	 * Totally empty parent tables are quite common, so we should be willing
-	 * to believe that they are empty.
-	 */
+	//
+// HACK: if the relation has never yet been vacuumed, use a minimum size
+// estimate of 10 pages.  The idea here is to avoid assuming a
+// newly-created table is really small, even if it currently is, because
+// that may not be true once some data gets loaded into it.  Once a vacuum
+// or analyze cycle has been done on it, it's more reasonable to believe
+// the size is somewhat stable.
+//
+// (Note that this is only an issue if the plan gets cached and used again
+// after the table has been filled.  What we're trying to avoid is using a
+// nestloop-type plan on a table that has grown substantially since the
+// plan was made.  Normally, autovacuum/autoanalyze will occur once enough
+// inserts have happened and cause cached-plan invalidation; but that
+// doesn't happen instantaneously, and it won't happen at all for cases
+// such as temporary tables.)
+//
+// We approximate "never vacuumed" by "has relpages = 0", which means this
+// will also fire on genuinely empty relations.  Not great, but
+// fortunately that's a seldom-seen case in the real world, and it
+// shouldn't degrade the quality of the plan too much anyway to err in
+// this direction.
+//
+// If the table has inheritance children, we don't apply this heuristic.
+// Totally empty parent tables are quite common, so we should be willing
+// to believe that they are empty.
+//
 	if (curpages < 10 &&
 		relpages == 0 &&
 		!rel->rd_rel->relhassubclass)
 		curpages = 10;
 
-	/* report estimated # pages */
+	// report estimated # pages
 	*pages = curpages;
-	/* quick exit if rel is clearly empty */
+	// quick exit if rel is clearly empty
 	if (curpages == 0)
 	{
 		*tuples = 0;
@@ -1507,41 +1507,41 @@ orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
 		return;
 	}
 
-	/* estimate number of tuples from previous tuple density */
+	// estimate number of tuples from previous tuple density
 	if (reltuples >= 0 && relpages > 0)
 	{
 		density = reltuples / (double) relpages;
 	}
 	else
 	{
-		/*
-		 * When we have no data because the relation was truncated, estimate
-		 * tuple width from attribute datatypes.  We assume here that the
-		 * pages are completely full, which is OK for tables (since they've
-		 * presumably not been VACUUMed yet) but is probably an overestimate
-		 * for indexes.  Fortunately get_relation_info() can clamp the
-		 * overestimate to the parent table's size.
-		 *
-		 * Note: this code intentionally disregards alignment considerations,
-		 * because (a) that would be gilding the lily considering how crude
-		 * the estimate is, and (b) it creates platform dependencies in the
-		 * default plans which are kind of a headache for regression testing.
-		 */
+		//
+// When we have no data because the relation was truncated, estimate
+// tuple width from attribute datatypes.  We assume here that the
+// pages are completely full, which is OK for tables (since they've
+// presumably not been VACUUMed yet) but is probably an overestimate
+// for indexes.  Fortunately get_relation_info() can clamp the
+// overestimate to the parent table's size.
+//
+// Note: this code intentionally disregards alignment considerations,
+// because (a) that would be gilding the lily considering how crude
+// the estimate is, and (b) it creates platform dependencies in the
+// default plans which are kind of a headache for regression testing.
+//
 		int32		tuple_width;
 
 		tuple_width = get_rel_data_width(rel, attr_widths);
 		tuple_width += MAXALIGN(SizeOfOTupleHeader);
-		/* note: integer division is intentional here */
+		// note: integer division is intentional here
 		density = ((double) (ORIOLEDB_BLCKSZ / 2)) / tuple_width;
 	}
 	*tuples = rint(density * (double) curpages);
 
-	/*
-	 * We use relallvisible as-is, rather than scaling it up like we do for
-	 * the pages and tuples counts, on the theory that any pages added since
-	 * the last VACUUM are most likely not marked all-visible.  But costsize.c
-	 * wants it converted to a fraction.
-	 */
+	//
+// We use relallvisible as-is, rather than scaling it up like we do for
+// the pages and tuples counts, on the theory that any pages added since
+// the last VACUUM are most likely not marked all-visible.  But costsize.c
+// wants it converted to a fraction.
+//
 	if (relallvisible == 0 || curpages <= 0)
 		*allvisfrac = 0;
 	else if ((double) relallvisible >= curpages)
@@ -1551,10 +1551,10 @@ orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
 }
 
 
-/* ------------------------------------------------------------------------
- * Executor related callbacks for the heap AM
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// Executor related callbacks for the heap AM
+// ------------------------------------------------------------------------
+//
 
 #if PG_VERSION_NUM < 180000
 static bool
@@ -1636,7 +1636,7 @@ orioledb_parallelscan_initialize_internal(ParallelTableScanDesc pscan)
 #endif
 }
 
-/* Modified copy of table_block_parallelscan_initialize */
+// Modified copy of table_block_parallelscan_initialize
 static Size
 orioledb_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 {
@@ -1703,9 +1703,9 @@ orioledb_beginscan(Relation relation, Snapshot snapshot,
 
 	descr = relation_get_descr(relation);
 
-	/*
-	 * allocate and initialize scan descriptor
-	 */
+	//
+// allocate and initialize scan descriptor
+//
 	scan = (OScanDesc) palloc0(sizeof(OScanDescData));
 
 	scan->rs_base.rs_rd = relation;
@@ -1881,11 +1881,11 @@ orioledb_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 	descr = relation_get_descr(relation);
 	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
 
-	/*
-	 * Batched path drains adjacent ordered keys into the same primary leaf
-	 * under a single lwlock (see o_tbl_multi_insert).  Single-row or GUC-off
-	 * falls back to per-row.
-	 */
+	//
+// Batched path drains adjacent ordered keys into the same primary leaf
+// under a single lwlock (see o_tbl_multi_insert).  Single-row or GUC-off
+// falls back to per-row.
+//
 	if (!orioledb_debug_disable_multi_insert && ntuples > 1)
 	{
 		o_tbl_multi_insert(descr, relation, slots, ntuples, oxid, oSnapshot.csn);
@@ -1914,9 +1914,9 @@ orioledb_vacuum_rel(Relation onerel, VacuumParams *params,
 
 	descr = relation_get_descr(onerel);
 
-	/*
-	 * We do VACUUM only to cleanup bridged indexes.
-	 */
+	//
+// We do VACUUM only to cleanup bridged indexes.
+//
 	if (!descr->bridge || params->index_cleanup == VACOPTVALUE_DISABLED)
 		return;
 
@@ -1938,9 +1938,9 @@ orioledb_free_rd_amcache(Relation rel)
 	rel->rd_amcache = NULL;
 }
 
-/*
- * Comparator for sorting rows[] array
- */
+//
+// Comparator for sorting rows[] array
+//
 static int
 compare_rows(const void *a, const void *b, void *arg)
 {
@@ -1976,11 +1976,11 @@ orioledb_acquire_sample_rows(Relation relation, int elevel,
 	bool		scanEnd;
 	OTuple		tuple;
 	TupleTableSlot *slot = descr->newTuple;
-	int			numrows = 0;	/* # rows now in reservoir */
-	double		samplerows = 0; /* total # rows collected */
-	double		liverows = 0;	/* # live rows seen */
-	double		deadrows = 0;	/* # dead rows seen */
-	double		rowstoskip = -1;	/* -1 means not set yet */
+	int			numrows = 0;	// # rows now in reservoir
+	double		samplerows = 0; // total # rows collected
+	double		liverows = 0;	// # live rows seen
+	double		deadrows = 0;	// # dead rows seen
+	double		rowstoskip = -1;	// -1 means not set yet
 	BlockSamplerData bs;
 	BlockNumber totalblocks;
 	ItemPointerData fake_iptr = {0};
@@ -1996,11 +1996,11 @@ orioledb_acquire_sample_rows(Relation relation, int elevel,
 
 	scan = make_btree_sampling_scan(&pk->desc, &bs);
 
-	/* Report sampling block numbers */
+	// Report sampling block numbers
 	pgstat_progress_update_param(PROGRESS_ANALYZE_BLOCKS_TOTAL,
 								 nblocks);
 
-	/* Prepare for sampling rows */
+	// Prepare for sampling rows
 	reservoir_init_selection_state(&rstate, targrows);
 
 	tuple = btree_seq_scan_getnext_raw(scan, CurrentMemoryContext,
@@ -2031,20 +2031,20 @@ orioledb_acquire_sample_rows(Relation relation, int elevel,
 				rows[numrows++] = ExecCopySlotHeapTuple(slot);
 			else
 			{
-				/*
-				 * t in Vitter's paper is the number of records already
-				 * processed.  If we need to compute a new S value, we must
-				 * use the not-yet-incremented value of samplerows as t.
-				 */
+				//
+// t in Vitter's paper is the number of records already
+// processed.  If we need to compute a new S value, we must
+// use the not-yet-incremented value of samplerows as t.
+//
 				if (rowstoskip < 0)
 					rowstoskip = reservoir_get_next_S(&rstate, samplerows, targrows);
 
 				if (rowstoskip <= 0)
 				{
-					/*
-					 * Found a suitable tuple, so save it, replacing one old
-					 * tuple at random
-					 */
+					//
+// Found a suitable tuple, so save it, replacing one old
+// tuple at random
+//
 					int			k = (int) (targrows * sampler_random_fract(&rstate.randstate));
 
 					Assert(k >= 0 && k < targrows);
@@ -2066,25 +2066,25 @@ orioledb_acquire_sample_rows(Relation relation, int elevel,
 	free_btree_seq_scan(scan);
 
 
-	/*
-	 * If we didn't find as many tuples as we wanted then we're done. No sort
-	 * is needed, since they're already in order.
-	 *
-	 * Otherwise we need to sort the collected tuples by position
-	 * (itempointer). It's not worth worrying about corner cases where the
-	 * tuples are already sorted.
-	 */
+	//
+// If we didn't find as many tuples as we wanted then we're done. No sort
+// is needed, since they're already in order.
+//
+// Otherwise we need to sort the collected tuples by position
+// (itempointer). It's not worth worrying about corner cases where the
+// tuples are already sorted.
+//
 	if (numrows == targrows)
 		qsort_interruptible(rows, numrows, sizeof(HeapTuple),
 							compare_rows, NULL);
 
-	/*
-	 * Estimate total numbers of live and dead rows in relation, extrapolating
-	 * on the assumption that the average tuple density in pages we didn't
-	 * scan is the same as in the pages we did scan.  Since what we scanned is
-	 * a random sample of the pages in the relation, this should be a good
-	 * assumption.
-	 */
+	//
+// Estimate total numbers of live and dead rows in relation, extrapolating
+// on the assumption that the average tuple density in pages we didn't
+// scan is the same as in the pages we did scan.  Since what we scanned is
+// a random sample of the pages in the relation, this should be a good
+// assumption.
+//
 	if (bs.m > 0)
 	{
 		*totalrows = floor((liverows / bs.m) * totalblocks + 0.5);
@@ -2096,9 +2096,9 @@ orioledb_acquire_sample_rows(Relation relation, int elevel,
 		*totaldeadrows = 0.0;
 	}
 
-	/*
-	 * Emit some interesting relation info
-	 */
+	//
+// Emit some interesting relation info
+//
 	ereport(elevel,
 			(errmsg("\"%s\": scanned %d of %u pages, "
 					"containing %.0f live rows and %.0f dead rows; "
@@ -2146,7 +2146,7 @@ validate_toast_compress(const char *value)
 		validate_compress(o_parse_compress(value), "TOAST");
 }
 
-/* values from StdRdOptIndexCleanup */
+// values from StdRdOptIndexCleanup
 static relopt_enum_elt_def StdRdOptIndexCleanupValues[] =
 {
 	{
@@ -2178,12 +2178,12 @@ static relopt_enum_elt_def StdRdOptIndexCleanupValues[] =
 	},
 	{
 		(const char *) NULL
-	}							/* list terminator */
+	}							// list terminator
 };
 
-/*
- * Option parser for anything that uses StdRdOptions.
- */
+//
+// Option parser for anything that uses StdRdOptions.
+//
 static bytea *
 orioledb_default_reloptions(Datum reloptions, bool validate, relopt_kind kind)
 {
@@ -2197,7 +2197,7 @@ orioledb_default_reloptions(Datum reloptions, bool validate, relopt_kind kind)
 		oldcxt = MemoryContextSwitchTo(TopMemoryContext);
 		init_local_reloptions(&relopts, sizeof(ORelOptions));
 
-		/* Options from default_reloptions */
+		// Options from default_reloptions
 		add_local_int_reloption(&relopts, "fillfactor",
 								"Packs table pages only to this percentage",
 								BTREE_DEFAULT_FILLFACTOR, BTREE_MIN_FILLFACTOR,
@@ -2367,7 +2367,7 @@ orioledb_default_reloptions(Datum reloptions, bool validate, relopt_kind kind)
 								 offsetof(ORelOptions, std_options) +
 								 offsetof(StdRdOptions, vacuum_truncate));
 
-		/* Options for orioledb tables */
+		// Options for orioledb tables
 		add_local_string_reloption(&relopts, "compress",
 								   "Default compression level for "
 								   "all table data structures",
@@ -2409,7 +2409,7 @@ orioledb_reloptions(char relkind, Datum reloptions, bool validate)
 				default_reloptions(reloptions, validate, RELOPT_KIND_TOAST);
 			if (rdopts != NULL)
 			{
-				/* adjust default-only parameters for TOAST relations */
+				// adjust default-only parameters for TOAST relations
 				rdopts->fillfactor = 100;
 				rdopts->autovacuum.analyze_threshold = -1;
 				rdopts->autovacuum.analyze_scale_factor = -1;
@@ -2420,7 +2420,7 @@ orioledb_reloptions(char relkind, Datum reloptions, bool validate)
 			return orioledb_default_reloptions(reloptions, validate,
 											   RELOPT_KIND_HEAP);
 		default:
-			/* other relkinds are not supported */
+			// other relkinds are not supported
 			return NULL;
 	}
 }
@@ -2433,10 +2433,10 @@ orioledb_tuple_is_current(Relation rel, TupleTableSlot *slot)
 	return COMMITSEQNO_IS_INPROGRESS(oslot->csn);
 }
 
-/* ------------------------------------------------------------------------
- * Definition of the orioledb table access method.
- * ------------------------------------------------------------------------
- */
+// ------------------------------------------------------------------------
+// Definition of the orioledb table access method.
+// ------------------------------------------------------------------------
+//
 
 static const TableAmRoutine orioledb_am_methods = {
 	.type = T_TableAmRoutine,
@@ -2523,14 +2523,14 @@ orioledb_tableam_handler(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(&orioledb_am_methods);
 }
 
-/*
- * Returns private descriptor for relation
- *
- * In order to save some hash lookup, we cache descriptor in rel->rd_amcache.
- * Since rel->rd_amcache is automatically freed on cache invalidation, we
- * can't set rel->rd_amcache to the descriptor directly.  But we may use
- * pointer to allocated area contained pointer to descriptor.
- */
+//
+// Returns private descriptor for relation
+//
+// In order to save some hash lookup, we cache descriptor in rel->rd_amcache.
+// Since rel->rd_amcache is automatically freed on cache invalidation, we
+// can't set rel->rd_amcache to the descriptor directly.  But we may use
+// pointer to allocated area contained pointer to descriptor.
+//
 OTableDescr *
 relation_get_descr(Relation rel)
 {
@@ -2656,10 +2656,10 @@ rowid_set_csn(OIndexDescr *id, Datum pkDatum, CommitSeqNo csn)
 	}
 }
 
-/*
- * Return physical size of directory contents, or 0 if dir doesn't exist
- * Private copy of Postgres db_dir_size()
- */
+//
+// Return physical size of directory contents, or 0 if dir doesn't exist
+// Private copy of Postgres db_dir_size()
+//
 static int64
 orioledb_db_dir_size(const char *path)
 {
@@ -2701,11 +2701,11 @@ orioledb_db_dir_size(const char *path)
 	return dirsize;
 }
 
-/*
- * Calculate Orioledb-related part of database size in all tablespaces.
- * User access privileges should be checked before calling this hook
- * (see calculate_database_size() function)
- */
+//
+// Calculate Orioledb-related part of database size in all tablespaces.
+// User access privileges should be checked before calling this hook
+// (see calculate_database_size() function)
+//
 int64
 orioledb_calculate_database_size(Oid dbOid)
 {
@@ -2715,18 +2715,18 @@ orioledb_calculate_database_size(Oid dbOid)
 	char		dirpath[MAXPGPATH];
 	char		pathname[MAXPGPATH + 21 + sizeof(TABLESPACE_VERSION_DIRECTORY) + 13];
 
-	/*
-	 * No user privileges check here. They must have been checked before
-	 * calling this hook
-	 */
+	//
+// No user privileges check here. They must have been checked before
+// calling this hook
+//
 
-	/* Shared storage in pg_global is not counted */
+	// Shared storage in pg_global is not counted
 
-	/* Include pg_default storage */
+	// Include pg_default storage
 	snprintf(pathname, sizeof(pathname), "orioledb_data/%u", dbOid);
 	totalsize = orioledb_db_dir_size(pathname);
 
-	/* Scan the non-default tablespaces */
+	// Scan the non-default tablespaces
 	snprintf(dirpath, MAXPGPATH, "pg_tblspc");
 	dirdesc = AllocateDir(dirpath);
 
@@ -2745,7 +2745,7 @@ orioledb_calculate_database_size(Oid dbOid)
 
 	FreeDir(dirdesc);
 
-	/* Support database_size_hook chaining */
+	// Support database_size_hook chaining
 	if (prev_database_size_hook != NULL)
 	{
 		elog(DEBUG4, "called prev_database_size_hook");

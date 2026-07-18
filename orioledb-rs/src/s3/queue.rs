@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * queue.c
- *		Implementation for queue of tasks for S3 workers.
- *
- * Copyright (c) 2024-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/s3/queue.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// queue.c
+// Implementation for queue of tasks for S3 workers.
+//
+// Copyright (c) 2024-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/s3/queue.c
+//
+// -------------------------------------------------------------------------
+//
 
 #include "postgres.h"
 
@@ -20,30 +20,30 @@
 
 #include "utils/wait_event.h"
 
-/*
- * Meta-information about S3 tasks queue.
- */
+//
+// Meta-information about S3 tasks queue.
+//
 typedef struct
 {
-	/* Location to insert new tasks */
+	// Location to insert new tasks
 	pg_atomic_uint64 insertLocation;
 	ConditionVariable insertLocationCV;
 
-	/* Location to pick the existing tasks by workers */
+	// Location to pick the existing tasks by workers
 	pg_atomic_uint64 pickLocation;
 
-	/*
-	 * All the tasks before this location has been already erased in the
-	 * buffer.
-	 */
+	//
+// All the tasks before this location has been already erased in the
+// buffer.
+//
 	pg_atomic_uint64 erasedLocation;
 	ConditionVariable erasedLocationCV;
 } S3TaskQueueMeta;
 
-/*
- * The "erased" flag for the task length.  This flag means that task body was
- * already erased, but erased position wasn't yet advanced through this task.
- */
+//
+// The "erased" flag for the task length.  This flag means that task body was
+// already erased, but erased position wasn't yet advanced through this task.
+//
 #define	LENGTH_ERASED_FLAG	(0x80000000)
 
 static Size s3_queue_size = 0;
@@ -96,9 +96,9 @@ s3_queue_get_insert_location(void)
 	return pg_atomic_read_u64(&s3_queue_meta->insertLocation);
 }
 
-/*
- * Put new task to the lockless queue.
- */
+//
+// Put new task to the lockless queue.
+//
 S3TaskLocation
 s3_queue_put_task(Pointer data, uint32 len)
 {
@@ -108,13 +108,13 @@ s3_queue_put_task(Pointer data, uint32 len)
 
 	Assert(totallen = INTALIGN(totallen));
 
-	/* Pick the insert location */
+	// Pick the insert location
 	insertLocation = pg_atomic_fetch_add_u64(&s3_queue_meta->insertLocation, totallen);
 
-	/*
-	 * Check that circular buffer of tasks didn't wraparound.  Wait the
-	 * overlapping tasks to be erased before we continue.
-	 */
+	//
+// Check that circular buffer of tasks didn't wraparound.  Wait the
+// overlapping tasks to be erased before we continue.
+//
 	while (insertLocation + totallen > pg_atomic_read_u64(&s3_queue_meta->erasedLocation) + s3_queue_size)
 	{
 		ConditionVariableSleep(&s3_queue_meta->erasedLocationCV, WAIT_EVENT_MQ_PUT_MESSAGE);
@@ -123,20 +123,20 @@ s3_queue_put_task(Pointer data, uint32 len)
 	if (slept)
 		ConditionVariableCancelSleep();
 
-	/* Put the task into a circular buffer */
+	// Put the task into a circular buffer
 	if (insertLocation / s3_queue_size == (insertLocation + totallen - 1) / s3_queue_size)
 	{
-		/* Easy case: we can put the task a as continuous chunk of memory */
+		// Easy case: we can put the task a as continuous chunk of memory
 		memcpy(s3_queue_buffer + insertLocation % s3_queue_size + sizeof(uint32),
 			   data,
 			   len);
 	}
 	else
 	{
-		/*
-		 * More complex case: we hit the buffer end boundary.  In this case we
-		 * need to split the task into two distinct chunks.
-		 */
+		//
+// More complex case: we hit the buffer end boundary.  In this case we
+// need to split the task into two distinct chunks.
+//
 		uint32		firstChunkLen = s3_queue_size - insertLocation % s3_queue_size;
 
 		Assert(firstChunkLen >= sizeof(uint32));
@@ -149,20 +149,20 @@ s3_queue_put_task(Pointer data, uint32 len)
 			   totallen - firstChunkLen);
 	}
 
-	/*
-	 * Write the task length after copying the task body.  We use length
-	 * presence as the sign that body is completely copied.
-	 */
+	//
+// Write the task length after copying the task body.  We use length
+// presence as the sign that body is completely copied.
+//
 	pg_write_barrier();
 	*((uint32 *) (s3_queue_buffer + insertLocation % s3_queue_size)) = totallen;
 
 	return insertLocation;
 }
 
-/*
- * Try to pick the task for processing.  Returns the task location on success,
- * and InvalidS3TaskLocation on failure.
- */
+//
+// Try to pick the task for processing.  Returns the task location on success,
+// and InvalidS3TaskLocation on failure.
+//
 S3TaskLocation
 s3_queue_try_pick_task(void)
 {
@@ -180,14 +180,14 @@ s3_queue_try_pick_task(void)
 
 		if (pickLocation >= insertLocation)
 		{
-			/* Nothing inserted yet */
+			// Nothing inserted yet
 			Assert(pickLocation == insertLocation);
 			return InvalidS3TaskLocation;
 		}
 
 		if (pickLocation + sizeof(uint32) >= erasedLocation + s3_queue_size)
 		{
-			/* Insert location is advanced, but the area wasn't erased yet */
+			// Insert location is advanced, but the area wasn't erased yet
 			return InvalidS3TaskLocation;
 		}
 
@@ -197,14 +197,14 @@ s3_queue_try_pick_task(void)
 
 		if (taskLen == 0)
 		{
-			/* Insert location is advanced, but the data wasn't written yet */
+			// Insert location is advanced, but the data wasn't written yet
 			return InvalidS3TaskLocation;
 		}
 
-		/*
-		 * Try to advance the pick location.  Whoever succeed on advancing the
-		 * pick location is assumed to successfully pick the task.
-		 */
+		//
+// Try to advance the pick location.  Whoever succeed on advancing the
+// pick location is assumed to successfully pick the task.
+//
 		if (pg_atomic_compare_exchange_u64(&s3_queue_meta->pickLocation,
 										   &pickLocation,
 										   pickLocation + taskLen))
@@ -214,16 +214,16 @@ s3_queue_try_pick_task(void)
 	}
 }
 
-/*
- * Get the task by its location.
- */
+//
+// Get the task by its location.
+//
 Pointer
 s3_queue_get_task(S3TaskLocation taskLocation)
 {
 	uint32		taskLen;
 	Pointer		result;
 
-	/* Get the task length */
+	// Get the task length
 	taskLen = *((uint32 *) (s3_queue_buffer + taskLocation % s3_queue_size));
 
 	Assert(taskLen != 0);
@@ -231,20 +231,20 @@ s3_queue_get_task(S3TaskLocation taskLocation)
 
 	result = (Pointer) palloc(taskLen - sizeof(uint32));
 
-	/* Copy the task body */
+	// Copy the task body
 	if (taskLocation / s3_queue_size == (taskLocation + taskLen - 1) / s3_queue_size)
 	{
-		/* Easy case: the task is a continuous chunk of memory */
+		// Easy case: the task is a continuous chunk of memory
 		memcpy(result,
 			   s3_queue_buffer + taskLocation % s3_queue_size + sizeof(uint32),
 			   taskLen - sizeof(uint32));
 	}
 	else
 	{
-		/*
-		 * More complex case: we hit the buffer end boundary.  In this case we
-		 * have to assemble task from the two distinct chunks.
-		 */
+		//
+// More complex case: we hit the buffer end boundary.  In this case we
+// have to assemble task from the two distinct chunks.
+//
 		uint32		firstChunkLen = s3_queue_size - taskLocation % s3_queue_size;
 
 		Assert(firstChunkLen >= sizeof(uint32));
@@ -260,9 +260,9 @@ s3_queue_get_task(S3TaskLocation taskLocation)
 	return result;
 }
 
-/*
- * Erase the processed task from the circular buffer.
- */
+//
+// Erase the processed task from the circular buffer.
+//
 void
 s3_queue_erase_task(S3TaskLocation taskLocation)
 {
@@ -273,20 +273,20 @@ s3_queue_erase_task(S3TaskLocation taskLocation)
 	Assert(taskLen != 0);
 	Assert((taskLen & LENGTH_ERASED_FLAG) == 0);
 
-	/* Erase the task body */
+	// Erase the task body
 	if (taskLocation / s3_queue_size == (taskLocation + taskLen - 1) / s3_queue_size)
 	{
-		/* Easy case: the task is a continuous chunk of memory */
+		// Easy case: the task is a continuous chunk of memory
 		memset(s3_queue_buffer + taskLocation % s3_queue_size + sizeof(uint32),
 			   0,
 			   taskLen - sizeof(uint32));
 	}
 	else
 	{
-		/*
-		 * More complex case: we hit the buffer end boundary.  In this case we
-		 * have to erase the two distinct chunks.
-		 */
+		//
+// More complex case: we hit the buffer end boundary.  In this case we
+// have to erase the two distinct chunks.
+//
 		int			firstChunkLen = s3_queue_size - taskLocation % s3_queue_size;
 
 		Assert(firstChunkLen >= sizeof(uint32));
@@ -301,10 +301,10 @@ s3_queue_erase_task(S3TaskLocation taskLocation)
 
 	pg_write_barrier();
 
-	/* Put the LENGTH_ERASED_FLAG, which means we have erased the task body */
+	// Put the LENGTH_ERASED_FLAG, which means we have erased the task body
 	*((uint32 *) (s3_queue_buffer + taskLocation % s3_queue_size)) = taskLen | LENGTH_ERASED_FLAG;
 
-	/* Try to advance the erased location */
+	// Try to advance the erased location
 	while (pg_atomic_compare_exchange_u64(&s3_queue_meta->erasedLocation,
 										  &taskLocation,
 										  taskLocation + taskLen))
@@ -313,13 +313,13 @@ s3_queue_erase_task(S3TaskLocation taskLocation)
 
 		taskLocation += taskLen;
 
-		/*
-		 * Try to also advance erased location for the next task if
-		 * appropriate.  It might happened that the next task is already
-		 * erased but its process gave up on advancing the erased location. In
-		 * this case we take a lead.  This algorithm guaranteed that somebody
-		 * will advance the erased location anyway.
-		 */
+		//
+// Try to also advance erased location for the next task if
+// appropriate.  It might happened that the next task is already
+// erased but its process gave up on advancing the erased location. In
+// this case we take a lead.  This algorithm guaranteed that somebody
+// will advance the erased location anyway.
+//
 		taskLen = *((uint32 *) (s3_queue_buffer + taskLocation % s3_queue_size));
 		if (!(taskLen & LENGTH_ERASED_FLAG))
 			break;
@@ -329,9 +329,9 @@ s3_queue_erase_task(S3TaskLocation taskLocation)
 	ConditionVariableBroadcast(&s3_queue_meta->erasedLocationCV);
 }
 
-/*
- * Wait till the task with given location is processed by worker.
- */
+//
+// Wait till the task with given location is processed by worker.
+//
 void
 s3_queue_wait_for_location(S3TaskLocation location)
 {

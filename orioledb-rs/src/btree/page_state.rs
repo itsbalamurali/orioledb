@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * page_state.c
- *		OrioleDB B-tree page locking, waiting, reading etc.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/btree/page_state.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// page_state.c
+// OrioleDB B-tree page locking, waiting, reading etc.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/btree/page_state.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include "orioledb.h"
@@ -38,13 +38,13 @@
 #include "storage/s_lock.h"
 #include "utils/memdebug.h"
 
-/* Maximum simultaneously locked pages per process */
+// Maximum simultaneously locked pages per process
 #define MAX_PAGES_PER_PROCESS 8
 
-/*
- * Enable this to recheck page stats on every unlock.
- */
-/* #define CHECK_PAGE_STATS */
+//
+// Enable this to recheck page stats on every unlock.
+//
+// #define CHECK_PAGE_STATS
 
 typedef struct
 {
@@ -317,10 +317,10 @@ lock_page_or_queue_or_split_detect(BTreeDescr *desc, OInMemoryBlkno *blkno,
 		return LockPageResultQueued;
 }
 
-/*
- * This function finishes when page is enable to read or we managed to lock
- * the page list.
- */
+//
+// This function finishes when page is enable to read or we managed to lock
+// the page list.
+//
 static uint64
 read_enabled_or_queue(OInMemoryBlkno blkno, uint32 pgprocnum)
 {
@@ -403,10 +403,10 @@ state_changed_or_queue(OInMemoryBlkno blkno, uint32 pgprocnum,
 }
 
 
-/*
- * Place exclusive lock on the page.  Doesn't block readers before
- * page_block_reads() is called.
- */
+//
+// Place exclusive lock on the page.  Doesn't block readers before
+// page_block_reads() is called.
+//
 void
 lock_page(OInMemoryBlkno blkno)
 {
@@ -414,7 +414,7 @@ lock_page(OInMemoryBlkno blkno)
 	uint64		prevState;
 	int			extraWaits = 0;
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return;
 
@@ -444,17 +444,17 @@ lock_page(OInMemoryBlkno blkno)
 
 	my_locked_page_add(blkno, prevState | PAGE_STATE_LOCKED_FLAG);
 
-	/*
-	 * Fix the process wait semaphore's count for any absorbed wakeups.
-	 */
+	//
+// Fix the process wait semaphore's count for any absorbed wakeups.
+//
 	while (extraWaits-- > 0)
 		PGSemaphoreUnlock(MyProc->sem);
 }
 
-/*
- * Place exclusive lock on the page.  Doesn't block readers before
- * page_block_reads() is called.
- */
+//
+// Place exclusive lock on the page.  Doesn't block readers before
+// page_block_reads() is called.
+//
 OLockPageWithTupleResult
 lock_page_with_tuple(BTreeDescr *desc,
 					 OInMemoryBlkno *blkno, uint32 *pageChangeCount,
@@ -466,7 +466,7 @@ lock_page_with_tuple(BTreeDescr *desc,
 	bool		keySerialized = false;
 	PageImg		img;
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(*blkno))
 		return OLockPageWithTupleResultLocked;
 
@@ -505,9 +505,9 @@ lock_page_with_tuple(BTreeDescr *desc,
 		}
 		pgstat_report_wait_end();
 
-		/*
-		 * Fix the process wait semaphore's count for any absorbed wakeups.
-		 */
+		//
+// Fix the process wait semaphore's count for any absorbed wakeups.
+//
 		while (extraWaits-- > 0)
 			PGSemaphoreUnlock(MyProc->sem);
 
@@ -524,20 +524,20 @@ lock_page_with_tuple(BTreeDescr *desc,
 					!UndoLocationIsValid(curRetainUndoLocations[undoType]))
 					curRetainUndoLocations[undoType] = lockerState->undoLocation;
 
-				/*
-				 * The lock holder allocated the waiter's undo record on our
-				 * behalf via make_waiter_undo_record(), and stamped its
-				 * location into the tuphdr on the page.  When an INSERT
-				 * doesn't queue, o_btree_modify_insert_update() registers the
-				 * freshly allocated undo location in this backend's
-				 * commandInfos[] via current_command_get_undo_location().
-				 * Here that registration never happens, because we returned
-				 * before reaching that code.  Do it now, otherwise a
-				 * subsequent same-transaction read of the row would call
-				 * undo_location_get_command() with a location below every
-				 * commandInfos[i].undoLocation, tripping its lo >= 0
-				 * assertion (or returning a bogus cid in non-assert builds).
-				 */
+				//
+// The lock holder allocated the waiter's undo record on our
+// behalf via make_waiter_undo_record(), and stamped its
+// location into the tuphdr on the page.  When an INSERT
+// doesn't queue, o_btree_modify_insert_update() registers the
+// freshly allocated undo location in this backend's
+// commandInfos[] via current_command_get_undo_location().
+// Here that registration never happens, because we returned
+// before reaching that code.  Do it now, otherwise a
+// subsequent same-transaction read of the row would call
+// undo_location_get_command() with a location below every
+// commandInfos[i].undoLocation, tripping its lo >= 0
+// assertion (or returning a bogus cid in non-assert builds).
+//
 				if (undoType == UndoLogRegular &&
 					UndoLocationIsValid(lockerState->undoLocation) &&
 					!IsParallelWorker())
@@ -563,7 +563,7 @@ page_wait_for_read_enable(OInMemoryBlkno blkno)
 	int			extraWaits = 0;
 	OPageWaiterShmemState *lockerState = &lockerStates[MYPROCNUMBER];
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return;
 
@@ -587,9 +587,9 @@ page_wait_for_read_enable(OInMemoryBlkno blkno)
 		pgstat_report_wait_end();
 	}
 
-	/*
-	 * Fix the process wait semaphore's count for any absorbed wakeups.
-	 */
+	//
+// Fix the process wait semaphore's count for any absorbed wakeups.
+//
 	while (extraWaits-- > 0)
 		PGSemaphoreUnlock(MyProc->sem);
 
@@ -637,9 +637,9 @@ page_wait_for_changecount(OInMemoryBlkno blkno, uint32 state)
 		pgstat_report_wait_end();
 	}
 
-	/*
-	 * Fix the process wait semaphore's count for any absorbed wakeups.
-	 */
+	//
+// Fix the process wait semaphore's count for any absorbed wakeups.
+//
 	while (extraWaits-- > 0)
 		PGSemaphoreUnlock(MyProc->sem);
 
@@ -652,13 +652,13 @@ have_locked_pages(void)
 	return (numberOfMyLockedPages > 0);
 }
 
-/* Wait for a change of the page and lock it. */
+// Wait for a change of the page and lock it.
 void
 relock_page(OInMemoryBlkno blkno)
 {
 	uint64		state;
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return;
 
@@ -671,9 +671,9 @@ relock_page(OInMemoryBlkno blkno)
 	lock_page(blkno);
 }
 
-/*
- * Try to lock the given page from concurrent changes.  Returns true on success.
- */
+//
+// Try to lock the given page from concurrent changes.  Returns true on success.
+//
 bool
 try_lock_page(OInMemoryBlkno blkno)
 {
@@ -681,7 +681,7 @@ try_lock_page(OInMemoryBlkno blkno)
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 	uint64		state;
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return true;
 
@@ -698,39 +698,39 @@ try_lock_page(OInMemoryBlkno blkno)
 	return true;
 }
 
-/*
- * Declare newly created page as already locked by our process.
- *
- * No existing callers.
- */
+//
+// Declare newly created page as already locked by our process.
+//
+// No existing callers.
+//
 void
 delare_page_as_locked(OInMemoryBlkno blkno)
 {
 	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return;
 
 	my_locked_page_add(blkno, pg_atomic_read_u64(&(O_PAGE_HEADER(p)->state)));
 }
 
-/*
- * Check if page is locked.
- */
+//
+// Check if page is locked.
+//
 bool
 page_is_locked(OInMemoryBlkno blkno)
 {
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return false;
 
 	return (get_my_locked_page_index(blkno) >= 0);
 }
 
-/*
- * Block reads on locked page to prepare it for the modification.
- */
+//
+// Block reads on locked page to prepare it for the modification.
+//
 void
 page_block_reads(OInMemoryBlkno blkno)
 {
@@ -740,14 +740,14 @@ page_block_reads(OInMemoryBlkno blkno)
 
 	if (O_PAGE_IS_LOCAL(blkno))
 	{
-		/*
-		 * Local pages don't go through the lock_page / unlock_page path that
-		 * bumps the change count on modification, so a same-backend
-		 * partial_load_chunk() would otherwise miss writes to the page
-		 * between the descent and the iterator's later reads (parentImg
-		 * carries partial state across find_page calls).  No concurrency, so
-		 * a plain RMW on state is enough.
-		 */
+		//
+// Local pages don't go through the lock_page / unlock_page path that
+// bumps the change count on modification, so a same-backend
+// partial_load_chunk() would otherwise miss writes to the page
+// between the descent and the iterator's later reads (parentImg
+// carries partial state across find_page calls).  No concurrency, so
+// a plain RMW on state is enough.
+//
 		OrioleDBPageHeader *hdr = (OrioleDBPageHeader *) p;
 		uint64		old = pg_atomic_read_u64(&hdr->state);
 		uint64		newChangeCount = ((old & PAGE_STATE_CHANGE_COUNT_MASK) +
@@ -764,13 +764,13 @@ page_block_reads(OInMemoryBlkno blkno)
 	Assert((myLockedPages[i].state & PAGE_STATE_CHANGE_NON_WAITERS_MASK) ==
 		   (pg_atomic_read_u64(&(O_PAGE_HEADER(p)->state)) & PAGE_STATE_CHANGE_NON_WAITERS_MASK));
 
-	/*
-	 * Idempotent: if reads are already blocked on this locked page, a
-	 * repeated call is a no-op.  Callers may legitimately double up -- e.g.
-	 * o_ppool_free_page() now blocks reads defensively on every free, which
-	 * can stack with a caller (such as free_page()) that already blocked
-	 * them.
-	 */
+	//
+// Idempotent: if reads are already blocked on this locked page, a
+// repeated call is a no-op.  Callers may legitimately double up -- e.g.
+// o_ppool_free_page() now blocks reads defensively on every free, which
+// can stack with a caller (such as free_page()) that already blocked
+// them.
+//
 	if (myLockedPages[i].state & PAGE_STATE_NO_READ_FLAG)
 		return;
 
@@ -788,7 +788,7 @@ get_waiters_with_tuples(BTreeDescr *desc,
 	uint32		pgprocnum;
 	int			count = 0;
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return 0;
 
@@ -829,9 +829,9 @@ mark_waiter_tuples_inserted(int procnums[BTREE_PAGE_MAX_SPLIT_ITEMS],
 
 }
 
-/*
- * Check page before unlocking.
- */
+//
+// Check page before unlocking.
+//
 static void
 unlock_check_page(OInMemoryBlkno blkno)
 {
@@ -856,10 +856,10 @@ unlock_check_page(OInMemoryBlkno blkno)
 
 #ifdef CHECK_PAGE_STATS
 	{
-		/*
-		 * XXX: index_oids_get_btree_descr() might expand a hash table under
-		 * critical section.
-		 */
+		//
+// XXX: index_oids_get_btree_descr() might expand a hash table under
+// critical section.
+//
 		OrioleDBPageDesc *page_desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
 
 		if (O_PAGE_IS(p, LEAF) && page_desc->type != oIndexInvalid)
@@ -897,42 +897,42 @@ unlock_check_page(OInMemoryBlkno blkno)
 	VALGRIND_CHECK_MEM_IS_DEFINED(O_GET_IN_MEMORY_PAGE(blkno), ORIOLEDB_BLCKSZ);
 }
 
-/*
- * unlock_page_internal -- release a previously locked in‑memory page and wake
- *						   any backends that can now proceed.
- *
- * The waiters are stored in a lock‑less, singly‑linked list.  The tail
- * (newest waiter) PGPROC number is packed into the low bits of the 64-bit
- * page‑state word.  A successful unlock therefore needs to:
- *	 1. Walk that list;
- *	 2. Move every suitable waiter (see `shouldWake`) and at most one
- *		exclusive waiter to a private wake list;
- *	 3. Patch the shared list so that the removed waiters vanish from it;
- *	 4. Publish a new page‑state word with the updated tail via atomic CAS;
- *	 5. If the CAS fails, process the newly added waiters (if any) and retry;
- *	 6. Finally, wake up all backends we collected on our private list.
- *
- * The two auxiliary variables `prevTail` and `prevTailPatch` are the key to
- * the logic: if we fail the CAS, the list may already contain our previous
- * patch (i.e. `prevTail->next` now points somewhere else).  We detect that
- * and re‑apply the patch in the next iteration instead of trying to start
- * from scratch (the latter is not possible, because we might already have
- * modified the list).
- */
+//
+// unlock_page_internal -- release a previously locked in‑memory page and wake
+// any backends that can now proceed.
+//
+// The waiters are stored in a lock‑less, singly‑linked list.  The tail
+// (newest waiter) PGPROC number is packed into the low bits of the 64-bit
+// page‑state word.  A successful unlock therefore needs to:
+// 1. Walk that list;
+// 2. Move every suitable waiter (see `shouldWake`) and at most one
+// exclusive waiter to a private wake list;
+// 3. Patch the shared list so that the removed waiters vanish from it;
+// 4. Publish a new page‑state word with the updated tail via atomic CAS;
+// 5. If the CAS fails, process the newly added waiters (if any) and retry;
+// 6. Finally, wake up all backends we collected on our private list.
+//
+// The two auxiliary variables `prevTail` and `prevTailPatch` are the key to
+// the logic: if we fail the CAS, the list may already contain our previous
+// patch (i.e. `prevTail->next` now points somewhere else).  We detect that
+// and re‑apply the patch in the next iteration instead of trying to start
+// from scratch (the latter is not possible, because we might already have
+// modified the list).
+//
 static void
 unlock_page_internal(OInMemoryBlkno blkno, bool split)
 {
 	Page		page = O_GET_IN_MEMORY_PAGE(blkno);
 	OrioleDBPageHeader *hdr = (OrioleDBPageHeader *) page;
 
-	/* Head of our private stack of waiters to wake once the page is unlocked */
+	// Head of our private stack of waiters to wake once the page is unlocked
 	uint32		wakeListHead = PAGE_STATE_INVALID_PROCNO;
 
-	/* Bookkeeping needed when the CAS fails and we must retry */
+	// Bookkeeping needed when the CAS fails and we must retry
 	uint32		prevTail = PAGE_STATE_INVALID_PROCNO;
 	uint32		prevTailPatch = PAGE_STATE_INVALID_PROCNO;
 
-	/* We may wake **one** exclusive waiter per unlock attempt */
+	// We may wake **one** exclusive waiter per unlock attempt
 	bool		exclusiveAlreadyWoken = false;
 	uint64		state;
 
@@ -945,23 +945,23 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 
 	for (;;)
 	{
-		/* Snapshot the tail encoded in the state word */
+		// Snapshot the tail encoded in the state word
 		uint32		tail = state & PAGE_STATE_LIST_TAIL_MASK;
 		uint32		cur = tail;
 		uint32		prev = PAGE_STATE_INVALID_PROCNO;
 		uint64		newState;
 
-		uint32		newTail = tail; /* will become the new list tail */
+		uint32		newTail = tail; // will become the new list tail
 
-		/* Remember the first exclusive waiter we may decide to wake */
+		// Remember the first exclusive waiter we may decide to wake
 		uint32		exclusive = PAGE_STATE_INVALID_PROCNO;
 		uint32		exclusivePrev = PAGE_STATE_INVALID_PROCNO;
 
-		/* --------------------------------------------------------------
-		 * 1. Walk the waiter list, unlinking suitable lockers on the fly
-		 * --------------------------------------------------------------*/
-		while (cur != prevTail) /* stop before the node we patched during the
-								 * previous (failed) iteration */
+		// --------------------------------------------------------------
+// 1. Walk the waiter list, unlinking suitable lockers on the fly
+// --------------------------------------------------------------
+		while (cur != prevTail) // stop before the node we patched during the
+// previous (failed) iteration
 		{
 			OPageWaiterShmemState *lock = &lockerStates[cur];
 
@@ -974,22 +974,22 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 			{
 				uint32		next = lock->next;
 
-				/* Unlink waiter from shared waiter list */
+				// Unlink waiter from shared waiter list
 				if (prev == PAGE_STATE_INVALID_PROCNO)
-					newTail = next; /* removed the first element */
+					newTail = next; // removed the first element
 				else
 					lockerStates[prev].next = next;
 
-				/* Push waiter onto our private wake list */
+				// Push waiter onto our private wake list
 				lock->next = wakeListHead;
 				wakeListHead = cur;
 				expectedWakeCount++;
 
 				cur = next;
-				continue;		/* stay on the same `prev` */
+				continue;		// stay on the same `prev`
 			}
 
-			/* Remember the first (oldest) exclusive waiter */
+			// Remember the first (oldest) exclusive waiter
 			if (!exclusiveAlreadyWoken && exclusive == PAGE_STATE_INVALID_PROCNO)
 			{
 				exclusive = cur;
@@ -1000,9 +1000,9 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 			cur = lock->next;
 		}
 
-		/* ----------------------------------------------------------------
-		 * 2. Optionally move the first exclusive waiter to the wake list
-		 * ----------------------------------------------------------------*/
+		// ----------------------------------------------------------------
+// 2. Optionally move the first exclusive waiter to the wake list
+// ----------------------------------------------------------------
 		if (exclusive != PAGE_STATE_INVALID_PROCNO && !exclusiveAlreadyWoken)
 		{
 			OPageWaiterShmemState *lock = &lockerStates[exclusive];
@@ -1010,11 +1010,11 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 			exclusiveAlreadyWoken = true;
 
 			if (exclusivePrev == PAGE_STATE_INVALID_PROCNO)
-				newTail = lock->next;	/* exclusive was the first node */
+				newTail = lock->next;	// exclusive was the first node
 			else
 				lockerStates[exclusivePrev].next = lock->next;
 
-			/* push to wake list */
+			// push to wake list
 			lock->next = wakeListHead;
 			wakeListHead = exclusive;
 			expectedWakeCount++;
@@ -1023,15 +1023,15 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 				prev = exclusivePrev;
 		}
 
-		/* ----------------------------------------------------------------
-		 * 3. Re‑apply the patch from the previous failed CAS attempt
-		 * ----------------------------------------------------------------*/
+		// ----------------------------------------------------------------
+// 3. Re‑apply the patch from the previous failed CAS attempt
+// ----------------------------------------------------------------
 		if (prevTail != prevTailPatch)
 		{
 			Assert(prevTail != PAGE_STATE_INVALID_PROCNO);
 
 			if (prev == PAGE_STATE_INVALID_PROCNO)
-				newTail = prevTailPatch;	/* new head is different */
+				newTail = prevTailPatch;	// new head is different
 			else
 			{
 				Assert(prev != prevTailPatch);
@@ -1039,15 +1039,15 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 			}
 		}
 
-		/* ----------------------------------------------------------------
-		 * 4. Compose and try to publish the new page‑state word
-		 * ----------------------------------------------------------------*/
+		// ----------------------------------------------------------------
+// 4. Compose and try to publish the new page‑state word
+// ----------------------------------------------------------------
 		newState = state &
 			~(PAGE_STATE_LIST_TAIL_MASK |
 			  PAGE_STATE_LOCKED_FLAG |
 			  PAGE_STATE_NO_READ_FLAG);
 
-		/* Bump change‑counter if reads had been blocked */
+		// Bump change‑counter if reads had been blocked
 		if (O_PAGE_STATE_READ_IS_BLOCKED(state))
 		{
 			uint64		changeCount = (newState & PAGE_STATE_CHANGE_COUNT_MASK);
@@ -1061,23 +1061,23 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 		newState |= newTail;
 
 		if (pg_atomic_compare_exchange_u64(&hdr->state, &state, newState))
-			break;				/* Success!  Exit retry loop */
+			break;				// Success!  Exit retry loop
 
-		/* ----------------------------------------------------------------
-		 * 5. CAS failed – remember what we did and retry
-		 * ----------------------------------------------------------------*/
+		// ----------------------------------------------------------------
+// 5. CAS failed – remember what we did and retry
+// ----------------------------------------------------------------
 		prevTail = tail;
 		prevTailPatch = newTail;
-		/* `state` now holds the value returned by the failed CAS */
+		// `state` now holds the value returned by the failed CAS
 	}
 
-	/* Cleanup the local list of locked pages */
+	// Cleanup the local list of locked pages
 	my_locked_page_del(blkno);
 
-	/* --------------------------------------------------------------------
-	 * 6. Waking collected waiters
-	 * --------------------------------------------------------------------*/
-	pg_write_barrier();			/* ensure list modifications are visible */
+	// --------------------------------------------------------------------
+// 6. Waking collected waiters
+// --------------------------------------------------------------------
+	pg_write_barrier();			// ensure list modifications are visible
 
 	for (uint32 procno = wakeListHead;
 		 procno != PAGE_STATE_INVALID_PROCNO;)
@@ -1088,20 +1088,20 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 
 		next = lockState->next;
 
-		/*
-		 * Ensure memory access ordering.  The effect of statement above must
-		 * materialize before waking up the waiter, which must see
-		 * lockState->status == OPageWaitWakeUp and can modify
-		 * lockState->next.
-		 */
+		//
+// Ensure memory access ordering.  The effect of statement above must
+// materialize before waking up the waiter, which must see
+// lockState->status == OPageWaitWakeUp and can modify
+// lockState->next.
+//
 		pg_memory_barrier();
 
 		lockState->status = OPageWaitWakeUp;
 
-		/*
-		 * Also, ensure woken up waiter will see lockState->status ==
-		 * OPageWaitWakeUp.
-		 */
+		//
+// Also, ensure woken up waiter will see lockState->status ==
+// OPageWaitWakeUp.
+//
 		pg_memory_barrier();
 
 		PGSemaphoreUnlock(proc->sem);
@@ -1116,29 +1116,29 @@ unlock_page_internal(OInMemoryBlkno blkno, bool split)
 void
 unlock_page(OInMemoryBlkno blkno)
 {
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return;
 
 	unlock_page_internal(blkno, false);
 }
 
-/*
- * Unlock the page after page split.  Page should be locked before.
- */
+//
+// Unlock the page after page split.  Page should be locked before.
+//
 void
 unlock_page_after_split(OInMemoryBlkno blkno)
 {
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(blkno))
 		return;
 
 	unlock_page_internal(blkno, true);
 }
 
-/*
- * Release all previously acquired page locks one-by-one.
- */
+//
+// Release all previously acquired page locks one-by-one.
+//
 void
 release_all_page_locks(void)
 {
@@ -1148,12 +1148,12 @@ release_all_page_locks(void)
 		unlock_page(myLockedPages[0].blkno);
 }
 
-/*
- * Register in-progress split.  This split will be marked as incomplete on
- * errer cleanup unless it's unregistered before.
- *
- * Must be called within critical section.
- */
+//
+// Register in-progress split.  This split will be marked as incomplete on
+// errer cleanup unless it's unregistered before.
+//
+// Must be called within critical section.
+//
 void
 btree_register_inprogress_split(OInMemoryBlkno rightBlkno)
 {
@@ -1168,11 +1168,11 @@ btree_register_inprogress_split(OInMemoryBlkno rightBlkno)
 	myInProgressSplitPages[numberOfMyInProgressSplitPages++] = rightBlkno;
 }
 
-/*
- * Unregister in-progress split.
- *
- * Must be calles within critical section.
- */
+//
+// Unregister in-progress split.
+//
+// Must be calles within critical section.
+//
 void
 btree_unregister_inprogress_split(OInMemoryBlkno rightBlkno)
 {
@@ -1192,9 +1192,9 @@ btree_unregister_inprogress_split(OInMemoryBlkno rightBlkno)
 	Assert(false);
 }
 
-/*
- * Marks all in-progress splits as incomplete.
- */
+//
+// Marks all in-progress splits as incomplete.
+//
 void
 btree_mark_incomplete_splits(void)
 {
@@ -1205,14 +1205,14 @@ btree_mark_incomplete_splits(void)
 	numberOfMyInProgressSplitPages = 0;
 }
 
-/*
- * Marks the split as finished.
- *
- * It sets O_BTREE_FLAG_BROKEN_SPLIT if success = false or removes rightlink
- * on the left page.
- *
- * It does not call modify_page if use_lock = false.
- */
+//
+// Marks the split as finished.
+//
+// It sets O_BTREE_FLAG_BROKEN_SPLIT if success = false or removes rightlink
+// on the left page.
+//
+// It does not call modify_page if use_lock = false.
+//
 void
 btree_split_mark_finished(OInMemoryBlkno rightBlkno, bool use_lock, bool success)
 {
@@ -1221,18 +1221,18 @@ btree_split_mark_finished(OInMemoryBlkno rightBlkno, bool use_lock, bool success
 	OrioleDBPageDesc *rightPageDesc = O_GET_IN_MEMORY_PAGEDESC(rightBlkno);
 	OInMemoryBlkno leftBlkno;
 
-	/* Local pages do not need locking */
+	// Local pages do not need locking
 	if (O_PAGE_IS_LOCAL(rightBlkno))
 		use_lock = false;
 
 	leftBlkno = rightPageDesc->leftBlkno;
 	Assert(OInMemoryBlknoIsValid(leftBlkno));
 
-	/*
-	 * Still need to lock th left page even if we're going to just set
-	 * BROKEN_SPLIT on the right page, because we need to notify waiters in
-	 * o_btree_split_is_incomplete().
-	 */
+	//
+// Still need to lock th left page even if we're going to just set
+// BROKEN_SPLIT on the right page, because we need to notify waiters in
+// o_btree_split_is_incomplete().
+//
 	if (use_lock)
 	{
 		while (true)
@@ -1286,9 +1286,9 @@ btree_split_mark_finished(OInMemoryBlkno rightBlkno, bool use_lock, bool success
 
 extern void log_btree(BTreeDescr *desc);
 
-/*
- * Check if page has a consistent structure.
- */
+//
+// Check if page has a consistent structure.
+//
 static void
 o_check_page_struct(BTreeDescr *desc, Page p)
 {
@@ -1427,10 +1427,10 @@ o_check_page_struct(BTreeDescr *desc, Page p)
 
 #ifdef CHECK_PAGE_STATS
 
-/*
- * Check if precalculated number of vacated bytes for leaf pages and number
- * of disk downlinks for non-leaf pages is correct.
- */
+//
+// Check if precalculated number of vacated bytes for leaf pages and number
+// of disk downlinks for non-leaf pages is correct.
+//
 static void
 o_check_btree_page_statistics(BTreeDescr *desc, Pointer p)
 {

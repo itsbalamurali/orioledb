@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * o_buffers.c
- * 		Buffering layer for file access.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/utils/o_buffers.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// o_buffers.c
+// Buffering layer for file access.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/utils/o_buffers.c
+//
+// -------------------------------------------------------------------------
+//
 #include "postgres.h"
 
 #include <unistd.h>
@@ -105,11 +105,11 @@ o_buffers_shmem_init(OBuffersDesc *desc, void *buf, bool found)
 						  desc->bufferCtlTrancheName);
 }
 
-/*
- * Open a buffer file.  When create is true, the file is created if it
- * doesn't exist (O_CREAT) and failure is always PANIC.  When create is
- * false, a missing file (ENOENT) returns false instead of panicking.
- */
+//
+// Open a buffer file.  When create is true, the file is created if it
+// doesn't exist (O_CREAT) and failure is always PANIC.  When create is
+// false, a missing file (ENOENT) returns false instead of panicking.
+//
 static bool
 open_file(OBuffersDesc *desc, uint32 tag, uint64 fileNum, bool create)
 {
@@ -180,10 +180,10 @@ write_buffer(OBuffersDesc *desc, OBuffer *buffer)
 	write_buffer_data(desc, buffer->data, buffer->tag, buffer->blockNum);
 }
 
-/*
- * Read a buffer from disk.  When missing_ok is true, a missing file
- * returns false (buffer zeroed) instead of panicking.
- */
+//
+// Read a buffer from disk.  When missing_ok is true, a missing file
+// returns false (buffer zeroed) instead of panicking.
+//
 static bool
 read_buffer(OBuffersDesc *desc, OBuffer *buffer, bool missing_ok)
 {
@@ -218,12 +218,12 @@ read_buffer(OBuffersDesc *desc, OBuffer *buffer, bool missing_ok)
 	return true;
 }
 
-/*
- * Get (or load) a buffer for the given block.  When missing_ok is true and
- * the underlying file does not exist, the buffer is invalidated and NULL is
- * returned (no lock held).  The write flag controls the lock mode for
- * already-cached buffers.
- */
+//
+// Get (or load) a buffer for the given block.  When missing_ok is true and
+// the underlying file does not exist, the buffer is invalidated and NULL is
+// returned (no lock held).  The write flag controls the lock mode for
+// already-cached buffers.
+//
 static OBuffer *
 get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
 		   bool missing_ok)
@@ -238,7 +238,7 @@ get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
 	uint32		prevTag;
 	LWLockMode	lockMode = write ? LW_EXCLUSIVE : LW_SHARED;
 
-	/* First check if required buffer is already loaded */
+	// First check if required buffer is already loaded
 	LWLockAcquire(&group->groupCtlLock, LW_SHARED);
 	for (i = 0; i < O_BUFFERS_PER_GROUP; i++)
 	{
@@ -255,15 +255,15 @@ get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
 	}
 	LWLockRelease(&group->groupCtlLock);
 
-	/* No luck: have to evict some buffer */
+	// No luck: have to evict some buffer
 	LWLockAcquire(&group->groupCtlLock, LW_EXCLUSIVE);
 
-	/* Search for victim buffer */
+	// Search for victim buffer
 	for (i = 0; i < O_BUFFERS_PER_GROUP; i++)
 	{
 		buffer = &group->buffers[i];
 
-		/* Need to recheck after relock */
+		// Need to recheck after relock
 		if (buffer->blockNum == blockNum &&
 			buffer->tag == tag)
 		{
@@ -277,10 +277,10 @@ get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
 		if (buffer->shadowBlockNum == blockNum &&
 			buffer->shadowTag == tag)
 		{
-			/*
-			 * There is an in-progress operation with required tag.  We must
-			 * wait till it's completed.
-			 */
+			//
+// There is an in-progress operation with required tag.  We must
+// wait till it's completed.
+//
 			if (LWLockAcquireOrWait(&buffer->bufferCtlLock, LW_SHARED))
 				LWLockRelease(&buffer->bufferCtlLock);
 		}
@@ -313,7 +313,7 @@ get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
 
 	if (!read_buffer(desc, buffer, missing_ok))
 	{
-		/* File doesn't exist — invalidate buffer */
+		// File doesn't exist — invalidate buffer
 		Assert(missing_ok);
 		buffer->blockNum = -1;
 		buffer->shadowBlockNum = -1;
@@ -326,21 +326,21 @@ get_buffer(OBuffersDesc *desc, uint32 tag, int64 blockNum, bool write,
 	return buffer;
 }
 
-/*
- * Read or write a range of data from/to buffers.
- *
- * missing_ok: a missing underlying file returns false instead of panicking
- * (read path returns with buf zeroed).  Otherwise the call always returns
- * true.
- *
- * mark_clean (write only): the data is already durable on disk (the caller
- * is refreshing the cache copy of a page a checkpoint-time flush already
- * pushed out).  The touched buffers are left clean -- no write-back is
- * performed and none must clobber the on-disk image.  Used by the
- * undo/xidmap eviction paths so a stale partial copy a prior eviction left
- * in the cache does not get read back after the written-frontier advances
- * past it.
- */
+//
+// Read or write a range of data from/to buffers.
+//
+// missing_ok: a missing underlying file returns false instead of panicking
+// (read path returns with buf zeroed).  Otherwise the call always returns
+// true.
+//
+// mark_clean (write only): the data is already durable on disk (the caller
+// is refreshing the cache copy of a page a checkpoint-time flush already
+// pushed out).  The touched buffers are left clean -- no write-back is
+// performed and none must clobber the on-disk image.  Used by the
+// undo/xidmap eviction paths so a stale partial copy a prior eviction left
+// in the cache does not get read back after the written-frontier advances
+// past it.
+//
 static bool
 o_buffers_rw(OBuffersDesc *desc, Pointer buf,
 			 uint32 tag, int64 offset, int64 size,
@@ -417,29 +417,29 @@ o_buffers_write(OBuffersDesc *desc, Pointer buf, uint32 tag,
 						if_exists, mark_clean);
 }
 
-/*
- * Write one ORIOLEDB_BLCKSZ-aligned page straight to the on-disk file,
- * bypassing the o_buffers cache.
- *
- * Useful at checkpoint time when the caller knows the same data will
- * stay hot in another in-memory copy (e.g. the xidmap / undo circular
- * buffers, which keep the slot/record contents themselves and answer
- * subsequent reads from there rather than from the o_buffers cache).
- * Going through o_buffers_write() in that case would only pollute the
- * cache with a copy that nobody will ever read.
- *
- * Caller must not call this concurrently for the same OBuffersDesc with
- * other paths that mutate desc->curFile (the process-local open-file
- * cache); the typical pattern is to hold the same write lock that
- * serialises the eviction path.
- *
- * If the page does happen to be resident in the cache -- only the partial
- * boundary pages the eviction path leaves behind ever are -- its copy is
- * refreshed to match what we put on disk and marked clean, so a subsequent
- * read of it does not return now-stale bytes.  Absent pages are deliberately
- * not pulled in: their data stays hot in the caller's ring buffer and a
- * cache copy would only duplicate it.
- */
+//
+// Write one ORIOLEDB_BLCKSZ-aligned page straight to the on-disk file,
+// bypassing the o_buffers cache.
+//
+// Useful at checkpoint time when the caller knows the same data will
+// stay hot in another in-memory copy (e.g. the xidmap / undo circular
+// buffers, which keep the slot/record contents themselves and answer
+// subsequent reads from there rather than from the o_buffers cache).
+// Going through o_buffers_write() in that case would only pollute the
+// cache with a copy that nobody will ever read.
+//
+// Caller must not call this concurrently for the same OBuffersDesc with
+// other paths that mutate desc->curFile (the process-local open-file
+// cache); the typical pattern is to hold the same write lock that
+// serialises the eviction path.
+//
+// If the page does happen to be resident in the cache -- only the partial
+// boundary pages the eviction path leaves behind ever are -- its copy is
+// refreshed to match what we put on disk and marked clean, so a subsequent
+// read of it does not return now-stale bytes.  Absent pages are deliberately
+// not pulled in: their data stays hot in the caller's ring buffer and a
+// cache copy would only duplicate it.
+//
 void
 o_buffers_write_page_direct(OBuffersDesc *desc, char *data, uint32 tag,
 							int64 offset)
@@ -568,13 +568,13 @@ o_buffers_sync(OBuffersDesc *desc, uint32 tag,
 	}
 }
 
-/*
- * Discard blocks [firstBlockNumber, lastBlockNumber]: unlink files fully
- * covered by the range and punch holes over the touched portion of partially
- * covered files at either edge.  A boundary file that does not yet exist
- * (e.g. when callers cleanup ahead of the active write frontier) is silently
- * skipped.
- */
+//
+// Discard blocks [firstBlockNumber, lastBlockNumber]: unlink files fully
+// covered by the range and punch holes over the touched portion of partially
+// covered files at either edge.  A boundary file that does not yet exist
+// (e.g. when callers cleanup ahead of the active write frontier) is silently
+// skipped.
+//
 void
 o_buffers_unlink_blocks_range(OBuffersDesc *desc, uint32 tag,
 							  int64 firstBlockNumber, int64 lastBlockNumber)
@@ -617,27 +617,27 @@ o_buffers_unlink_blocks_range(OBuffersDesc *desc, uint32 tag,
 	}
 }
 
-/*
- * Discard items in [cleanupStart, cleanupEnd) that are no longer kept by the
- * retain set [chkpRetainStart, chkpRetainEnd) U [transactionRetainStart, +inf).
- * Fully covered files are unlinked.  The leading file is also unlinked when
- * it lies entirely outside the retain set, so successive concurrent calls
- * with non-file-aligned boundaries don't leave orphan partial-coverage files.
- * itemsPerBlock is the count of caller-defined items in one ORIOLEDB_BLCKSZ
- * block.
- *
- * Partition of items in [cleanupStart, cleanupEnd) against the new retain set:
- *
- *   1. item < retainStart                                  -- unlink
- *   2. item in [retainStart, chkpRetainEnd)                -- chkp, keep
- *   3. item in [chkpRetainEnd, transactionRetainStart)      -- gap, unlink
- *      (only reachable when chkpRetainEnd < transactionRetainStart)
- *   4. item >= transactionRetainStart                       -- active, keep
- *
- * When the chkp range is empty, retainStart = transactionRetainStart, the gap
- * branch is skipped, and everything below transactionRetainStart falls into
- * case 1.
- */
+//
+// Discard items in [cleanupStart, cleanupEnd) that are no longer kept by the
+// retain set [chkpRetainStart, chkpRetainEnd) U [transactionRetainStart, +inf).
+// Fully covered files are unlinked.  The leading file is also unlinked when
+// it lies entirely outside the retain set, so successive concurrent calls
+// with non-file-aligned boundaries don't leave orphan partial-coverage files.
+// itemsPerBlock is the count of caller-defined items in one ORIOLEDB_BLCKSZ
+// block.
+//
+// Partition of items in [cleanupStart, cleanupEnd) against the new retain set:
+//
+// 1. item < retainStart                                  -- unlink
+// 2. item in [retainStart, chkpRetainEnd)                -- chkp, keep
+// 3. item in [chkpRetainEnd, transactionRetainStart)      -- gap, unlink
+// (only reachable when chkpRetainEnd < transactionRetainStart)
+// 4. item >= transactionRetainStart                       -- active, keep
+//
+// When the chkp range is empty, retainStart = transactionRetainStart, the gap
+// branch is skipped, and everything below transactionRetainStart falls into
+// case 1.
+//
 void
 unlink_unretained_o_buffers(OBuffersDesc *desc, uint32 tag, int64 itemsPerBlock,
 							int64 cleanupStart, int64 cleanupEnd,
@@ -648,12 +648,12 @@ unlink_unretained_o_buffers(OBuffersDesc *desc, uint32 tag, int64 itemsPerBlock,
 	int64		retainStart;
 	int64		finish;
 
-	/*
-	 * Block arithmetic below uses index / itemsPerBlock, which is only
-	 * correct when items align to block boundaries.  For straddling items
-	 * (e.g. RewindItem) the caller must compute block ranges itself and call
-	 * o_buffers_unlink_blocks_range directly.
-	 */
+	//
+// Block arithmetic below uses index / itemsPerBlock, which is only
+// correct when items align to block boundaries.  For straddling items
+// (e.g. RewindItem) the caller must compute block ranges itself and call
+// o_buffers_unlink_blocks_range directly.
+//
 	Assert(ORIOLEDB_BLCKSZ % itemsPerBlock == 0);
 
 	if (cleanupStart >= cleanupEnd)
@@ -664,7 +664,7 @@ unlink_unretained_o_buffers(OBuffersDesc *desc, uint32 tag, int64 itemsPerBlock,
 	else
 		retainStart = transactionRetainStart;
 
-	/* Case 1: items below the new persist start. */
+	// Case 1: items below the new persist start.
 	finish = Min(cleanupEnd, retainStart);
 	if (cleanupStart < finish)
 	{
@@ -673,20 +673,20 @@ unlink_unretained_o_buffers(OBuffersDesc *desc, uint32 tag, int64 itemsPerBlock,
 		int64		retainBlock = retainStart / itemsPerBlock;
 		int64		leadFile = firstBlock / blocksPerFile;
 
-		/*
-		 * If the file containing the leading edge is entirely below retain,
-		 * extend the range down to its first block so the file is unlinked
-		 * rather than left as a stale partial-coverage shell.  The bytes
-		 * below cleanupStart in that file are below the previous cleaned
-		 * boundary and therefore already dead.
-		 */
+		//
+// If the file containing the leading edge is entirely below retain,
+// extend the range down to its first block so the file is unlinked
+// rather than left as a stale partial-coverage shell.  The bytes
+// below cleanupStart in that file are below the previous cleaned
+// boundary and therefore already dead.
+//
 		if ((leadFile + 1) * blocksPerFile <= retainBlock)
 			firstBlock = leadFile * blocksPerFile;
 
 		o_buffers_unlink_blocks_range(desc, tag, firstBlock, lastBlock);
 	}
 
-	/* Case 3: gap above chkpRetainEnd and below current retain. */
+	// Case 3: gap above chkpRetainEnd and below current retain.
 	if (chkpRetainStart < chkpRetainEnd && chkpRetainEnd < transactionRetainStart)
 	{
 		int64		gapStart = Max(cleanupStart, chkpRetainEnd);
@@ -701,11 +701,11 @@ unlink_unretained_o_buffers(OBuffersDesc *desc, uint32 tag, int64 itemsPerBlock,
 			int64		leadFile = firstBlock / blocksPerFile;
 			int64		leadFileFirst = leadFile * blocksPerFile;
 
-			/*
-			 * Extend only when the leading file sits entirely inside the gap
-			 * (above chkpRetainEnd and below transactionRetainStart): then
-			 * every item in it is dead.
-			 */
+			//
+// Extend only when the leading file sits entirely inside the gap
+// (above chkpRetainEnd and below transactionRetainStart): then
+// every item in it is dead.
+//
 			if (leadFileFirst >= chkpEndBlock &&
 				leadFileFirst + blocksPerFile <= retainBlock)
 				firstBlock = leadFileFirst;

@@ -1,16 +1,16 @@
-/*-------------------------------------------------------------------------
- *
- * oxid.c
- *		Management of OrioleDB transaction identifiers.
- *
- * Copyright (c) 2021-2026, Oriole DB Inc.
- * Copyright (c) 2025-2026, Supabase Inc.
- *
- * IDENTIFICATION
- *	  contrib/orioledb/src/transam/oxid.c
- *
- *-------------------------------------------------------------------------
- */
+// -------------------------------------------------------------------------
+//
+// oxid.c
+// Management of OrioleDB transaction identifiers.
+//
+// Copyright (c) 2021-2026, Oriole DB Inc.
+// Copyright (c) 2025-2026, Supabase Inc.
+//
+// IDENTIFICATION
+// contrib/orioledb/src/transam/oxid.c
+//
+// -------------------------------------------------------------------------
+//
 #include "c.h"
 #include "postgres.h"
 
@@ -73,35 +73,35 @@ PG_FUNCTION_INFO_V1(orioledb_get_current_logical_xid);
 PG_FUNCTION_INFO_V1(orioledb_get_current_heap_xid);
 PG_FUNCTION_INFO_V1(orioledb_get_xid_meta);
 
-/*
- * OrioleDB uses three transaction id entities:
- *     - [uint32 TransactionId] native PG heap transaction id (heap xid)
- *     - [uint64 OXid] extended OrioleDB transaction id (oxid)
- *     - [uint32 TransactionId] logical transaction id for compatibility with logical decoding PG API (logical xid)
- *
- * Each one of these xids uses an independent sequence / algorithm to allocate a new xid.
- *
- * xact types of xid assignment for logical decoding & replay:
- *     - readonly           - no xid (*)
- *     - heap write         - heap xid - COMMIT heap xact
- *     - oriole write       - oriole xid - COMMIT oriole xact
- *     - heap->oriole write - SWITCH_LOGICAL_XID H2O: \
- *                                                     Oriole txn acts as a sub-txn of a top heap txn
- *     - oriole->heap write - SWITCH_LOGICAL_XID O2H: /
- */
-static OXid curOxid = InvalidOXid;	/* a 64-bit OrioleDB oxid */
+//
+// OrioleDB uses three transaction id entities:
+// - [uint32 TransactionId] native PG heap transaction id (heap xid)
+// - [uint64 OXid] extended OrioleDB transaction id (oxid)
+// - [uint32 TransactionId] logical transaction id for compatibility with logical decoding PG API (logical xid)
+//
+// Each one of these xids uses an independent sequence / algorithm to allocate a new xid.
+//
+// xact types of xid assignment for logical decoding & replay:
+// - readonly           - no xid (*)
+// - heap write         - heap xid - COMMIT heap xact
+// - oriole write       - oriole xid - COMMIT oriole xact
+// - heap->oriole write - SWITCH_LOGICAL_XID H2O: \
+// Oriole txn acts as a sub-txn of a top heap txn
+// - oriole->heap write - SWITCH_LOGICAL_XID O2H: /
+//
+static OXid curOxid = InvalidOXid;	// a 64-bit OrioleDB oxid
 
-/*
- * Flags that record whether current_oxid_precommit() /
- * current_oxid_xlog_precommit() have stamped the COMMITTING bit on
- * curOxid's CSN / xlog ptr.  current_oxid_clear_committing() consults
- * them on the abort path to decide whether the bit must be reverted to
- * IN_PROGRESS before apply_undo_stack() runs.  These are kept as
- * backend-local booleans rather than being recovered from xidBuffer
- * because the xidBuffer slot is shared by all oxids that map to it
- * modulo xid_circular_buffer_size and, after run_xmin advances, may be
- * reused for a different oxid.
- */
+//
+// Flags that record whether current_oxid_precommit() /
+// current_oxid_xlog_precommit() have stamped the COMMITTING bit on
+// curOxid's CSN / xlog ptr.  current_oxid_clear_committing() consults
+// them on the abort path to decide whether the bit must be reverted to
+// IN_PROGRESS before apply_undo_stack() runs.  These are kept as
+// backend-local booleans rather than being recovered from xidBuffer
+// because the xidBuffer slot is shared by all oxids that map to it
+// modulo xid_circular_buffer_size and, after run_xmin advances, may be
+// reused for a different oxid.
+//
 static bool csn_committing_set = false;
 static bool xlog_ptr_committing_set = false;
 
@@ -136,44 +136,44 @@ orioledb_get_current_heap_xid(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(GetCurrentTransactionIdIfAny());
 }
 
-static List *prevLogicalXids = NIL; /* remember all xids on subxact's chain
-									 * for correct release */
+static List *prevLogicalXids = NIL; // remember all xids on subxact's chain
+// for correct release
 static OXidMapItem *xidBuffer;
 
-/*
- * Per-page dirty bitmap for xidBuffer.  One bit per ORIOLEDB_BLCKSZ page
- * (i.e. per ORIOLEDB_BLCKSZ / sizeof(OXidMapItem) slots).  Set by writers
- * whenever they store into a slot; cleared by the checkpoint-time flush
- * (flush_dirty_xidsmap_range) and by the eviction path once the page has
- * been pushed out to o_buffers.
- *
- * The bit signals "this page may differ from the on-disk copy" - it is set
- * AFTER the slot store with a release barrier, so a checkpointer that has
- * just observed it can read the slot data with an acquire barrier and is
- * guaranteed to see the writer's update.  A late-setting writer (set bit
- * after checkpoint cleared it) leaves the bit set so the next flush
- * catches the update; the worst case is one redundant page write.
- */
+//
+// Per-page dirty bitmap for xidBuffer.  One bit per ORIOLEDB_BLCKSZ page
+// (i.e. per ORIOLEDB_BLCKSZ / sizeof(OXidMapItem) slots).  Set by writers
+// whenever they store into a slot; cleared by the checkpoint-time flush
+// (flush_dirty_xidsmap_range) and by the eviction path once the page has
+// been pushed out to o_buffers.
+//
+// The bit signals "this page may differ from the on-disk copy" - it is set
+// AFTER the slot store with a release barrier, so a checkpointer that has
+// just observed it can read the slot data with an acquire barrier and is
+// guaranteed to see the writer's update.  A late-setting writer (set bit
+// after checkpoint cleared it) leaves the bit set so the next flush
+// catches the update; the worst case is one redundant page write.
+//
 static pg_atomic_uint32 *xidBufferDirty;
 
 XidMeta    *xid_meta;
 
 static pg_atomic_uint32 *logicalXidsShmemMap;
 
-/* # slots covered by one o_buffers page in the xidmap. */
+// # slots covered by one o_buffers page in the xidmap.
 #define XID_SLOTS_PER_PAGE (ORIOLEDB_BLCKSZ / sizeof(OXidMapItem))
 StaticAssertDecl(ORIOLEDB_BLCKSZ % sizeof(OXidMapItem) == 0,
 				 "OXidMapItem must tile ORIOLEDB_BLCKSZ");
 
-/* # of pages in the circular buffer (== xid_buffers_count by construction). */
+// # of pages in the circular buffer (== xid_buffers_count by construction).
 #define XID_BUFFER_NPAGES \
 	(xid_circular_buffer_size / XID_SLOTS_PER_PAGE)
 
-/* # of uint32 words holding the dirty bitmap. */
+// # of uint32 words holding the dirty bitmap.
 #define XID_BUFFER_DIRTY_WORDS \
 	((XID_BUFFER_NPAGES + 31) / 32)
 
-/* Ring-relative page index for oxid (folds modulo the circular buffer). */
+// Ring-relative page index for oxid (folds modulo the circular buffer).
 #define XID_BUFFER_PAGE_INDEX(oxid) \
 	(((oxid) % xid_circular_buffer_size) / XID_SLOTS_PER_PAGE)
 
@@ -185,18 +185,18 @@ mark_xid_buffer_dirty(OXid oxid)
 
 	Assert(page < XID_BUFFER_NPAGES);
 
-	/*
-	 * Release fence so the preceding slot store is visible to a checkpointer
-	 * that observes the bit set.
-	 */
+	//
+// Release fence so the preceding slot store is visible to a checkpointer
+// that observes the bit set.
+//
 	pg_atomic_fetch_or_u32(&xidBufferDirty[page / 32], mask);
 }
 
-/*
- * Atomic test-and-clear of the dirty bit for one page.  Returns true if
- * the bit was set (caller must persist the page to disk).  Acquire fence
- * pairs with the release in mark_xid_buffer_dirty().
- */
+//
+// Atomic test-and-clear of the dirty bit for one page.  Returns true if
+// the bit was set (caller must persist the page to disk).  Acquire fence
+// pairs with the release in mark_xid_buffer_dirty().
+//
 static inline bool
 test_clear_xid_buffer_page_dirty(uint32 page)
 {
@@ -206,11 +206,11 @@ test_clear_xid_buffer_page_dirty(uint32 page)
 	return (old & mask) != 0;
 }
 
-/*
- * Non-destructive read of one page's dirty bit.  Used for partial boundary
- * pages, whose bit must be left intact (their tail still covers slots
- * outside the range being written).
- */
+//
+// Non-destructive read of one page's dirty bit.  Used for partial boundary
+// pages, whose bit must be left intact (their tail still covers slots
+// outside the range being written).
+//
 static inline bool
 xid_buffer_page_dirty(uint32 page)
 {
@@ -219,14 +219,14 @@ xid_buffer_page_dirty(uint32 page)
 	return (pg_atomic_read_u32(&xidBufferDirty[page / 32]) & mask) != 0;
 }
 
-/*
- * Clear dirty bits for pages fully covered by [xmin, xmax) so a subsequent
- * checkpoint-time flush can skip them.  Used by write_xidsmap() (which has
- * just written the pages out) and advance_global_xmin() (which has just
- * reset them to FROZEN).  Partial boundary pages are left dirty: their
- * tail still belongs to slots outside the range that may be actively
- * written.
- */
+//
+// Clear dirty bits for pages fully covered by [xmin, xmax) so a subsequent
+// checkpoint-time flush can skip them.  Used by write_xidsmap() (which has
+// just written the pages out) and advance_global_xmin() (which has just
+// reset them to FROZEN).  Partial boundary pages are left dirty: their
+// tail still belongs to slots outside the range that may be actively
+// written.
+//
 static inline void
 clear_xid_dirty_range(OXid xmin, OXid xmax)
 {
@@ -248,17 +248,17 @@ clear_xid_dirty_range(OXid xmin, OXid xmax)
 
 OSnapshot	o_in_progress_snapshot = {COMMITSEQNO_INPROGRESS, InvalidXLogRecPtr, 0, 0};
 
-/*
- * Snapshot that returns uncommitted transactions data (like
- * o_in_progress_snapshot), but also includes tuples marked as deleted that
- * are still present on the data page.  This is needed for accessing
- * SYS_TREES_O_INDICES chunks for trees that may be deleted in uncommitted
- * (sub-)transactions: on rollback those trees might become visible again.
- *
- * Used as the default snapshot for fetching table/index descriptors
- * (default_table_fetch_context), because processes like the checkpointer or
- * bgwriter may need to access trees being dropped.
- */
+//
+// Snapshot that returns uncommitted transactions data (like
+// o_in_progress_snapshot), but also includes tuples marked as deleted that
+// are still present on the data page.  This is needed for accessing
+// SYS_TREES_O_INDICES chunks for trees that may be deleted in uncommitted
+// (sub-)transactions: on rollback those trees might become visible again.
+//
+// Used as the default snapshot for fetching table/index descriptors
+// (default_table_fetch_context), because processes like the checkpointer or
+// bgwriter may need to access trees being dropped.
+//
 OSnapshot	o_non_deleted_snapshot = {COMMITSEQNO_NON_DELETED, InvalidXLogRecPtr, 0, 0};
 
 static OBuffersDesc buffersDesc = {
@@ -296,17 +296,17 @@ oxid_shmem_needs(void)
 static HTAB *LockMethodLockHash;
 static HTAB *LockMethodProcLockHash;
 
-/*
- * Compute the hash code associated with a PROCLOCKTAG.
- *
- * Because we want to use just one set of partition locks for both the
- * LOCK and PROCLOCK hash tables, we have to make sure that PROCLOCKs
- * fall into the same partition number as their associated LOCKs.
- * dynahash.c expects the partition number to be the low-order bits of
- * the hash code, and therefore a PROCLOCKTAG's hash code must have the
- * same low-order bits as the associated LOCKTAG's hash code.  We achieve
- * this with this specialized hash function.
- */
+//
+// Compute the hash code associated with a PROCLOCKTAG.
+//
+// Because we want to use just one set of partition locks for both the
+// LOCK and PROCLOCK hash tables, we have to make sure that PROCLOCKs
+// fall into the same partition number as their associated LOCKs.
+// dynahash.c expects the partition number to be the low-order bits of
+// the hash code, and therefore a PROCLOCKTAG's hash code must have the
+// same low-order bits as the associated LOCKTAG's hash code.  We achieve
+// this with this specialized hash function.
+//
 static uint32
 proclock_hash(const void *key, Size keysize)
 {
@@ -316,25 +316,25 @@ proclock_hash(const void *key, Size keysize)
 
 	Assert(keysize == sizeof(PROCLOCKTAG));
 
-	/* Look into the associated LOCK object, and compute its hash code */
+	// Look into the associated LOCK object, and compute its hash code
 	lockhash = LockTagHashCode(&proclocktag->myLock->tag);
 
-	/*
-	 * To make the hash code also depend on the PGPROC, we xor the proc
-	 * struct's address into the hash code, left-shifted so that the
-	 * partition-number bits don't change.  Since this is only a hash, we
-	 * don't care if we lose high-order bits of the address; use an
-	 * intermediate variable to suppress cast-pointer-to-int warnings.
-	 */
+	//
+// To make the hash code also depend on the PGPROC, we xor the proc
+// struct's address into the hash code, left-shifted so that the
+// partition-number bits don't change.  Since this is only a hash, we
+// don't care if we lose high-order bits of the address; use an
+// intermediate variable to suppress cast-pointer-to-int warnings.
+//
 	procptr = PointerGetDatum(proclocktag->myProc);
 	lockhash ^= ((uint32) procptr) << LOG2_NUM_LOCK_PARTITIONS;
 
 	return lockhash;
 }
 
-/*
- * Get access to lock system hashes in the shared memory.
- */
+//
+// Get access to lock system hashes in the shared memory.
+//
 static void
 init_lock_hashes(void)
 {
@@ -342,17 +342,17 @@ init_lock_hashes(void)
 	long		init_table_size,
 				max_table_size;
 
-	/*
-	 * Compute init/max size to request for lock hashtables.  Note these
-	 * calculations must agree with LockShmemSize!
-	 */
+	//
+// Compute init/max size to request for lock hashtables.  Note these
+// calculations must agree with LockShmemSize!
+//
 	max_table_size = NLOCKENTS();
 	init_table_size = max_table_size / 2;
 
-	/*
-	 * Allocate hash table for LOCK structs.  This stores per-locked-object
-	 * information.
-	 */
+	//
+// Allocate hash table for LOCK structs.  This stores per-locked-object
+// information.
+//
 	info.keysize = sizeof(LOCKTAG);
 	info.entrysize = sizeof(LOCK);
 	info.num_partitions = NUM_LOCK_PARTITIONS;
@@ -363,14 +363,14 @@ init_lock_hashes(void)
 									   &info,
 									   HASH_ELEM | HASH_BLOBS | HASH_PARTITION);
 
-	/* Assume an average of 2 holders per lock */
+	// Assume an average of 2 holders per lock
 	max_table_size *= 2;
 	init_table_size *= 2;
 
-	/*
-	 * Allocate hash table for PROCLOCK structs.  This stores
-	 * per-lock-per-holder information.
-	 */
+	//
+// Allocate hash table for PROCLOCK structs.  This stores
+// per-lock-per-holder information.
+//
 	info.keysize = sizeof(PROCLOCKTAG);
 	info.entrysize = sizeof(PROCLOCK);
 	info.hash = proclock_hash;
@@ -400,7 +400,7 @@ oxid_init_shmem(Pointer ptr, bool found)
 	{
 		int64		i;
 
-		/* xid_meta fields are initialized in checkpoint_shmem_init() */
+		// xid_meta fields are initialized in checkpoint_shmem_init()
 		SpinLockInit(&xid_meta->xminMutex);
 		for (i = 0; i < xid_circular_buffer_size; i++)
 		{
@@ -421,7 +421,7 @@ oxid_init_shmem(Pointer ptr, bool found)
 		for (i = 0; i < logical_xid_buffers_guc * (BLCKSZ / sizeof(pg_atomic_uint32)); i++)
 			pg_atomic_init_u32(&logicalXidsShmemMap[i], 0);
 
-		/* Undo positions are initialized in checkpoint_shmem_init() */
+		// Undo positions are initialized in checkpoint_shmem_init()
 	}
 	LWLockRegisterTranche(xid_meta->xidMapTrancheId,
 						  "OXidMapWriteTranche");
@@ -446,16 +446,16 @@ acquire_logical_xid(bool *isValidHeapXid)
 
 	Assert(i >= 0 && i < max_procs);
 
-	/*
-	 * Check whether any valid heap xid is present at the moment of allocation
-	 * of xid Oriole
-	 */
+	//
+// Check whether any valid heap xid is present at the moment of allocation
+// of xid Oriole
+//
 	if (isValidHeapXid)
 	{
 		*isValidHeapXid = TransactionIdIsValid(GetTopTransactionIdIfAny());
 	}
 
-	/* Allocate new Oriole logical xid */
+	// Allocate new Oriole logical xid
 	while (true)
 	{
 		uint32		value = pg_atomic_read_u32(&logicalXidsShmemMap[i]);
@@ -544,7 +544,7 @@ acquire_logical_xid_wrapper(bool *isValidHeapXid)
 
 	if (*isValidHeapXid)
 	{
-		/* Support native heap mechanics: assign all sub-txns to a top one */
+		// Support native heap mechanics: assign all sub-txns to a top one
 
 		heapXid = GetTopTransactionIdIfAny();
 		if (TransactionIdIsValid(heapXid))
@@ -565,9 +565,9 @@ assign_subtransaction_logical_xid(void)
 
 	nextLogicalXid = acquire_logical_xid_wrapper(&isValidHeapXid);
 
-	/*
-	 * Check previous logical xid if present and store it in a list of xids
-	 */
+	//
+// Check previous logical xid if present and store it in a list of xids
+//
 	if (TransactionIdIsValid(logicalXidContext.xid))
 	{
 		MemoryContext mcxt = MemoryContextSwitchTo(TopMemoryContext);
@@ -683,9 +683,9 @@ oxid_subxact_callback(
 	}
 }
 
-/*
- * Set the csn value for particular oxid.
- */
+//
+// Set the csn value for particular oxid.
+//
 void
 set_oxid_csn(OXid oxid, CommitSeqNo csn)
 {
@@ -705,17 +705,17 @@ set_oxid_csn(OXid oxid, CommitSeqNo csn)
 			return;
 		}
 
-		/*
-		 * We assume that nobody could change the csn value concurrently.
-		 * Thus, it could be only wiped out from the circular buffer to
-		 * o_buffers.
-		 */
+		//
+// We assume that nobody could change the csn value concurrently.
+// Thus, it could be only wiped out from the circular buffer to
+// o_buffers.
+//
 		Assert(oxid < pg_atomic_read_u64(&xid_meta->writeInProgressXmin));
 	}
 
-	/*
-	 * Wait for the concurrent write operation if needed.
-	 */
+	//
+// Wait for the concurrent write operation if needed.
+//
 	if (oxid >= pg_atomic_read_u64(&xid_meta->writtenXmin))
 	{
 		LWLockAcquire(&xid_meta->xidMapWriteLock, LW_SHARED);
@@ -728,9 +728,9 @@ set_oxid_csn(OXid oxid, CommitSeqNo csn)
 					sizeof(CommitSeqNo), false, false);
 }
 
-/*
- * Set the csn value for particular oxid.
- */
+//
+// Set the csn value for particular oxid.
+//
 static void
 set_oxid_xlog_ptr_internal(OXid oxid, XLogRecPtr ptr)
 {
@@ -750,17 +750,17 @@ set_oxid_xlog_ptr_internal(OXid oxid, XLogRecPtr ptr)
 			return;
 		}
 
-		/*
-		 * We assume that nobody could change the csn value concurrently.
-		 * Thus, it could be only wiped out from the circular buffer to
-		 * o_buffers.
-		 */
+		//
+// We assume that nobody could change the csn value concurrently.
+// Thus, it could be only wiped out from the circular buffer to
+// o_buffers.
+//
 		Assert(oxid < pg_atomic_read_u64(&xid_meta->writeInProgressXmin));
 	}
 
-	/*
-	 * Wait for the concurrent write operation if needed.
-	 */
+	//
+// Wait for the concurrent write operation if needed.
+//
 	if (oxid >= pg_atomic_read_u64(&xid_meta->writtenXmin))
 	{
 		LWLockAcquire(&xid_meta->xidMapWriteLock, LW_SHARED);
@@ -782,10 +782,10 @@ set_oxid_xlog_ptr(OXid oxid, XLogRecPtr ptr)
 }
 
 
-/*
- * Read csn of given xid from xidmap.
- * If getRawCsn is true outputs raw csn, otherwise clears COMMITSEQNO_RETAINED_FOR_REWIND flag.
- */
+//
+// Read csn of given xid from xidmap.
+// If getRawCsn is true outputs raw csn, otherwise clears COMMITSEQNO_RETAINED_FOR_REWIND flag.
+//
 static void
 map_oxid(OXid oxid, CommitSeqNo *outCsn, XLogRecPtr *outPtr, bool getRawCsn)
 {
@@ -804,20 +804,20 @@ map_oxid(OXid oxid, CommitSeqNo *outCsn, XLogRecPtr *outPtr, bool getRawCsn)
 		}
 	}
 
-	/* Optimisticly try to read csn and/or xlog ptr from circular buffer */
+	// Optimisticly try to read csn and/or xlog ptr from circular buffer
 	if (outCsn)
 		*outCsn = pg_atomic_read_u64(&xidBuffer[oxid % xid_circular_buffer_size].csn) & (getRawCsn ? UINT64_MAX : (~COMMITSEQNO_RETAINED_FOR_REWIND));
 	if (outPtr)
 		*outPtr = pg_atomic_read_u64(&xidBuffer[oxid % xid_circular_buffer_size].commitPtr);
 	pg_read_barrier();
 
-	/* Did we manage to read the correct csn? */
+	// Did we manage to read the correct csn?
 	if (oxid >= pg_atomic_read_u64(&xid_meta->writeInProgressXmin))
 		return;
 
-	/*
-	 * Wait for the concurrent write operation if needed.
-	 */
+	//
+// Wait for the concurrent write operation if needed.
+//
 	if (oxid >= pg_atomic_read_u64(&xid_meta->writtenXmin))
 	{
 		LWLockAcquire(&xid_meta->xidMapWriteLock, LW_SHARED);
@@ -829,7 +829,7 @@ map_oxid(OXid oxid, CommitSeqNo *outCsn, XLogRecPtr *outPtr, bool getRawCsn)
 				   oxid * sizeof(OXidMapItem),
 				   sizeof(OXidMapItem), false);
 
-	/* Recheck if globalXmin was advanced concurrently */
+	// Recheck if globalXmin was advanced concurrently
 	if (oxid < pg_atomic_read_u64(&xid_meta->globalXmin))
 	{
 		if (outCsn)
@@ -852,7 +852,7 @@ clear_rewind_oxid(OXid oxid)
 	CommitSeqNo csn;
 
 	map_oxid(oxid, &csn, &xlogPtr, false);
-/* 	elog(LOG, "csn unset from rewind %lu -> %lu", csn | COMMITSEQNO_RETAINED_FOR_REWIND, csn); */
+// elog(LOG, "csn unset from rewind %lu -> %lu", csn | COMMITSEQNO_RETAINED_FOR_REWIND, csn);
 	set_oxid_csn(oxid, csn);
 }
 
@@ -862,9 +862,9 @@ csn_is_retained_for_rewind(CommitSeqNo csn)
 	return (bool) ((csn) & COMMITSEQNO_RETAINED_FOR_REWIND);
 }
 
-/*
- * Write some data from circular buffer to o_buffers
- */
+//
+// Write some data from circular buffer to o_buffers
+//
 static void
 write_xidsmap(OXid targetXmax)
 {
@@ -875,9 +875,9 @@ write_xidsmap(OXid targetXmax)
 	int			bufferLength = ORIOLEDB_BLCKSZ / sizeof(OXidMapItem);
 	OXidMapItem buffer[ORIOLEDB_BLCKSZ / sizeof(OXidMapItem)];
 
-	/*
-	 * Get the xidmap range to write.
-	 */
+	//
+// Get the xidmap range to write.
+//
 	SpinLockAcquire(&xid_meta->xminMutex);
 	xmin = pg_atomic_read_u64(&xid_meta->writtenXmin);
 	xmax = Max(pg_atomic_read_u64(&xid_meta->writtenXmin) + xid_circular_buffer_size / 8,
@@ -913,12 +913,12 @@ write_xidsmap(OXid targetXmax)
 							  writeEnd == pageBase + XID_SLOTS_PER_PAGE);
 		bool		dirty;
 
-		/*
-		 * Drain this page's slots into the local buffer, resetting the ring
-		 * slots to FROZEN so the ring space is freed.  This happens for every
-		 * page regardless of the dirty bit -- writtenXmin advances past the
-		 * whole range below, so the slots must be vacated either way.
-		 */
+		//
+// Drain this page's slots into the local buffer, resetting the ring
+// slots to FROZEN so the ring space is freed.  This happens for every
+// page regardless of the dirty bit -- writtenXmin advances past the
+// whole range below, so the slots must be vacated either way.
+//
 		for (oxid = writeStart; oxid < writeEnd; oxid++)
 		{
 			Size		idx = oxid % xid_circular_buffer_size;
@@ -931,18 +931,18 @@ write_xidsmap(OXid targetXmax)
 													   FirstNormalUnloggedLSN));
 		}
 
-		/*
-		 * A page whose dirty bit is set is written to o_buffers dirty as
-		 * usual.  A page whose bit is already clear was pushed straight to
-		 * disk by a checkpoint-time flush (flush_dirty_xidsmap_range), so its
-		 * on-disk copy is current; we still write it into the o_buffers cache
-		 * as *clean* rather than skipping it, so a stale partial copy an
-		 * earlier eviction may have left resident is refreshed before
-		 * writtenXmin advances past it.  Consume the bit for a fully covered
-		 * page (test-and-clear); only peek for a partial boundary page,
-		 * leaving its bit set since the tail slots beyond [xmin, xmax) may
-		 * still be dirty.
-		 */
+		//
+// A page whose dirty bit is set is written to o_buffers dirty as
+// usual.  A page whose bit is already clear was pushed straight to
+// disk by a checkpoint-time flush (flush_dirty_xidsmap_range), so its
+// on-disk copy is current; we still write it into the o_buffers cache
+// as *clean* rather than skipping it, so a stale partial copy an
+// earlier eviction may have left resident is refreshed before
+// writtenXmin advances past it.  Consume the bit for a fully covered
+// page (test-and-clear); only peek for a partial boundary page,
+// leaving its bit set since the tail slots beyond [xmin, xmax) may
+// still be dirty.
+//
 		if (isFull)
 			dirty = test_clear_xid_buffer_page_dirty(page);
 		else
@@ -966,27 +966,27 @@ write_xidsmap(OXid targetXmax)
 	advance_global_xmin(InvalidOXid);
 }
 
-/*
- * Walk pages overlapping [xmin, xmax) and persist any whose dirty bit is
- * set, leaving the ring buffer untouched (slots keep their data, writtenXmin
- * does not advance).  This is the checkpoint-time flush: it makes the
- * on-disk copy current without forcing future reads of the same oxids onto
- * the slow path.
- *
- * Pages whose bit was cleared by the time we look at them are already on
- * disk (or were never written since the last flush) and are skipped.  A
- * writer that sets the bit again after we cleared it leaves the bit set,
- * so the next flush will catch the update.
- *
- * The function works in short batches of XID_FLUSH_BATCH_PAGES under
- * xidMapWriteLock in EXCLUSIVE mode, releasing the lock between batches.
- * This keeps it serialised with the slot-pressure eviction path
- * (write_xidsmap), which mutates the same slots and writtenXmin and would
- * otherwise produce torn page snapshots; the brief release windows let
- * concurrent eviction and waiters (set_oxid_csn / set_oxid_xlog_ptr
- * SHARED-lock waiters) make progress instead of stalling for the whole
- * flush.
- */
+//
+// Walk pages overlapping [xmin, xmax) and persist any whose dirty bit is
+// set, leaving the ring buffer untouched (slots keep their data, writtenXmin
+// does not advance).  This is the checkpoint-time flush: it makes the
+// on-disk copy current without forcing future reads of the same oxids onto
+// the slow path.
+//
+// Pages whose bit was cleared by the time we look at them are already on
+// disk (or were never written since the last flush) and are skipped.  A
+// writer that sets the bit again after we cleared it leaves the bit set,
+// so the next flush will catch the update.
+//
+// The function works in short batches of XID_FLUSH_BATCH_PAGES under
+// xidMapWriteLock in EXCLUSIVE mode, releasing the lock between batches.
+// This keeps it serialised with the slot-pressure eviction path
+// (write_xidsmap), which mutates the same slots and writtenXmin and would
+// otherwise produce torn page snapshots; the brief release windows let
+// concurrent eviction and waiters (set_oxid_csn / set_oxid_xlog_ptr
+// SHARED-lock waiters) make progress instead of stalling for the whole
+// flush.
+//
 #define XID_FLUSH_BATCH_PAGES 128
 static void
 flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
@@ -1022,23 +1022,23 @@ flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
 			if (!test_clear_xid_buffer_page_dirty(page))
 				continue;
 
-			/*
-			 * Acquire-fence pair with the writer's release in
-			 * mark_xid_buffer_dirty() lives inside the atomic fetch_and that
-			 * test_clear_xid_buffer_page_dirty() just performed; the per-slot
-			 * reads below see all stores preceding the writer's bit set.
-			 *
-			 * Assemble the page into a local OXidMapItem buffer (writers do
-			 * not take the write lock, so per-slot CAS can race with our
-			 * read; the local buffer gives o_buffers_write_page_direct() a
-			 * stable page).  Bypass the o_buffers cache: reads of these oxids
-			 * stay in the ring (writtenXmin does not advance), so the cache
-			 * copy would only duplicate the bytes.
-			 *
-			 * The (csn, commitPtr) pair of a single slot is not atomic, so a
-			 * flush may capture a half-updated slot; WAL replay rebuilds
-			 * xidmap on recovery and any later write re-dirties the page.
-			 */
+			//
+// Acquire-fence pair with the writer's release in
+// mark_xid_buffer_dirty() lives inside the atomic fetch_and that
+// test_clear_xid_buffer_page_dirty() just performed; the per-slot
+// reads below see all stores preceding the writer's bit set.
+//
+// Assemble the page into a local OXidMapItem buffer (writers do
+// not take the write lock, so per-slot CAS can race with our
+// read; the local buffer gives o_buffers_write_page_direct() a
+// stable page).  Bypass the o_buffers cache: reads of these oxids
+// stay in the ring (writtenXmin does not advance), so the cache
+// copy would only duplicate the bytes.
+//
+// The (csn, commitPtr) pair of a single slot is not atomic, so a
+// flush may capture a half-updated slot; WAL replay rebuilds
+// xidmap on recovery and any later write re-dirties the page.
+//
 			for (slot = 0; slot < XID_SLOTS_PER_PAGE; slot++)
 			{
 				OXid		slotOxid = pageOxid + slot;
@@ -1060,9 +1060,9 @@ flush_dirty_xidsmap_range(OXid xmin, OXid xmax)
 	}
 }
 
-/*
- * Sync given range of xidmap with disk.
- */
+//
+// Sync given range of xidmap with disk.
+//
 void
 fsync_xidmap_range(OXid xmin, OXid xmax, uint32 wait_event_info)
 {
@@ -1075,10 +1075,10 @@ fsync_xidmap_range(OXid xmin, OXid xmax, uint32 wait_event_info)
 				   wait_event_info);
 }
 
-/*
- * Wait particular oxid to finish or oxid_notify() call.  Returns true if
- * oxid was finished.
- */
+//
+// Wait particular oxid to finish or oxid_notify() call.  Returns true if
+// oxid was finished.
+//
 bool
 wait_for_oxid(OXid oxid, bool errorOk)
 {
@@ -1101,10 +1101,10 @@ wait_for_oxid(OXid oxid, bool errorOk)
 
 	if (vxidElem->oxid != oxid)
 	{
-		/*
-		 * If transaction isn't already present in its process map, then it
-		 * must be concurrently gone.
-		 */
+		//
+// If transaction isn't already present in its process map, then it
+// must be concurrently gone.
+//
 		return true;
 	}
 
@@ -1121,11 +1121,11 @@ wait_for_oxid(OXid oxid, bool errorOk)
 	return result;
 }
 
-/*
- * Notify wait_for_oxid() caller only if it is waiting for current process.
- *
- * No existing callers.
- */
+//
+// Notify wait_for_oxid() caller only if it is waiting for current process.
+//
+// No existing callers.
+//
 void
 oxid_notify(OXid oxid)
 {
@@ -1145,7 +1145,7 @@ oxid_notify(OXid oxid)
 	vxid.localTransactionId = MyProc->LXID;
 	vxid.BACKENDID = MyBackendId;
 
-	/* ensure that it is waiting for us */
+	// ensure that it is waiting for us
 	SET_LOCKTAG_VIRTUALTRANSACTION(tag, vxid);
 
 	if (
@@ -1158,18 +1158,18 @@ oxid_notify(OXid oxid)
 		proc->waitLock->tag.locktag_type == tag.locktag_type &&
 		oProcData[PROCNUMBER(proc)].waitingForOxid)
 	{
-		/*
-		 * It's a hack. We can not just release lock because VirtualXactLock()
-		 * used in critical postgres code. We must release it only for the
-		 * specific backend.
-		 */
+		//
+// It's a hack. We can not just release lock because VirtualXactLock()
+// used in critical postgres code. We must release it only for the
+// specific backend.
+//
 		uint32		hashcode = LockTagHashCode(&(proc->waitLock->tag));
 		LWLock	   *partitionLock = LockHashPartitionLock(hashcode);
 
-		/*
-		 * No need to acquire the lock before check because the backend can be
-		 * unlocked only by this code.
-		 */
+		//
+// No need to acquire the lock before check because the backend can be
+// unlocked only by this code.
+//
 		LWLockAcquire(partitionLock, LW_EXCLUSIVE);
 		RemoveFromWaitQueue(proc, hashcode);
 		proc->waitStatus = PROC_WAIT_STATUS_OK;
@@ -1180,30 +1180,30 @@ oxid_notify(OXid oxid)
 	VirtualXactLock(vxid, true);
 }
 
-/*
- * Compute the hash code associated with a PROCLOCKTAG, given the hashcode
- * for its underlying LOCK.
- *
- * We use this just to avoid redundant calls of LockTagHashCode().
- */
+//
+// Compute the hash code associated with a PROCLOCKTAG, given the hashcode
+// for its underlying LOCK.
+//
+// We use this just to avoid redundant calls of LockTagHashCode().
+//
 static inline uint32
 ProcLockHashCode(const PROCLOCKTAG *proclocktag, uint32 hashcode)
 {
 	uint32		lockhash = hashcode;
 	Datum		procptr;
 
-	/*
-	 * This must match proclock_hash()!
-	 */
+	//
+// This must match proclock_hash()!
+//
 	procptr = PointerGetDatum(proclocktag->myProc);
 	lockhash ^= ((uint32) procptr) << LOG2_NUM_LOCK_PARTITIONS;
 
 	return lockhash;
 }
 
-/*
- * Notify oxid_notify_all() callers who are waiting for current process.
- */
+//
+// Notify oxid_notify_all() callers who are waiting for current process.
+//
 void
 oxid_notify_all(void)
 {
@@ -1224,7 +1224,7 @@ oxid_notify_all(void)
 	vxid.localTransactionId = MyProc->LXID;
 	vxid.BACKENDID = MyBackendId;
 
-	/* ensure that it is waiting for us */
+	// ensure that it is waiting for us
 	SET_LOCKTAG_VIRTUALTRANSACTION(tag, vxid);
 
 	hashcode = LockTagHashCode(&tag);
@@ -1232,7 +1232,7 @@ oxid_notify_all(void)
 
 	LWLockAcquire(partitionLock, LW_EXCLUSIVE);
 
-	/* Find the lock object */
+	// Find the lock object
 	lock = (LOCK *) hash_search_with_hash_value(LockMethodLockHash,
 												(void *) &tag,
 												hashcode,
@@ -1240,14 +1240,14 @@ oxid_notify_all(void)
 												NULL);
 	if (!lock)
 	{
-		/* Must be granted with fast path */
+		// Must be granted with fast path
 		LWLockRelease(partitionLock);
 		return;
 	}
 
-	/*
-	 * Re-find the proclock object (ditto).
-	 */
+	//
+// Re-find the proclock object (ditto).
+//
 	proclocktag.myLock = lock;
 	proclocktag.myProc = MyProc;
 
@@ -1295,9 +1295,9 @@ oxid_notify_all(void)
 	list_free(procs);
 }
 
-/*
- * Loop over oProcData[] and update xid_meta accordingly.
- */
+//
+// Loop over oProcData[] and update xid_meta accordingly.
+//
 static void
 advance_global_xmin(OXid newXid)
 {
@@ -1340,17 +1340,17 @@ advance_global_xmin(OXid newXid)
 
 	prevGlobalXmin = pg_atomic_read_u64(&xid_meta->globalXmin);
 
-	/*
-	 * Sometimes, xmin of individual process can go backwards.  However, xids
-	 * in the shift should be never accessed.  We never advance globalXmin
-	 * backwards.
-	 */
+	//
+// Sometimes, xmin of individual process can go backwards.  However, xids
+// in the shift should be never accessed.  We never advance globalXmin
+// backwards.
+//
 	if (globalXmin > prevGlobalXmin)
 		pg_atomic_write_u64(&xid_meta->globalXmin, globalXmin);
 
-	/*
-	 * Check if we can update writtenXmin without actual writing.
-	 */
+	//
+// Check if we can update writtenXmin without actual writing.
+//
 	writtenXmin = pg_atomic_read_u64(&xid_meta->writtenXmin);
 	writeInProgressXmin = pg_atomic_read_u64(&xid_meta->writeInProgressXmin);
 
@@ -1414,15 +1414,15 @@ advance_global_xmin(OXid newXid)
 	}
 }
 
-/*
- * Extends xidmap to given value if needed.  New values are filled with
- * COMMITSEQNO_INPROGRESS value.  Used during recovery when procnum from xidmap
- * isn't used (transaction doesn't belong to particular pid).
- *
- * This function is intended to be only called by main recovery process.  So,
- * to locks needed to prevent concurrent execution of the this function by
- * another process.
- */
+//
+// Extends xidmap to given value if needed.  New values are filled with
+// COMMITSEQNO_INPROGRESS value.  Used during recovery when procnum from xidmap
+// isn't used (transaction doesn't belong to particular pid).
+//
+// This function is intended to be only called by main recovery process.  So,
+// to locks needed to prevent concurrent execution of the this function by
+// another process.
+//
 void
 advance_oxids(OXid new_xid)
 {
@@ -1432,15 +1432,15 @@ advance_oxids(OXid new_xid)
 	if (new_xid < pg_atomic_read_u64(&xid_meta->nextXid))
 		return;
 
-	/*
-	 * We might need to extend xidmap more than xid_circular_buffer_size.  So,
-	 * we need a loop here.
-	 */
+	//
+// We might need to extend xidmap more than xid_circular_buffer_size.  So,
+// we need a loop here.
+//
 	while (new_xid >= pg_atomic_read_u64(&xid_meta->nextXid))
 	{
 		advance_global_xmin(new_xid);
 
-		/* Write some xids out of circular buffer if needed. */
+		// Write some xids out of circular buffer if needed.
 		if (new_xid >= pg_atomic_read_u64(&xid_meta->writtenXmin) + xid_circular_buffer_size)
 		{
 			if (LWLockAcquireOrWait(&xid_meta->xidMapWriteLock, LW_EXCLUSIVE))
@@ -1450,7 +1450,7 @@ advance_oxids(OXid new_xid)
 			}
 		}
 
-		/* Fill xidmap in circular buffer. */
+		// Fill xidmap in circular buffer.
 		xid = pg_atomic_read_u64(&xid_meta->nextXid);
 		xmax = Min(new_xid + 1, pg_atomic_read_u64(&xid_meta->writtenXmin) + xid_circular_buffer_size);
 		for (; xid < xmax; xid++)
@@ -1466,9 +1466,9 @@ advance_oxids(OXid new_xid)
 }
 
 
-/*
- * Get current OrioleDB xid (oxid).  Assign new oxid it's not done yet.
- */
+//
+// Get current OrioleDB xid (oxid).  Assign new oxid it's not done yet.
+//
 OXid
 get_current_oxid(void)
 {
@@ -1481,19 +1481,19 @@ get_current_oxid(void)
 		XidVXidMapElement *vxidElem;
 		int			nestingLevel;
 
-		/*
-		 * Advance xmin every 10th part of circular buffer.  That should
-		 * prevent unnecessary circular buffer overrun.
-		 */
+		//
+// Advance xmin every 10th part of circular buffer.  That should
+// prevent unnecessary circular buffer overrun.
+//
 		if (newOxid > pg_atomic_read_u64(&xid_meta->lastXidWhenUpdatedGlobalXmin) + xid_circular_buffer_size / 10)
 			advance_global_xmin(newOxid);
 
-		/*
-		 * Write some xids out of circular buffer if needed.  We always keep
-		 * one COMMITSEQNO_FROZEN in circular buffers as a delimiter between
-		 * the future and the past.  This helps protect runXmin from growing
-		 * bigger than nextXid.
-		 */
+		//
+// Write some xids out of circular buffer if needed.  We always keep
+// one COMMITSEQNO_FROZEN in circular buffers as a delimiter between
+// the future and the past.  This helps protect runXmin from growing
+// bigger than nextXid.
+//
 		while (newOxid >= pg_atomic_read_u64(&xid_meta->writtenXmin) + xid_circular_buffer_size - 1)
 		{
 			advance_global_xmin(newOxid);
@@ -1507,9 +1507,9 @@ get_current_oxid(void)
 			}
 		}
 
-		/*
-		 * Make new xidmap item and write it to the circular buffer.
-		 */
+		//
+// Make new xidmap item and write it to the circular buffer.
+//
 		nestingLevel = GET_CUR_PROCDATA()->autonomousNestingLevel;
 		Assert(nestingLevel >= 0 && nestingLevel < PROC_XID_ARRAY_SIZE);
 		vxidElem = &GET_CUR_PROCDATA()->vxids[nestingLevel];
@@ -1530,13 +1530,13 @@ get_current_oxid(void)
 		mark_xid_buffer_dirty(newOxid);
 		curOxid = newOxid;
 
-		/* Check if an autonomous transaction is in progress */
+		// Check if an autonomous transaction is in progress
 		if (nestingLevel > 0)
 		{
-			/*
-			 * Autonomous transactions should be ignored during logical
-			 * decoding, so invalidate logical xid info
-			 */
+			//
+// Autonomous transactions should be ignored during logical
+// decoding, so invalidate logical xid info
+//
 			reset_logical_xid_ctx();
 		}
 		else
@@ -1632,12 +1632,12 @@ current_oxid_xlog_precommit(void)
 	if (!OXidIsValid(curOxid))
 		return;
 
-	/*
-	 * Use XLOG_PTR_MAKE_SPECIAL (bit 0 set) so XLOG_PTR_IS_SPECIAL()
-	 * recognises the marker.  set_oxid_xlog_ptr_internal() bypasses the
-	 * wrapper's !XLOG_PTR_IS_SPECIAL() assertion, which is meant for real LSN
-	 * writes only.
-	 */
+	//
+// Use XLOG_PTR_MAKE_SPECIAL (bit 0 set) so XLOG_PTR_IS_SPECIAL()
+// recognises the marker.  set_oxid_xlog_ptr_internal() bypasses the
+// wrapper's !XLOG_PTR_IS_SPECIAL() assertion, which is meant for real LSN
+// writes only.
+//
 	set_oxid_xlog_ptr_internal(curOxid,
 							   XLOG_PTR_MAKE_SPECIAL(MYPROCNUMBER,
 													 GET_CUR_PROCDATA()->autonomousNestingLevel,
@@ -1732,17 +1732,17 @@ current_oxid_abort(void)
 
 	if (STOPEVENTS_ENABLED())
 	{
-		/*
-		 * Deterministic-repro hook for the checkpoint abort-snapshot race We
-		 * are past wal_rollback (the WAL_REC_ROLLBACK is already written and,
-		 * under synchronous_commit, flushed) but have NOT yet cleared this
-		 * oxid's vxids slot.  Pausing here lets a concurrent checkpoint's
-		 * finish_write_xids() snapshot this oxid as in-flight (it gates only
-		 * on OXidIsValid(vxids[].oxid)) while its resolving rollback sits
-		 * below the checkpoint's replayStartPtr -- the exact inconsistency
-		 * that makes crash recovery resurrect the oxid and emit a spurious
-		 * deferred rollback.
-		 */
+		//
+// Deterministic-repro hook for the checkpoint abort-snapshot race We
+// are past wal_rollback (the WAL_REC_ROLLBACK is already written and,
+// under synchronous_commit, flushed) but have NOT yet cleared this
+// oxid's vxids slot.  Pausing here lets a concurrent checkpoint's
+// finish_write_xids() snapshot this oxid as in-flight (it gates only
+// on OXidIsValid(vxids[].oxid)) while its resolving rollback sits
+// below the checkpoint's replayStartPtr -- the exact inconsistency
+// that makes crash recovery resurrect the oxid and emit a spurious
+// deferred rollback.
+//
 		Jsonb	   *params;
 		JsonbParseState *state = NULL;
 
@@ -1760,24 +1760,24 @@ current_oxid_abort(void)
 	release_assigned_logical_xids();
 }
 
-/*
- * Revert the COMMITTING bit on our oxid back to IN_PROGRESS if
- * current_oxid_precommit() (and/or current_oxid_xlog_precommit()) ran
- * but the commit aborted before current_oxid_commit() got to write the
- * actual CSN.  Other backends busy-spin in oxid_get_csn() /
- * oxid_match_snapshot() / oxid_get_xlog_ptr() while the bit is set, so
- * the abort path must drop it before doing any work that could acquire
- * locks the spinners are holding (notably apply_undo_stack()'s page
- * locks).  current_oxid_abort() will later overwrite the CSN with
- * COMMITSEQNO_ABORTED at the proper moment in the abort sequence; this
- * is intentionally a smaller, idempotent step.
- *
- * Whether each precommit ran is tracked through backend-local flags
- * (csn_committing_set, xlog_ptr_committing_set) — peeking at xidBuffer
- * is unsafe because its slots are shared by all oxids modulo the
- * buffer size and may already hold someone else's data after run_xmin
- * advances.
- */
+//
+// Revert the COMMITTING bit on our oxid back to IN_PROGRESS if
+// current_oxid_precommit() (and/or current_oxid_xlog_precommit()) ran
+// but the commit aborted before current_oxid_commit() got to write the
+// actual CSN.  Other backends busy-spin in oxid_get_csn() /
+// oxid_match_snapshot() / oxid_get_xlog_ptr() while the bit is set, so
+// the abort path must drop it before doing any work that could acquire
+// locks the spinners are holding (notably apply_undo_stack()'s page
+// locks).  current_oxid_abort() will later overwrite the CSN with
+// COMMITSEQNO_ABORTED at the proper moment in the abort sequence; this
+// is intentionally a smaller, idempotent step.
+//
+// Whether each precommit ran is tracked through backend-local flags
+// (csn_committing_set, xlog_ptr_committing_set) — peeking at xidBuffer
+// is unsafe because its slots are shared by all oxids modulo the
+// buffer size and may already hold someone else's data after run_xmin
+// advances.
+//
 void
 current_oxid_clear_committing(void)
 {
@@ -1812,11 +1812,11 @@ current_oxid_clear_committing(void)
 	pg_write_barrier();
 }
 
-/*
- * Gets csn for given oxid.  Wrapper over map_oxid_csn(), which loops
- * till "committing bit" is not set.
- * If getRawCsn is true outputs raw csn, otherwise clears COMMITSEQNO_RETAINED_FOR_REWIND flag.
- */
+//
+// Gets csn for given oxid.  Wrapper over map_oxid_csn(), which loops
+// till "committing bit" is not set.
+// If getRawCsn is true outputs raw csn, otherwise clears COMMITSEQNO_RETAINED_FOR_REWIND flag.
+//
 CommitSeqNo
 oxid_get_csn(OXid oxid, bool getRawCsn)
 {
@@ -1849,10 +1849,10 @@ oxid_get_csn(OXid oxid, bool getRawCsn)
 	return csn;
 }
 
-/*
- * Gets commit ptr for given oxid.  Wrapper over map_oxid_xlog_ptr(), which
- * loops till "committing bit" is not set.
- */
+//
+// Gets commit ptr for given oxid.  Wrapper over map_oxid_xlog_ptr(), which
+// loops till "committing bit" is not set.
+//
 XLogRecPtr
 oxid_get_xlog_ptr(OXid oxid)
 {
@@ -1885,10 +1885,10 @@ oxid_get_xlog_ptr(OXid oxid)
 	return ptr;
 }
 
-/*
- * Gets csn for given oxid.  Wrapper over map_oxid_csn(), which loops
- * till "committing bit" is not set.
- */
+//
+// Gets csn for given oxid.  Wrapper over map_oxid_csn(), which loops
+// till "committing bit" is not set.
+//
 void
 oxid_match_snapshot(OXid oxid, OSnapshot *snapshot,
 					CommitSeqNo *outCsn, XLogRecPtr *outPtr)
@@ -1988,11 +1988,11 @@ oxid_get_procnum(OXid oxid)
 	return -1;
 }
 
-/*
- * Check if xid should be considered as finished for given process.  During
- * recovery we also consult with local map of xids, because workers can go
- * ahead of what is markerd as finished for everybody.
- */
+//
+// Check if xid should be considered as finished for given process.  During
+// recovery we also consult with local map of xids, because workers can go
+// ahead of what is markerd as finished for everybody.
+//
 bool
 xid_is_finished(OXid xid)
 {
@@ -2051,11 +2051,11 @@ orioledb_get_xid_meta(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(htup));
 }
 
-/*
- * Check if xid is finished for every process.  It's nothing special during
- * normal processing, but for recovery means xid is confirmed by main
- * recovery process as processed by all recovery workers.
- */
+//
+// Check if xid is finished for every process.  It's nothing special during
+// normal processing, but for recovery means xid is confirmed by main
+// recovery process as processed by all recovery workers.
+//
 bool
 xid_is_finished_for_everybody(OXid xid)
 {
