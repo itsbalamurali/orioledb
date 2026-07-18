@@ -65,20 +65,13 @@ use crate::utils::ucm;
 use crate::workers::bgwriter;
 use pgrx::pg_sys;
 
-// -------------------------------------------------------------------------
-//
-// orioledb.c
+
 // Main file: setup shared memory, hooks and other general-purpose
 // routines.
 //
 // Copyright (c) 2021-2026, Oriole DB Inc.
 // Copyright (c) 2025-2026, Supabase Inc.
-//
-// IDENTIFICATION
-// contrib/orioledb/src/orioledb.c
-//
-// -------------------------------------------------------------------------
-//
+
 
 PG_MODULE_MAGIC;
 
