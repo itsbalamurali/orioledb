@@ -1,150 +1,112 @@
 /*-------------------------------------------------------------------------
  *
- * compress.rs
+ * compress.c
  *		Compression functions for BTree pages. Wrapper for libzstd.
  *
  * Copyright (c) 2021-2026, Oriole DB Inc.
  * Copyright (c) 2025-2026, Supabase Inc.
  *
  * IDENTIFICATION
- *	  contrib/orioledb/src/utils/compress.rs
+ *	  contrib/orioledb/src/utils/compress.c
  *
  *-------------------------------------------------------------------------
  */
+#include "postgres.h"
 
-use std::cell::RefCell;
-use std::ffi::{c_char, c_int, c_void, CStr};
-use std::slice;
+#include "orioledb.h"
 
-pub const ORIOLEDB_BLCKSZ: usize = 8192;
+#include "utils/compress.h"
 
-thread_local! {
-    static C_CTX: RefCell<Option<zstd_safe::CCtx<'static>>> = RefCell::new(None);
-    static D_CTX: RefCell<Option<zstd_safe::DCtx<'static>>> = RefCell::new(None);
-    static DST_BUFFER: RefCell<Vec<u8>> = RefCell::new(Vec::new());
-}
+#include "utils/elog.h"
+#include "utils/memdebug.h"
+
+#include <zstd.h>
+
+static ZSTD_CCtx *zstd_cctx = NULL;
+static ZSTD_DCtx *zstd_dctx = NULL;
+static size_t zstd_dst_size;
+static Pointer zstd_dst = NULL;
 
 /*
  * Initializes compression context.
  */
-#[no_mangle]
-pub extern "C" fn o_compress_init() {
-    C_CTX.with(|ctx| {
-        let mut slot = ctx.borrow_mut();
-        if slot.is_none() {
-            *slot = Some(zstd_safe::CCtx::create());
-        }
-    });
+void
+o_compress_init(void)
+{
+	zstd_cctx = ZSTD_createCCtx();
+	zstd_dctx = ZSTD_createDCtx();
+	zstd_dst_size = ZSTD_compressBound(ORIOLEDB_BLCKSZ);
+	zstd_dst = malloc(zstd_dst_size);
 
-    D_CTX.with(|ctx| {
-        let mut slot = ctx.borrow_mut();
-        if slot.is_none() {
-            *slot = Some(zstd_safe::DCtx::create());
-        }
-    });
-
-    DST_BUFFER.with(|buf| {
-        let mut slot = buf.borrow_mut();
-        if slot.is_empty() {
-            let bound = zstd_safe::compress_bound(ORIOLEDB_BLCKSZ);
-            *slot = vec![0u8; bound];
-        }
-    });
+	/*
+	 * It helps to avoid Valgrind uninitialized bytes error inside
+	 * OFileWrite().
+	 *
+	 * We write compressed pages to a file with size % ORIOLEDB_COMP_BLCKSZ ==
+	 * 0, where size >= compressed page size. So it's normal to write
+	 * uninitialized bytes.
+	 */
+	VALGRIND_MAKE_MEM_DEFINED(zstd_dst, ORIOLEDB_BLCKSZ);
 }
 
 /*
  * Compresses a BTree page.
  */
-#[no_mangle]
-pub unsafe extern "C" fn o_compress_page(
-    page: *mut c_void,
-    size: *mut usize,
-    lvl: c_int,
-) -> *mut c_void {
-    let src_slice = slice::from_raw_parts(page as *const u8, ORIOLEDB_BLCKSZ);
+Pointer
+o_compress_page(Pointer page, size_t *size, OCompress lvl)
+{
+	VALGRIND_CHECK_MEM_IS_DEFINED(page, ORIOLEDB_BLCKSZ);
+	*size = ZSTD_compressCCtx(zstd_cctx,
+							  zstd_dst, zstd_dst_size,
+							  page, ORIOLEDB_BLCKSZ,
+							  lvl);
+	VALGRIND_MAKE_MEM_DEFINED(zstd_dst, *size);
+	if (ZSTD_isError(*size))
+	{
+		elog(PANIC,
+			 "Unable to compress page, reason: %s", ZSTD_getErrorName(*size));
+	}
 
-    let result = C_CTX.with(|ctx| {
-        DST_BUFFER.with(|buf| {
-            let mut ctx_borrow = ctx.borrow_mut();
-            let mut buf_borrow = buf.borrow_mut();
-
-            let cctx = ctx_borrow.as_mut().expect("o_compress_init not called");
-            let dst_slice = buf_borrow.as_mut_slice();
-
-            cctx.compress(dst_slice, src_slice, lvl)
-        })
-    });
-
-    match result {
-        Ok(compressed_size) => {
-            if !size.is_null() {
-                *size = compressed_size;
-            }
-            DST_BUFFER.with(|buf| {
-                buf.borrow().as_ptr() as *mut c_void
-            })
-        }
-        Err(err) => {
-            panic!("Unable to compress page, reason: {:?}", err);
-        }
-    }
+	return zstd_dst;
 }
 
 /*
  * Decompresses a BTree page.
  */
-#[no_mangle]
-pub unsafe extern "C" fn o_decompress_page(
-    src: *const c_void,
-    size: usize,
-    page: *mut c_void,
-) {
-    let src_slice = slice::from_raw_parts(src as *const u8, size);
-    let dst_slice = slice::from_raw_parts_mut(page as *mut u8, ORIOLEDB_BLCKSZ);
+void
+o_decompress_page(Pointer src, size_t size, Pointer page)
+{
+	size_t		result;
 
-    let result = D_CTX.with(|ctx| {
-        let mut ctx_borrow = ctx.borrow_mut();
-        let dctx = ctx_borrow.as_mut().expect("o_compress_init not called");
+	result = ZSTD_decompressDCtx(zstd_dctx,
+								 page, ORIOLEDB_BLCKSZ,
+								 src, size);
+	if (ZSTD_isError(result))
+	{
+		elog(PANIC,
+			 "Unable to decompress page, reason: %s", ZSTD_getErrorName(result));
+	}
 
-        dctx.decompress(dst_slice, src_slice)
-    });
-
-    match result {
-        Ok(decompressed_size) => {
-            assert_eq!(
-                decompressed_size, ORIOLEDB_BLCKSZ,
-                "Decompressed size must match ORIOLEDB_BLCKSZ"
-            );
-        }
-        Err(err) => {
-            panic!("Unable to decompress page, reason: {:?}", err);
-        }
-    }
+	Assert(result == ORIOLEDB_BLCKSZ);
 }
 
 /*
  * Returns max orioledb compression level.
  */
-#[no_mangle]
-pub extern "C" fn o_compress_max_lvl() -> c_int {
-    zstd_safe::max_c_level() as c_int
+OCompress
+o_compress_max_lvl()
+{
+	return ZSTD_maxCLevel();
 }
 
-/*
- * Validates compression level.
- */
-#[no_mangle]
-pub unsafe extern "C" fn validate_compress(compress: c_int, prefix: *const c_char) {
-    let max_compress = o_compress_max_lvl();
-    if compress < -1 || compress > max_compress {
-        let prefix_str = if prefix.is_null() {
-            "Unknown"
-        } else {
-            CStr::from_ptr(prefix).to_str().unwrap_or("Invalid UTF-8")
-        };
-        panic!(
-            "{} compression level must be between -1 and {}",
-            prefix_str, max_compress
-        );
-    }
+void
+validate_compress(OCompress compress, char *prefix)
+{
+	OCompress	max_compress = o_compress_max_lvl();
+
+	if (compress < -1 || compress > max_compress)
+	{
+		elog(ERROR, "%s compression level must be between %d and %d",
+			 prefix, -1, max_compress);
+	}
 }

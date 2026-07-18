@@ -1,48 +1,46 @@
 /*-------------------------------------------------------------------------
  *
- * interrupt.rs
+ * interrupt.c
  *		Routines for background workers interrupt handling.
  *
- * Copyright (c) 2021-2026, Oriole DB Inc.
+ * Copyright (c) 2024-2026, Oriole DB Inc.
  * Copyright (c) 2025-2026, Supabase Inc.
  *
  * IDENTIFICATION
- *	  contrib/orioledb/orioledb-rs/src/workers/interrupt.rs
+ *	  contrib/orioledb/src/workers/interrupt.c
  *
  *-------------------------------------------------------------------------
  */
 
-use std::ffi::{c_char, c_int};
-use pgrx::pg_sys;
+#include "postgres.h"
 
-const fn make_sqlstate(c1: u8, c2: u8, c3: u8, c4: u8, c5: u8) -> i32 {
-    ((c1 - b'0') as i32)
-        + (((c2 - b'0') as i32) << 6)
-        + (((c3 - b'0') as i32) << 12)
-        + (((c4 - b'0') as i32) << 18)
-        + (((c5 - b'0') as i32) << 24)
+#include "orioledb.h"
+
+#include "workers/interrupt.h"
+
+#include "postmaster/interrupt.h"
+
+static void o_worker_shutdown(int elevel);
+
+/*
+ * Exit from an orioledb worker
+ */
+static void
+o_worker_shutdown(int elevel)
+{
+	Assert(MyBackendType == B_BG_WORKER);
+	ereport(elevel,
+			(errcode(ERRCODE_ADMIN_SHUTDOWN),
+			 errmsg("terminating orioledb worker due to administrator command")));
 }
 
-/// Exits from an orioledb worker.
-unsafe fn o_worker_shutdown(elevel: c_int) {
-    debug_assert_eq!(pg_sys::MyBackendType, pg_sys::BackendType::B_BG_WORKER);
-
-    let domain = std::ptr::null();
-    let file = b"interrupt.rs\0".as_ptr() as *const c_char;
-    let func = b"o_worker_shutdown\0".as_ptr() as *const c_char;
-    let msg = b"terminating orioledb worker due to administrator command\0".as_ptr() as *const c_char;
-
-    if pgrx::errstart(elevel, domain) {
-        let _ = pgrx::errcode(make_sqlstate(b'5', b'7', b'P', b'0', b'1'));
-        let _ = pgrx::errmsg(msg);
-        pgrx::errfinish(file, 29, func);
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_worker_handle_interrupts() {
-    // If a shutdown request is pending, raise an ERROR immediately.
-    if pg_sys::ShutdownRequestPending as i32 != 0 {
-        o_worker_shutdown(pg_sys::ERROR as c_int);
-    }
+void
+o_worker_handle_interrupts(void)
+{
+	/*
+	 * In case of a pending shutdown request we just raise an ERROR message
+	 * currently.
+	 */
+	if (ShutdownRequestPending)
+		o_worker_shutdown(ERROR);
 }

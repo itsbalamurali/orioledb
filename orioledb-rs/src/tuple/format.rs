@@ -1,1138 +1,875 @@
-//! format.rs
-//!
-//! Copyright (c) 2021-2026, Oriole DB Inc.
-//! Copyright (c) 2025-2026, Supabase Inc.
-//!
-//! IDENTIFICATION
-//!   contrib/orioledb/orioledb-rs/src/tuple/format.rs
-
-use std::ffi::{c_char, c_int};
-use pgrx::pg_sys::{Datum, TupleDesc, bits8, FormData_pg_attribute};
-
-pub const O_TUPLE_FLAGS_FIXED_FORMAT: u8 = 0x1;
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct ORelOids {
-    pub datoid: pgrx::pg_sys::Oid,
-    pub reloid: pgrx::pg_sys::Oid,
-    pub relnode: pgrx::pg_sys::Oid,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum OIndexType {
-    Invalid = 0,
-    Toast = 1,
-    Bridge = 2,
-    Primary = 3,
-    Unique = 4,
-    Regular = 5,
-    Exclusion = 6,
-}
-
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct OTuple {
-    pub data: *mut c_char,
-    pub formatFlags: u8,
-}
-
-impl OTuple {
-    pub fn is_null(&self) -> bool {
-        self.data.is_null()
-    }
-
-    pub fn set_null(&mut self) {
-        self.data = std::ptr::null_mut();
-        self.formatFlags = 0;
-    }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct OTupleReaderState {
-    pub desc: TupleDesc,
-    pub tp: *mut c_char,
-    pub bp: *mut bits8,
-    pub off: u32,
-    pub attnum: u16,
-    pub natts: u16,
-    pub hasnulls: bool,
-    pub slow: bool,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct OTupleHeaderData {
-    pub flags_and_len: u16, // hasnulls: 1, len: 15
-    pub natts: u16,
-    pub version: u32,
-}
-
-impl OTupleHeaderData {
-    pub fn hasnulls(&self) -> bool {
-        (self.flags_and_len & 1) != 0
-    }
-
-    pub fn set_hasnulls(&mut self, val: bool) {
-        if val {
-            self.flags_and_len |= 1;
-        } else {
-            self.flags_and_len &= !1;
-        }
-    }
-
-    pub fn len(&self) -> u16 {
-        self.flags_and_len >> 1
-    }
-
-    pub fn set_len(&mut self, val: u16) {
-        self.flags_and_len = (self.flags_and_len & 1) | (val << 1);
-    }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct OTupleFixedFormatSpec {
-    pub natts: u16,
-    pub len: u16,
-}
-
-pub type OTupleHeader = *mut OTupleHeaderData;
-
-pub const SizeOfOTupleHeader: usize = maxalign(std::mem::size_of::<OTupleHeaderData>());
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct BridgeData {
-    pub is_pkey: bool,
-    pub bridge_iptr: pgrx::pg_sys::ItemPointerData,
-    pub attnum: pgrx::pg_sys::AttrNumber,
-}
-
-pub type OTupleAttrCompact = pgrx::pg_sys::CompactAttribute;
-pub type OTupleAttrFull = FormData_pg_attribute;
-
-pub const fn maxalign(len: usize) -> usize {
-    (len + 7) & !7
-}
-
-pub fn BITMAPLEN(natts: usize) -> usize {
-    (natts + 7) / 8
-}
-
-pub unsafe fn att_isnull(attnum: usize, bits: *const u8) -> bool {
-    let byte = attnum >> 3;
-    let bit = attnum & 0x07;
-    (*bits.add(byte) & (1 << bit)) == 0
-}
-
-pub unsafe fn TupleDescAttr(tupdesc: TupleDesc, i: usize) -> *mut FormData_pg_attribute {
-    pgrx::pg_sys::TupleDescAttr(tupdesc, i as c_int)
-}
-
-pub unsafe fn OTupleDescAttrFast(tupdesc: TupleDesc, i: usize) -> *mut OTupleAttrCompact {
-    pgrx::pg_sys::TupleDescCompactAttr(tupdesc, i as c_int)
-}
-
-pub unsafe fn OTupleDescAttrSlow(tupdesc: TupleDesc, i: usize) -> *mut OTupleAttrFull {
-    TupleDescAttr(tupdesc, i)
-}
-
-pub fn att_align_nominal(cur_offset: usize, attalign: c_char) -> usize {
-    let mask = match attalign as u8 as char {
-        'd' => 7,
-        'i' => 3,
-        's' => 1,
-        _ => 0,
-    };
-    (cur_offset + mask) & !mask
-}
-
-pub fn att_align_nominal_ptr(ptr: *mut c_char, attalign: c_char) -> *mut c_char {
-    let addr = ptr as usize;
-    let aligned = att_align_nominal(addr, attalign);
-    aligned as *mut c_char
-}
-
-pub fn att_nominal_alignby(cur_offset: usize, attalignby: u8) -> usize {
-    let alignby = attalignby as usize;
-    (cur_offset + (alignby - 1)) & !(alignby - 1)
-}
-
-pub unsafe fn att_pointer_alignby(cur_offset: usize, attalignby: u8, attlen: i16, attptr: *const c_char) -> usize {
-    if attlen == -1 && *(attptr as *const u8) != 0 {
-        cur_offset
-    } else {
-        att_nominal_alignby(cur_offset, attalignby)
-    }
-}
-
-pub fn o_att_align_nominal(att: &OTupleAttrCompact, cur_offset: usize) -> usize {
-    att_nominal_alignby(cur_offset, att.attalignby)
-}
-
-pub unsafe fn o_att_align_pointer(att: &OTupleAttrCompact, cur_offset: usize, attlen: i16, attptr: *const c_char) -> usize {
-    att_pointer_alignby(cur_offset, att.attalignby, attlen, attptr)
-}
-
-#[repr(C, packed)]
-pub struct varattrib_1b {
-    pub va_header: u8,
-    pub va_data: [u8; 0],
-}
-
-#[repr(C, packed)]
-pub struct varattrib_4b {
-    pub va_header: u32,
-    pub va_data: [u8; 0],
-}
-
-pub unsafe fn VARATT_IS_SHORT(ptr: *const c_char) -> bool {
-    let va = &*(ptr as *const varattrib_1b);
-    (va.va_header & 0x80) != 0
-}
-
-pub unsafe fn VARSIZE_SHORT(ptr: *const c_char) -> usize {
-    let va = &*(ptr as *const varattrib_1b);
-    (va.va_header & 0x7F) as usize
-}
-
-pub unsafe fn VARATT_IS_EXTERNAL(ptr: *const c_char) -> bool {
-    let va = &*(ptr as *const varattrib_1b);
-    (va.va_header & 0xFF) == 0x01
-}
-
-pub unsafe fn VARATT_IS_COMPRESSED(ptr: *const c_char) -> bool {
-    let va = &*(ptr as *const varattrib_1b);
-    (va.va_header & 0xC0) == 0x40
-}
-
-pub unsafe fn VARATT_IS_EXTERNAL_EXPANDED(ptr: *const c_char) -> bool {
-    pgrx::pg_sys::VARATT_IS_EXTERNAL_EXPANDED(ptr as *mut pgrx::pg_sys::varlena)
-}
-
-pub unsafe fn VARSIZE(ptr: *const c_char) -> usize {
-    let header_4b = *(ptr as *const u32);
-    (header_4b & 0x3FFFFFFF) as usize
-}
-
-pub unsafe fn VARSIZE_ANY(ptr: *const c_char) -> usize {
-    let header = *(ptr as *const u8);
-    if header == 0x01 {
-        18
-    } else if (header & 0x80) != 0 {
-        (header & 0x7F) as usize
-    } else {
-        VARSIZE(ptr)
-    }
-}
-
-pub unsafe fn VARSIZE_ANY_EXHDR(value: Datum) -> usize {
-    pgrx::pg_sys::VARSIZE_ANY_EXHDR(value.value() as *mut pgrx::pg_sys::varlena) as usize
-}
-
-pub unsafe fn VARATT_CAN_MAKE_SHORT(ptr: *const c_char) -> bool {
-    VARSIZE(ptr) <= 129
-}
-
-pub unsafe fn VARATT_CONVERTED_SHORT_SIZE(ptr: *const c_char) -> usize {
-    VARSIZE(ptr) - 3
-}
-
-pub unsafe fn att_align_pointer(
-    cur_offset: usize,
-    attalign: c_char,
-    attlen: i16,
-    attptr: *const c_char,
-) -> usize {
-    if attlen == -1 {
-        if attalign as u8 as char == 'd' {
-            if VARATT_IS_SHORT(attptr) {
-                cur_offset
-            } else {
-                att_align_nominal(cur_offset, attalign)
-            }
-        } else {
-            cur_offset
-        }
-    } else {
-        att_align_nominal(cur_offset, attalign)
-    }
-}
-
-pub unsafe fn att_addlength_pointer(cur_offset: usize, attlen: i16, attptr: *const c_char) -> usize {
-    if attlen > 0 {
-        cur_offset + attlen as usize
-    } else if attlen == -1 {
-        cur_offset + VARSIZE_ANY(attptr)
-    } else {
-        cur_offset + std::ffi::CStr::from_ptr(attptr).to_bytes().len() + 1
-    }
-}
-
-pub unsafe fn att_align_datum(cur_offset: usize, attalign: c_char, attlen: i16, attval: Datum) -> usize {
-    if attlen == -1 {
-        att_align_pointer(cur_offset, attalign, attlen, attval.value() as *const c_char)
-    } else {
-        att_align_nominal(cur_offset, attalign)
-    }
-}
-
-pub unsafe fn att_addlength_datum(cur_offset: usize, attlen: i16, attval: Datum) -> usize {
-    att_addlength_pointer(cur_offset, attlen, attval.value() as *const c_char)
-}
-
-#[cfg(target_endian = "big")]
-pub unsafe fn SET_TOAST_POINTER(ptr: *mut std::ffi::c_void) {
-    *(ptr as *mut u8) = 0x80;
-}
-#[cfg(target_endian = "big")]
-pub unsafe fn IS_TOAST_POINTER(ptr: *const std::ffi::c_void) -> bool {
-    *(ptr as *const u8) == 0x80
-}
-
-#[cfg(not(target_endian = "big"))]
-pub unsafe fn SET_TOAST_POINTER(ptr: *mut std::ffi::c_void) {
-    *(ptr as *mut u8) = 0x01;
-}
-#[cfg(not(target_endian = "big"))]
-pub unsafe fn IS_TOAST_POINTER(ptr: *const std::ffi::c_void) -> bool {
-    *(ptr as *const u8) == 0x01
-}
-
-pub fn ATT_IS_PACKABLE(att: &FormData_pg_attribute) -> bool {
-    att.attlen == -1 && att.attstorage != 'p' as i8
-}
-
-pub fn VARLENA_ATT_IS_PACKABLE(att: &FormData_pg_attribute) -> bool {
-    att.attstorage != 'p' as i8
-}
-
-pub trait OTupleAttr {
-    fn attlen(&self) -> i16;
-    fn attbyval(&self) -> bool;
-}
-
-impl OTupleAttr for FormData_pg_attribute {
-    fn attlen(&self) -> i16 { self.attlen }
-    fn attbyval(&self) -> bool { self.attbyval }
-}
-
-impl OTupleAttr for pgrx::pg_sys::CompactAttribute {
-    fn attlen(&self) -> i16 { self.attlen }
-    fn attbyval(&self) -> bool { self.attbyval }
-}
-
-pub unsafe fn fetchatt<T: OTupleAttr>(att: *const T, attval: *const c_char) -> Datum {
-    let att = &*att;
-    if att.attbyval() {
-        match att.attlen() {
-            1 => Datum::from(*(attval as *const u8) as usize),
-            2 => Datum::from(*(attval as *const u16) as usize),
-            4 => Datum::from(*(attval as *const u32) as usize),
-            8 => Datum::from(*(attval as *const u64) as usize),
-            _ => panic!("Unsupported attlen for attbyval: {}", att.attlen()),
-        }
-    } else {
-        Datum::from(attval as usize)
-    }
-}
-
-pub unsafe fn store_att_byval(ptr: *mut c_char, newval: Datum, attlen: i16) {
-    match attlen {
-        1 => *(ptr as *mut u8) = newval.value() as u8,
-        2 => *(ptr as *mut u16) = newval.value() as u16,
-        4 => *(ptr as *mut u32) = newval.value() as u32,
-        8 => *(ptr as *mut u64) = newval.value() as u64,
-        _ => panic!("Unsupported attlen for store_att_byval: {}", attlen),
-    }
-}
-
-pub unsafe fn o_fastgetattr(
-    tup: OTuple,
-    attnum: i32,
-    tuple_desc: TupleDesc,
-    spec: *const OTupleFixedFormatSpec,
-    isnull: &mut bool,
-) -> Datum {
-    assert!(attnum > 0);
-    *isnull = false;
-    if (tup.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        if (attnum - 1) < (*spec).natts as i32 {
-            let att = OTupleDescAttrFast(tuple_desc, (attnum - 1) as usize);
-            if (*att).attcacheoff >= 0 {
-                fetchatt(att, tup.data.offset((*att).attcacheoff as isize))
-            } else {
-                o_toast_nocachegetattr(tup, attnum, tuple_desc, spec, isnull)
-            }
-        } else {
-            *isnull = true;
-            Datum::from(0)
-        }
-    } else {
-        let header = tup.data as *const OTupleHeaderData;
-        if !(*header).hasnulls() {
-            let att = OTupleDescAttrFast(tuple_desc, (attnum - 1) as usize);
-            if (*att).attcacheoff >= 0 {
-                fetchatt(att, tup.data.add(SizeOfOTupleHeader).offset((*att).attcacheoff as isize))
-            } else {
-                o_toast_nocachegetattr(tup, attnum, tuple_desc, spec, isnull)
-            }
-        } else {
-            let bits = tup.data.add(SizeOfOTupleHeader) as *const u8;
-            if att_isnull((attnum - 1) as usize, bits) {
-                *isnull = true;
-                Datum::from(0)
-            } else {
-                o_toast_nocachegetattr(tup, attnum, tuple_desc, spec, isnull)
-            }
-        }
-    }
-}
-
-pub unsafe fn o_fastgetattr_ptr(
-    tup: OTuple,
-    attnum: i32,
-    tuple_desc: TupleDesc,
-    spec: *const OTupleFixedFormatSpec,
-) -> *mut c_char {
-    assert!(attnum > 0);
-    if (tup.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        if (attnum - 1) < (*spec).natts as i32 {
-            let att = OTupleDescAttrFast(tuple_desc, (attnum - 1) as usize);
-            if (*att).attcacheoff >= 0 {
-                tup.data.offset((*att).attcacheoff as isize)
-            } else {
-                o_toast_nocachegetattr_ptr(tup, attnum, tuple_desc, spec)
-            }
-        } else {
-            std::ptr::null_mut()
-        }
-    } else {
-        let header = tup.data as *const OTupleHeaderData;
-        if !(*header).hasnulls() {
-            let att = OTupleDescAttrFast(tuple_desc, (attnum - 1) as usize);
-            if (*att).attcacheoff >= 0 {
-                tup.data.add(SizeOfOTupleHeader).offset((*att).attcacheoff as isize)
-            } else {
-                o_toast_nocachegetattr_ptr(tup, attnum, tuple_desc, spec)
-            }
-        } else {
-            let bits = tup.data.add(SizeOfOTupleHeader) as *const u8;
-            if att_isnull((attnum - 1) as usize, bits) {
-                std::ptr::null_mut()
-            } else {
-                o_toast_nocachegetattr_ptr(tup, attnum, tuple_desc, spec)
-            }
-        }
-    }
-}
-
-pub unsafe fn o_tuple_size(tup: OTuple, spec: *const OTupleFixedFormatSpec) -> usize {
-    if (tup.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        (*spec).len as usize
-    } else {
-        let header = tup.data as *const OTupleHeaderData;
-        (*header).len() as usize
-    }
-}
-
-pub unsafe fn o_has_nulls(tup: OTuple) -> bool {
-    if (tup.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        false
-    } else {
-        let header = tup.data as *const OTupleHeaderData;
-        (*header).hasnulls()
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_init_reader(
-    state: *mut OTupleReaderState,
-    tuple: OTuple,
-    desc: TupleDesc,
-    spec: *mut OTupleFixedFormatSpec,
-) {
-    let data = tuple.data;
-    let header = data as *mut OTupleHeaderData;
-    let state = &mut *state;
-
-    if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        state.bp = std::ptr::null_mut();
-        state.tp = data;
-        state.hasnulls = false;
-        state.natts = (*spec).natts;
-    } else if (*header).hasnulls() {
-        state.bp = data.add(SizeOfOTupleHeader) as *mut bits8;
-        state.tp = data.add(SizeOfOTupleHeader).add(maxalign(BITMAPLEN((*header).natts as usize)));
-        state.hasnulls = true;
-        state.natts = (*header).natts;
-    } else {
-        state.bp = std::ptr::null_mut();
-        state.tp = data.add(SizeOfOTupleHeader);
-        state.hasnulls = false;
-        state.natts = (*header).natts;
-    }
-    state.off = 0;
-    state.attnum = 0;
-    state.desc = desc;
-    state.slow = false;
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_next_field_offset(
-    state: *mut OTupleReaderState,
-    att: *mut OTupleAttrCompact,
-) -> u32 {
-    let state = &mut *state;
-    let att = &mut *att;
-    let off: u32;
-
-    if !state.slow && att.attcacheoff >= 0 {
-        state.off = att.attcacheoff as u32;
-    } else if att.attlen == -1 {
-        if !state.slow && state.off as usize == o_att_align_nominal(att, state.off as usize) {
-            att.attcacheoff = state.off as i32;
-        } else {
-            state.off = o_att_align_pointer(att, state.off as usize, -1, state.tp.add(state.off as usize)) as u32;
-            state.slow = true;
-        }
-    } else {
-        state.off = o_att_align_nominal(att, state.off as usize) as u32;
-        if !state.slow {
-            att.attcacheoff = state.off as i32;
-        }
-    }
-
-    off = state.off;
-
-    if !att.attbyval && att.attlen < 0 && IS_TOAST_POINTER(state.tp.add(state.off as usize) as *const std::ffi::c_void) {
-        state.off += std::mem::size_of::<OToastValue>() as u32;
-    } else {
-        state.off = att_addlength_pointer(state.off as usize, att.attlen, state.tp.add(state.off as usize)) as u32;
-    }
-
-    if att.attlen <= 0 {
-        state.slow = true;
-    }
-
-    state.attnum += 1;
-
-    off
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_read_next_field(
-    state: *mut OTupleReaderState,
-    isnull: *mut bool,
-) -> Datum {
-    let state = &mut *state;
-    let att = OTupleDescAttrFast(state.desc, state.attnum as usize);
-
-    if state.attnum >= state.natts {
-        if (*att).atthasmissing {
-            let result = pgrx::pg_sys::getmissingattr(state.desc, (state.attnum + 1) as i32, isnull);
-            state.attnum += 1;
-            return result;
-        } else {
-            *isnull = true;
-            state.attnum += 1;
-            return Datum::from(0);
-        }
-    }
-
-    if state.hasnulls && att_isnull(state.attnum as usize, state.bp) {
-        *isnull = true;
-        state.slow = true;
-        state.attnum += 1;
-        return Datum::from(0);
-    }
-
-    *isnull = false;
-    let off = o_tuple_next_field_offset(state, att);
-
-    fetchatt(att, state.tp.add(off as usize))
-}
-
-pub unsafe fn o_tuple_read_next_field_ptr(state: &mut OTupleReaderState) -> *mut c_char {
-    if state.attnum >= state.natts {
-        return std::ptr::null_mut();
-    }
-
-    if state.hasnulls && att_isnull(state.attnum as usize, state.bp) {
-        state.slow = true;
-        state.attnum += 1;
-        return std::ptr::null_mut();
-    }
-
-    let att = OTupleDescAttrFast(state.desc, state.attnum as usize);
-    let off = o_tuple_next_field_offset(state, att);
-
-    state.tp.add(off as usize)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_get_last_iptr(
-    desc: TupleDesc,
-    spec: *mut OTupleFixedFormatSpec,
-    tuple: OTuple,
-    isnull: *mut bool,
-) -> pgrx::pg_sys::ItemPointer {
-    if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) == 0 {
-        let header = tuple.data as *const OTupleHeaderData;
-        let bp = tuple.data.add(SizeOfOTupleHeader) as *const u8;
-
-        if (*header).hasnulls() && att_isnull((*desc).natts as usize - 1, bp) {
-            *isnull = true;
-            return std::ptr::null_mut();
-        }
-
-        *isnull = false;
-        tuple.data.add((*header).len() as usize - std::mem::size_of::<pgrx::pg_sys::ItemPointerData>()) as pgrx::pg_sys::ItemPointer
-    } else {
-        if (*spec).natts < (*desc).natts as u16 {
-            *isnull = true;
-            return std::ptr::null_mut();
-        }
-
-        *isnull = false;
-        tuple.data.add((*spec).len as usize - std::mem::size_of::<pgrx::pg_sys::ItemPointerData>()) as pgrx::pg_sys::ItemPointer
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_toast_nocachegetattr_ptr(
-    tuple: OTuple,
-    mut attnum: c_int,
-    tupleDesc: TupleDesc,
-    spec: *const OTupleFixedFormatSpec,
-) -> *mut c_char {
-    let tup = tuple.data as *mut OTupleHeaderData;
-    let tp: *mut c_char;
-    let mut slow = false;
-    let mut result: *mut c_char = std::ptr::null_mut();
-
-    attnum -= 1;
-
-    if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        tp = tuple.data;
-    } else if (*tup).hasnulls() {
-        let byte = attnum >> 3;
-        let finalbit = attnum & 0x07;
-        let bp = tuple.data.add(SizeOfOTupleHeader) as *const u8;
-
-        if ((!*bp.add(byte as usize)) & ((1 << finalbit) - 1)) != 0 {
-            slow = true;
-        } else {
-            for i in 0..byte {
-                if *bp.add(i as usize) != 0xFF {
-                    slow = true;
-                    break;
-                }
-            }
-        }
-        tp = tuple.data.add(SizeOfOTupleHeader).add(maxalign(BITMAPLEN((*tup).natts as usize)));
-    } else {
-        tp = tuple.data.add(SizeOfOTupleHeader);
-    }
-
-    if !slow {
-        let att = OTupleDescAttrFast(tupleDesc, attnum as usize);
-        if (*att).attcacheoff >= 0 {
-            return tp.offset((*att).attcacheoff as isize);
-        }
-    }
-
-    let mut reader = std::mem::MaybeUninit::<OTupleReaderState>::uninit();
-    o_tuple_init_reader(reader.as_mut_ptr(), tuple, tupleDesc, spec as *mut OTupleFixedFormatSpec);
-    let mut reader = reader.assume_init();
-
-    for _ in 0..=attnum {
-        result = o_tuple_read_next_field_ptr(&mut reader);
-    }
-    assert!(!result.is_null());
-
-    result
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_toast_nocachegetattr(
-    tuple: OTuple,
-    mut attnum: c_int,
-    tupleDesc: TupleDesc,
-    spec: *const OTupleFixedFormatSpec,
-    is_null: *mut bool,
-) -> Datum {
-    let tup = tuple.data as *mut OTupleHeaderData;
-    let tp: *mut c_char;
-    let mut slow = false;
-    let mut result = Datum::from(0);
-
-    *is_null = false;
-    attnum -= 1;
-
-    if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        tp = tuple.data;
-    } else if (*tup).hasnulls() {
-        let byte = attnum >> 3;
-        let finalbit = attnum & 0x07;
-        let bp = tuple.data.add(SizeOfOTupleHeader) as *const u8;
-
-        if ((!*bp.add(byte as usize)) & ((1 << finalbit) - 1)) != 0 {
-            slow = true;
-        } else {
-            for i in 0..byte {
-                if *bp.add(i as usize) != 0xFF {
-                    slow = true;
-                    break;
-                }
-            }
-        }
-        tp = tuple.data.add(SizeOfOTupleHeader).add(maxalign(BITMAPLEN((*tup).natts as usize)));
-    } else {
-        tp = tuple.data.add(SizeOfOTupleHeader);
-    }
-
-    if !slow {
-        let att = OTupleDescAttrFast(tupleDesc, attnum as usize);
-        if (*att).attcacheoff >= 0 {
-            return fetchatt(att, tp.offset((*att).attcacheoff as isize));
-        }
-    }
-
-    let mut reader = std::mem::MaybeUninit::<OTupleReaderState>::uninit();
-    o_tuple_init_reader(reader.as_mut_ptr(), tuple, tupleDesc, spec as *mut OTupleFixedFormatSpec);
-    let mut reader = reader.assume_init();
-
-    for _ in 0..=attnum {
-        result = o_tuple_read_next_field(&mut reader, is_null);
-    }
-
-    if *is_null && (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) == 0 && !(*tup).hasnulls() && (*tup).natts < (*tupleDesc).natts as u16 {
-        *is_null = true;
-        return Datum::from(0);
-    }
-
-    assert!(!*is_null);
-
-    result
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_get_data(
-    tuple: OTuple,
-    size: *mut c_int,
-    spec: *mut OTupleFixedFormatSpec,
-) -> *mut c_char {
-    if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) == 0 {
-        let header = tuple.data as *mut OTupleHeaderData;
-        let hasnull_off = if (*header).hasnulls() {
-            maxalign(BITMAPLEN((*header).natts as usize))
-        } else {
-            0
-        };
-        let hoff = SizeOfOTupleHeader + hasnull_off;
-        *size = ((*header).len() as usize - hoff) as c_int;
-        tuple.data.add(hoff)
-    } else {
-        *size = (*spec).len as c_int;
-        tuple.data
-    }
-}
-
-unsafe fn o_tuple_compute_data_size(
-    tupleDesc: TupleDesc,
-    iptr: pgrx::pg_sys::ItemPointer,
-    bridge_data: *mut BridgeData,
-    values: *mut Datum,
-    isnull: *mut bool,
-    to_toast: *mut c_char,
-    natts: c_int,
-) -> usize {
-    let mut data_length = 0;
-    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber as i16;
-    let mut ctid_off = 0;
-
-    if !iptr.is_null() {
-        ctid_off += 1;
-    }
-    if has_bridge_ctid {
-        ctid_off += 1;
-    }
-
-    for i in 0..natts {
-        let val: Datum;
-        if i == 0 && !iptr.is_null() {
-            val = Datum::from(iptr as usize);
-        } else if has_bridge_ctid && i == ((*bridge_data).attnum - 1) as i32 {
-            val = Datum::from(&(*bridge_data).bridge_iptr as *const pgrx::pg_sys::ItemPointerData as usize);
-        } else {
-            if !to_toast.is_null() && *to_toast.offset((i - ctid_off) as isize) == ORIOLEDB_TO_TOAST_ON as i8 {
-                data_length += std::mem::size_of::<OToastValue>();
-                continue;
-            }
-            if *isnull.offset((i - ctid_off) as isize) {
-                continue;
-            }
-            val = *values.offset((i - ctid_off) as isize);
-        }
-
-        let atti = &*TupleDescAttr(tupleDesc, i as usize);
-        if ATT_IS_PACKABLE(atti) && VARATT_CAN_MAKE_SHORT(val.value() as *const c_char) {
-            data_length += VARATT_CONVERTED_SHORT_SIZE(val.value() as *const c_char);
-        } else if atti.attlen == -1 && VARATT_IS_EXTERNAL_EXPANDED(val.value() as *const c_char) {
-            data_length = att_align_nominal(data_length, atti.attalign);
-            data_length += pgrx::pg_sys::EOH_get_flat_size(val.value() as *mut pgrx::pg_sys::ExpandedObjectHeader);
-        } else {
-            data_length = att_align_datum(data_length, atti.attalign, atti.attlen, val);
-            data_length = att_addlength_datum(data_length, atti.attlen, val);
-        }
-    }
-
-    data_length
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_new_tuple_size(
-    tupleDesc: TupleDesc,
-    spec: *mut OTupleFixedFormatSpec,
-    iptr: pgrx::pg_sys::ItemPointer,
-    bridge_data: *mut BridgeData,
-    version: u32,
-    values: *mut Datum,
-    isnull: *mut bool,
-    to_toast: *mut c_char,
-) -> pgrx::pg_sys::Size {
-    let mut hasnull = false;
-    let mut fixedFormat = version == 0;
-    let mut natts = (*tupleDesc).natts;
-    let mut ctid_off = 0;
-    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber as i16;
-
-    if !iptr.is_null() {
-        ctid_off += 1;
-    }
-    if has_bridge_ctid {
-        ctid_off += 1;
-    }
-
-    for i in ctid_off..natts {
-        if *isnull.offset((i - ctid_off) as isize) {
-            fixedFormat = false;
-            hasnull = true;
-        } else if i >= (*spec).natts as i32 {
-            fixedFormat = false;
-        }
-    }
-
-    let mut result: usize;
-    if !fixedFormat {
-        result = SizeOfOTupleHeader;
-        if hasnull {
-            result += maxalign(BITMAPLEN(natts as usize));
-        }
-    } else {
-        result = 0;
-        natts = (*spec).natts as i32;
-    }
-
-    result += o_tuple_compute_data_size(tupleDesc, iptr, bridge_data, values, isnull, to_toast, natts);
-
-    result as pgrx::pg_sys::Size
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_fill(
-    tupleDesc: TupleDesc,
-    spec: *mut OTupleFixedFormatSpec,
-    tuple: *mut OTuple,
-    tuple_size: pgrx::pg_sys::Size,
-    iptr: pgrx::pg_sys::ItemPointer,
-    bridge_data: *mut BridgeData,
-    version: u32,
-    values: *mut Datum,
-    isnull: *mut bool,
-    to_toast: *mut c_char,
-) {
-    let tup = (*tuple).data as *mut OTupleHeaderData;
-    let mut bitP: *mut bits8 = std::ptr::null_mut();
-    let mut bitmask: bits8 = 0;
-    let mut natts = (*tupleDesc).natts;
-    let hoff: usize;
-    let mut ctid_off = 0;
-    let mut len: usize;
-    let mut hasnull = false;
-    let mut fixedFormat = version == 0;
-    let data: *mut c_char;
-    let has_bridge_ctid = !bridge_data.is_null() && (*bridge_data).attnum != pgrx::pg_sys::InvalidAttrNumber as i16;
-
-    if !iptr.is_null() {
-        ctid_off += 1;
-    }
-    if !bridge_data.is_null() && (*bridge_data).is_pkey {
-        ctid_off += 1;
-    }
-
-    for i in ctid_off..natts {
-        if *isnull.offset((i - ctid_off) as isize) {
-            fixedFormat = false;
-            hasnull = true;
-        } else if i >= (*spec).natts as i32 {
-            fixedFormat = false;
-        }
-    }
-
-    if !fixedFormat {
-        (*tup).set_hasnulls(hasnull);
-        (*tup).set_len(tuple_size as u16);
-        (*tup).natts = natts as u16;
-        (*tup).version = version;
-        len = SizeOfOTupleHeader;
-        if hasnull {
-            len += maxalign(BITMAPLEN(natts as usize));
-        }
-        hoff = len;
-        if hasnull {
-            bitP = (*tuple).data.add(SizeOfOTupleHeader - 1) as *mut bits8;
-            bitmask = 0x80;
-        }
-        (*tuple).formatFlags = 0;
-    } else {
-        len = 0;
-        hoff = 0;
-        natts = (*spec).natts as i32;
-        hasnull = false;
-        (*tuple).formatFlags = O_TUPLE_FLAGS_FIXED_FORMAT;
-    }
-
-    data = (*tuple).data.add(hoff);
-    let mut data_ptr = data;
-
-    for i in 0..natts {
-        let att = &*TupleDescAttr(tupleDesc, i as usize);
-        let mut data_length = 0;
-        let value: Datum;
-        let null: bool;
-        let cur_to_toast: bool;
-
-        if i == 0 && !iptr.is_null() {
-            cur_to_toast = false;
-            value = Datum::from(iptr as usize);
-            null = false;
-        } else if has_bridge_ctid && i == ((*bridge_data).attnum - 1) as i32 {
-            cur_to_toast = false;
-            value = Datum::from(&(*bridge_data).bridge_iptr as *const pgrx::pg_sys::ItemPointerData as usize);
-            null = false;
-        } else {
-            cur_to_toast = !to_toast.is_null() && *to_toast.offset((i - ctid_off) as isize) == ORIOLEDB_TO_TOAST_ON as i8;
-            value = *values.offset((i - ctid_off) as isize);
-            null = *isnull.offset((i - ctid_off) as isize);
-        }
-
-        if cur_to_toast {
-            let mut toastValue = OToastValue {
-                pointer: 0,
-                compression: 0,
-                raw_size: 0,
-                toasted_size: 0,
-            };
-            SET_TOAST_POINTER(&mut toastValue as *mut OToastValue as *mut std::ffi::c_void);
-            toastValue.raw_size = crate::tuple::toast::o_get_raw_size(value);
-            toastValue.toasted_size = crate::tuple::toast::o_get_src_size(value);
-
-            let val_ptr = value.value() as *const c_char;
-            if VARATT_IS_COMPRESSED(val_ptr) {
-                let mut cmp = att.attcompression;
-                if cmp == pgrx::pg_sys::InvalidCompressionMethod as i8 {
-                    cmp = pgrx::pg_sys::default_toast_compression;
-                }
-                toastValue.compression = match cmp as u8 as char {
-                    'p' => pgrx::pg_sys::TOAST_PGLZ_COMPRESSION_ID as u8,
-                    'l' => pgrx::pg_sys::TOAST_LZ4_COMPRESSION_ID as u8,
-                    _ => pgrx::pg_sys::TOAST_INVALID_COMPRESSION_ID as u8,
-                };
-            } else {
-                toastValue.compression = pgrx::pg_sys::TOAST_INVALID_COMPRESSION_ID as u8;
-            }
-
-            data_length = std::mem::size_of::<OToastValue>();
-            std::ptr::copy_nonoverlapping(&toastValue as *const OToastValue as *const u8, data_ptr as *mut u8, data_length);
-        }
-
-        if hasnull {
-            if bitmask != 0x80 {
-                bitmask <<= 1;
-            } else {
-                bitP = bitP.add(1);
-                *bitP = 0x0;
-                bitmask = 1;
-            }
-
-            if null {
-                continue;
-            }
-
-            *bitP |= bitmask;
-        }
-
-        if cur_to_toast {
-            data_ptr = data_ptr.add(data_length);
-            continue;
-        }
-
-        if att.attbyval {
-            data_ptr = att_align_nominal_ptr(data_ptr, att.attalign);
-            store_att_byval(data_ptr, value, att.attlen);
-            data_length = att.attlen as usize;
-        } else if att.attlen == -1 {
-            let val = value.value() as *mut pgrx::pg_sys::varlena;
-            let val_ptr = val as *const c_char;
-
-            if pgrx::pg_sys::VARATT_IS_EXTERNAL(val) {
-                if VARATT_IS_EXTERNAL_EXPANDED(val_ptr) {
-                    let eoh = pgrx::pg_sys::DatumGetEOHP(value);
-                    data_ptr = att_align_nominal_ptr(data_ptr, att.attalign);
-                    data_length = pgrx::pg_sys::EOH_get_flat_size(eoh);
-                    pgrx::pg_sys::EOH_flatten_into(eoh, data_ptr as *mut std::ffi::c_void, data_length);
-                } else {
-                    data_length = pgrx::pg_sys::VARSIZE_EXTERNAL(val) as usize;
-                    std::ptr::copy_nonoverlapping(val as *const u8, data_ptr as *mut u8, data_length);
-                }
-            } else if pgrx::pg_sys::VARATT_IS_SHORT(val) {
-                data_length = pgrx::pg_sys::VARSIZE_SHORT(val) as usize;
-                std::ptr::copy_nonoverlapping(val as *const u8, data_ptr as *mut u8, data_length);
-            } else if VARLENA_ATT_IS_PACKABLE(att) && pgrx::pg_sys::VARATT_CAN_MAKE_SHORT(val) {
-                data_length = pgrx::pg_sys::VARATT_CONVERTED_SHORT_SIZE(val) as usize;
-                *(data_ptr as *mut u8) = (data_length | 0x80) as u8;
-                std::ptr::copy_nonoverlapping(
-                    (val as *const u8).add(4),
-                    data_ptr.add(1) as *mut u8,
-                    data_length - 1
-                );
-            } else {
-                data_ptr = att_align_nominal_ptr(data_ptr, att.attalign);
-                data_length = pgrx::pg_sys::VARSIZE(val) as usize;
-                std::ptr::copy_nonoverlapping(val as *const u8, data_ptr as *mut u8, data_length);
-            }
-        } else if att.attlen == -2 {
-            data_length = std::ffi::CStr::from_ptr(value.value() as *const c_char).to_bytes().len() + 1;
-            std::ptr::copy_nonoverlapping(value.value() as *const u8, data_ptr as *mut u8, data_length);
-        } else {
-            data_ptr = att_align_nominal_ptr(data_ptr, att.attalign);
-            assert!(att.attlen > 0);
-            data_length = att.attlen as usize;
-            std::ptr::copy_nonoverlapping(value.value() as *const u8, data_ptr as *mut u8, data_length);
-        }
-
-        data_ptr = data_ptr.add(data_length);
-    }
-
-    assert_eq!(data_ptr.offset_from((*tuple).data), tuple_size as isize);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_form_tuple(
-    tupleDesc: TupleDesc,
-    spec: *mut OTupleFixedFormatSpec,
-    version: u32,
-    values: *mut Datum,
-    isnull: *mut bool,
-    bridge_data: *mut BridgeData,
-) -> OTuple {
-    let mut result = OTuple {
-        data: std::ptr::null_mut(),
-        formatFlags: 0,
-    };
-    let len = o_new_tuple_size(tupleDesc, spec, std::ptr::null_mut(), bridge_data, version, values, isnull, std::ptr::null_mut());
-    result.data = pgrx::pg_sys::palloc0(len) as *mut c_char;
-    o_tuple_fill(tupleDesc, spec, &mut result, len, std::ptr::null_mut(), bridge_data, version, values, isnull, std::ptr::null_mut());
-    result
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_get_version(tuple: OTuple) -> u32 {
-    if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        0
-    } else {
-        let header = tuple.data as *mut OTupleHeaderData;
-        (*header).version
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_set_version(
-    spec: *mut OTupleFixedFormatSpec,
-    tuple: *mut OTuple,
-    version: u32,
-) {
-    let mut header = (*tuple).data as *mut OTupleHeaderData;
-
-    if ((*tuple).formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) == 0 {
-        (*header).version = version;
-        if (*header).version == 0 && !(*header).hasnulls() && (*header).natts == (*spec).natts {
-            assert_eq!((*header).len() as usize, (*spec).len as usize + std::mem::size_of::<OTupleHeaderData>());
-            (*tuple).formatFlags |= O_TUPLE_FLAGS_FIXED_FORMAT;
-            std::ptr::copy(
-                (*tuple).data.add(std::mem::size_of::<OTupleHeaderData>()),
-                (*tuple).data,
-                (*spec).len as usize
-            );
-        }
-        return;
-    }
-
-    if version == 0 {
-        return;
-    }
-
-    (*tuple).data = pgrx::pg_sys::repalloc(
-        (*tuple).data as *mut std::ffi::c_void,
-        ((*spec).len as usize + std::mem::size_of::<OTupleHeaderData>()) as pgrx::pg_sys::Size
-    ) as *mut c_char;
-
-    std::ptr::copy(
-        (*tuple).data,
-        (*tuple).data.add(std::mem::size_of::<OTupleHeaderData>()),
-        (*spec).len as usize
-    );
-    (*tuple).formatFlags &= !O_TUPLE_FLAGS_FIXED_FORMAT;
-
-    header = (*tuple).data as *mut OTupleHeaderData;
-    (*header).natts = (*spec).natts;
-    let new_len = std::mem::size_of::<OTupleHeaderData>() + (*spec).len as usize;
-    (*header).set_len(new_len as u16);
-    (*header).set_hasnulls(false);
-    (*header).version = version;
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn o_tuple_set_ctid(tuple: OTuple, iptr: pgrx::pg_sys::ItemPointer) {
-    let data = tuple.data;
-    let header = data as *mut OTupleHeaderData;
-
-    if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT) != 0 {
-        *(data as pgrx::pg_sys::ItemPointer) = *iptr;
-    } else if (*header).hasnulls() {
-        let dest = data.add(SizeOfOTupleHeader).add(maxalign(BITMAPLEN((*header).natts as usize))) as pgrx::pg_sys::ItemPointer;
-        *dest = *iptr;
-    } else {
-        let dest = data.add(SizeOfOTupleHeader) as pgrx::pg_sys::ItemPointer;
-        *dest = *iptr;
-    }
-}
-
-pub const ORIOLEDB_TO_TOAST_OFF: c_char = '\0' as c_char;
-pub const ORIOLEDB_TO_TOAST_ON: c_char = 'y' as c_char;
-pub const ORIOLEDB_TO_TOAST_COMPRESSION_TRIED: c_char = 'c' as c_char;
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct OToastValue {
-    pub pointer: u8,
-    pub compression: u8,
-    pub raw_size: i32,
-    pub toasted_size: i32,
+/*-------------------------------------------------------------------------
+ *
+ * format.c
+ * 		Routines for accessing tuples in orioledb format.
+ *
+ * Copyright (c) 2021-2026, Oriole DB Inc.
+ * Copyright (c) 2025-2026, Supabase Inc.
+ *
+ * IDENTIFICATION
+ *	  contrib/orioledb/src/tuple/format.c
+ *
+ *-------------------------------------------------------------------------
+ */
+#include "postgres.h"
+
+#include "orioledb.h"
+
+#include "tableam/toast.h"
+#include "tuple/slot.h"
+#include "tuple/toast.h"
+#include "tuple/format.h"
+
+#include "access/htup_details.h"
+
+/* Does att's datatype allow packing into the 1-byte-header varlena format? */
+#define ATT_IS_PACKABLE(att) \
+	((att)->attlen == -1 && (att)->attstorage != 'p')
+
+/* Use this if it's already known varlena */
+#define VARLENA_ATT_IS_PACKABLE(att) \
+	((att)->attstorage != 'p')
+
+void
+o_tuple_init_reader(OTupleReaderState *state, OTuple tuple, TupleDesc desc,
+					OTupleFixedFormatSpec *spec)
+{
+	Pointer		data = tuple.data;
+	OTupleHeader header = (OTupleHeader) data;
+
+	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
+	{
+		state->bp = NULL;
+		state->tp = (char *) data;
+		state->hasnulls = false;
+		state->natts = spec->natts;
+	}
+	else if (header->hasnulls)
+	{
+		state->bp = (bits8 *) (data + SizeOfOTupleHeader);
+		state->tp = (char *) (data + SizeOfOTupleHeader + MAXALIGN(BITMAPLEN(header->natts)));
+		state->hasnulls = true;
+		state->natts = header->natts;
+	}
+	else
+	{
+		state->bp = NULL;
+		state->tp = (char *) (data + SizeOfOTupleHeader);
+		state->hasnulls = false;
+		state->natts = header->natts;
+	}
+	state->off = 0;
+	state->attnum = 0;
+	state->desc = desc;
+	state->slow = false;
+}
+
+uint32
+o_tuple_next_field_offset(OTupleReaderState *state, OTupleAttrCompact * att)
+{
+	uint32		off;
+
+	if (!state->slow && att->attcacheoff >= 0)
+	{
+		state->off = att->attcacheoff;
+	}
+	else if (att->attlen == -1)
+	{
+		if (!state->slow &&
+			state->off == o_att_align_nominal(att, state->off))
+		{
+			att->attcacheoff = state->off;
+		}
+		else
+		{
+			state->off = o_att_align_pointer(att, state->off, -1,
+											 state->tp + state->off);
+			state->slow = true;
+		}
+	}
+	else
+	{
+		state->off = o_att_align_nominal(att, state->off);
+		if (!state->slow)
+			att->attcacheoff = state->off;
+	}
+
+	off = state->off;
+
+	if (!att->attbyval && att->attlen < 0 &&
+		IS_TOAST_POINTER(state->tp + state->off))
+	{
+		state->off += sizeof(OToastValue);
+	}
+	else
+	{
+		state->off = att_addlength_pointer(state->off,
+										   att->attlen,
+										   state->tp + state->off);
+	}
+
+	if (att->attlen <= 0)
+		state->slow = true;
+
+	state->attnum++;
+
+	return off;
+}
+
+Datum
+o_tuple_read_next_field(OTupleReaderState *state, bool *isnull)
+{
+	OTupleAttrCompact *att = OTupleDescAttrFast(state->desc, state->attnum);
+	Datum		result;
+	uint32		off;
+
+	if (state->attnum >= state->natts)
+	{
+		if (att->atthasmissing)
+		{
+			result = getmissingattr(state->desc,
+									state->attnum + 1,
+									isnull);
+			state->attnum++;
+			return result;
+		}
+		else
+		{
+			*isnull = true;
+			state->attnum++;
+			return (Datum) 0;
+		}
+	}
+
+	if (state->hasnulls && att_isnull(state->attnum, state->bp))
+	{
+		*isnull = true;
+		state->slow = true;
+		state->attnum++;
+		return (Datum) 0;
+	}
+
+	*isnull = false;
+	off = o_tuple_next_field_offset(state, att);
+
+	return fetchatt(att, state->tp + off);
+}
+
+static Pointer
+o_tuple_read_next_field_ptr(OTupleReaderState *state)
+{
+	uint32		off;
+
+	if (state->attnum >= state->natts)
+		return NULL;
+
+	if (state->hasnulls && att_isnull(state->attnum, state->bp))
+	{
+		state->slow = true;
+		state->attnum++;
+		return NULL;
+	}
+
+	off = o_tuple_next_field_offset(state,
+									OTupleDescAttrFast(state->desc, state->attnum));
+
+	return state->tp + off;
+}
+
+ItemPointer
+o_tuple_get_last_iptr(TupleDesc desc, OTupleFixedFormatSpec *spec,
+					  OTuple tuple, bool *isnull)
+{
+	if (!(tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT))
+	{
+		OTupleHeader header = (OTupleHeader) tuple.data;
+		uint8	   *bp = (uint8 *) (tuple.data + SizeOfOTupleHeader);
+
+		if ((header->hasnulls) && att_isnull(desc->natts - 1, bp))
+		{
+			*isnull = true;
+			return (ItemPointer) NULL;
+		}
+
+		*isnull = false;
+		return (ItemPointer) ((char *) header + header->len - sizeof(ItemPointerData));
+	}
+	else
+	{
+		if (spec->natts < desc->natts)
+		{
+			*isnull = true;
+			return (ItemPointer) NULL;
+		}
+
+		*isnull = false;
+		return (ItemPointer) ((char *) tuple.data + spec->len - sizeof(ItemPointerData));
+	}
+}
+
+/*
+ * nocachegetattr analog for tuples that can consist
+ * orioledb toast values (OToastValue). But return just pointer to field
+ * in the tuple.
+ */
+Pointer
+o_toast_nocachegetattr_ptr(OTuple tuple,
+						   int attnum,
+						   TupleDesc tupleDesc,
+						   OTupleFixedFormatSpec *spec)
+{
+	OTupleHeader tup = (OTupleHeader) tuple.data;
+	char	   *tp;				/* ptr to data part of tuple */
+	bool		slow = false;	/* do we have to walk attrs? */
+	int			i;
+	OTupleReaderState reader;
+	Pointer		result = NULL;
+
+	/* ----------------
+	 *	 Three cases:
+	 *
+	 *	 1: No nulls and no variable-width attributes.
+	 *	 2: Has a null or a var-width AFTER att.
+	 *	 3: Has nulls or var-widths BEFORE att.
+	 * ----------------
+	 */
+
+	attnum--;
+
+	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
+	{
+		tp = (char *) tuple.data;
+	}
+	else if (tup->hasnulls)
+	{
+		/*
+		 * there's a null somewhere in the tuple
+		 *
+		 * check to see if any preceding bits are null...
+		 */
+		int			byte = attnum >> 3;
+		int			finalbit = attnum & 0x07;
+		bits8	   *bp = (bits8 *) (tuple.data + SizeOfOTupleHeader);
+
+		/* check for nulls "before" final bit of last byte */
+		if ((~bp[byte]) & ((1 << finalbit) - 1))
+			slow = true;
+		else
+		{
+			/* check for nulls in any "earlier" bytes */
+			for (i = 0; i < byte; i++)
+			{
+				if (bp[i] != 0xFF)
+				{
+					slow = true;
+					break;
+				}
+			}
+		}
+		tp = (char *) (tuple.data + SizeOfOTupleHeader + MAXALIGN(BITMAPLEN(tup->natts)));
+	}
+	else
+	{
+		tp = (char *) (tuple.data + SizeOfOTupleHeader);
+	}
+
+	if (!slow)
+	{
+		OTupleAttrCompact *att = OTupleDescAttrFast(tupleDesc, attnum);
+
+		/*
+		 * If we get here, there are no nulls up to and including the target
+		 * attribute.  If we have a cached offset, we can use it.
+		 */
+		if (att->attcacheoff >= 0)
+			return tp + att->attcacheoff;
+	}
+
+	o_tuple_init_reader(&reader, tuple, tupleDesc, spec);
+	for (i = 0; i <= attnum; i++)
+		result = o_tuple_read_next_field_ptr(&reader);
+	Assert(result != NULL);
+
+	return result;
+}
+
+
+/*
+ * nocachegetattr analog for tuples that can consist
+ * orioledb toast values (OToastValue).
+ */
+Datum
+o_toast_nocachegetattr(OTuple tuple,
+					   int attnum,
+					   TupleDesc tupleDesc,
+					   OTupleFixedFormatSpec *spec,
+					   bool *is_null)
+{
+	OTupleHeader tup = (OTupleHeader) tuple.data;
+	char	   *tp;				/* ptr to data part of tuple */
+	bool		slow = false;	/* do we have to walk attrs? */
+	int			i;
+	OTupleReaderState reader;
+	Datum		result = (Datum) 0;
+
+	*is_null = false;
+
+	/* ----------------
+	 *	 Three cases:
+	 *
+	 *	 1: No nulls and no variable-width attributes.
+	 *	 2: Has a null or a var-width AFTER att.
+	 *	 3: Has nulls or var-widths BEFORE att.
+	 * ----------------
+	 */
+
+	attnum--;
+
+	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
+	{
+		tp = (char *) tuple.data;
+	}
+	else if (tup->hasnulls)
+	{
+		/*
+		 * there's a null somewhere in the tuple
+		 *
+		 * check to see if any preceding bits are null...
+		 */
+		int			byte = attnum >> 3;
+		int			finalbit = attnum & 0x07;
+		bits8	   *bp = (bits8 *) (tuple.data + SizeOfOTupleHeader);
+
+		/* check for nulls "before" final bit of last byte */
+		if ((~bp[byte]) & ((1 << finalbit) - 1))
+			slow = true;
+		else
+		{
+			/* check for nulls in any "earlier" bytes */
+			for (i = 0; i < byte; i++)
+			{
+				if (bp[i] != 0xFF)
+				{
+					slow = true;
+					break;
+				}
+			}
+		}
+		tp = (char *) (tuple.data + SizeOfOTupleHeader + MAXALIGN(BITMAPLEN(tup->natts)));
+	}
+	else
+	{
+		tp = (char *) (tuple.data + SizeOfOTupleHeader);
+	}
+
+	if (!slow)
+	{
+		OTupleAttrCompact *att;
+
+		/*
+		 * If we get here, there are no nulls up to and including the target
+		 * attribute.  If we have a cached offset, we can use it.
+		 */
+		att = OTupleDescAttrFast(tupleDesc, attnum);
+		if (att->attcacheoff >= 0)
+			return fetchatt(att, tp + att->attcacheoff);
+	}
+
+	o_tuple_init_reader(&reader, tuple, tupleDesc, spec);
+	for (i = 0; i <= attnum; i++)
+		result = o_tuple_read_next_field(&reader, is_null);
+
+	if (*is_null && !tup->hasnulls && tup->natts < tupleDesc->natts)
+	{
+		/*
+		 * This possible when reading tuple without nulls after adding null
+		 * column
+		 */
+		*is_null = true;
+		return 0;
+	}
+
+	Assert(!(*is_null));
+
+	return result;
+}
+
+/* No existing callers */
+Pointer
+o_tuple_get_data(OTuple tuple, int *size, OTupleFixedFormatSpec *spec)
+{
+	if (!(tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT))
+	{
+		OTupleHeader header = (OTupleHeader) tuple.data;
+		int			hasnull_off;
+		int			hoff;
+
+		hasnull_off = header->hasnulls ? MAXALIGN(BITMAPLEN(header->natts)) :
+			0;
+		hoff = SizeOfOTupleHeader + hasnull_off;
+		*size = header->len - hoff;
+		return (Pointer) tuple.data + hoff;
+	}
+	else
+	{
+		*size = spec->len;
+		return tuple.data;
+	}
+}
+
+/*
+ * toast_compute_data_size
+ *		Determine size of the data area of a tuple to be constructed
+ */
+static Size
+o_tuple_compute_data_size(TupleDesc tupleDesc, ItemPointer iptr, BridgeData *bridge_data,
+						  Datum *values, bool *isnull, char *to_toast,
+						  int natts)
+{
+	Size		data_length = 0;
+	bool		has_bridge_ctid = bridge_data && bridge_data->attnum != InvalidAttrNumber;
+	int			i,
+				ctid_off = 0;
+
+	if (iptr)
+		ctid_off++;
+	if (has_bridge_ctid)
+		ctid_off++;
+
+	for (i = 0; i < natts; i++)
+	{
+		Datum		val;
+		Form_pg_attribute atti;
+
+		if (i == 0 && iptr)
+		{
+			val = PointerGetDatum(iptr);
+		}
+		else if (has_bridge_ctid && i == bridge_data->attnum - 1)
+		{
+			val = PointerGetDatum(bridge_data->bridge_iptr);
+		}
+		else
+		{
+			if (to_toast != NULL &&
+				to_toast[i - ctid_off] == ORIOLEDB_TO_TOAST_ON)
+			{
+				data_length += sizeof(OToastValue);
+				continue;
+			}
+
+			if (isnull[i - ctid_off])
+				continue;
+			val = values[i - ctid_off];
+		}
+
+		atti = TupleDescAttr(tupleDesc, i);
+		if (ATT_IS_PACKABLE(atti) &&
+			VARATT_CAN_MAKE_SHORT(DatumGetPointer(val)))
+		{
+			/*
+			 * we're anticipating converting to a short varlena header, so
+			 * adjust length and don't count any alignment
+			 */
+			data_length += VARATT_CONVERTED_SHORT_SIZE(DatumGetPointer(val));
+		}
+		else if (atti->attlen == -1 &&
+				 VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val)))
+		{
+			/*
+			 * we want to flatten the expanded value so that the constructed
+			 * tuple doesn't depend on it
+			 */
+			data_length = att_align_nominal(data_length, atti->attalign);
+			data_length += EOH_get_flat_size(DatumGetEOHP(val));
+		}
+		else
+		{
+			data_length = att_align_datum(data_length, atti->attalign,
+										  atti->attlen, val);
+			data_length = att_addlength_datum(data_length, atti->attlen,
+											  val);
+		}
+	}
+
+	return data_length;
+}
+
+Size
+o_new_tuple_size(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
+				 ItemPointer iptr, BridgeData *bridge_data, uint32 version,
+				 Datum *values, bool *isnull, char *to_toast)
+{
+	bool		hasnull = false;
+	bool		fixedFormat = (version == 0);
+	int			i,
+				natts,
+				ctid_off = 0;
+	bool		has_bridge_ctid = bridge_data && bridge_data->attnum != InvalidAttrNumber;
+	Size		result;
+
+	natts = tupleDesc->natts;
+
+	if (iptr)
+		ctid_off++;
+	if (has_bridge_ctid)
+		ctid_off++;
+
+	/*
+	 * Check for nulls
+	 */
+	for (i = ctid_off; i < natts; i++)
+	{
+		if (isnull[i - ctid_off])
+		{
+			fixedFormat = false;
+			hasnull = true;
+		}
+		else if (i >= spec->natts)
+			fixedFormat = false;
+	}
+
+	/*
+	 * Determine total space needed
+	 */
+	if (!fixedFormat)
+	{
+		result = SizeOfOTupleHeader;
+		if (hasnull)
+			result += MAXALIGN(BITMAPLEN(natts));
+	}
+	else
+	{
+		result = 0;
+		natts = spec->natts;
+	}
+
+	result += o_tuple_compute_data_size(tupleDesc, iptr, bridge_data, values,
+										isnull, to_toast, natts);
+
+	return result;
+}
+
+/*
+ * Memory is expected to be already zeroed!
+ */
+void
+o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
+			 OTuple *tuple, Size tuple_size,
+			 ItemPointer iptr, BridgeData *bridge_data, uint32 version,
+			 Datum *values, bool *isnull, char *to_toast)
+{
+	OTupleHeader tup = (OTupleHeader) tuple->data;
+	bits8	   *bitP;
+	bits8		bitmask;
+	int			i;
+	int			natts = tupleDesc->natts;
+	int			hoff;
+	int			ctid_off = 0;
+	Size		len;
+	bool		hasnull = false;
+	bool		fixedFormat = (version == 0);
+	Pointer		data;
+	bool		has_bridge_ctid = bridge_data && bridge_data->attnum != InvalidAttrNumber;
+
+	if (iptr)
+		ctid_off++;
+	if (bridge_data && bridge_data->is_pkey)
+		ctid_off++;
+
+	/*
+	 * Check for nulls
+	 */
+	for (i = ctid_off; i < natts; i++)
+	{
+		if (isnull[i - ctid_off])
+		{
+			fixedFormat = false;
+			hasnull = true;
+		}
+		else if (i >= spec->natts)
+			fixedFormat = false;
+	}
+
+	if (!fixedFormat)
+	{
+		tup->hasnulls = hasnull;
+		tup->len = tuple_size;
+		tup->natts = natts;
+		tup->version = version;
+		len = SizeOfOTupleHeader;
+		if (hasnull)
+			len += MAXALIGN(BITMAPLEN(natts));
+		hoff = len;
+		if (hasnull)
+		{
+			bitP = (bits8 *) (tuple->data + SizeOfOTupleHeader - 1);
+			bitmask = HIGHBIT;
+		}
+		else
+		{
+			/* just to keep compiler quiet */
+			bitP = NULL;
+			bitmask = 0;
+		}
+		tuple->formatFlags = 0;
+	}
+	else
+	{
+		bitP = NULL;
+		bitmask = 0;
+		len = 0;
+		hoff = 0;
+		natts = spec->natts;
+		hasnull = false;
+		tuple->formatFlags = O_TUPLE_FLAGS_FIXED_FORMAT;
+	}
+
+	data = tuple->data + hoff;
+
+	for (i = 0; i < natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupleDesc, i);
+		Size		data_length = 0;
+		Datum		value;
+		bool		null;
+		bool		cur_to_toast;
+
+		if (i == 0 && iptr)
+		{
+			cur_to_toast = false;
+			value = PointerGetDatum(iptr);
+			null = false;
+		}
+		else if (has_bridge_ctid && i == bridge_data->attnum - 1)
+		{
+			cur_to_toast = false;
+			value = PointerGetDatum(bridge_data->bridge_iptr);
+			null = false;
+		}
+		else
+		{
+			cur_to_toast = (to_toast != NULL &&
+							to_toast[i - ctid_off] == ORIOLEDB_TO_TOAST_ON);
+			value = values[i - ctid_off];
+			null = isnull[i - ctid_off];
+		}
+
+		if (cur_to_toast)
+		{
+			OToastValue toastValue;
+
+			memset(&toastValue, 0, sizeof(toastValue));
+			SET_TOAST_POINTER(&toastValue);
+			toastValue.raw_size = o_get_raw_size(value);
+			toastValue.toasted_size = o_get_src_size(value);
+
+			{
+				if (VARATT_IS_COMPRESSED(value))
+				{
+					if (att->attcompression == InvalidCompressionMethod)
+						att->attcompression = default_toast_compression;
+					switch (att->attcompression)
+					{
+						case TOAST_PGLZ_COMPRESSION:
+							toastValue.compression = TOAST_PGLZ_COMPRESSION_ID;
+							break;
+						case TOAST_LZ4_COMPRESSION:
+							toastValue.compression = TOAST_LZ4_COMPRESSION_ID;
+							break;
+						default:
+							toastValue.compression = TOAST_INVALID_COMPRESSION_ID;
+					}
+				}
+				else
+					toastValue.compression = TOAST_INVALID_COMPRESSION_ID;
+			}
+
+			data_length = sizeof(OToastValue);
+			memcpy(data, &toastValue, data_length);
+		}
+
+		if (hasnull)
+		{
+			if (bitmask != HIGHBIT)
+				bitmask <<= 1;
+			else
+			{
+				bitP += 1;
+				*bitP = 0x0;
+				bitmask = 1;
+			}
+
+			if (null)
+				continue;
+
+			*bitP |= bitmask;
+		}
+
+		if (cur_to_toast)
+		{
+			data += data_length;
+			continue;
+		}
+
+
+		/*
+		 * XXX we use the att_align macros on the pointer value itself, not on
+		 * an offset.  This is a bit of a hack.
+		 */
+		if (att->attbyval)
+		{
+			/* pass-by-value */
+			data = (char *) att_align_nominal(data, att->attalign);
+			store_att_byval(data, value, att->attlen);
+			data_length = att->attlen;
+		}
+		else if (att->attlen == -1)
+		{
+			/* varlena */
+			Pointer		val = DatumGetPointer(value);
+
+			if (VARATT_IS_EXTERNAL(val))
+			{
+				if (VARATT_IS_EXTERNAL_EXPANDED(val))
+				{
+					/*
+					 * we want to flatten the expanded value so that the
+					 * constructed tuple doesn't depend on it
+					 */
+					ExpandedObjectHeader *eoh = DatumGetEOHP(value);
+
+					data = (char *) att_align_nominal(data,
+													  att->attalign);
+					data_length = EOH_get_flat_size(eoh);
+					EOH_flatten_into(eoh, data, data_length);
+				}
+				else
+				{
+					/* no alignment, since it's short by definition */
+					data_length = VARSIZE_EXTERNAL(val);
+					memcpy(data, val, data_length);
+				}
+			}
+			else if (VARATT_IS_SHORT(val))
+			{
+				/* no alignment for short varlenas */
+				data_length = VARSIZE_SHORT(val);
+				memcpy(data, val, data_length);
+			}
+			else if (VARLENA_ATT_IS_PACKABLE(att) &&
+					 VARATT_CAN_MAKE_SHORT(val))
+			{
+				/* convert to short varlena -- no alignment */
+				data_length = VARATT_CONVERTED_SHORT_SIZE(val);
+				SET_VARSIZE_SHORT(data, data_length);
+				memcpy(data + 1, VARDATA(val), data_length - 1);
+			}
+			else
+			{
+				/* full 4-byte header varlena */
+				data = (char *) att_align_nominal(data,
+												  att->attalign);
+				data_length = VARSIZE(val);
+				memcpy(data, val, data_length);
+			}
+		}
+		else if (att->attlen == -2)
+		{
+			/* cstring ... never needs alignment */
+			Assert(att->attalign == 'c');
+			data_length = strlen(DatumGetCString(value)) + 1;
+			memcpy(data, DatumGetPointer(value), data_length);
+		}
+		else
+		{
+			/* fixed-length pass-by-reference */
+			data = (char *) att_align_nominal(data, att->attalign);
+			Assert(att->attlen > 0);
+			data_length = att->attlen;
+			memcpy(data, DatumGetPointer(value), data_length);
+		}
+
+		data += data_length;
+	}
+
+	Assert((data - tuple->data) == tuple_size);
+}
+
+OTuple
+o_form_tuple(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
+			 uint32 version, Datum *values, bool *isnull,
+			 BridgeData *bridge_data)
+{
+	OTuple		result;
+	int			len;
+
+	len = o_new_tuple_size(tupleDesc, spec, NULL, bridge_data, version, values, isnull, NULL);
+	result.data = (Pointer) palloc0(len);
+	o_tuple_fill(tupleDesc, spec, &result, len, NULL, bridge_data, version, values, isnull, NULL);
+	return result;
+}
+
+
+uint32
+o_tuple_get_version(OTuple tuple)
+{
+	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
+		return 0;
+	else
+		return ((OTupleHeader) tuple.data)->version;
+}
+
+void
+o_tuple_set_version(OTupleFixedFormatSpec *spec, OTuple *tuple,
+					uint32 version)
+{
+	OTupleHeader header = (OTupleHeader) tuple->data;
+
+	if (!(tuple->formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT))
+	{
+		header->version = version;
+		if (header->version == 0 && !header->hasnulls && header->natts == spec->natts)
+		{
+			Assert(header->len == spec->len + sizeof(OTupleHeaderData));
+			tuple->formatFlags |= O_TUPLE_FLAGS_FIXED_FORMAT;
+			memmove(tuple->data, tuple->data + sizeof(OTupleHeaderData), spec->len);
+		}
+		return;
+	}
+
+	if (version == 0)
+		return;
+
+	tuple->data = (Pointer) repalloc(tuple->data, spec->len + sizeof(OTupleHeaderData));
+	memmove(tuple->data + sizeof(OTupleHeaderData),
+			tuple->data,
+			spec->len);
+	tuple->formatFlags &= ~O_TUPLE_FLAGS_FIXED_FORMAT;
+
+	header = (OTupleHeaderData *) tuple->data;
+	header->natts = spec->natts;
+	header->len = sizeof(OTupleHeaderData) + spec->len;
+	header->hasnulls = 0;
+	header->version = version;
+}
+
+void
+o_tuple_set_ctid(OTuple tuple, ItemPointer iptr)
+{
+	Pointer		data = tuple.data;
+	OTupleHeader header = (OTupleHeader) data;
+
+	if (tuple.formatFlags & O_TUPLE_FLAGS_FIXED_FORMAT)
+	{
+		*((ItemPointer) data) = *iptr;
+	}
+	else if (header->hasnulls)
+	{
+		*((ItemPointer) (data + SizeOfOTupleHeader + MAXALIGN(BITMAPLEN(header->natts)))) = *iptr;
+	}
+	else
+	{
+		*((ItemPointer) (data + SizeOfOTupleHeader)) = *iptr;
+	}
 }

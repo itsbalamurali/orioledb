@@ -1,2847 +1,2153 @@
-//! handler.rs
-//!
-//! Copyright (c) 2021-2026, Oriole DB Inc.
-//! Copyright (c) 2025-2026, Supabase Inc.
-//!
-//! IDENTIFICATION
-//!   contrib/orioledb/orioledb-rs/src/indexam/handler.rs
-
-use std::ffi::{c_char, c_int, c_void};
-use pgrx::pg_sys;
-
-// Type Aliases
-pub type OIndexNumber = u16;
-pub type CommitSeqNo = u64;
-pub type OXid = u64;
-pub type UndoLocation = u64;
-pub type OInMemoryBlkno = u32;
-
-// Constants
-pub const F_BTHANDLER: pg_sys::Oid = pg_sys::Oid::from_u32(330);
-pub const HEAP_TABLE_AM_OID: pg_sys::Oid = pg_sys::Oid::from_u32(2);
-pub const BTMaxStrategyNumber: usize = 5;
-pub const BTNProcs: usize = 5;
-pub const BTOPTIONS_PROC: usize = 4;
-pub const BTLessStrategyNumber: i16 = 1;
-pub const BTEqualStrategyNumber: c_int = 3;
-pub const INDEX_MAX_KEYS: usize = 32;
-pub const PrimaryIndexNumber: OIndexNumber = 0;
-pub const STOPEVENT_SCAN_END: c_int = 16;
-pub const BTREE_DEFAULT_FILLFACTOR: c_int = 90;
-pub const BTREE_MIN_FILLFACTOR: c_int = 10;
-pub const RowIdAttributeNumber: pg_sys::AttrNumber = 100; // Placeholder / custom attribute number for rowid
-
-// Struct and Enum Definitions
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OTuple {
-    pub data: pg_sys::Pointer,
-    pub formatFlags: u8,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ORelOids {
-    pub datoid: pg_sys::Oid,
-    pub reloid: pg_sys::Oid,
-    pub relnode: pg_sys::Oid,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum OIndexType {
-    OIndexInvalid = 0,
-    OIndexToast = 1,
-    OIndexBridge = 2,
-    OIndexPrimary = 3,
-    OIndexUnique = 4,
-    OIndexRegular = 5,
-    OIndexExclusion = 6,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct BTreeRootInfo {
-    pub rootPageBlkno: OInMemoryBlkno,
-    pub rootPageChangeCount: u32,
-    pub metaPageBlkno: OInMemoryBlkno,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union OSmgr {
-    pub array: OSmgrArray,
-    pub hash: *mut c_void,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OSmgrArray {
-    pub files: *mut pg_sys::File,
-    pub filesAllocated: c_int,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum BTreeStorageType {
-    BTreeStorageInMemory = 0,
-    BTreeStorageTemporary = 1,
-    BTreeStorageUnlogged = 2,
-    BTreeStoragePersistence = 3,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum UndoLogType {
-    UndoLogNone = 0,
-    // Add other fields if needed, but not accessed in handler.c
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct BTreeDescr {
-    pub rootInfo: BTreeRootInfo,
-    pub arg: *mut c_void,
-    pub smgr: OSmgr,
-    pub oids: ORelOids,
-    pub tablespace: pg_sys::Oid,
-    pub r#type: OIndexType,
-    pub ppool: *mut c_void, // PagePool
-    pub compress: c_char,   // OCompress
-    pub fillfactor: u8,
-    pub undoType: UndoLogType,
-    pub storageType: BTreeStorageType,
-    // other fields omitted
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OTupleFixedFormatSpec {
-    pub natts: u16,
-    pub len: u16,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct BTreeLocationHint {
-    pub blkno: OInMemoryBlkno,
-    pub pageChangeCount: u32,
-}
-
-#[repr(C)]
-pub struct OIndexDescr {
-    pub oids: ORelOids,
-    pub tableOids: ORelOids,
-    pub version: u32,
-    pub refcnt: c_int,
-    pub valid: bool,
-    pub desc: BTreeDescr,
-    pub name: pg_sys::NameData,
-    pub index_mctx: pg_sys::MemoryContext,
-    pub expressions: *mut pg_sys::List,
-    pub predicate: *mut pg_sys::List,
-    pub predicate_str: *mut c_char,
-    pub expressions_state: *mut pg_sys::List,
-    pub predicate_state: *mut pg_sys::ExprState,
-    pub econtext: *mut pg_sys::ExprContext,
-    pub nonLeafTupdesc: pg_sys::TupleDesc,
-    pub nonLeafSpec: OTupleFixedFormatSpec,
-    pub leafTupdesc: pg_sys::TupleDesc,
-    pub leafSpec: OTupleFixedFormatSpec,
-    pub unique: bool,
-    pub immediate: bool,
-    pub nulls_not_distinct: bool,
-    pub nUniqueFields: c_int,
-    pub primaryIsCtid: bool,
-    pub bridging: bool,
-    pub fillfactor: u8,
-    pub nFields: c_int,
-    pub nKeyFields: c_int,
-    pub nIncludedFields: c_int,
-    pub fields: *mut c_void, // OIndexField
-    pub nPrimaryFields: c_int,
-    pub primaryFieldsAttnums: [pg_sys::AttrNumber; INDEX_MAX_KEYS],
-    pub compress: c_char, // OCompress
-    pub tableAttnums: *mut pg_sys::AttrNumber,
-    pub maxTableAttnum: c_int,
-    pub pk_tbl_field_map: *mut c_void, // AttrNumberMap
-    pub pk_comparators: *mut *mut c_void, // OComparator
-    pub itupdesc: pg_sys::TupleDesc,
-    pub index_slot: *mut pg_sys::TupleTableSlot,
-    pub old_leaf_slot: *mut pg_sys::TupleTableSlot,
-    pub new_leaf_slot: *mut pg_sys::TupleTableSlot,
-    pub duplicates: *mut pg_sys::List,
-}
-
-#[repr(C)]
-pub struct OTable {
-    pub oids: ORelOids,
-    pub toast_oids: ORelOids,
-    pub toast_ixversion: u32,
-    pub primary_ixversion: u32,
-    pub bridge_ixversion: u32,
-    pub bridge_oids: ORelOids,
-    pub default_compress: c_char, // OCompress
-    pub primary_compress: c_char,
-    pub toast_compress: c_char,
-    pub index_bridging: bool,
-    pub nfields: u16,
-    pub primary_init_nfields: u16,
-    pub nindices: u16,
-    pub tid_btree_ops_oid: pg_sys::Oid,
-    pub tid_hash_fn_oid: pg_sys::Oid,
-    pub int2_hash_fn_oid: pg_sys::Oid,
-    pub int4_hash_fn_oid: pg_sys::Oid,
-    pub has_primary: bool,
-    pub persistence: c_char,
-    pub fillfactor: u8,
-    pub data_version: u16,
-    pub indices: *mut c_void, // OTableIndex
-    pub fields: *mut c_void,  // OTableField
-    pub missing: *mut pg_sys::AttrMissing,
-    pub tablespace: pg_sys::Oid,
-    pub version: u32,
-    pub tbl_mctx: pg_sys::MemoryContext,
-}
-
-#[repr(C)]
-pub struct OTableDescr {
-    pub oids: ORelOids,
-    pub version: u32,
-    pub refcnt: c_int,
-    pub tupdesc: pg_sys::TupleDesc,
-    pub oldTuple: *mut pg_sys::TupleTableSlot,
-    pub newTuple: *mut pg_sys::TupleTableSlot,
-    pub indices: *mut *mut OIndexDescr,
-    pub bridge: *mut OIndexDescr,
-    pub toast: *mut OIndexDescr,
-    pub toastable: *mut pg_sys::AttrNumber,
-    pub ntoastable: c_int,
-    pub nIndices: c_int,
-    pub nUniqueIndices: c_int,
-    pub tablespace: pg_sys::Oid,
-    pub noInvalidation: bool,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum BTreeLeafTupleDeletedStatus {
-    BTreeLeafTupleDeleted = 1,
-    BTreeLeafTupleMovedPartitions = 2,
-    BTreeLeafTuplePKChanged = 3,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum RowLockMode {
-    RowLockKeyShare = 0,
-    RowLockShare = 1,
-    RowLockNoKeyUpdate = 2,
-    RowLockUpdate = 3,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum OBTreeModifyCallbackAction {
-    OBTreeCallbackActionDoNothing = 1,
-    OBTreeCallbackActionUpdate = 2,
-    OBTreeCallbackActionDelete = 3,
-    OBTreeCallbackActionLock = 4,
-    OBTreeCallbackActionUndo = 5,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum OBTreeWaitCallbackAction {
-    OBTreeCallbackActionXidNoWait = 1,
-    OBTreeCallbackActionXidWait = 2,
-}
-
-#[repr(C)]
-pub struct BTreeModifyCallbackInfo {
-    pub waitCallback: Option<
-        unsafe extern "C-unwind" fn(
-            desc: *mut BTreeDescr,
-            oldTup: OTuple,
-            newTup: *mut OTuple,
-            oxid: OXid,
-            prevXactInfo: u64, // OTupleXactInfo
-            location: UndoLocation,
-            lockMode: *mut RowLockMode,
-            hint: *mut BTreeLocationHint,
-            arg: *mut c_void,
-        ) -> OBTreeWaitCallbackAction,
-    >,
-    pub modifyCallback: Option<
-        unsafe extern "C-unwind" fn(
-            desc: *mut BTreeDescr,
-            oldTup: OTuple,
-            newTup: *mut OTuple,
-            oxid: OXid,
-            prevXactInfo: u64,
-            location: UndoLocation,
-            lockMode: *mut RowLockMode,
-            hint: *mut BTreeLocationHint,
-            arg: *mut c_void,
-        ) -> OBTreeModifyCallbackAction,
-    >,
-    pub modifyDeletedCallback: Option<
-        unsafe extern "C-unwind" fn(
-            desc: *mut BTreeDescr,
-            oldTup: OTuple,
-            newTup: *mut OTuple,
-            oxid: OXid,
-            prevXactInfo: u64,
-            deleted: BTreeLeafTupleDeletedStatus,
-            location: UndoLocation,
-            lockMode: *mut RowLockMode,
-            hint: *mut BTreeLocationHint,
-            arg: *mut c_void,
-        ) -> OBTreeModifyCallbackAction,
-    >,
-    pub needsUndoForSelfCreated: bool,
-    pub arg: *mut c_void,
-    pub postUndoRecorded: Option<unsafe extern "C-unwind" fn(undoLoc: UndoLocation, arg: *mut c_void)>,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum BTreeKeyType {
-    BTreeKeyLeafTuple = 0,
-    BTreeKeyNonLeafKey = 1,
-    BTreeKeyBound = 2,
-    BTreeKeyUniqueLowerBound = 3,
-    BTreeKeyUniqueUpperBound = 4,
-    BTreeKeyNone = 5,
-    BTreeKeyPageHiKey = 6,
-    BTreeKeyRightmost = 7,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OBTreeValueBound {
-    pub value: pg_sys::Datum,
-    pub r#type: pg_sys::Oid,
-    pub flags: u8,
-    pub comparator: *mut c_void,
-    pub exclusion_fn: *mut c_void,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OBtreeRowKeyBound {
-    pub nkeys: c_int,
-    pub keynums: *mut c_int,
-    pub keys: *mut OBTreeValueBound,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OBTreeKeyBound {
-    pub nkeys: c_int,
-    pub keys: [OBTreeValueBound; INDEX_MAX_KEYS],
-    pub n_row_keys: c_int,
-    pub row_keys: *mut OBtreeRowKeyBound,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OBTreeKeyRange {
-    pub empty: bool,
-    pub low: OBTreeKeyBound,
-    pub high: OBTreeKeyBound,
-}
-
-#[repr(C)]
-pub struct BTreeIterator {
-    // opaque structure
-}
-
-#[repr(C)]
-pub struct OSnapshot {
-    pub csn: CommitSeqNo,
-    pub xlogptr: pg_sys::XLogRecPtr,
-    pub xmin: pg_sys::XLogRecPtr,
-    pub cid: pg_sys::CommandId,
-}
-
-#[repr(C)]
-pub struct OScanState {
-    pub scandesc: pg_sys::IndexScanDescData,
-    pub ixNum: OIndexNumber,
-    pub cxt: pg_sys::MemoryContext,
-    pub scanDir: pg_sys::ScanDirection::Type,
-    pub addJunk: bool,
-    pub onlyCurIx: bool,
-    pub returning: bool,
-    pub curKeyRangeIsLoaded: bool,
-    pub numPrefixExactKeys: c_int,
-    pub exact: bool,
-    #[cfg(any(feature = "pg18", feature = "pg19"))]
-    pub skipScanProbePending: bool,
-    pub curKeyRange: OBTreeKeyRange,
-    pub iterator: *mut BTreeIterator,
-    pub indexQuals: *mut pg_sys::List,
-    pub cmd: pg_sys::CmdType::Type,
-    pub oSnapshot: OSnapshot,
-    pub xs_rowid: pg_sys::NullableDatum,
-    pub xs_want_rowid: bool,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum BTreeOperationType {
-    BTreeOperationInsert = 0,
-    BTreeOperationLock = 1,
-    BTreeOperationUpdate = 2,
-    BTreeOperationDelete = 3,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OTableModifyResult {
-    pub success: bool,
-    pub action: BTreeOperationType,
-    pub failedIxNum: OIndexNumber,
-    pub oldTuple: *mut pg_sys::TupleTableSlot,
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum OBTreeModifyResult {
-    OBTreeModifyResultInserted = 1,
-    OBTreeModifyResultUpdated = 2,
-    OBTreeModifyResultDeleted = 3,
-    OBTreeModifyResultLocked = 4,
-    OBTreeModifyResultFound = 5,
-    OBTreeModifyResultNotFound = 6,
-}
-
-#[repr(C)]
-pub struct BridgedIndexAmRoutine {
-    pub original_routine: *mut pg_sys::IndexAmRoutine,
-    pub routine: pg_sys::IndexAmRoutine,
-    pub amhandler: pg_sys::Oid,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ORowIdAddendumCtid {
-    pub hint: BTreeLocationHint,
-    pub csn: CommitSeqNo,
-    pub version: u32,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ORowIdAddendumNonCtid {
-    pub hint: BTreeLocationHint,
-    pub csn: CommitSeqNo,
-    pub flags: u8,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ORowIdBridgeData {
-    pub bridgeCtid: pg_sys::ItemPointerData,
-    pub bridgeChanged: bool,
-}
-
-#[repr(C)]
-pub struct OTableSlot {
-    pub base: pg_sys::TupleTableSlot,
-    pub data: *mut c_char,
-    pub to_toast: *mut c_char,
-    pub vfree: *mut bool,
-    pub detoasted: *mut pg_sys::Datum,
-    pub tuple: OTuple,
-    pub descr: *mut OTableDescr,
-    pub rowid: *mut pg_sys::bytea,
-    pub csn: CommitSeqNo,
-    pub ixnum: c_int,
-    pub leafTuple: bool,
-    pub bridgeChanged: bool,
-    pub version: u32,
-    pub state: OTupleReaderState,
-    pub hint: BTreeLocationHint,
-    pub bridge_ctid: pg_sys::ItemPointerData,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct OTupleReaderState {
-    pub desc: pg_sys::TupleDesc,
-    pub tp: *mut c_char,
-    pub bp: *mut pg_sys::bits8,
-    pub off: u32,
-    pub attnum: u16,
-    pub natts: u16,
-    pub hasnulls: bool,
-    pub slow: bool,
-}
-
-// Global static variables & extern declarations
-
-extern "C" {
-    // OrioleDB functions
-    pub fn orioledb_check_shmem();
-    pub fn relation_get_descr(rel: pg_sys::Relation) -> *mut OTableDescr;
-    pub fn o_index_rel_get_ix_type(rel: pg_sys::Relation) -> OIndexType;
-    pub fn o_fetch_index_descr(
-        oids: ORelOids,
-        ix_type: OIndexType,
-        create: bool,
-        tree: *mut *mut c_void,
-    ) -> *mut OIndexDescr;
-    pub fn o_fetch_table_descr(oids: ORelOids) -> *mut OTableDescr;
-    pub fn o_tables_get(oids: ORelOids) -> *mut OTable;
-    pub fn drop_primary_index(heap: pg_sys::Relation, o_table: *mut OTable);
-    pub fn redefine_pkey_for_rel(heap: pg_sys::Relation);
-    pub fn o_define_index_validate(
-        tbl_oids: ORelOids,
-        index: pg_sys::Relation,
-        indexInfo: *mut pg_sys::IndexInfo,
-        descr: *mut OTableDescr,
-    );
-    pub fn o_define_index(
-        heap: pg_sys::Relation,
-        index: pg_sys::Relation,
-        old_reloid: pg_sys::Oid,
-        reindex: bool,
-        old_ix_num: OIndexNumber,
-        oldTblRelnode: pg_sys::Oid,
-        result: *mut pg_sys::IndexBuildResult,
-    );
-    pub fn o_tuple_set_version(spec: *mut OTupleFixedFormatSpec, tuple: *mut OTuple, version: u32);
-    pub fn o_tuple_get_version(tuple: OTuple) -> u32;
-    pub fn o_fastgetattr(
-        tup: OTuple,
-        attnum: c_int,
-        tupdesc: pg_sys::TupleDesc,
-        spec: *mut OTupleFixedFormatSpec,
-        isnull: *mut bool,
-    ) -> pg_sys::Datum;
-    pub fn o_form_tuple(
-        tupdesc: pg_sys::TupleDesc,
-        spec: *mut OTupleFixedFormatSpec,
-        version: u32,
-        values: *mut pg_sys::Datum,
-        isnull: *mut bool,
-        formatFlags: *mut u8,
-    ) -> OTuple;
-    pub fn tts_orioledb_store_tuple(
-        slot: *mut pg_sys::TupleTableSlot,
-        tuple: OTuple,
-        descr: *mut OTableDescr,
-        csn: CommitSeqNo,
-        ixNum: OIndexNumber,
-        shouldFree: bool,
-        hint: *mut BTreeLocationHint,
-    );
-    pub fn tts_orioledb_store_non_leaf_tuple(
-        slot: *mut pg_sys::TupleTableSlot,
-        tuple: OTuple,
-        descr: *mut OTableDescr,
-        csn: CommitSeqNo,
-        ixNum: OIndexNumber,
-        shouldFree: bool,
-        hint: *mut BTreeLocationHint,
-    );
-    pub fn fill_current_oxid_osnapshot(oxid: *mut OXid, o_snapshot: *mut OSnapshot);
-    pub fn o_tbl_index_insert(
-        descr: *mut OTableDescr,
-        index: *mut OIndexDescr,
-        tuple: *mut OTuple,
-        slot: *mut pg_sys::TupleTableSlot,
-        oxid: OXid,
-        csn: CommitSeqNo,
-        callbackInfo: *mut BTreeModifyCallbackInfo,
-        checkUnique: pg_sys::IndexUniqueCheck::Type,
-    ) -> OBTreeModifyResult;
-    pub fn o_update_secondary_index(
-        index_descr: *mut OIndexDescr,
-        ix_num: OIndexNumber,
-        new_valid: bool,
-        old_valid: bool,
-        new_slot: *mut pg_sys::TupleTableSlot,
-        new_tuple: OTuple,
-        old_slot: *mut pg_sys::TupleTableSlot,
-        oxid: OXid,
-        csn: CommitSeqNo,
-        checkUnique: pg_sys::IndexUniqueCheck::Type,
-    ) -> OTableModifyResult;
-    pub fn o_tbl_index_delete(
-        index_descr: *mut OIndexDescr,
-        ix_num: OIndexNumber,
-        slot: *mut pg_sys::TupleTableSlot,
-        oxid: OXid,
-        csn: CommitSeqNo,
-    ) -> OTableModifyResult;
-    pub fn o_index_scan_getnext(
-        descr: *mut OTableDescr,
-        ostate: *mut OScanState,
-        tupleCsn: *mut CommitSeqNo,
-        scan_primary: bool,
-        tupleCxt: pg_sys::MemoryContext,
-        hint: *mut BTreeLocationHint,
-    ) -> OTuple;
-    pub fn btree_iterator_free(iterator: *mut BTreeIterator);
-    pub fn o_parse_compress(value: *const c_char) -> *mut c_char;
-    pub fn validate_compress(compress: *mut c_char, r#type: *const c_char);
-    pub fn o_new_tuple_size(
-        descr: pg_sys::TupleDesc,
-        spec: *mut OTupleFixedFormatSpec,
-        arg1: *mut c_void,
-        arg2: *mut c_void,
-        version: u32,
-        values: *mut pg_sys::Datum,
-        isnull: *mut bool,
-        arg3: *mut c_void,
-    ) -> c_int;
-    pub fn o_tuple_fill(
-        descr: pg_sys::TupleDesc,
-        spec: *mut OTupleFixedFormatSpec,
-        tuple: *mut OTuple,
-        size: c_int,
-        arg1: *mut c_void,
-        arg2: *mut c_void,
-        version: u32,
-        values: *mut pg_sys::Datum,
-        isnull: *mut bool,
-        arg3: *mut c_void,
-    );
-
-    // Stop events
-    pub static mut enable_stopevents: bool;
-    pub static mut trace_stopevents: bool;
-    pub fn handle_stopevent(event_id: c_int, params: *mut pg_sys::Jsonb);
-
-    // Postgres / Planner FFI globals and functions
-    pub fn clauselist_selectivity(
-        root: *mut pg_sys::PlannerInfo,
-        clauses: *mut pg_sys::List,
-        varRelid: c_int,
-        jointype: pg_sys::JoinType::Type,
-        sjinfo: *mut pg_sys::SpecialJoinInfo,
-    ) -> pg_sys::Selectivity;
-    pub fn genericcostestimate(
-        root: *mut pg_sys::PlannerInfo,
-        path: *mut pg_sys::IndexPath,
-        loop_count: f64,
-        costs: *mut pg_sys::GenericCosts,
-    );
-
-    #[cfg(any(feature = "pg17", feature = "pg18", feature = "pg19"))]
-    pub fn estimate_array_length(root: *mut pg_sys::PlannerInfo, arrayexpr: *mut pg_sys::Node) -> c_int;
-    #[cfg(not(any(feature = "pg17", feature = "pg18", feature = "pg19")))]
-    pub fn estimate_array_length(arrayexpr: *mut pg_sys::Node) -> c_int;
-
-    pub fn add_predicate_to_index_quals(
-        index: *mut pg_sys::IndexOptInfo,
-        indexQuals: *mut pg_sys::List,
-    ) -> *mut pg_sys::List;
-    pub fn get_op_opfamily_strategy(opno: pg_sys::Oid, opfamily: pg_sys::Oid) -> c_int;
-    pub fn get_opfamily_member(
-        opfamily: pg_sys::Oid,
-        lefttype: pg_sys::Oid,
-        righttype: pg_sys::Oid,
-        strategy: i16,
-    ) -> pg_sys::Oid;
-    pub fn get_attstatsslot(
-        sslot: *mut pg_sys::AttStatsSlot,
-        statstuple: pg_sys::HeapTuple,
-        reqkind: c_int,
-        reqop: pg_sys::Oid,
-        flags: c_int,
-    ) -> bool;
-    pub fn free_attstatsslot(sslot: *mut pg_sys::AttStatsSlot);
-    pub fn ReleaseVariableStats(vardata: pg_sys::VariableStatData);
-
-    pub static mut cpu_operator_cost: f64;
-    pub static mut get_relation_stats_hook: *mut c_void;
-    pub static mut get_index_stats_hook: *mut c_void;
-
-    // Standard BTree handlers
-    pub fn btbuild(
-        heap: pg_sys::Relation,
-        index: pg_sys::Relation,
-        indexInfo: *mut pg_sys::IndexInfo,
-    ) -> *mut pg_sys::IndexBuildResult;
-    pub fn btbuildempty(index: pg_sys::Relation);
-    pub fn btinsert(
-        rel: pg_sys::Relation,
-        values: *mut pg_sys::Datum,
-        isnull: *mut bool,
-        tupleid: pg_sys::Datum,
-        heapRel: pg_sys::Relation,
-        checkUnique: pg_sys::IndexUniqueCheck::Type,
-        indexUnchanged: bool,
-        indexInfo: *mut pg_sys::IndexInfo,
-    ) -> bool;
-    pub fn btbulkdelete(
-        info: *mut pg_sys::IndexVacuumInfo,
-        stats: *mut pg_sys::IndexBulkDeleteResult,
-        callback: pg_sys::IndexBulkDeleteCallback,
-        callback_state: *mut c_void,
-    ) -> *mut pg_sys::IndexBulkDeleteResult;
-    pub fn btvacuumcleanup(
-        info: *mut pg_sys::IndexVacuumInfo,
-        stats: *mut pg_sys::IndexBulkDeleteResult,
-    ) -> *mut pg_sys::IndexBulkDeleteResult;
-    pub fn btcanreturn(index: pg_sys::Relation, attno: c_int) -> bool;
-    pub fn btrescan(
-        scan: pg_sys::IndexScanDesc,
-        scankey: pg_sys::ScanKey,
-        nscankeys: c_int,
-        orderbys: pg_sys::ScanKey,
-        norderbys: c_int,
-    );
-    pub fn btgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection::Type) -> bool;
-    pub fn btgetbitmap(scan: pg_sys::IndexScanDesc, tbm: *mut pg_sys::TIDBitmap) -> i64;
-    pub fn btendscan(scan: pg_sys::IndexScanDesc);
-    pub fn btbeginscan(rel: pg_sys::Relation, nkeys: c_int, norderbys: c_int) -> pg_sys::IndexScanDesc;
-
-    // OrioleDB Global vars
-    pub static mut o_reuse_indices: *mut pg_sys::List;
-    pub static mut reindex_list: *mut pg_sys::List;
-    pub static mut in_nontransactional_truncate: bool;
-    pub static mut o_saved_relrewrite: pg_sys::Oid;
-
-    // Global in-progress snapshots defined in oxid
-    pub static mut o_in_progress_snapshot: OSnapshot;
-    pub static mut o_non_deleted_snapshot: OSnapshot;
-
-    // Reloptions registration functions (part of pg_sys, but declaring just in case)
-    pub fn init_local_reloptions(relopts: *mut pg_sys::local_relopts, relopt_struct_size: pg_sys::Size);
-    pub fn add_local_int_reloption(
-        relopts: *mut pg_sys::local_relopts,
-        name: *const c_char,
-        desc: *const c_char,
-        default_val: c_int,
-        min_val: c_int,
-        max_val: c_int,
-        offset: pg_sys::Size,
-    );
-    pub fn add_local_real_reloption(
-        relopts: *mut pg_sys::local_relopts,
-        name: *const c_char,
-        desc: *const c_char,
-        default_val: f64,
-        min_val: f64,
-        max_val: f64,
-        offset: pg_sys::Size,
-    );
-    pub fn add_local_bool_reloption(
-        relopts: *mut pg_sys::local_relopts,
-        name: *const c_char,
-        desc: *const c_char,
-        default_val: bool,
-        offset: pg_sys::Size,
-    );
-    pub fn add_local_string_reloption(
-        relopts: *mut pg_sys::local_relopts,
-        name: *const c_char,
-        desc: *const c_char,
-        default_val: *const c_char,
-        validate: Option<unsafe extern "C-unwind" fn(*const c_char)>,
-        fill: Option<unsafe extern "C-unwind" fn(*const c_char) -> *mut c_void>,
-        offset: pg_sys::Size,
-    );
-    pub fn build_local_reloptions(
-        relopts: *mut pg_sys::local_relopts,
-        reloptions: pg_sys::Datum,
-        validate: bool,
-    ) -> *mut pg_sys::bytea;
-}
-
-unsafe extern "C-unwind" fn release_sys_cache_wrapper(tuple: *mut pg_sys::HeapTupleData) {
-    pg_sys::ReleaseSysCache(tuple);
-}
-
-// Local global list of bridged AMs
-static mut bridged_ams: *mut pg_sys::List = std::ptr::null_mut();
-
-// Helper functions mimicking C macros
-
-#[inline]
-pub unsafe fn ORelOidsSetFromRel(oids: &mut ORelOids, rel: pg_sys::Relation) {
-    oids.datoid = pg_sys::MyDatabaseId;
-    oids.reloid = (*rel).rd_id;
-    #[cfg(any(feature = "pg16", feature = "pg17", feature = "pg18", feature = "pg19"))]
-    {
-        oids.relnode = (*rel).rd_locator.relNumber;
-    }
-    #[cfg(not(any(feature = "pg16", feature = "pg17", feature = "pg18", feature = "pg19")))]
-    {
-        oids.relnode = (*rel).rd_node.relNode;
-    }
-}
-
-#[inline]
-pub unsafe fn GET_PRIMARY(descr: *mut OTableDescr) -> *mut OIndexDescr {
-    *((*descr).indices)
-}
-
-#[inline]
-pub unsafe fn OidIsValid(oid: pg_sys::Oid) -> bool {
-    oid != pg_sys::InvalidOid
-}
-
-#[inline]
-pub unsafe fn CStringGetDatum(s: *const c_char) -> pg_sys::Datum {
-    pg_sys::Datum::from(s as usize)
-}
-
-#[inline]
-pub unsafe fn DatumGetPointer(d: pg_sys::Datum) -> pg_sys::Pointer {
-    d.value() as pg_sys::Pointer
-}
-
-#[inline]
-pub unsafe fn PointerGetDatum(p: pg_sys::Pointer) -> pg_sys::Datum {
-    pg_sys::Datum::from(p as usize)
-}
-
-#[inline]
-pub unsafe fn lfirst(lc: *mut pg_sys::ListCell) -> *mut c_void {
-    (*lc).ptr_value
-}
-
-#[inline]
-pub unsafe fn lfirst_int(lc: *mut pg_sys::ListCell) -> c_int {
-    (*lc).int_value as c_int
-}
-
-#[inline]
-pub unsafe fn lnext(l: *const pg_sys::List, lc: *mut pg_sys::ListCell) -> *mut pg_sys::ListCell {
-    if l.is_null() || lc.is_null() {
-        std::ptr::null_mut()
-    } else {
-        pg_sys::lnext(l, lc)
-    }
-}
-
-#[inline]
-pub unsafe fn linitial_int(l: *mut pg_sys::List) -> c_int {
-    let head = pg_sys::list_head(l);
-    lfirst_int(head)
-}
-
-#[inline]
-pub unsafe fn list_make1_oid(oid: pg_sys::Oid) -> *mut pg_sys::List {
-    pg_sys::lcons_oid(oid, std::ptr::null_mut())
-}
-
-#[inline]
-pub unsafe fn is_a(node: *mut c_void, tag: pg_sys::NodeTag) -> bool {
-    if node.is_null() {
-        return false;
-    }
-    (*(node as *const pg_sys::Node)).type_ == tag
-}
-
-#[inline]
-pub unsafe fn lsecond(list: *mut pg_sys::List) -> *mut c_void {
-    let head = pg_sys::list_head(list);
-    if head.is_null() {
-        return std::ptr::null_mut();
-    }
-    let second = lnext(list, head);
-    if second.is_null() {
-        std::ptr::null_mut()
-    } else {
-        (*second).ptr_value
-    }
-}
-
-#[inline]
-pub unsafe fn linitial_oid(list: *mut pg_sys::List) -> pg_sys::Oid {
-    let head = pg_sys::list_head(list);
-    if head.is_null() {
-        return pg_sys::InvalidOid;
-    }
-    (*head).oid_value
-}
-
-#[inline]
-pub unsafe fn STOPEVENTS_ENABLED() -> bool {
-    enable_stopevents || trace_stopevents
-}
-
-#[inline]
-pub unsafe fn STOPEVENT(event_id: c_int, params: *mut pg_sys::Jsonb) {
-    if STOPEVENTS_ENABLED() {
-        handle_stopevent(event_id, params);
-    }
-}
-
-// BTree Handler Implementation
-
-unsafe extern "C-unwind" fn orioledb_btree_handler() -> *mut pg_sys::IndexAmRoutine {
-    let amroutine = pg_sys::newNode(
-        std::mem::size_of::<pg_sys::IndexAmRoutine>(),
-        pg_sys::NodeTag_T_IndexAmRoutine,
-    ) as *mut pg_sys::IndexAmRoutine;
-
-    orioledb_check_shmem();
-    (*amroutine).type_ = pg_sys::NodeTag::T_IndexAmRoutine;
-    (*amroutine).amstrategies = BTMaxStrategyNumber as u16;
-    (*amroutine).amsupport = BTNProcs as u16;
-    (*amroutine).amoptsprocnum = BTOPTIONS_PROC as u16;
-    (*amroutine).amcanorder = true;
-    (*amroutine).amcanorderbyop = false;
-    (*amroutine).amcanbackward = false;
-    (*amroutine).amcanunique = true;
-    (*amroutine).amcanmulticol = true;
-    (*amroutine).amoptionalkey = true;
-    (*amroutine).amsearcharray = true;
-    (*amroutine).amsearchnulls = true;
-    (*amroutine).amstorage = false;
-    (*amroutine).amclusterable = true;
-    (*amroutine).ampredlocks = true;
-    (*amroutine).amcanparallel = false;
-    (*amroutine).amcaninclude = true;
-    (*amroutine).amusemaintenanceworkmem = false;
-    (*amroutine).amsummarizing = false;
-    (*amroutine).amparallelvacuumoptions =
-        (pg_sys::VACUUM_OPTION_PARALLEL_BULKDEL | pg_sys::VACUUM_OPTION_PARALLEL_COND_CLEANUP) as u8;
-    (*amroutine).amkeytype = pg_sys::InvalidOid;
-
-    (*amroutine).ambuild = Some(orioledb_ambuild);
-    // (*amroutine).amreuse = Some(orioledb_amreuse);
-    (*amroutine).ambuildempty = Some(orioledb_ambuildempty);
-    (*amroutine).aminsert = Some(orioledb_aminsert);
-    // (*amroutine).amupdate = Some(orioledb_amupdate);
-    // (*amroutine).amdelete = Some(orioledb_amdelete);
-    (*amroutine).ambulkdelete = Some(orioledb_ambulkdelete);
-    (*amroutine).amvacuumcleanup = Some(orioledb_amvacuumcleanup);
-    (*amroutine).amcanreturn = Some(orioledb_amcanreturn);
-    (*amroutine).amcostestimate = Some(orioledb_amcostestimate);
-    #[cfg(any(feature = "pg18", feature = "pg19"))]
-    {
-        (*amroutine).amgettreeheight = None;
-    }
-    (*amroutine).amoptions = Some(orioledb_amoptions);
-    (*amroutine).amproperty = Some(orioledb_amproperty);
-    (*amroutine).ambuildphasename = Some(orioledb_ambuildphasename);
-    (*amroutine).amvalidate = Some(orioledb_amvalidate);
-    (*amroutine).amadjustmembers = Some(orioledb_amadjustmembers);
-    (*amroutine).ambeginscan = Some(orioledb_ambeginscan);
-    (*amroutine).amrescan = Some(orioledb_amrescan);
-    (*amroutine).amgettuple = Some(orioledb_amgettuple);
-    (*amroutine).amgetbitmap = Some(orioledb_amgetbitmap);
-    (*amroutine).amendscan = Some(orioledb_amendscan);
-    (*amroutine).ammarkpos = None;
-    (*amroutine).amrestrpos = None;
-    (*amroutine).amestimateparallelscan = Some(orioledb_amestimateparallelscan);
-    (*amroutine).aminitparallelscan = Some(orioledb_aminitparallelscan);
-    (*amroutine).amparallelrescan = Some(orioledb_amparallelrescan);
-
-    amroutine
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn orioledb_indexam_routine_hook(
-    tamoid: pg_sys::Oid,
-    amhandler: pg_sys::Oid,
-) -> *mut pg_sys::IndexAmRoutine {
-    static mut orioledb_tam_oid: pg_sys::Oid = pg_sys::InvalidOid;
-
-    if tamoid == HEAP_TABLE_AM_OID {
-        return std::ptr::null_mut();
-    }
-
-    if !OidIsValid(orioledb_tam_oid) {
-        let key1 = CStringGetDatum(b"orioledb\0".as_ptr() as *const c_char);
-        orioledb_tam_oid = pg_sys::GetSysCacheOid(
-            pg_sys::SysCacheIdentifier_AMNAME as c_int,
-            pg_sys::Anum_pg_am_oid as pg_sys::AttrNumber,
-            key1,
-            pg_sys::Datum::from(0),
-            pg_sys::Datum::from(0),
-            pg_sys::Datum::from(0),
-        );
-    }
-
-    if tamoid == orioledb_tam_oid {
-        if amhandler == F_BTHANDLER {
-            return orioledb_btree_handler();
-        } else {
-            let mut amroutine: *mut pg_sys::IndexAmRoutine = std::ptr::null_mut();
-            let mut lc = pg_sys::list_head(bridged_ams);
-            while !lc.is_null() {
-                let bridged = lfirst(lc) as *mut BridgedIndexAmRoutine;
-                if (*bridged).amhandler == amhandler {
-                    amroutine = pg_sys::palloc0(std::mem::size_of::<pg_sys::IndexAmRoutine>()) as *mut pg_sys::IndexAmRoutine;
-                    std::ptr::copy_nonoverlapping(&((*bridged).routine), amroutine, 1);
-                    break;
-                }
-                lc = lnext(bridged_ams, lc);
-            }
-
-            if amroutine.is_null() {
-                let old_mcxt = pg_sys::MemoryContextSwitchTo(pg_sys::TopMemoryContext);
-                let bridged = pg_sys::palloc0(std::mem::size_of::<BridgedIndexAmRoutine>()) as *mut BridgedIndexAmRoutine;
-                let datum = pg_sys::OidFunctionCall0Coll(amhandler, pg_sys::InvalidOid);
-                bridged_ams = pg_sys::lappend(bridged_ams, bridged as *mut c_void);
-                (*bridged).amhandler = amhandler;
-                (*bridged).original_routine = DatumGetPointer(datum) as *mut pg_sys::IndexAmRoutine;
-                (*bridged).routine = *(*bridged).original_routine;
-                (*bridged).routine.ambuild = Some(bridged_ambuild);
-                (*bridged).routine.aminsert = Some(bridged_aminsert);
-                (*bridged).routine.ambeginscan = Some(bridged_ambeginscan);
-                pg_sys::MemoryContextSwitchTo(old_mcxt);
-
-                amroutine = pg_sys::palloc0(std::mem::size_of::<pg_sys::IndexAmRoutine>()) as *mut pg_sys::IndexAmRoutine;
-                std::ptr::copy_nonoverlapping(&((*bridged).routine), amroutine, 1);
-            }
-            return amroutine;
-        }
-    }
-
-    std::ptr::null_mut()
-}
-
-unsafe extern "C-unwind" fn orioledb_amreuse(index: pg_sys::Relation) {
-    if !o_reuse_indices.is_null() {
-        o_reuse_indices = pg_sys::lappend_oid(o_reuse_indices, (*index).rd_id);
-    } else {
-        o_reuse_indices = list_make1_oid((*index).rd_id);
-    }
-}
-
-unsafe extern "C-unwind" fn orioledb_ambuild(
-    heap: pg_sys::Relation,
-    index: pg_sys::Relation,
-    indexInfo: *mut pg_sys::IndexInfo,
-) -> *mut pg_sys::IndexBuildResult {
-    let mut reindex = false;
-    let mut result: *mut pg_sys::IndexBuildResult;
-    let options = (*index).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        let descr = relation_get_descr(heap);
-        if descr.is_null() {
-            result = pg_sys::palloc(std::mem::size_of::<pg_sys::IndexBuildResult>()) as *mut pg_sys::IndexBuildResult;
-            (*result).heap_tuples = 0.0;
-            (*result).index_tuples = 0.0;
-            return result;
-        } else {
-            return btbuild(heap, index, indexInfo);
-        }
-    }
-
-    let relname = pg_sys::makeString((*(*index).rd_rel).relname.data.as_ptr() as *mut c_char);
-    if !in_nontransactional_truncate && pg_sys::list_member(reindex_list, relname as *const c_void) {
-        reindex = true;
-        reindex_list = pg_sys::list_delete(reindex_list, relname as *mut c_void);
-    }
-
-    btbuild(heap, index, indexInfo);
-
-    result = pg_sys::palloc(std::mem::size_of::<pg_sys::IndexBuildResult>()) as *mut pg_sys::IndexBuildResult;
-    (*result).heap_tuples = 0.0;
-    (*result).index_tuples = 0.0;
-
-    if in_nontransactional_truncate || !OidIsValid(o_saved_relrewrite) {
-        let mut tbl_oids = ORelOids {
-            datoid: pg_sys::InvalidOid,
-            reloid: pg_sys::InvalidOid,
-            relnode: pg_sys::InvalidOid,
-        };
-        ORelOidsSetFromRel(&mut tbl_oids, heap);
-        let o_table = o_tables_get(tbl_oids);
-
-        if (*(*index).rd_index).indisprimary && !o_table.is_null() && (*o_table).has_primary {
-            drop_primary_index(heap, o_table);
-            redefine_pkey_for_rel(heap);
-        } else {
-            if !in_nontransactional_truncate {
-                o_define_index_validate(tbl_oids, index, indexInfo, std::ptr::null_mut());
-            }
-            o_define_index(
-                heap,
-                index,
-                pg_sys::InvalidOid,
-                reindex,
-                pg_sys::InvalidIndexNumber,
-                pg_sys::InvalidOid,
-                result,
-            );
-        }
-    }
-
-    result
-}
-
-unsafe extern "C-unwind" fn orioledb_ambuildempty(index: pg_sys::Relation) {
-    btbuildempty(index);
-}
-
-unsafe extern "C-unwind" fn o_insert_callback(
-    descr: *mut BTreeDescr,
-    tup: OTuple,
-    newtup: *mut OTuple,
-    _oxid: OXid,
-    xactInfo: u64,
-    _deleted: BTreeLeafTupleDeletedStatus,
-    _location: UndoLocation,
-    _lock_mode: *mut RowLockMode,
-    _hint: *mut BTreeLocationHint,
-    arg: *mut c_void,
-) -> OBTreeModifyCallbackAction {
-    let oslot = arg as *mut OTableSlot;
-    if (*descr).r#type == OIndexType::OIndexPrimary && ((xactInfo & 0xFFFF) != 0) { // XACT_INFO_OXID_IS_CURRENT analogue check
-        let id = (*descr).arg as *mut OIndexDescr;
-        o_tuple_set_version(&mut (*id).leafSpec, newtup, o_tuple_get_version(tup) + 1);
-        (*oslot).tuple = *newtup;
-    }
-    OBTreeModifyCallbackAction::OBTreeCallbackActionUpdate
-}
-
-unsafe fn o_report_duplicate(rel: pg_sys::Relation, id: *mut OIndexDescr, slot: *mut pg_sys::TupleTableSlot) {
-    let is_ctid = (*id).primaryIsCtid;
-    let is_primary = (*id).desc.r#type == OIndexType::OIndexPrimary;
-
-    if is_primary && is_ctid {
-        pg_sys::ereport!(
-            pg_sys::ERROR,
-            pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR),
-            pgrx::errmsg("ctid index key duplicate.")
-        );
-    } else {
-        let str_info = pg_sys::makeStringInfo();
-        pg_sys::appendStringInfo(str_info, b"(\0".as_ptr() as *const c_char);
-        for i in 0..(*id).nKeyFields {
-            if i != 0 {
-                pg_sys::appendStringInfo(str_info, b", \0".as_ptr() as *const c_char);
-            }
-            let attr = pg_sys::TupleDescAttr((*id).nonLeafTupdesc, i);
-            pg_sys::appendStringInfo(
-                str_info,
-                b"%s\0".as_ptr() as *const c_char,
-                (*attr).attname.data.as_ptr(),
-            );
-        }
-        pg_sys::appendStringInfo(str_info, b")=\0".as_ptr() as *const c_char);
-
-        pg_sys::slot_getallattrs(slot);
-
-        pg_sys::appendStringInfo(str_info, b"(\0".as_ptr() as *const c_char);
-        for i in 0..(*id).nUniqueFields {
-            let value = *(*slot).tts_values.add(i as usize);
-            let isnull = *(*slot).tts_isnull.add(i as usize);
-
-            if i != 0 {
-                pg_sys::appendStringInfo(str_info, b", \0".as_ptr() as *const c_char);
-            }
-            if isnull {
-                pg_sys::appendStringInfo(str_info, b"null\0".as_ptr() as *const c_char);
-            } else {
-                let mut typoutput = pg_sys::InvalidOid;
-                let mut typisvarlena = false;
-                let attr = pg_sys::TupleDescAttr((*id).nonLeafTupdesc, i);
-                pg_sys::getTypeOutputInfo((*attr).atttypid, &mut typoutput, &mut typisvarlena);
-                let res = pg_sys::OidOutputFunctionCall(typoutput, value);
-                pg_sys::appendStringInfo(str_info, b"%s\0".as_ptr() as *const c_char, res);
-            }
-        }
-        pg_sys::appendStringInfo(str_info, b")\0".as_ptr() as *const c_char);
-
-        if pgrx::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
-            pgrx::errcode(pg_sys::ERRCODE_UNIQUE_VIOLATION as i32);
-            pgrx::errmsg(
-                b"duplicate key value violates unique constraint \"%s\"\0".as_ptr() as *const c_char,
-                (*id).name.data.as_ptr(),
-            );
-            pgrx::errdetail(
-                b"Key %s already exists.\0".as_ptr() as *const c_char,
-                (*str_info).data,
-            );
-            pg_sys::errtableconstraint(
-                rel,
-                if (*id).desc.r#type == OIndexType::OIndexPrimary {
-                    b"pk\0".as_ptr() as *const c_char
-                } else {
-                    b"sk\0".as_ptr() as *const c_char
-                },
-            );
-            pgrx::errfinish(std::ptr::null(), 0, std::ptr::null());
-        }
-    }
-}
-
-unsafe fn append_rowid_values(
-    id: *mut OIndexDescr,
-    pk_tupdesc: pg_sys::TupleDesc,
-    pk_spec: *mut OTupleFixedFormatSpec,
-    pk_datum: pg_sys::Datum,
-    values: *mut pg_sys::Datum,
-    isnull: *mut bool,
-    csn: *mut CommitSeqNo,
-    version: *mut u32,
-) {
-    let rowid = pg_sys::pg_detoast_datum(pk_datum.value() as *mut pg_sys::varlena);
-    let mut p = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize)) as *mut c_void;
-
-    if !(*id).primaryIsCtid {
-        let add = p as *mut ORowIdAddendumNonCtid;
-        p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumNonCtid>()));
-        *csn = (*add).csn;
-
-        let mut tuple = OTuple {
-            data: p as pg_sys::Pointer,
-            formatFlags: (*add).flags,
-        };
-        if (*id).bridging {
-            tuple.data = tuple.data.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdBridgeData>()));
-        }
-
-        *version = o_tuple_get_version(tuple);
-
-        if (*id).nPrimaryFields <= (*id).nFields {
-            let pk_from = (*id).nFields - (*id).nPrimaryFields;
-            for i in 0..(*id).nPrimaryFields {
-                let attnum = (*id).primaryFieldsAttnums[i as usize] - 1;
-                if attnum >= pk_from as pg_sys::AttrNumber {
-                    *values.add(attnum as usize) = o_fastgetattr(
-                        tuple,
-                        i + 1,
-                        pk_tupdesc,
-                        pk_spec,
-                        isnull.add(attnum as usize),
-                    );
-                }
-            }
-        }
-    } else {
-        let add = p as *mut ORowIdAddendumCtid;
-        let attnum = (*id).nFields - 1;
-        *csn = (*add).csn;
-        *version = (*add).version;
-        p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumCtid>()));
-        *values.add(attnum as usize) = PointerGetDatum(p as pg_sys::Pointer);
-        *isnull.add(attnum as usize) = false;
-    }
-}
-
-unsafe fn detoast_passed_values(
-    index_descr: *mut OIndexDescr,
-    values: *mut pg_sys::Datum,
-    isnull: *mut bool,
-    vfree: *mut bool,
-) {
-    let pk_from = (*index_descr).nFields - (*index_descr).nPrimaryFields;
-    for i in 0..pk_from {
-        let att = pg_sys::TupleDescAttr((*index_descr).nonLeafTupdesc, i);
-        if !*isnull.add(i as usize) && (*att).attlen == -1 {
-            let varlena = (*values.add(i as usize)).value() as *mut pg_sys::varlena;
-            if pg_sys::VARATT_IS_EXTENDED(varlena) {
-                let tmp = PointerGetDatum(pg_sys::pg_detoast_datum(varlena) as pg_sys::Pointer);
-                *values.add(i as usize) = tmp;
-                *vfree.add(i as usize) = true;
-            }
-        }
-    }
-}
-
-unsafe extern "C-unwind" fn orioledb_aminsert(
-    rel: pg_sys::Relation,
-    values: *mut pg_sys::Datum,
-    isnull: *mut bool,
-    tupleid: pg_sys::ItemPointer,
-    heapRel: pg_sys::Relation,
-    checkUnique: pg_sys::IndexUniqueCheck::Type,
-    indexUnchanged: bool,
-    indexInfo: *mut pg_sys::IndexInfo,
-) -> bool {
-    let options = (*rel).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        let mut oids = ORelOids {
-            datoid: pg_sys::InvalidOid,
-            reloid: pg_sys::InvalidOid,
-            relnode: pg_sys::InvalidOid,
-        };
-        ORelOidsSetFromRel(&mut oids, heapRel);
-        let descr = o_fetch_table_descr(oids);
-        let rowid = pg_sys::pg_detoast_datum(tupleid as *mut pg_sys::varlena);
-        let mut p = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize)) as *mut c_void;
-
-        let primary = GET_PRIMARY(descr);
-        let bridge_data = if !(*primary).primaryIsCtid {
-            p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumNonCtid>()));
-            p as *mut ORowIdBridgeData
-        } else {
-            p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumCtid>()));
-            p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<pg_sys::ItemPointerData>()));
-            p as *mut ORowIdBridgeData
-        };
-
-        let target_tupleid = PointerGetDatum(&mut (*bridge_data).bridgeCtid as *mut pg_sys::ItemPointerData as pg_sys::Pointer);
-
-        if !indexUnchanged {
-            return btinsert(
-                rel,
-                values,
-                isnull,
-                target_tupleid,
-                heapRel,
-                checkUnique,
-                indexUnchanged,
-                indexInfo,
-            );
-        } else {
-            return true;
-        }
-    }
-
-    if OidIsValid((*(*rel).rd_rel).relrewrite) {
-        return true;
-    }
-
-    if (*(*rel).rd_rel).relispartition && (*(*rel).rd_index).indisprimary {
-        return true;
-    }
-
-    let mut oids = ORelOids {
-        datoid: pg_sys::InvalidOid,
-        reloid: pg_sys::InvalidOid,
-        relnode: pg_sys::InvalidOid,
-    };
-    ORelOidsSetFromRel(&mut oids, rel);
-    let ix_type = o_index_rel_get_ix_type(rel);
-    let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
-    let descr = o_fetch_table_descr((*index_descr).tableOids);
-
-    let mut ix_num = 0;
-    while ix_num < (*descr).nIndices {
-        let index = *(*descr).indices.add(ix_num as usize);
-        if (*index).oids.reloid == (*(*rel).rd_rel).oid {
-            break;
-        }
-        ix_num += 1;
-    }
-
-    if !(*index_descr).duplicates.is_null() {
-        let mut lc_id = 0;
-        let duplicates = (*index_descr).duplicates;
-        let mut lc = pg_sys::list_head(duplicates);
-        let mut duplicate = if !lc.is_null() {
-            lfirst(lc) as *mut pg_sys::List
-        } else {
-            std::ptr::null_mut()
-        };
-
-        let mut cur_attr = 0;
-        for i in 0..(*rel).rd_att.as_ref().unwrap().natts {
-            if !duplicate.is_null() && linitial_int(duplicate) == cur_attr {
-                lc = lnext(duplicates, lc);
-                duplicate = if !lc.is_null() {
-                    lfirst(lc) as *mut pg_sys::List
-                } else {
-                    std::ptr::null_mut()
-                };
-            } else {
-                *values.add(cur_attr as usize) = *values.add(i as usize);
-                cur_attr += 1;
-            }
-        }
-    }
-
-    let mut csn = 0;
-    let mut version = 0;
-    let primary = GET_PRIMARY(descr);
-    append_rowid_values(
-        index_descr,
-        (*primary).nonLeafTupdesc,
-        &mut (*primary).nonLeafSpec,
-        PointerGetDatum(tupleid as pg_sys::Pointer),
-        values,
-        isnull,
-        &mut csn,
-        &mut version,
-    );
-
-    let mut tuple = o_form_tuple(
-        (*index_descr).leafTupdesc,
-        &mut (*index_descr).leafSpec,
-        version,
-        values,
-        isnull,
-        std::ptr::null_mut(),
-    );
-
-    let slot = (*index_descr).old_leaf_slot;
-    let mut hint = BTreeLocationHint { blkno: 0, pageChangeCount: 0 };
-    tts_orioledb_store_tuple(slot, tuple, descr, csn, ix_num as OIndexNumber, false, &mut hint);
-
-    let mut callback_info = BTreeModifyCallbackInfo {
-        waitCallback: None,
-        modifyCallback: None,
-        modifyDeletedCallback: Some(o_insert_callback),
-        needsUndoForSelfCreated: true,
-        arg: slot as *mut c_void,
-        postUndoRecorded: None,
-    };
-
-    let mut oxid = 0;
-    let mut o_snapshot = OSnapshot { csn: 0, xlogptr: 0, xmin: 0, cid: 0 };
-    fill_current_oxid_osnapshot(&mut oxid, &mut o_snapshot);
-
-    let iresult = o_tbl_index_insert(
-        descr,
-        *(*descr).indices.add(ix_num as usize),
-        &mut tuple,
-        slot,
-        oxid,
-        o_snapshot.csn,
-        &mut callback_info,
-        checkUnique,
-    );
-
-    let success = if checkUnique != pg_sys::IndexUniqueCheck::UNIQUE_CHECK_EXISTING {
-        iresult == OBTreeModifyResult::OBTreeModifyResultInserted
-    } else {
-        iresult == OBTreeModifyResult::OBTreeModifyResultNotFound
-    };
-
-    if !success {
-        if checkUnique == pg_sys::IndexUniqueCheck::UNIQUE_CHECK_YES
-            || checkUnique == pg_sys::IndexUniqueCheck::UNIQUE_CHECK_EXISTING
-        {
-            o_report_duplicate(heapRel, *(*descr).indices.add(ix_num as usize), slot);
-        }
-    }
-
-    if !tuple.data.is_null() {
-        pg_sys::pfree(tuple.data as *mut c_void);
-    }
-
-    success
-}
-
-unsafe extern "C-unwind" fn orioledb_amupdate(
-    rel: pg_sys::Relation,
-    new_valid: bool,
-    old_valid: bool,
-    values: *mut pg_sys::Datum,
-    isnull: *mut bool,
-    tupleid: pg_sys::Datum,
-    valuesOld: *mut pg_sys::Datum,
-    isnullOld: *mut bool,
-    oldTupleid: pg_sys::Datum,
-    heapRel: pg_sys::Relation,
-    checkUnique: pg_sys::IndexUniqueCheck::Type,
-    indexUnchanged: bool,
-    indexInfo: *mut pg_sys::IndexInfo,
-) -> bool {
-    let options = (*rel).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        return btinsert(
-            rel,
-            values,
-            isnull,
-            tupleid,
-            heapRel,
-            checkUnique,
-            indexUnchanged,
-            indexInfo,
-        );
-    }
-
-    if (*rel).rd_index.as_ref().unwrap().indisprimary {
-        return true;
-    }
-
-    let mut oids = ORelOids {
-        datoid: pg_sys::InvalidOid,
-        reloid: pg_sys::InvalidOid,
-        relnode: pg_sys::InvalidOid,
-    };
-    ORelOidsSetFromRel(&mut oids, rel);
-    let ix_type = o_index_rel_get_ix_type(rel);
-    let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
-    let descr = o_fetch_table_descr((*index_descr).tableOids);
-
-    let mut ix_num = 0;
-    while ix_num < (*descr).nIndices {
-        let index = *(*descr).indices.add(ix_num as usize);
-        if (*index).oids.reloid == (*(*rel).rd_rel).oid {
-            break;
-        }
-        ix_num += 1;
-    }
-
-    let primary = GET_PRIMARY(descr);
-    let mut csn = 0;
-    let mut version = 0;
-    append_rowid_values(
-        index_descr,
-        (*primary).nonLeafTupdesc,
-        &mut (*primary).nonLeafSpec,
-        oldTupleid,
-        valuesOld,
-        isnullOld,
-        &mut csn,
-        &mut version,
-    );
-
-    let natts = (*(*index_descr).leafTupdesc).natts as usize;
-    let vfree = pg_sys::palloc0(std::mem::size_of::<bool>() * natts) as *mut bool;
-    detoast_passed_values(index_descr, valuesOld, isnullOld, vfree);
-
-    let old_tuple = o_form_tuple(
-        (*index_descr).leafTupdesc,
-        &mut (*index_descr).leafSpec,
-        version,
-        valuesOld,
-        isnullOld,
-        std::ptr::null_mut(),
-    );
-    let old_slot = (*index_descr).old_leaf_slot;
-    let mut hint = BTreeLocationHint { blkno: 0, pageChangeCount: 0 };
-    tts_orioledb_store_non_leaf_tuple(old_slot, old_tuple, descr, csn, ix_num as OIndexNumber, false, &mut hint);
-
-    append_rowid_values(
-        index_descr,
-        (*primary).nonLeafTupdesc,
-        &mut (*primary).nonLeafSpec,
-        tupleid,
-        values,
-        isnull,
-        &mut csn,
-        &mut version,
-    );
-
-    let new_tuple = o_form_tuple(
-        (*index_descr).leafTupdesc,
-        &mut (*index_descr).leafSpec,
-        version,
-        values,
-        isnull,
-        std::ptr::null_mut(),
-    );
-    let new_slot = (*index_descr).new_leaf_slot;
-    tts_orioledb_store_non_leaf_tuple(new_slot, new_tuple, descr, csn, ix_num as OIndexNumber, false, &mut hint);
-
-    let mut oxid = 0;
-    let mut o_snapshot = OSnapshot { csn: 0, xlogptr: 0, xmin: 0, cid: 0 };
-    fill_current_oxid_osnapshot(&mut oxid, &mut o_snapshot);
-
-    let result = o_update_secondary_index(
-        index_descr,
-        ix_num as OIndexNumber,
-        new_valid,
-        old_valid,
-        new_slot,
-        new_tuple,
-        old_slot,
-        oxid,
-        o_snapshot.csn,
-        checkUnique,
-    );
-
-    for i in 0..natts {
-        if *vfree.add(i) {
-            pg_sys::pfree(DatumGetPointer(*valuesOld.add(i)) as *mut c_void);
-        }
-    }
-    pg_sys::pfree(vfree as *mut c_void);
-
-    if !result.success {
-        match result.action {
-            BTreeOperationType::BTreeOperationUpdate => {
-                if result.failedIxNum != PrimaryIndexNumber {
-                    let str_info = pg_sys::makeStringInfo();
-                    pg_sys::appendStringInfo(str_info, b"(\0".as_ptr() as *const c_char);
-                    for i in 0..(*index_descr).nUniqueFields {
-                        if i != 0 {
-                            pg_sys::appendStringInfo(str_info, b", \0".as_ptr() as *const c_char);
-                        }
-                        if *isnullOld.add(i as usize) {
-                            pg_sys::appendStringInfo(str_info, b"null\0".as_ptr() as *const c_char);
-                        } else {
-                            let mut typoutput = pg_sys::InvalidOid;
-                            let mut typisvarlena = false;
-                            let attr = pg_sys::TupleDescAttr((*index_descr).leafTupdesc, i);
-                            pg_sys::getTypeOutputInfo((*attr).atttypid, &mut typoutput, &mut typisvarlena);
-                            let res = pg_sys::OidOutputFunctionCall(typoutput, *valuesOld.add(i as usize));
-                            pg_sys::appendStringInfo(str_info, b"'%s'\0".as_ptr() as *const c_char, res);
-                        }
-                    }
-                    if !old_tuple.data.is_null() {
-                        pg_sys::pfree(old_tuple.data as *mut c_void);
-                    }
-                    if !new_tuple.data.is_null() {
-                        pg_sys::pfree(new_tuple.data as *mut c_void);
-                    }
-                    pg_sys::appendStringInfo(str_info, b")\0".as_ptr() as *const c_char);
-
-                    if pgrx::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
-                        pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR as i32);
-                        pgrx::errmsg(
-                            b"unable to remove tuple from secondary index in \"%s\"\0".as_ptr() as *const c_char,
-                            pg_sys::RelationGetRelationName(rel),
-                        );
-                        pgrx::errdetail(
-                            b"Unable to remove %s from index \"%s\"\0".as_ptr() as *const c_char,
-                            (*str_info).data,
-                            (*index_descr).name.data.as_ptr(),
-                        );
-                        pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char);
-                        pgrx::errfinish(std::ptr::null(), 0, std::ptr::null());
-                    }
-                }
-            }
-            BTreeOperationType::BTreeOperationInsert => {
-                if checkUnique == pg_sys::IndexUniqueCheck::UNIQUE_CHECK_YES
-                    || checkUnique == pg_sys::IndexUniqueCheck::UNIQUE_CHECK_EXISTING
-                {
-                    o_report_duplicate(heapRel, index_descr, new_slot);
-                }
-            }
-            _ => {
-                if !old_tuple.data.is_null() {
-                    pg_sys::pfree(old_tuple.data as *mut c_void);
-                }
-                if !new_tuple.data.is_null() {
-                    pg_sys::pfree(new_tuple.data as *mut c_void);
-                }
-                pg_sys::ereport!(
-                    pg_sys::ERROR,
-                    pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR),
-                    pgrx::errmsg("Unsupported BTreeOperationType.")
-                );
-            }
-        }
-    }
-
-    if !old_tuple.data.is_null() {
-        pg_sys::pfree(old_tuple.data as *mut c_void);
-    }
-    if !new_tuple.data.is_null() {
-        pg_sys::pfree(new_tuple.data as *mut c_void);
-    }
-
-    result.success
-}
-
-unsafe extern "C-unwind" fn orioledb_amdelete(
-    rel: pg_sys::Relation,
-    values: *mut pg_sys::Datum,
-    isnull: *mut bool,
-    tupleid: pg_sys::Datum,
-    heapRel: pg_sys::Relation,
-    _indexInfo: *mut pg_sys::IndexInfo,
-) -> bool {
-    let options = (*rel).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        return true;
-    }
-
-    if (*rel).rd_index.as_ref().unwrap().indisprimary {
-        return true;
-    }
-
-    let mut oids = ORelOids {
-        datoid: pg_sys::InvalidOid,
-        reloid: pg_sys::InvalidOid,
-        relnode: pg_sys::InvalidOid,
-    };
-    ORelOidsSetFromRel(&mut oids, rel);
-    let ix_type = o_index_rel_get_ix_type(rel);
-    let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
-    let descr = o_fetch_table_descr((*index_descr).tableOids);
-
-    let mut ix_num = 0;
-    while ix_num < (*descr).nIndices {
-        let index = *(*descr).indices.add(ix_num as usize);
-        if (*index).oids.reloid == (*(*rel).rd_rel).oid {
-            break;
-        }
-        ix_num += 1;
-    }
-
-    let slot = (*index_descr).old_leaf_slot;
-    let primary = GET_PRIMARY(descr);
-    let mut csn = 0;
-    let mut version = 0;
-    append_rowid_values(
-        index_descr,
-        (*primary).nonLeafTupdesc,
-        &mut (*primary).nonLeafSpec,
-        tupleid,
-        values,
-        isnull,
-        &mut csn,
-        &mut version,
-    );
-
-    let natts = (*(*index_descr).nonLeafTupdesc).natts as usize;
-    let vfree = pg_sys::palloc0(std::mem::size_of::<bool>() * natts) as *mut bool;
-    detoast_passed_values(index_descr, values, isnull, vfree);
-
-    let tuple = o_form_tuple(
-        (*index_descr).leafTupdesc,
-        &mut (*index_descr).leafSpec,
-        version,
-        values,
-        isnull,
-        std::ptr::null_mut(),
-    );
-    let mut hint = BTreeLocationHint { blkno: 0, pageChangeCount: 0 };
-    tts_orioledb_store_tuple(slot, tuple, descr, csn, ix_num as OIndexNumber, false, &mut hint);
-
-    let mut oxid = 0;
-    let mut o_snapshot = OSnapshot { csn: 0, xlogptr: 0, xmin: 0, cid: 0 };
-    fill_current_oxid_osnapshot(&mut oxid, &mut o_snapshot);
-
-    let result = o_tbl_index_delete(index_descr, ix_num as OIndexNumber, slot, oxid, o_snapshot.csn);
-
-    for i in 0..natts {
-        if *vfree.add(i) {
-            pg_sys::pfree(DatumGetPointer(*values.add(i)) as *mut c_void);
-        }
-    }
-    pg_sys::pfree(vfree as *mut c_void);
-
-    if !result.success {
-        match result.action {
-            BTreeOperationType::BTreeOperationUpdate => {
-                if result.failedIxNum != PrimaryIndexNumber {
-                    let str_info = pg_sys::makeStringInfo();
-                    pg_sys::appendStringInfo(str_info, b"(\0".as_ptr() as *const c_char);
-                    for i in 0..(*index_descr).nUniqueFields {
-                        if i != 0 {
-                            pg_sys::appendStringInfo(str_info, b", \0".as_ptr() as *const c_char);
-                        }
-                        if *isnull.add(i as usize) {
-                            pg_sys::appendStringInfo(str_info, b"null\0".as_ptr() as *const c_char);
-                        } else {
-                            let mut typoutput = pg_sys::InvalidOid;
-                            let mut typisvarlena = false;
-                            let attr = pg_sys::TupleDescAttr((*index_descr).nonLeafTupdesc, i);
-                            pg_sys::getTypeOutputInfo((*attr).atttypid, &mut typoutput, &mut typisvarlena);
-                            let res = pg_sys::OidOutputFunctionCall(typoutput, *values.add(i as usize));
-                            pg_sys::appendStringInfo(str_info, b"'%s'\0".as_ptr() as *const c_char, res);
-                        }
-                    }
-                    pg_sys::appendStringInfo(str_info, b")\0".as_ptr() as *const c_char);
-
-                    if !tuple.data.is_null() {
-                        pg_sys::pfree(tuple.data as *mut c_void);
-                    }
-
-                    if pgrx::errstart(pg_sys::ERROR as i32, std::ptr::null()) {
-                        pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR as i32);
-                        pgrx::errmsg(
-                            b"unable to remove tuple from secondary index in \"%s\"\0".as_ptr() as *const c_char,
-                            pg_sys::RelationGetRelationName(rel),
-                        );
-                        pgrx::errdetail(
-                            b"Unable to remove %s from index \"%s\"\0".as_ptr() as *const c_char,
-                            (*str_info).data,
-                            (*index_descr).name.data.as_ptr(),
-                        );
-                        pg_sys::errtableconstraint(rel, b"sk\0".as_ptr() as *const c_char);
-                        pgrx::errfinish(std::ptr::null(), 0, std::ptr::null());
-                    }
-                }
-            }
-            _ => {
-                if !tuple.data.is_null() {
-                    pg_sys::pfree(tuple.data as *mut c_void);
-                }
-                pg_sys::ereport!(
-                    pg_sys::ERROR,
-                    pgrx::errcode(crate::ERRCODE_INTERNAL_ERROR),
-                    pgrx::errmsg("Unsupported BTreeOperationType.")
-                );
-            }
-        }
-    }
-
-    if !tuple.data.is_null() {
-        pg_sys::pfree(tuple.data as *mut c_void);
-    }
-
-    result.success
-}
-
-unsafe extern "C-unwind" fn orioledb_ambulkdelete(
-    info: *mut pg_sys::IndexVacuumInfo,
-    stats: *mut pg_sys::IndexBulkDeleteResult,
-    callback: pg_sys::IndexBulkDeleteCallback,
-    callback_state: *mut c_void,
-) -> *mut pg_sys::IndexBulkDeleteResult {
-    let options = (*(*info).index).rd_options as *mut OBTOptions;
-    if !options.is_null() && !(*options).orioledb_index {
-        return btbulkdelete(info, stats, callback, callback_state);
-    }
-    stats
-}
-
-unsafe extern "C-unwind" fn orioledb_amvacuumcleanup(
-    info: *mut pg_sys::IndexVacuumInfo,
-    stats: *mut pg_sys::IndexBulkDeleteResult,
-) -> *mut pg_sys::IndexBulkDeleteResult {
-    let options = (*(*info).index).rd_options as *mut OBTOptions;
-    if !options.is_null() && !(*options).orioledb_index {
-        return btvacuumcleanup(info, stats);
-    }
-    stats
-}
-
-unsafe extern "C-unwind" fn orioledb_amcanreturn(index: pg_sys::Relation, attno: c_int) -> bool {
-    let options = (*index).rd_options as *mut OBTOptions;
-    if !options.is_null() && !(*options).orioledb_index {
-        return btcanreturn(index, attno);
-    }
-    true
-}
-
-unsafe extern "C-unwind" fn orioledb_amcostestimate(
-    root: *mut pg_sys::PlannerInfo,
-    path: *mut pg_sys::IndexPath,
-    loop_count: f64,
-    indexStartupCost: *mut pg_sys::Cost,
-    indexTotalCost: *mut pg_sys::Cost,
-    indexSelectivity: *mut pg_sys::Selectivity,
-    indexCorrelation: *mut f64,
-    indexPages: *mut f64,
-) {
-    let index = (*path).indexinfo;
-    let mut costs: pg_sys::GenericCosts = std::mem::zeroed();
-    let mut num_sa_scans = 1.0;
-    let mut index_bound_quals: *mut pg_sys::List = std::ptr::null_mut();
-    let mut indexcol = 0;
-    let mut eq_qual_here = false;
-    let mut found_saop = false;
-    let mut found_is_null_op = false;
-
-    let clauses = (*path).indexclauses;
-    let mut lc = pg_sys::list_head(clauses);
-    while !lc.is_null() {
-        let iclause = lfirst(lc) as *mut pg_sys::IndexClause;
-
-        if indexcol != (*iclause).indexcol {
-            if !eq_qual_here {
-                break;
-            }
-            eq_qual_here = false;
-            indexcol = (*iclause).indexcol;
-            if indexcol != (*iclause).indexcol {
-                break;
-            }
-        }
-
-        let mut lc2 = pg_sys::list_head((*iclause).indexquals);
-        while !lc2.is_null() {
-            let rinfo = lfirst(lc2) as *mut pg_sys::RestrictInfo;
-            let clause = (*rinfo).clause;
-            let mut clause_op = pg_sys::InvalidOid;
-
-            if is_a(clause as *mut c_void, pg_sys::NodeTag_T_OpExpr) {
-                let op = clause as *mut pg_sys::OpExpr;
-                clause_op = (*op).opno;
-            } else if is_a(clause as *mut c_void, pg_sys::NodeTag_T_RowCompareExpr) {
-                let rc = clause as *mut pg_sys::RowCompareExpr;
-                clause_op = linitial_oid((*rc).opnos);
-            } else if is_a(clause as *mut c_void, pg_sys::NodeTag_T_ScalarArrayOpExpr) {
-                let saop = clause as *mut pg_sys::ScalarArrayOpExpr;
-                let other_operand = lsecond((*saop).args) as *mut pg_sys::Node;
-                #[cfg(any(feature = "pg17", feature = "pg18", feature = "pg19"))]
-                let alength = estimate_array_length(root, other_operand);
-                #[cfg(not(any(feature = "pg17", feature = "pg18", feature = "pg19")))]
-                let alength = estimate_array_length(other_operand);
-
-                clause_op = (*saop).opno;
-                found_saop = true;
-                if alength > 1 {
-                    num_sa_scans *= alength as f64;
-                }
-            } else if is_a(clause as *mut c_void, pg_sys::NodeTag_T_NullTest) {
-                let nt = clause as *mut pg_sys::NullTest;
-                if (*nt).nulltesttype == pg_sys::NullTestType::IS_NULL {
-                    found_is_null_op = true;
-                    eq_qual_here = true;
-                }
-            } else {
-                pgrx::elog!(pgrx::PgLogLevel::ERROR, "unsupported indexqual type");
-            }
-
-            if OidIsValid(clause_op) {
-                let strategy = get_op_opfamily_strategy(clause_op, *(*index).opfamily.add(indexcol as usize));
-                if strategy == BTEqualStrategyNumber {
-                    eq_qual_here = true;
-                }
-            }
-
-            index_bound_quals = pg_sys::lappend(index_bound_quals, rinfo as *mut c_void);
-            lc2 = lnext((*iclause).indexquals, lc2);
-        }
-
-        lc = lnext(clauses, lc);
-    }
-
-    let mut num_index_tuples: f64;
-    if (*index).unique
-        && indexcol as i32 == (*index).nkeycolumns as i32 - 1
-        && eq_qual_here
-        && !found_saop
-        && !found_is_null_op
-    {
-        num_index_tuples = 1.0;
-    } else {
-        let selectivity_quals = add_predicate_to_index_quals(index, index_bound_quals);
-        let btree_selectivity = clauselist_selectivity(
-            root,
-            selectivity_quals,
-            (*(*index).rel).relid as c_int,
-            pg_sys::JoinType::JOIN_INNER,
-            std::ptr::null_mut(),
-        );
-        num_index_tuples = btree_selectivity * (*(*index).rel).tuples;
-
-        #[cfg(any(feature = "pg17", feature = "pg18", feature = "pg19"))]
-        {
-            let ceiling = ((*index).pages as f64 * 0.3333333).ceil();
-            if num_sa_scans > ceiling {
-                num_sa_scans = ceiling;
-            }
-            if num_sa_scans < 1.0 {
-                num_sa_scans = 1.0;
-            }
-        }
-
-        num_index_tuples = (num_index_tuples / num_sa_scans).round();
-    }
-
-    costs.numIndexTuples = num_index_tuples;
-    #[cfg(any(feature = "pg17", feature = "pg18", feature = "pg19"))]
-    {
-        costs.num_sa_scans = num_sa_scans;
-    }
-
-    genericcostestimate(root, path, loop_count, &mut costs);
-
-    if (*index).tuples > 1.0 {
-        let descent_cost = ((*index).tuples.log2()).ceil() * cpu_operator_cost;
-        costs.indexStartupCost += descent_cost;
-        #[cfg(any(feature = "pg17", feature = "pg18", feature = "pg19"))]
-        {
-            costs.indexTotalCost += costs.num_sa_scans * descent_cost;
-        }
-        #[cfg(not(any(feature = "pg17", feature = "pg18", feature = "pg19")))]
-        {
-            costs.indexTotalCost += descent_cost;
-        }
-    }
-
-    let descent_cost = ((*index).tree_height + 1) as f64 * 50.0 * cpu_operator_cost;
-    costs.indexStartupCost += descent_cost;
-    #[cfg(any(feature = "pg17", feature = "pg18", feature = "pg19"))]
-    {
-        costs.indexTotalCost += costs.num_sa_scans * descent_cost;
-    }
-    #[cfg(not(any(feature = "pg17", feature = "pg18", feature = "pg19")))]
-    {
-        costs.indexTotalCost += descent_cost;
-    }
-
-    if *(*index).indexkeys.add(0) != 0 {
-        let rte = pg_sys::planner_rt_fetch((*(*index).rel).relid, root);
-        let relid = (*rte).relid;
-        let colnum = *(*index).indexkeys.add(0);
-
-        let mut vardata: pg_sys::VariableStatData = std::mem::zeroed();
-        let hook_ptr: Option<
-            unsafe extern "C-unwind" fn(
-                *mut pg_sys::PlannerInfo,
-                *mut pg_sys::RangeTblEntry,
-                pg_sys::AttrNumber,
-                *mut pg_sys::VariableStatData,
-            ) -> bool,
-        > = std::mem::transmute(get_relation_stats_hook);
-
-        let hook_taken = if let Some(hook) = hook_ptr {
-            hook(root, rte, colnum as pg_sys::AttrNumber, &mut vardata)
-        } else {
-            false
-        };
-
-        if !hook_taken {
-            vardata.statsTuple = pg_sys::SearchSysCache3(
-                pg_sys::SysCacheIdentifier::STATRELATTINH as c_int,
-                pg_sys::ObjectIdGetDatum(relid),
-                pg_sys::Int16GetDatum(colnum as i16),
-                pg_sys::BoolGetDatum((*rte).inh),
-            );
-            vardata.freefunc = Some(release_sys_cache_wrapper);
-        }
-
-        if !vardata.statsTuple.is_null() {
-            let sortop = get_opfamily_member(
-                *(*index).opfamily.add(0),
-                *(*index).opcintype.add(0),
-                *(*index).opcintype.add(0),
-                BTLessStrategyNumber,
-            );
-            let mut sslot: pg_sys::AttStatsSlot = std::mem::zeroed();
-            if OidIsValid(sortop)
-                && get_attstatsslot(
-                    &mut sslot,
-                    vardata.statsTuple,
-                    pg_sys::STATISTIC_KIND_CORRELATION as c_int,
-                    sortop,
-                    pg_sys::ATTSTATSSLOT_NUMBERS as c_int,
-                )
-            {
-                let mut var_correlation = *sslot.numbers.add(0);
-                if *(*index).reverse_sort.add(0) {
-                    var_correlation = -var_correlation;
-                }
-                if (*index).nkeycolumns > 1 {
-                    costs.indexCorrelation = (var_correlation * 0.75) as f64;
-                } else {
-                    costs.indexCorrelation = var_correlation as f64;
-                }
-                free_attstatsslot(&mut sslot);
-            }
-        }
-        ReleaseVariableStats(vardata);
-    } else {
-        let relid = (*index).indexoid;
-        let colnum = 1;
-
-        let mut vardata: pg_sys::VariableStatData = std::mem::zeroed();
-        let hook_ptr: Option<
-            unsafe extern "C-unwind" fn(
-                *mut pg_sys::PlannerInfo,
-                pg_sys::Oid,
-                pg_sys::AttrNumber,
-                *mut pg_sys::VariableStatData,
-            ) -> bool,
-        > = std::mem::transmute(get_index_stats_hook);
-
-        let hook_taken = if let Some(hook) = hook_ptr {
-            hook(root, relid, colnum, &mut vardata)
-        } else {
-            false
-        };
-
-        if !hook_taken {
-            vardata.statsTuple = pg_sys::SearchSysCache3(
-                pg_sys::SysCacheIdentifier::STATRELATTINH as c_int,
-                pg_sys::ObjectIdGetDatum(relid),
-                pg_sys::Int16GetDatum(colnum as i16),
-                pg_sys::BoolGetDatum(false),
-            );
-            vardata.freefunc = Some(release_sys_cache_wrapper);
-        }
-
-        if !vardata.statsTuple.is_null() {
-            let sortop = get_opfamily_member(
-                *(*index).opfamily.add(0),
-                *(*index).opcintype.add(0),
-                *(*index).opcintype.add(0),
-                BTLessStrategyNumber,
-            );
-            let mut sslot: pg_sys::AttStatsSlot = std::mem::zeroed();
-            if OidIsValid(sortop)
-                && get_attstatsslot(
-                    &mut sslot,
-                    vardata.statsTuple,
-                    pg_sys::STATISTIC_KIND_CORRELATION as c_int,
-                    sortop,
-                    pg_sys::ATTSTATSSLOT_NUMBERS as c_int,
-                )
-            {
-                let mut var_correlation = *sslot.numbers.add(0);
-                if *(*index).reverse_sort.add(0) {
-                    var_correlation = -var_correlation;
-                }
-                if (*index).nkeycolumns > 1 {
-                    costs.indexCorrelation = (var_correlation * 0.75) as f64;
-                } else {
-                    costs.indexCorrelation = var_correlation as f64;
-                }
-                free_attstatsslot(&mut sslot);
-            }
-        }
-        ReleaseVariableStats(vardata);
-    }
-
-    *indexStartupCost = costs.indexStartupCost;
-    *indexTotalCost = costs.indexTotalCost;
-    *indexSelectivity = costs.indexSelectivity;
-    *indexCorrelation = costs.indexCorrelation;
-    *indexPages = costs.numIndexPages;
-}
-
-unsafe extern "C-unwind" fn validate_index_compress(value: *const c_char) {
-    if !value.is_null() {
-        validate_compress(o_parse_compress(value), b"Index\0".as_ptr() as *const c_char);
-    }
-}
-
-const OFFSETOF_FILLFACTOR: usize = 0;
-const OFFSETOF_VACUUM_SCALE: usize = 8;
-const OFFSETOF_DEDUPLICATE: usize = 16;
-const OFFSETOF_COMPRESS: usize = 24;
-const OFFSETOF_ORIOLEDB_INDEX: usize = 28;
-
-unsafe extern "C-unwind" fn orioledb_amoptions(reloptions: pg_sys::Datum, validate: bool) -> *mut pg_sys::bytea {
-    static mut relopts_set: bool = false;
-    static mut relopts: pg_sys::local_relopts = unsafe { std::mem::transmute([0u8; std::mem::size_of::<pg_sys::local_relopts>()]) };
-
-    if !relopts_set {
-        let oldcxt = pg_sys::MemoryContextSwitchTo(pg_sys::TopMemoryContext);
-        init_local_reloptions(&mut relopts, std::mem::size_of::<OBTOptions>());
-
-        add_local_int_reloption(
-            &mut relopts,
-            b"fillfactor\0".as_ptr() as *const c_char,
-            b"Packs btree index pages only to this percentage\0".as_ptr() as *const c_char,
-            BTREE_DEFAULT_FILLFACTOR,
-            BTREE_MIN_FILLFACTOR,
-            100,
-            OFFSETOF_FILLFACTOR,
-        );
-
-        add_local_real_reloption(
-            &mut relopts,
-            b"vacuum_cleanup_index_scale_factor\0".as_ptr() as *const c_char,
-            b"Deprecated B-Tree parameter.\0".as_ptr() as *const c_char,
-            -1.0,
-            0.0,
-            1e10,
-            OFFSETOF_VACUUM_SCALE,
-        );
-
-        add_local_bool_reloption(
-            &mut relopts,
-            b"deduplicate_items\0".as_ptr() as *const c_char,
-            b"Enables \"deduplicate items\" feature for this btree index\0".as_ptr() as *const c_char,
-            false,
-            OFFSETOF_DEDUPLICATE,
-        );
-
-        add_local_string_reloption(
-            &mut relopts,
-            b"compress\0".as_ptr() as *const c_char,
-            b"Compression level of a particular index\0".as_ptr() as *const c_char,
-            std::ptr::null(),
-            Some(validate_index_compress),
-            None,
-            OFFSETOF_COMPRESS,
-        );
-
-        add_local_bool_reloption(
-            &mut relopts,
-            b"orioledb_index\0".as_ptr() as *const c_char,
-            b"Use orioledb own implementation of index\0".as_ptr() as *const c_char,
-            true,
-            OFFSETOF_ORIOLEDB_INDEX,
-        );
-
-        pg_sys::MemoryContextSwitchTo(oldcxt);
-        relopts_set = true;
-    }
-
-    build_local_reloptions(&mut relopts, reloptions, validate)
-}
-
-unsafe extern "C-unwind" fn orioledb_amproperty(
-    _index_oid: pg_sys::Oid,
-    attno: c_int,
-    prop: pg_sys::IndexAMProperty::Type,
-    _propname: *const c_char,
-    res: *mut bool,
-    _isnull: *mut bool,
-) -> bool {
-    match prop {
-        pg_sys::IndexAMProperty::AMPROP_RETURNABLE => {
-            if attno == 0 {
-                return false;
-            }
-            *res = true;
-            true
-        }
-        _ => false,
-    }
-}
-
-unsafe extern "C-unwind" fn orioledb_ambuildphasename(phasenum: i64) -> *mut c_char {
-    match phasenum as u32 {
-        pg_sys::PROGRESS_CREATEIDX_SUBPHASE_INITIALIZE => b"initializing\0".as_ptr() as *mut c_char,
-        pg_sys::PROGRESS_BTREE_PHASE_INDEXBUILD_TABLESCAN => b"scanning table\0".as_ptr() as *mut c_char,
-        pg_sys::PROGRESS_BTREE_PHASE_PERFORMSORT_1 => b"sorting live tuples\0".as_ptr() as *mut c_char,
-        pg_sys::PROGRESS_BTREE_PHASE_PERFORMSORT_2 => b"sorting dead tuples\0".as_ptr() as *mut c_char,
-        pg_sys::PROGRESS_BTREE_PHASE_LEAF_LOAD => b"loading tuples in tree\0".as_ptr() as *mut c_char,
-        _ => std::ptr::null_mut(),
-    }
-}
-
-unsafe extern "C-unwind" fn orioledb_amvalidate(_opclassoid: pg_sys::Oid) -> bool {
-    true
-}
-
-unsafe extern "C-unwind" fn orioledb_amadjustmembers(
-    _opfamilyoid: pg_sys::Oid,
-    _opclassoid: pg_sys::Oid,
-    _operators: *mut pg_sys::List,
-    _functions: *mut pg_sys::List,
-) {
-}
-
-unsafe extern "C-unwind" fn orioledb_ambeginscan(
-    rel: pg_sys::Relation,
-    nkeys: c_int,
-    norderbys: c_int,
-) -> pg_sys::IndexScanDesc {
-    let options = (*rel).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        return btbeginscan(rel, nkeys, norderbys);
-    }
-
-    let o_scan = pg_sys::palloc0(std::mem::size_of::<OScanState>()) as *mut OScanState;
-
-    let scan = btbeginscan(rel, nkeys, norderbys);
-    (*scan).xs_snapshot = std::ptr::null_mut();
-    std::ptr::copy_nonoverlapping(scan, &mut (*o_scan).scandesc, 1);
-    pg_sys::pfree(scan as *mut c_void);
-
-    let scan = &mut (*o_scan).scandesc as *mut pg_sys::IndexScanDescData;
-
-    (*scan).parallel_scan = std::ptr::null_mut();
-    (*scan).xs_temp_snap = false;
-    (*o_scan).xs_want_rowid = true;
-
-    let mut oids = ORelOids {
-        datoid: pg_sys::InvalidOid,
-        reloid: pg_sys::InvalidOid,
-        relnode: pg_sys::InvalidOid,
-    };
-    ORelOidsSetFromRel(&mut oids, rel);
-    let ix_type = o_index_rel_get_ix_type(rel);
-    let index_descr = o_fetch_index_descr(oids, ix_type, false, std::ptr::null_mut());
-    let descr = o_fetch_table_descr((*index_descr).tableOids);
-
-    let mut ix_num = 0;
-    while ix_num < (*descr).nIndices {
-        let index = *(*descr).indices.add(ix_num as usize);
-        if (*index).oids.reloid == (*(*rel).rd_rel).oid {
-            break;
-        }
-        ix_num += 1;
-    }
-
-    (*o_scan).ixNum = ix_num as OIndexNumber;
-
-    (*o_scan).cxt = pg_sys::AllocSetContextCreateInternal(
-        pg_sys::CurrentMemoryContext,
-        b"orioledb_cs plan data\0".as_ptr() as *const c_char,
-        pg_sys::ALLOCSET_DEFAULT_SIZES[0],
-        pg_sys::ALLOCSET_DEFAULT_SIZES[1],
-        pg_sys::ALLOCSET_DEFAULT_SIZES[2],
-    );
-
-    scan
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_get_num_prefix_exact_keys(scankey: pg_sys::ScanKey, nscankeys: c_int) -> c_int {
-    let mut prev_attr: pg_sys::AttrNumber = 0;
-    let mut i = 0;
-
-    while i < nscankeys {
-        let key = &*scankey.add(i as usize);
-        if key.sk_attno != prev_attr + 1 || key.sk_strategy != BTEqualStrategyNumber as u16 {
-            break;
-        }
-        prev_attr = key.sk_attno;
-        i += 1;
-    }
-
-    i
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_adjust_num_prefix_exact_keys(
-    so: pg_sys::BTScanOpaque,
-    numPrefixExactKeys: c_int,
-) -> c_int {
-    let mut adjusted = numPrefixExactKeys;
-
-    #[cfg(any(feature = "pg18", feature = "pg19"))]
-    {
-        let so_ref = &*so;
-        for i in 0..so_ref.numArrayKeys {
-            let array_key = &*so_ref.arrayKeys.add(i as usize);
-            if array_key.num_elems <= 0 && array_key.scan_key < adjusted {
-                adjusted = array_key.scan_key;
-            }
-        }
-    }
-
-    adjusted
-}
-
-unsafe extern "C-unwind" fn orioledb_amrescan(
-    scan: pg_sys::IndexScanDesc,
-    scankey: pg_sys::ScanKey,
-    nscankeys: c_int,
-    orderbys: pg_sys::ScanKey,
-    norderbys: c_int,
-) {
-    let o_scan = scan as *mut OScanState;
-    let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        return btrescan(scan, scankey, nscankeys, orderbys, norderbys);
-    }
-
-    if !(*o_scan).iterator.is_null() {
-        btree_iterator_free((*o_scan).iterator);
-    }
-    pg_sys::MemoryContextReset((*o_scan).cxt);
-    (*o_scan).iterator = std::ptr::null_mut();
-    (*o_scan).curKeyRangeIsLoaded = false;
-    (*o_scan).numPrefixExactKeys = o_get_num_prefix_exact_keys(scankey, nscankeys);
-    btrescan(scan, scankey, nscankeys, orderbys, norderbys);
-}
-
-unsafe fn fill_hitup(
-    scan: pg_sys::IndexScanDesc,
-    tuple: OTuple,
-    descr: *mut OTableDescr,
-    tuple_csn: CommitSeqNo,
-    hint: *mut BTreeLocationHint,
-) {
-    let o_scan = scan as *mut OScanState;
-    (*scan).xs_hitupdesc = (*descr).tupdesc;
-    let slot = (*descr).oldTuple;
-    tts_orioledb_store_tuple(slot, tuple, descr, tuple_csn, PrimaryIndexNumber, true, hint);
-
-    if !(*o_scan).xs_rowid.isnull {
-        pg_sys::pfree(DatumGetPointer((*o_scan).xs_rowid.value) as *mut c_void);
-        (*o_scan).xs_rowid.isnull = true;
-    }
-
-    (*o_scan).xs_rowid.value = pg_sys::slot_getsysattr(
-        slot,
-        RowIdAttributeNumber as i32,
-        &mut (*o_scan).xs_rowid.isnull,
-    );
-
-    if !(*scan).xs_hitup.is_null() {
-        pg_sys::pfree((*scan).xs_hitup as *mut c_void);
-        (*scan).xs_hitup = std::ptr::null_mut();
-    }
-
-    (*scan).xs_hitup = pg_sys::ExecCopySlotHeapTuple(slot);
-
-    pg_sys::ExecClearTuple(slot);
-}
-
-unsafe fn search_next_dup_range(
-    duplicates: *mut pg_sys::List,
-    mut dup_range_lc_id: c_int,
-    dup_range_start: *mut c_int,
-    dup_range_end: *mut c_int,
-) {
-    let mut duplicate: *mut pg_sys::List;
-    let mut dup_range_lc: *mut pg_sys::ListCell;
-    let mut dup_range_src_attnum = -1;
-
-    *dup_range_start = -1;
-    *dup_range_end = -1;
-
-    loop {
-        if dup_range_lc_id >= 0 {
-            dup_range_lc = pg_sys::list_nth_cell(duplicates, dup_range_lc_id);
-        } else {
-            dup_range_lc = std::ptr::null_mut();
-        }
-
-        if !dup_range_lc.is_null() {
-            duplicate = lfirst(dup_range_lc) as *mut pg_sys::List;
-            if *dup_range_end < 0 {
-                *dup_range_end = dup_range_lc_id;
-                dup_range_src_attnum = linitial_int(duplicate);
-            } else if linitial_int(duplicate) != dup_range_src_attnum {
-                *dup_range_start = dup_range_lc_id + 1;
-            }
-        } else {
-            *dup_range_start = dup_range_lc_id + 1;
-        }
-        dup_range_lc_id -= 1;
-
-        if *dup_range_start >= 0 {
-            break;
-        }
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_new_rowid(
-    primary: *mut OIndexDescr,
-    slot: *mut pg_sys::TupleTableSlot,
-    rowid_values: *mut pg_sys::Datum,
-    rowid_isnull: *mut bool,
-    tuple_csn: CommitSeqNo,
-    hint: *mut BTreeLocationHint,
-) -> *mut pg_sys::bytea {
-    let oslot = slot as *mut OTableSlot;
-    let ptr: *mut c_char;
-    let result_size: usize;
-
-    if (*primary).primaryIsCtid {
-        let mut add_ctid = ORowIdAddendumCtid {
-            hint: *hint,
-            csn: tuple_csn,
-            version: (*oslot).version,
-        };
-
-        result_size = pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize)
-            + pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumCtid>())
-            + pg_sys::MAXALIGN(std::mem::size_of::<pg_sys::ItemPointerData>());
-        let mut actual_size = result_size;
-        if (*primary).bridging {
-            actual_size += pg_sys::MAXALIGN(std::mem::size_of::<ORowIdBridgeData>());
-        }
-
-        let rowid = pg_sys::MemoryContextAllocZero((*slot).tts_mcxt, actual_size) as *mut pg_sys::bytea;
-        *(std::ptr::addr_of_mut!((*rowid).vl_len_) as *mut u32) = (actual_size as u32) << 2; // SET_VARSIZE macro
-
-        ptr = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize));
-        std::ptr::copy_nonoverlapping(&add_ctid, ptr as *mut ORowIdAddendumCtid, 1);
-
-        let ptr = ptr.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumCtid>()));
-        std::ptr::copy_nonoverlapping(&(*slot).tts_tid, ptr as *mut pg_sys::ItemPointerData, 1);
-
-        if (*primary).bridging {
-            let ptr = ptr.add(pg_sys::MAXALIGN(std::mem::size_of::<pg_sys::ItemPointerData>()));
-            let bridged_data = ptr as *mut ORowIdBridgeData;
-            (*bridged_data).bridgeCtid = (*oslot).bridge_ctid;
-            (*bridged_data).bridgeChanged = (*oslot).bridgeChanged;
-        }
-
-        rowid
-    } else {
-        let mut add_non_ctid = ORowIdAddendumNonCtid {
-            hint: *hint,
-            csn: tuple_csn,
-            flags: 0,
-        };
-        let mut temp_tuple = OTuple {
-            data: std::ptr::null_mut(),
-            formatFlags: 0,
-        };
-
-        result_size = pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize)
-            + pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumNonCtid>());
-        let mut actual_size = result_size;
-        if (*primary).bridging {
-            actual_size += pg_sys::MAXALIGN(std::mem::size_of::<pg_sys::ItemPointerData>());
-        }
-
-        let pk_tupdesc = (*primary).nonLeafTupdesc;
-        let pk_spec = &mut (*primary).nonLeafSpec;
-
-        let tuple_size = o_new_tuple_size(
-            pk_tupdesc,
-            pk_spec,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            (*oslot).version,
-            rowid_values,
-            rowid_isnull,
-            std::ptr::null_mut(),
-        );
-        actual_size += pg_sys::MAXALIGN(tuple_size as usize);
-
-        let rowid = pg_sys::MemoryContextAllocZero((*slot).tts_mcxt, actual_size) as *mut pg_sys::bytea;
-        *(std::ptr::addr_of_mut!((*rowid).vl_len_) as *mut u32) = (actual_size as u32) << 2; // SET_VARSIZE macro
-
-        ptr = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize));
-        if (*primary).bridging {
-            let bridge_data = ptr.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumNonCtid>()))
-                as *mut ORowIdBridgeData;
-            (*bridge_data).bridgeCtid = (*oslot).bridge_ctid;
-            (*bridge_data).bridgeChanged = (*oslot).bridgeChanged;
-        }
-
-        temp_tuple.data = ptr.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumNonCtid>())) as pg_sys::Pointer;
-        if (*primary).bridging {
-            temp_tuple.data = temp_tuple.data.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdBridgeData>()));
-        }
-
-        o_tuple_fill(
-            pk_tupdesc,
-            pk_spec,
-            &mut temp_tuple,
-            tuple_size,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            (*oslot).version,
-            rowid_values,
-            rowid_isnull,
-            std::ptr::null_mut(),
-        );
-
-        add_non_ctid.flags = temp_tuple.formatFlags;
-        std::ptr::copy_nonoverlapping(&add_non_ctid, ptr as *mut ORowIdAddendumNonCtid, 1);
-
-        rowid
-    }
-}
-
-unsafe fn fill_itup(
-    scan: pg_sys::IndexScanDesc,
-    tuple: OTuple,
-    descr: *mut OTableDescr,
-    tuple_csn: CommitSeqNo,
-    hint: *mut BTreeLocationHint,
-) {
-    let o_scan = scan as *mut OScanState;
-    let index_descr = *(*descr).indices.add((*o_scan).ixNum as usize);
-    let slot = (*index_descr).index_slot;
-
-    tts_orioledb_store_tuple(slot, tuple, descr, tuple_csn, (*o_scan).ixNum, true, hint);
-    pg_sys::slot_getallattrs(slot);
-
-    if !(*index_descr).duplicates.is_null() {
-        let mut lc_id = pg_sys::list_length((*index_descr).duplicates) - 1;
-        let mut dup_range_start = -1;
-        let mut dup_range_end = -1;
-
-        search_next_dup_range(
-            (*index_descr).duplicates,
-            lc_id,
-            &mut dup_range_start,
-            &mut dup_range_end,
-        );
-
-        let mut lc = pg_sys::list_nth_cell((*index_descr).duplicates, dup_range_end);
-        let mut duplicate = lfirst(lc) as *mut pg_sys::List;
-        let mut dup_range_diff = dup_range_end - dup_range_start + 1;
-
-        lc = pg_sys::list_nth_cell((*index_descr).duplicates, lc_id);
-        duplicate = lfirst(lc) as *mut pg_sys::List;
-
-        let ctid_off = if (*index_descr).primaryIsCtid { 1 } else { 0 };
-        let mut cur_attr = (*(*index_descr).leafTupdesc).natts as c_int - 1 - ctid_off;
-
-        let mut i = (*(*index_descr).itupdesc).natts as c_int - 1;
-        while i >= 0 {
-            if !duplicate.is_null()
-                && i >= linitial_int(duplicate) + dup_range_start
-                && i <= linitial_int(duplicate) + dup_range_start - 1 + dup_range_diff
-            {
-                *(*slot).tts_values.add(i as usize) = pg_sys::Datum::from(0);
-                *(*slot).tts_isnull.add(i as usize) = true;
-            } else {
-                if !duplicate.is_null() && i == linitial_int(duplicate) + dup_range_start - 1 {
-                    lc_id = dup_range_start - 1;
-                    if lc_id >= 0 {
-                        search_next_dup_range(
-                            (*index_descr).duplicates,
-                            lc_id,
-                            &mut dup_range_start,
-                            &mut dup_range_end,
-                        );
-                        lc = pg_sys::list_nth_cell((*index_descr).duplicates, dup_range_end);
-                        duplicate = lfirst(lc) as *mut pg_sys::List;
-                        dup_range_diff = dup_range_end - dup_range_start + 1;
-                    } else {
-                        duplicate = std::ptr::null_mut();
-                    }
-                }
-                *(*slot).tts_values.add(i as usize) = *(*slot).tts_values.add(cur_attr as usize);
-                *(*slot).tts_isnull.add(i as usize) = *(*slot).tts_isnull.add(cur_attr as usize);
-                cur_attr -= 1;
-            }
-            i -= 1;
-        }
-    }
-
-    let mut temp_rowid_values = [pg_sys::Datum::from(0); 2 * INDEX_MAX_KEYS];
-    let mut temp_rowid_isnull = [true; 2 * INDEX_MAX_KEYS];
-    let mut rowid_values = std::ptr::null_mut();
-    let mut rowid_isnull = std::ptr::null_mut();
-
-    if !(*index_descr).primaryIsCtid {
-        let mut i = 0;
-        while i < (*index_descr).nPrimaryFields {
-            let attnum = (*index_descr).primaryFieldsAttnums[i as usize] - 1;
-            temp_rowid_values[i as usize] = *(*slot).tts_values.add(attnum as usize);
-            temp_rowid_isnull[i as usize] = *(*slot).tts_isnull.add(attnum as usize);
-            i += 1;
-        }
-
-        let primary = GET_PRIMARY(descr);
-        while i < (*(*primary).nonLeafTupdesc).natts {
-            temp_rowid_values[i as usize] = pg_sys::Datum::from(0);
-            temp_rowid_isnull[i as usize] = true;
-            i += 1;
-        }
-
-        if (*o_scan).ixNum == PrimaryIndexNumber {
-            rowid_values = (*slot).tts_values;
-            rowid_isnull = (*slot).tts_isnull;
-        } else {
-            rowid_values = temp_rowid_values.as_mut_ptr();
-            rowid_isnull = temp_rowid_isnull.as_mut_ptr();
-        }
-    }
-
-    let rowid = o_new_rowid(
-        GET_PRIMARY(descr),
-        slot,
-        rowid_values,
-        rowid_isnull,
-        tuple_csn,
-        hint,
-    );
-
-    if !(*o_scan).xs_rowid.isnull {
-        pg_sys::pfree(DatumGetPointer((*o_scan).xs_rowid.value) as *mut c_void);
-        (*o_scan).xs_rowid.isnull = true;
-    }
-    (*o_scan).xs_rowid.isnull = false;
-    (*o_scan).xs_rowid.value = PointerGetDatum(rowid as pg_sys::Pointer);
-
-    if !(*scan).xs_itup.is_null() {
-        pg_sys::pfree((*scan).xs_itup as *mut c_void);
-        (*scan).xs_itup = std::ptr::null_mut();
-    }
-
-    (*scan).xs_itupdesc = (*index_descr).itupdesc;
-    (*scan).xs_itup = pg_sys::index_form_tuple(
-        (*index_descr).itupdesc,
-        (*slot).tts_values,
-        (*slot).tts_isnull,
-    );
-
-    std::ptr::copy_nonoverlapping(
-        &(*slot).tts_tid,
-        &mut (*(*scan).xs_itup).t_tid as *mut pg_sys::ItemPointerData,
-        1,
-    );
-
-    pg_sys::ExecClearTuple(slot);
-}
-
-unsafe extern "C-unwind" fn orioledb_amgettuple(scan: pg_sys::IndexScanDesc, dir: pg_sys::ScanDirection::Type) -> bool {
-    let o_scan = scan as *mut OScanState;
-    let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        return btgettuple(scan, dir);
-    }
-
-    (*o_scan).scanDir = dir;
-
-    if (*(*scan).xs_snapshot).snapshot_type == pg_sys::SnapshotType::SNAPSHOT_DIRTY {
-        (*o_scan).oSnapshot = o_in_progress_snapshot;
-    } else if (*(*scan).xs_snapshot).snapshot_type == pg_sys::SnapshotType::SNAPSHOT_NON_VACUUMABLE {
-        (*o_scan).oSnapshot = o_non_deleted_snapshot;
-    } else {
-        // O_LOAD_SNAPSHOT macro equivalent
-        let snap = (*scan).xs_snapshot;
-        (*o_scan).oSnapshot.xmin = (*snap).xmin.into_inner() as u64;
-        (*o_scan).oSnapshot.csn = (*snap).xmin.into_inner() as u64;
-        (*o_scan).oSnapshot.cid = (*snap).curcid;
-    }
-
-    (*scan).xs_recheck = false;
-
-    let descr = relation_get_descr((*scan).heapRelation);
-    let scan_primary = (*o_scan).ixNum == PrimaryIndexNumber || !(*scan).xs_want_itup;
-    let mut hint = BTreeLocationHint { blkno: 0, pageChangeCount: 0 };
-    let mut csn = 0;
-
-    let tuple = o_index_scan_getnext(
-        descr,
-        o_scan,
-        &mut csn,
-        scan_primary,
-        pg_sys::CurrentMemoryContext,
-        &mut hint,
-    );
-
-    if tuple.data.is_null() {
-        if !(*o_scan).xs_rowid.isnull {
-            pg_sys::pfree(DatumGetPointer((*o_scan).xs_rowid.value) as *mut c_void);
-            (*o_scan).xs_rowid.isnull = true;
-        }
-        if !(*scan).xs_itup.is_null() {
-            pg_sys::pfree((*scan).xs_itup as *mut c_void);
-            (*scan).xs_itup = std::ptr::null_mut();
-        }
-        if !(*scan).xs_hitup.is_null() {
-            pg_sys::pfree((*scan).xs_hitup as *mut c_void);
-            (*scan).xs_hitup = std::ptr::null_mut();
-        }
-        (*o_scan).xs_rowid.isnull = true;
-        false
-    } else {
-        if (*scan).xs_want_itup {
-            fill_itup(scan, tuple, descr, csn, &mut hint);
-        } else {
-            fill_hitup(scan, tuple, descr, csn, &mut hint);
-        }
-        true
-    }
-}
-
-unsafe extern "C-unwind" fn orioledb_amgetbitmap(scan: pg_sys::IndexScanDesc, tbm: *mut pg_sys::TIDBitmap) -> i64 {
-    let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
-    if !options.is_null() && !(*options).orioledb_index {
-        return btgetbitmap(scan, tbm);
-    }
-    0
-}
-
-unsafe extern "C-unwind" fn orioledb_amendscan(scan: pg_sys::IndexScanDesc) {
-    let o_scan = scan as *mut OScanState;
-    let options = (*(*scan).indexRelation).rd_options as *mut OBTOptions;
-
-    if !options.is_null() && !(*options).orioledb_index {
-        return btendscan(scan);
-    }
-
-    STOPEVENT(STOPEVENT_SCAN_END, std::ptr::null_mut());
-
-    if !(*o_scan).iterator.is_null() {
-        btree_iterator_free((*o_scan).iterator);
-    }
-    pg_sys::MemoryContextDelete((*o_scan).cxt);
-}
-
-// Parallel scan estimation
-
-#[cfg(any(feature = "pg18", feature = "pg19"))]
-unsafe extern "C-unwind" fn orioledb_amestimateparallelscan(
-    _indexRelation: pg_sys::Relation,
-    _nkeys: c_int,
-    _norderbys: c_int,
-) -> pg_sys::Size {
-    std::mem::size_of::<u8>()
-}
-
-#[cfg(feature = "pg17")]
-unsafe extern "C-unwind" fn orioledb_amestimateparallelscan(
-    _nkeys: c_int,
-    _norderbys: c_int,
-) -> pg_sys::Size {
-    std::mem::size_of::<u8>()
-}
-
-#[cfg(not(any(feature = "pg17", feature = "pg18", feature = "pg19")))]
-unsafe extern "C-unwind" fn orioledb_amestimateparallelscan() -> pg_sys::Size {
-    std::mem::size_of::<u8>()
-}
-
-unsafe extern "C-unwind" fn orioledb_aminitparallelscan(_target: *mut c_void) {}
-
-unsafe extern "C-unwind" fn orioledb_amparallelrescan(_scan: pg_sys::IndexScanDesc) {}
-
-// Bridged Handler Implementation
-
-unsafe fn find_bridged_am(index: pg_sys::Relation) -> *mut pg_sys::IndexAmRoutine {
-    let mut amroutine = std::ptr::null_mut();
-    let mut lc = pg_sys::list_head(bridged_ams);
-    while !lc.is_null() {
-        let bridged = lfirst(lc) as *mut BridgedIndexAmRoutine;
-        if (*bridged).amhandler == (*index).rd_amhandler {
-            amroutine = (*bridged).original_routine;
-            break;
-        }
-        lc = lnext(bridged_ams, lc);
-    }
-    amroutine
-}
-
-unsafe extern "C-unwind" fn bridged_ambuild(
-    heap: pg_sys::Relation,
-    index: pg_sys::Relation,
-    indexInfo: *mut pg_sys::IndexInfo,
-) -> *mut pg_sys::IndexBuildResult {
-    let descr = relation_get_descr(heap);
-    if descr.is_null() {
-        let result = pg_sys::palloc(std::mem::size_of::<pg_sys::IndexBuildResult>()) as *mut pg_sys::IndexBuildResult;
-        (*result).heap_tuples = 0.0;
-        (*result).index_tuples = 0.0;
-        result
-    } else {
-        let amroutine = find_bridged_am(index);
-        ((*amroutine).ambuild.unwrap())(heap, index, indexInfo)
-    }
-}
-
-unsafe extern "C-unwind" fn bridged_aminsert(
-    rel: pg_sys::Relation,
-    values: *mut pg_sys::Datum,
-    isnull: *mut bool,
-    tupleid: pg_sys::ItemPointer,
-    heapRel: pg_sys::Relation,
-    checkUnique: pg_sys::IndexUniqueCheck::Type,
-    indexUnchanged: bool,
-    indexInfo: *mut pg_sys::IndexInfo,
-) -> bool {
-    let mut oids = ORelOids {
-        datoid: pg_sys::InvalidOid,
-        reloid: pg_sys::InvalidOid,
-        relnode: pg_sys::InvalidOid,
-    };
-    ORelOidsSetFromRel(&mut oids, heapRel);
-    let descr = o_fetch_table_descr(oids);
-
-    let rowid = pg_sys::pg_detoast_datum(tupleid as *mut pg_sys::varlena);
-    let mut p = (rowid as *mut c_char).add(pg_sys::MAXALIGN(pg_sys::VARHDRSZ as usize)) as *mut c_void;
-
-    let primary = GET_PRIMARY(descr);
-    let bridge_data = if !(*primary).primaryIsCtid {
-        p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumNonCtid>()));
-        p as *mut ORowIdBridgeData
-    } else {
-        p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<ORowIdAddendumCtid>()));
-        p = p.add(pg_sys::MAXALIGN(std::mem::size_of::<pg_sys::ItemPointerData>()));
-        p as *mut ORowIdBridgeData
-    };
-
-    if !(*bridge_data).bridgeChanged {
-        return true;
-    }
-
-    let target_tupleid = PointerGetDatum(&mut (*bridge_data).bridgeCtid as *mut pg_sys::ItemPointerData as pg_sys::Pointer);
-
-    let amroutine = find_bridged_am(rel);
-    ((*amroutine).aminsert.unwrap())(
-        rel,
-        values,
-        isnull,
-        target_tupleid.value() as *mut pg_sys::ItemPointerData,
-        heapRel,
-        checkUnique,
-        indexUnchanged,
-        indexInfo,
-    )
-}
-
-unsafe extern "C-unwind" fn bridged_ambeginscan(
-    rel: pg_sys::Relation,
-    nkeys: c_int,
-    norderbys: c_int,
-) -> pg_sys::IndexScanDesc {
-    let amroutine = find_bridged_am(rel);
-    ((*amroutine).ambeginscan.unwrap())(rel, nkeys, norderbys)
+/*-------------------------------------------------------------------------
+ *
+ * handler.c
+ *		Implementation of btree index access method handler and
+ *		generic bridged index access method handler
+ *
+ * Copyright (c) 2021-2026, Oriole DB Inc.
+ * Copyright (c) 2025-2026, Supabase Inc.
+ *
+ * IDENTIFICATION
+ *	  contrib/orioledb/src/indexam/handler.c
+ *
+ *-------------------------------------------------------------------------
+ */
+
+#include "postgres.h"
+
+#include "orioledb.h"
+
+#include "btree/iterator.h"
+#include "btree/modify.h"
+#include "catalog/indices.h"
+#include "catalog/o_tables.h"
+#include "indexam/handler.h"
+#include "tableam/index_scan.h"
+#include "tableam/operations.h"
+#include "tableam/tree.h"
+#include "tuple/slot.h"
+#include "utils/compress.h"
+#include "utils/planner.h"
+#include "utils/relcache.h"
+#include "utils/stopevent.h"
+
+#include "access/amapi.h"
+#include "access/relation.h"
+#include "commands/progress.h"
+#include "commands/vacuum.h"
+#include "nodes/pathnodes.h"
+#include "optimizer/optimizer.h"
+#include "parser/parsetree.h"
+#include "utils/fmgroids.h"
+#include "utils/index_selfuncs.h"
+#include "utils/selfuncs.h"
+#include "utils/syscache.h"
+#include "utils/lsyscache.h"
+#include "nodes/pg_list.h"
+
+#include <math.h>
+
+#define DEFAULT_PAGE_CPU_MULTIPLIER 50.0
+
+static IndexBuildResult *orioledb_ambuild(Relation heap, Relation index, IndexInfo *indexInfo);
+static void orioledb_amreuse(Relation index);
+static void orioledb_ambuildempty(Relation index);
+static bool orioledb_aminsert(Relation rel, Datum *values, bool *isnull,
+							  Datum tupleid, Relation heapRel,
+							  IndexUniqueCheck checkUnique,
+							  bool indexUnchanged,
+							  IndexInfo *indexInfo);
+static bool orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
+							  Datum *values, bool *isnull, Datum tupleid,
+							  Datum *valuesOld, bool *isnullOld,
+							  Datum oldTupleid,
+							  Relation heapRel,
+							  IndexUniqueCheck checkUnique,
+							  bool indexUnchanged,
+							  IndexInfo *indexInfo);
+static bool orioledb_amdelete(Relation rel,
+							  Datum *values, bool *isnull,
+							  Datum tupleid,
+							  Relation heapRel,
+							  IndexInfo *indexInfo);
+static IndexBulkDeleteResult *orioledb_ambulkdelete(IndexVacuumInfo *info,
+													IndexBulkDeleteResult *stats,
+													IndexBulkDeleteCallback callback,
+													void *callback_state);
+static IndexBulkDeleteResult *orioledb_amvacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stats);
+static bool orioledb_amcanreturn(Relation index, int attno);
+static void orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
+									Cost *indexStartupCost, Cost *indexTotalCost,
+									Selectivity *indexSelectivity, double *indexCorrelation,
+									double *indexPages);
+static bytea *orioledb_amoptions(Datum reloptions, bool validate);
+static bool orioledb_amproperty(Oid index_oid, int attno, IndexAMProperty prop,
+								const char *propname, bool *res, bool *isnull);
+static char *orioledb_ambuildphasename(int64 phasenum);
+static bool orioledb_amvalidate(Oid opclassoid);
+static void orioledb_amadjustmembers(Oid opfamilyoid, Oid opclassoid,
+									 List *operators, List *functions);
+static IndexScanDesc orioledb_ambeginscan(Relation rel, int nkeys, int norderbys);
+static void orioledb_amrescan(IndexScanDesc scan, ScanKey scankey,
+							  int nscankeys, ScanKey orderbys, int norderbys);
+static bool orioledb_amgettuple(IndexScanDesc scan, ScanDirection dir);
+static int64 orioledb_amgetbitmap(IndexScanDesc scan, TIDBitmap *tbm);
+static void orioledb_amendscan(IndexScanDesc scan);
+#if PG_VERSION_NUM >= 180000
+static Size orioledb_amestimateparallelscan(Relation indexRelation, int nkeys,
+											int norderbys);
+#elif PG_VERSION_NUM >= 170000
+static Size orioledb_amestimateparallelscan(int nkeys, int norderbys);
+#else
+static Size orioledb_amestimateparallelscan(void);
+#endif
+static void orioledb_aminitparallelscan(void *target);
+static void orioledb_amparallelrescan(IndexScanDesc scan);
+
+static IndexBuildResult *bridged_ambuild(Relation heap, Relation index, IndexInfo *indexInfo);
+static bool bridged_aminsert(Relation rel, Datum *values, bool *isnull,
+							 Datum tupleid, Relation heapRel,
+							 IndexUniqueCheck checkUnique,
+							 bool indexUnchanged,
+							 IndexInfo *indexInfo);
+static IndexScanDesc bridged_ambeginscan(Relation rel, int nkeys, int norderbys);
+
+typedef struct BridgedIndexAmRoutine
+{
+	IndexAmRoutine *original_routine;
+	IndexAmRoutine routine;
+	Oid			amhandler;
+} BridgedIndexAmRoutine;
+
+static List *bridged_ams = NIL;
+
+static IndexAmRoutine *
+orioledb_btree_handler(void)
+{
+	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
+
+	orioledb_check_shmem();
+
+	amroutine->amstrategies = BTMaxStrategyNumber;
+	amroutine->amsupport = BTNProcs;
+	amroutine->amoptsprocnum = BTOPTIONS_PROC;
+	amroutine->amcanorder = true;
+	amroutine->amcanorderbyop = false;
+	amroutine->amcanbackward = false;
+	amroutine->amcanunique = true;
+	amroutine->amcanmulticol = true;
+	amroutine->amoptionalkey = true;
+	amroutine->amsearcharray = true;
+	amroutine->amsearchnulls = true;
+	amroutine->amstorage = false;
+	amroutine->amclusterable = true;
+	amroutine->ampredlocks = true;
+	amroutine->amcanparallel = false;
+	amroutine->amcaninclude = true;
+	amroutine->amusemaintenanceworkmem = false;
+	amroutine->amsummarizing = false;
+	amroutine->ammvccaware = true;
+	amroutine->amparallelvacuumoptions =
+		VACUUM_OPTION_PARALLEL_BULKDEL | VACUUM_OPTION_PARALLEL_COND_CLEANUP;
+	amroutine->amkeytype = InvalidOid;
+
+	amroutine->ambuild = orioledb_ambuild;
+	amroutine->amreuse = orioledb_amreuse;
+	amroutine->ambuildempty = orioledb_ambuildempty;
+	amroutine->aminsert = NULL;
+	amroutine->aminsertextended = orioledb_aminsert;
+	amroutine->amupdate = orioledb_amupdate;
+	amroutine->amdelete = orioledb_amdelete;
+	amroutine->ambulkdelete = orioledb_ambulkdelete;
+	amroutine->amvacuumcleanup = orioledb_amvacuumcleanup;
+	amroutine->amcanreturn = orioledb_amcanreturn;
+	amroutine->amcostestimate = orioledb_amcostestimate;
+#if PG_VERSION_NUM >= 180000
+	amroutine->amgettreeheight = NULL;
+#endif
+	amroutine->amoptions = orioledb_amoptions;
+	amroutine->amproperty = orioledb_amproperty;
+	amroutine->ambuildphasename = orioledb_ambuildphasename;
+	amroutine->amvalidate = orioledb_amvalidate;
+	amroutine->amadjustmembers = orioledb_amadjustmembers;
+	amroutine->ambeginscan = orioledb_ambeginscan;
+	amroutine->amrescan = orioledb_amrescan;
+	amroutine->amgettuple = orioledb_amgettuple;
+	amroutine->amgetbitmap = orioledb_amgetbitmap;
+	amroutine->amendscan = orioledb_amendscan;
+	amroutine->ammarkpos = NULL;
+	amroutine->amrestrpos = NULL;
+	amroutine->amestimateparallelscan = orioledb_amestimateparallelscan;
+	amroutine->aminitparallelscan = orioledb_aminitparallelscan;
+	amroutine->amparallelrescan = orioledb_amparallelrescan;
+
+	return amroutine;
+}
+
+IndexAmRoutine *
+orioledb_indexam_routine_hook(Oid tamoid, Oid amhandler)
+{
+	static Oid	orioledb_tam_oid = InvalidOid;
+
+	if (tamoid == HEAP_TABLE_AM_OID)
+		return NULL;
+
+	if (!OidIsValid(orioledb_tam_oid))
+		orioledb_tam_oid = GetSysCacheOid1(AMNAME, Anum_pg_am_oid,
+										   CStringGetDatum("orioledb"));
+
+	if (tamoid == orioledb_tam_oid)
+	{
+		if (amhandler == F_BTHANDLER)
+		{
+			return orioledb_btree_handler();
+		}
+		else
+		{
+			IndexAmRoutine *amroutine = NULL;
+			ListCell   *lc;
+
+			foreach(lc, bridged_ams)
+			{
+				BridgedIndexAmRoutine *bridged = lfirst(lc);
+
+				if (bridged->amhandler == amhandler)
+				{
+					amroutine = palloc0(sizeof(IndexAmRoutine));
+					memcpy(amroutine, &bridged->routine, sizeof(IndexAmRoutine));
+					break;
+				}
+			}
+
+			if (amroutine == NULL)
+			{
+				BridgedIndexAmRoutine *bridged;
+				MemoryContext old_mcxt;
+				Datum		datum;
+
+				old_mcxt = MemoryContextSwitchTo(TopMemoryContext);
+				bridged = palloc0(sizeof(BridgedIndexAmRoutine));
+				datum = OidFunctionCall0(amhandler);
+				bridged_ams = lappend(bridged_ams, bridged);
+				bridged->amhandler = amhandler;
+				bridged->original_routine = (IndexAmRoutine *) DatumGetPointer(datum);
+				bridged->routine = *bridged->original_routine;
+				bridged->routine.ambuild = bridged_ambuild;
+				bridged->routine.aminsertextended = bridged_aminsert;
+				bridged->routine.ambeginscan = bridged_ambeginscan;
+				MemoryContextSwitchTo(old_mcxt);
+				amroutine = palloc0(sizeof(IndexAmRoutine));
+				memcpy(amroutine, &bridged->routine, sizeof(IndexAmRoutine));
+			}
+			return amroutine;
+		}
+	}
+
+	return NULL;
+}
+
+
+/* Check if name is used */
+
+
+static void
+orioledb_amreuse(Relation index)
+{
+	if (o_reuse_indices)
+	{
+		o_reuse_indices = lappend_oid(o_reuse_indices, index->rd_id);
+	}
+	else
+	{
+		o_reuse_indices = list_make1_oid(index->rd_id);
+	}
+}
+
+
+static IndexBuildResult *
+orioledb_ambuild(Relation heap, Relation index, IndexInfo *indexInfo)
+{
+	bool		reindex = false;
+	IndexBuildResult *result;
+	String	   *relname;
+	OBTOptions *options = (OBTOptions *) index->rd_options;
+
+	if (options && !options->orioledb_index)
+	{
+		OTableDescr *descr;
+
+		descr = relation_get_descr(heap);
+
+		/*
+		 * During rewrite we are ignoring first ambuild, because we need descr
+		 * to exist in orioledb_index_build_range_scan, but descr for table
+		 * created later. So we performing new reindex_index in
+		 * redefine_indices after descr created.
+		 */
+		if (descr == NULL)
+		{
+			result = (IndexBuildResult *) palloc(sizeof(IndexBuildResult));
+
+			result->heap_tuples = 0.0;
+			result->index_tuples = 0.0;
+
+			return result;
+		}
+		else
+			return btbuild(heap, index, indexInfo);
+	}
+
+	relname = makeString(index->rd_rel->relname.data);
+	if (!in_nontransactional_truncate && list_member(reindex_list, relname))
+	{
+		reindex = true;
+		reindex_list = list_delete(reindex_list, relname);
+	}
+
+	(void) btbuild(heap, index, indexInfo);
+
+	result = (IndexBuildResult *) palloc(sizeof(IndexBuildResult));
+
+	result->heap_tuples = 0.0;
+	result->index_tuples = 0.0;
+
+
+	if (in_nontransactional_truncate || !OidIsValid(o_saved_relrewrite))
+	{
+		ORelOids	tbl_oids;
+		OTable	   *o_table;
+
+		ORelOidsSetFromRel(tbl_oids, heap);
+		o_table = o_tables_get(tbl_oids);
+
+		if (index->rd_index->indisprimary && o_table->has_primary)
+		{
+			/* If table already has primary index, redefine it */
+			drop_primary_index(heap, o_table);
+			redefine_pkey_for_rel(heap);
+		}
+		else
+		{
+			if (!in_nontransactional_truncate)
+				o_define_index_validate(tbl_oids, index, indexInfo, NULL);
+			o_define_index(heap, index, InvalidOid, reindex, InvalidIndexNumber,
+						   InvalidOid, result);
+		}
+	}
+
+	return result;
+}
+
+static void
+orioledb_ambuildempty(Relation index)
+{
+	btbuildempty(index);
+}
+
+static OBTreeModifyCallbackAction
+o_insert_callback(BTreeDescr *descr, OTuple tup, OTuple *newtup,
+				  OXid oxid, OTupleXactInfo xactInfo,
+				  BTreeLeafTupleDeletedStatus deleted,
+				  UndoLocation location, RowLockMode *lock_mode,
+				  BTreeLocationHint *hint, void *arg)
+{
+	OTableSlot *oslot = (OTableSlot *) arg;
+
+	if (descr->type == oIndexPrimary &&
+		XACT_INFO_OXID_IS_CURRENT(xactInfo))
+	{
+		OIndexDescr *id = (OIndexDescr *) descr->arg;
+
+		o_tuple_set_version(&id->leafSpec, newtup,
+							o_tuple_get_version(tup) + 1);
+		oslot->tuple = *newtup;
+	}
+	return OBTreeCallbackActionUpdate;
+}
+
+static void
+o_report_duplicate(Relation rel, OIndexDescr *id, TupleTableSlot *slot)
+{
+	bool		is_ctid = id->primaryIsCtid;
+	bool		is_primary = id->desc.type == oIndexPrimary;
+
+	if (is_primary && is_ctid)
+	{
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
+						errmsg("ctid index key duplicate.")));
+	}
+	else
+	{
+		StringInfo	str = makeStringInfo();
+		int			i;
+
+		appendStringInfo(str, "(");
+		for (i = 0; i < id->nKeyFields; i++)
+		{
+			if (i != 0)
+				appendStringInfo(str, ", ");
+			appendStringInfo(str, "%s",
+							 TupleDescAttr(id->nonLeafTupdesc, i)->attname.data);
+		}
+		appendStringInfo(str, ")=");
+
+		slot_getallattrs(slot);
+
+		appendStringInfo(str, "(");
+		for (i = 0; i < id->nUniqueFields; i++)
+		{
+			Datum		value = slot->tts_values[i];
+			bool		isnull = slot->tts_isnull[i];
+
+			if (i != 0)
+				appendStringInfo(str, ", ");
+			if (isnull)
+				appendStringInfo(str, "null");
+			else
+			{
+				Oid			typoutput;
+				bool		typisvarlena;
+				char	   *res;
+
+				getTypeOutputInfo(TupleDescAttr(id->nonLeafTupdesc, i)->atttypid,
+								  &typoutput, &typisvarlena);
+				res = OidOutputFunctionCall(typoutput, value);
+				appendStringInfo(str, "%s", res);
+			}
+		}
+		appendStringInfo(str, ")");
+
+		ereport(ERROR,
+				(errcode(ERRCODE_UNIQUE_VIOLATION),
+				 errmsg("duplicate key value violates unique "
+						"constraint \"%s\"", id->name.data),
+				 errdetail("Key %s already exists.", str->data),
+				 errtableconstraint(rel, id->desc.type == oIndexPrimary ?
+									"pk" : "sk")));
+	}
+}
+
+
+static void
+append_rowid_values(OIndexDescr *id,
+					TupleDesc pk_tupdesc, OTupleFixedFormatSpec *pk_spec,
+					Datum pkDatum, Datum *values, bool *isnull,
+					CommitSeqNo *csn, uint32 *version)
+{
+	bytea	   *rowid;
+	Pointer		p;
+
+	rowid = DatumGetByteaP(pkDatum);
+	p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
+
+	if (!id->primaryIsCtid)
+	{
+		ORowIdAddendumNonCtid *add;
+		OTuple		tuple;
+
+		add = (ORowIdAddendumNonCtid *) p;
+		p += MAXALIGN(sizeof(ORowIdAddendumNonCtid));
+		*csn = add->csn;
+
+		tuple.data = p;
+		if (id->bridging)
+			tuple.data += MAXALIGN(sizeof(ORowIdBridgeData));
+
+		tuple.formatFlags = add->flags;
+		*version = o_tuple_get_version(tuple);
+
+		if (id->nPrimaryFields <= id->nFields)
+		{
+			int			i;
+			int			pk_from;
+
+			pk_from = id->nFields - id->nPrimaryFields;
+
+			/* Amount of index fields checked in o_define_index_validate */
+			for (i = 0; i < id->nPrimaryFields; i++)
+			{
+				AttrNumber	attnum = id->primaryFieldsAttnums[i] - 1;
+
+				if (attnum >= pk_from)
+				{
+					values[attnum] = o_fastgetattr(tuple, i + 1, pk_tupdesc, pk_spec, &isnull[attnum]);
+				}
+			}
+		}
+	}
+	else
+	{
+		ORowIdAddendumCtid *add;
+		AttrNumber	attnum = id->nFields - 1;
+
+		add = (ORowIdAddendumCtid *) p;
+		*csn = add->csn;
+		*version = add->version;
+		p += MAXALIGN(sizeof(ORowIdAddendumCtid));
+		values[attnum] = PointerGetDatum(p);
+		isnull[attnum] = false;
+	}
+}
+
+static void
+detoast_passed_values(OIndexDescr *index_descr, Datum *values, bool *isnull, bool *vfree)
+{
+	int			i;
+	int			pk_from;
+
+	pk_from = index_descr->nFields - index_descr->nPrimaryFields;
+
+	for (i = 0; i < pk_from; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(index_descr->nonLeafTupdesc, i);
+		Datum		tmp;
+
+		if (!isnull[i] && att->attlen == -1 &&
+			VARATT_IS_EXTENDED(values[i]))
+		{
+			tmp = PointerGetDatum(PG_DETOAST_DATUM(values[i]));
+			Assert(values[i] != tmp);
+			values[i] = tmp;
+			vfree[i] = true;
+		}
+	}
+}
+
+static bool
+orioledb_aminsert(Relation rel, Datum *values, bool *isnull,
+				  Datum tupleid, Relation heapRel,
+				  IndexUniqueCheck checkUnique,
+				  bool indexUnchanged,
+				  IndexInfo *indexInfo)
+{
+	ORelOids	oids;
+	OIndexType	ix_type;
+	OIndexDescr *index_descr;
+	OTableDescr *descr;
+	OIndexNumber ix_num;
+	OBTreeModifyResult iresult;
+	bool		success;
+	BTreeModifyCallbackInfo callbackInfo =
+	{
+		.waitCallback = NULL,
+		.modifyDeletedCallback = o_insert_callback,
+		.modifyCallback = NULL,
+		.needsUndoForSelfCreated = true
+	};
+	OSnapshot	o_snapshot;
+	OXid		oxid;
+	TupleTableSlot *slot;
+	uint32		version;
+	OTuple		tuple;
+	CommitSeqNo csn;
+	OBTOptions *options = (OBTOptions *) rel->rd_options;
+
+	if (options && !options->orioledb_index)
+	{
+		bytea	   *rowid;
+		Pointer		p;
+		bool		result;
+		ORowIdBridgeData *bridgeData;
+
+		ORelOidsSetFromRel(oids, heapRel);
+
+		descr = o_fetch_table_descr(oids);
+		Assert(descr != NULL);
+
+		rowid = DatumGetByteaP(tupleid);
+		p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
+
+		if (!GET_PRIMARY(descr)->primaryIsCtid)
+		{
+			p += MAXALIGN(sizeof(ORowIdAddendumNonCtid));
+			bridgeData = (ORowIdBridgeData *) p;
+		}
+		else
+		{
+			p += MAXALIGN(sizeof(ORowIdAddendumCtid));
+			p += MAXALIGN(sizeof(ItemPointerData));
+			bridgeData = (ORowIdBridgeData *) p;
+		}
+		tupleid = PointerGetDatum(&bridgeData->bridgeCtid);
+
+		if (!indexUnchanged)
+			result = btinsert(rel, values, isnull, tupleid, heapRel,
+							  checkUnique, indexUnchanged, indexInfo);
+		else
+			result = true;		/* FIXME: Wrong assumption? */
+
+		return result;
+	}
+
+	if (OidIsValid(rel->rd_rel->relrewrite))
+		return true;
+
+	if (rel->rd_index->indisprimary)
+		return true;
+
+	ORelOidsSetFromRel(oids, rel);
+	ix_type = o_index_rel_get_ix_type(rel);
+	index_descr = o_fetch_index_descr(oids, ix_type, false, NULL);
+	Assert(index_descr != NULL);
+	descr = o_fetch_table_descr(index_descr->tableOids);
+	Assert(descr != NULL);
+	/* Find ix_num */
+	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
+	{
+		OIndexDescr *index;
+
+		index = descr->indices[ix_num];
+		if (index->oids.reloid == rel->rd_rel->oid)
+			break;
+	}
+	Assert(ix_num < descr->nIndices);
+
+	if (index_descr->duplicates != NIL)
+	{
+		ListCell   *lc = NULL;
+		List	   *duplicate = NIL;
+		int			cur_attr;
+		int			i;
+
+		/* Remove duplicate column values to store in our index */
+
+		if (index_descr->duplicates != NIL)
+			lc = list_head(index_descr->duplicates);
+		if (lc != NULL)
+			duplicate = (List *) lfirst(lc);
+
+		cur_attr = 0;
+		for (i = 0; i < rel->rd_att->natts; i++)
+		{
+			if (duplicate != NIL && linitial_int(duplicate) == cur_attr)
+			{
+				lc = lnext(index_descr->duplicates, lc);
+				if (lc != NULL)
+					duplicate = (List *) lfirst(lc);
+				else
+					duplicate = NIL;
+			}
+			else
+			{
+				values[cur_attr] = values[i];
+				cur_attr++;
+			}
+		}
+	}
+	append_rowid_values(index_descr,
+						GET_PRIMARY(descr)->nonLeafTupdesc,
+						&GET_PRIMARY(descr)->nonLeafSpec,
+						tupleid, values, isnull,
+						&csn, &version);
+
+	tuple = o_form_tuple(index_descr->leafTupdesc, &index_descr->leafSpec, version, values, isnull, NULL);
+	slot = index_descr->old_leaf_slot;
+	tts_orioledb_store_tuple(slot, tuple, descr, csn, ix_num, false, NULL);
+	callbackInfo.arg = slot;
+
+	fill_current_oxid_osnapshot(&oxid, &o_snapshot);
+
+	iresult = o_tbl_index_insert(descr, descr->indices[ix_num], &tuple, slot,
+								 oxid, o_snapshot.csn, &callbackInfo,
+								 checkUnique);
+
+	if (checkUnique != UNIQUE_CHECK_EXISTING)
+		success = (iresult == OBTreeModifyResultInserted);
+	else
+		success = (iresult == OBTreeModifyResultNotFound);
+
+	if (!success)
+	{
+		if (checkUnique == UNIQUE_CHECK_YES || checkUnique == UNIQUE_CHECK_EXISTING)
+			o_report_duplicate(heapRel, descr->indices[ix_num], slot);
+	}
+
+	if (tuple.data)
+		pfree(tuple.data);
+
+	return success;
+}
+
+static bool
+orioledb_amupdate(Relation rel, bool new_valid, bool old_valid,
+				  Datum *values, bool *isnull, Datum tupleid,
+				  Datum *valuesOld, bool *isnullOld, Datum oldTupleid,
+				  Relation heapRel,
+				  IndexUniqueCheck checkUnique,
+				  bool indexUnchanged,
+				  IndexInfo *indexInfo)
+{
+	OTableModifyResult result;
+	ORelOids	oids;
+	OIndexType	ix_type;
+	OIndexDescr *index_descr;
+	OTableDescr *descr;
+	OIndexNumber ix_num;
+	CommitSeqNo csn;
+	OSnapshot	oSnapshot;
+	OXid		oxid;
+	TupleTableSlot *new_slot;
+	TupleTableSlot *old_slot;
+	uint32		version;
+	OTuple		new_tuple;
+	OTuple		old_tuple;
+	bool	   *vfree;
+	int			i;
+	OBTOptions *options = (OBTOptions *) rel->rd_options;
+
+	if (options && !options->orioledb_index)
+	{
+		bool		satisfiesConstraint;
+
+		/*
+		 * Call index_insert here, to mimic non MVCC aware part of
+		 * ExecUpdateIndexTuples
+		 */
+		satisfiesConstraint = index_insert(rel, /* index relation */
+										   values,	/* array of index Datums */
+										   isnull,	/* null flags */
+										   tupleid, /* tid of heap tuple */
+										   heapRel, /* heap relation */
+										   checkUnique, /* type of uniqueness
+														 * check to do */
+										   indexUnchanged,	/* UPDATE without
+															 * logical change? */
+										   indexInfo);	/* index AM may need
+														 * this */
+
+		return satisfiesConstraint;
+	}
+
+	if (rel->rd_index->indisprimary)
+		return true;
+
+	ORelOidsSetFromRel(oids, rel);
+	ix_type = o_index_rel_get_ix_type(rel);
+	index_descr = o_fetch_index_descr(oids, ix_type, false, NULL);
+	Assert(index_descr != NULL);
+	descr = o_fetch_table_descr(index_descr->tableOids);
+	Assert(descr != NULL);
+
+	/* Find ix_num */
+	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
+	{
+		OIndexDescr *index;
+
+		index = descr->indices[ix_num];
+		if (index->oids.reloid == rel->rd_rel->oid)
+			break;
+	}
+	Assert(ix_num < descr->nIndices);
+
+	append_rowid_values(index_descr,
+						GET_PRIMARY(descr)->nonLeafTupdesc,
+						&GET_PRIMARY(descr)->nonLeafSpec,
+						oldTupleid, valuesOld, isnullOld,
+						&csn, &version);
+	vfree = palloc0(sizeof(bool) * index_descr->leafTupdesc->natts);
+	/* TODO: Probably there is a better way than detoasting here */
+	detoast_passed_values(index_descr, valuesOld, isnullOld, vfree);
+	old_tuple = o_form_tuple(index_descr->leafTupdesc, &index_descr->leafSpec,
+							 version, valuesOld, isnullOld, NULL);
+	old_slot = index_descr->old_leaf_slot;
+	tts_orioledb_store_non_leaf_tuple(old_slot, old_tuple, descr, csn, ix_num, false, NULL);
+
+	append_rowid_values(index_descr,
+						GET_PRIMARY(descr)->nonLeafTupdesc,
+						&GET_PRIMARY(descr)->nonLeafSpec,
+						tupleid, values, isnull,
+						&csn, &version);
+	new_tuple = o_form_tuple(index_descr->leafTupdesc, &index_descr->leafSpec, version, values, isnull, NULL);
+	new_slot = index_descr->new_leaf_slot;
+	tts_orioledb_store_non_leaf_tuple(new_slot, new_tuple, descr, csn, ix_num, false, NULL);
+
+	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
+	result = o_update_secondary_index(index_descr, ix_num,
+									  new_valid, old_valid,
+									  new_slot, new_tuple,
+									  old_slot, oxid, oSnapshot.csn,
+									  checkUnique);
+
+	for (i = 0; i < index_descr->leafTupdesc->natts; i++)
+	{
+		if (vfree[i])
+			pfree(DatumGetPointer(valuesOld[i]));
+	}
+	pfree(vfree);
+
+	if (!result.success)
+	{
+		switch (result.action)
+		{
+			case BTreeOperationUpdate:
+				{
+					StringInfo	str = makeStringInfo();
+
+					if (result.failedIxNum == PrimaryIndexNumber)
+						break;	/* it is ok */
+
+					appendStringInfo(str, "(");
+					for (i = 0; i < index_descr->nUniqueFields; i++)
+					{
+						if (i != 0)
+							appendStringInfo(str, ", ");
+						if (isnull[i])
+							appendStringInfo(str, "null");
+						else
+						{
+							Oid			typoutput;
+							bool		typisvarlena;
+							char	   *res;
+
+							getTypeOutputInfo(TupleDescAttr(index_descr->leafTupdesc, i)->atttypid,
+											  &typoutput, &typisvarlena);
+							res = OidOutputFunctionCall(typoutput, valuesOld[i]);
+							appendStringInfo(str, "'%s'", res);
+						}
+					}
+
+					if (old_tuple.data)
+						pfree(old_tuple.data);
+					if (new_tuple.data)
+						pfree(new_tuple.data);
+
+					appendStringInfo(str, ")");
+					ereport(ERROR,
+							(errcode(ERRCODE_INTERNAL_ERROR),
+							 errmsg("unable to remove tuple from secondary index in \"%s\"",
+									RelationGetRelationName(rel)),
+							 errdetail("Unable to remove %s from index \"%s\"",
+									   str->data,
+									   index_descr->name.data),
+							 errtableconstraint(rel, "sk")));
+					break;
+				}
+			case BTreeOperationInsert:
+				if (checkUnique == UNIQUE_CHECK_YES || checkUnique == UNIQUE_CHECK_EXISTING)
+					o_report_duplicate(heapRel, index_descr, new_slot);
+				break;
+			default:
+				if (old_tuple.data)
+					pfree(old_tuple.data);
+				if (new_tuple.data)
+					pfree(new_tuple.data);
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("Unsupported BTreeOperationType.")));
+				break;
+		}
+	}
+
+	if (old_tuple.data)
+		pfree(old_tuple.data);
+	if (new_tuple.data)
+		pfree(new_tuple.data);
+
+	return result.success;
+}
+static bool
+orioledb_amdelete(Relation rel, Datum *values, bool *isnull,
+				  Datum tupleid, Relation heapRel, IndexInfo *indexInfo)
+{
+	OTableModifyResult result;
+	ORelOids	oids;
+	OIndexType	ix_type;
+	OIndexDescr *index_descr;
+	OTableDescr *descr;
+	OIndexNumber ix_num;
+	CommitSeqNo csn;
+	OSnapshot	oSnapshot;
+	OXid		oxid;
+	uint32		version;
+	TupleTableSlot *slot;
+	OTuple		tuple;
+	bool	   *vfree;
+	int			i;
+	OBTOptions *options = (OBTOptions *) rel->rd_options;
+
+	if (options && !options->orioledb_index)
+		return true;
+
+	if (rel->rd_index->indisprimary)
+		return true;
+
+	ORelOidsSetFromRel(oids, rel);
+	ix_type = o_index_rel_get_ix_type(rel);
+	index_descr = o_fetch_index_descr(oids, ix_type, false, NULL);
+	Assert(index_descr != NULL);
+	descr = o_fetch_table_descr(index_descr->tableOids);
+	Assert(descr != NULL);
+
+	/* Find ix_num */
+	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
+	{
+		OIndexDescr *index;
+
+		index = descr->indices[ix_num];
+		if (index->oids.reloid == rel->rd_rel->oid)
+			break;
+	}
+	Assert(ix_num < descr->nIndices);
+
+	slot = index_descr->old_leaf_slot;
+	append_rowid_values(index_descr,
+						GET_PRIMARY(descr)->nonLeafTupdesc,
+						&GET_PRIMARY(descr)->nonLeafSpec,
+						tupleid, values, isnull,
+						&csn, &version);
+	vfree = palloc0(sizeof(bool) * index_descr->nonLeafTupdesc->natts);
+	detoast_passed_values(index_descr, values, isnull, vfree);
+	tuple = o_form_tuple(index_descr->leafTupdesc, &index_descr->leafSpec,
+						 version, values, isnull, NULL);
+	tts_orioledb_store_tuple(slot, tuple, descr, csn, ix_num, false, NULL);
+
+	fill_current_oxid_osnapshot(&oxid, &oSnapshot);
+
+	result = o_tbl_index_delete(index_descr, ix_num, slot, oxid, oSnapshot.csn);
+	for (i = 0; i < index_descr->nonLeafTupdesc->natts; i++)
+	{
+		if (vfree[i])
+			pfree(DatumGetPointer(values[i]));
+	}
+	pfree(vfree);
+
+	if (!result.success)
+	{
+		switch (result.action)
+		{
+			case BTreeOperationUpdate:
+				{
+					StringInfo	str = makeStringInfo();
+
+					if (result.failedIxNum == PrimaryIndexNumber)
+						break;	/* it is ok */
+
+					appendStringInfo(str, "(");
+					for (i = 0; i < index_descr->nUniqueFields; i++)
+					{
+						if (i != 0)
+							appendStringInfo(str, ", ");
+						if (isnull[i])
+							appendStringInfo(str, "null");
+						else
+						{
+							Oid			typoutput;
+							bool		typisvarlena;
+							char	   *res;
+
+							getTypeOutputInfo(TupleDescAttr(index_descr->nonLeafTupdesc, i)->atttypid,
+											  &typoutput, &typisvarlena);
+							res = OidOutputFunctionCall(typoutput, values[i]);
+							appendStringInfo(str, "'%s'", res);
+						}
+					}
+					appendStringInfo(str, ")");
+
+					if (tuple.data)
+						pfree(tuple.data);
+					ereport(ERROR,
+							(errcode(ERRCODE_INTERNAL_ERROR),
+							 errmsg("unable to remove tuple from secondary index in \"%s\"",
+									RelationGetRelationName(rel)),
+							 errdetail("Unable to remove %s from index \"%s\"",
+									   str->data,
+									   index_descr->name.data),
+							 errtableconstraint(rel, "sk")));
+					break;
+				}
+			case BTreeOperationInsert:
+				break;
+			default:
+				if (tuple.data)
+					pfree(tuple.data);
+
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("Unsupported BTreeOperationType.")));
+				break;
+		}
+	}
+
+	if (tuple.data)
+		pfree(tuple.data);
+
+	return result.success;
+}
+
+IndexBulkDeleteResult *
+orioledb_ambulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
+					  IndexBulkDeleteCallback callback, void *callback_state)
+{
+	OBTOptions *options = (OBTOptions *) info->index->rd_options;
+
+	if (options && !options->orioledb_index)
+		return btbulkdelete(info, stats, callback, callback_state);
+
+	/*
+	 * No-op for orioledb-managed indexes: their MVCC and cleanup happen
+	 * inside the orioledb storage layer, not via the standard ambulkdelete
+	 * path.  We must not error here because parallel vacuum iterates every
+	 * index in the relation.
+	 */
+	return stats;
+}
+
+IndexBulkDeleteResult *
+orioledb_amvacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stats)
+{
+	OBTOptions *options = (OBTOptions *) info->index->rd_options;
+
+	if (options && !options->orioledb_index)
+		return btvacuumcleanup(info, stats);
+
+	return stats;
+}
+
+static bool
+orioledb_amcanreturn(Relation index, int attno)
+{
+	OBTOptions *options = (OBTOptions *) index->rd_options;
+
+	if (options && !options->orioledb_index)
+		return btcanreturn(index, attno);
+
+	return true;
+}
+
+/* TODO: Rewrite to be more orioledb-specific */
+static void
+orioledb_amcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
+						Cost *indexStartupCost, Cost *indexTotalCost,
+						Selectivity *indexSelectivity, double *indexCorrelation,
+						double *indexPages)
+{
+	IndexOptInfo *index = path->indexinfo;
+	GenericCosts costs = {0};
+	Oid			relid;
+	AttrNumber	colnum;
+	VariableStatData vardata = {0};
+	double		numIndexTuples;
+	Cost		descentCost;
+	List	   *indexBoundQuals;
+	int			indexcol;
+	bool		eqQualHere;
+	bool		found_saop;
+	bool		found_is_null_op;
+	double		num_sa_scans;
+	ListCell   *lc;
+
+	/*
+	 * For a btree scan, only leading '=' quals plus inequality quals for the
+	 * immediately next attribute contribute to index selectivity (these are
+	 * the "boundary quals" that determine the starting and stopping points of
+	 * the index scan).  Additional quals can suppress visits to the heap, so
+	 * it's OK to count them in indexSelectivity, but they should not count
+	 * for estimating numIndexTuples.  So we must examine the given indexquals
+	 * to find out which ones count as boundary quals.  We rely on the
+	 * knowledge that they are given in index column order.
+	 *
+	 * For a RowCompareExpr, we consider only the first column, just as
+	 * rowcomparesel() does.
+	 *
+	 * If there's a ScalarArrayOpExpr in the quals, we'll actually perform N
+	 * index scans not one, but the ScalarArrayOpExpr's operator can be
+	 * considered to act the same as it normally does.
+	 */
+	indexBoundQuals = NIL;
+	indexcol = 0;
+	eqQualHere = false;
+	found_saop = false;
+	found_is_null_op = false;
+	num_sa_scans = 1;
+	foreach(lc, path->indexclauses)
+	{
+		IndexClause *iclause = lfirst_node(IndexClause, lc);
+		ListCell   *lc2;
+
+		if (indexcol != iclause->indexcol)
+		{
+			/* Beginning of a new column's quals */
+			if (!eqQualHere)
+				break;			/* done if no '=' qual for indexcol */
+			eqQualHere = false;
+			indexcol++;
+			if (indexcol != iclause->indexcol)
+				break;			/* no quals at all for indexcol */
+		}
+
+		/* Examine each indexqual associated with this index clause */
+		foreach(lc2, iclause->indexquals)
+		{
+			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc2);
+			Expr	   *clause = rinfo->clause;
+			Oid			clause_op = InvalidOid;
+			int			op_strategy;
+
+			if (IsA(clause, OpExpr))
+			{
+				OpExpr	   *op = (OpExpr *) clause;
+
+				clause_op = op->opno;
+			}
+			else if (IsA(clause, RowCompareExpr))
+			{
+				RowCompareExpr *rc = (RowCompareExpr *) clause;
+
+				clause_op = linitial_oid(rc->opnos);
+			}
+			else if (IsA(clause, ScalarArrayOpExpr))
+			{
+				ScalarArrayOpExpr *saop = (ScalarArrayOpExpr *) clause;
+				Node	   *other_operand = (Node *) lsecond(saop->args);
+#if PG_VERSION_NUM >= 170000
+				int			alength = estimate_array_length(root, other_operand);
+#else
+				int			alength = estimate_array_length(other_operand);
+#endif
+				clause_op = saop->opno;
+				found_saop = true;
+				/* count number of SA scans induced by indexBoundQuals only */
+				if (alength > 1)
+					num_sa_scans *= alength;
+			}
+			else if (IsA(clause, NullTest))
+			{
+				NullTest   *nt = (NullTest *) clause;
+
+				if (nt->nulltesttype == IS_NULL)
+				{
+					found_is_null_op = true;
+					/* IS NULL is like = for selectivity purposes */
+					eqQualHere = true;
+				}
+			}
+			else
+				elog(ERROR, "unsupported indexqual type: %d",
+					 (int) nodeTag(clause));
+
+			/* check for equality operator */
+			if (OidIsValid(clause_op))
+			{
+				op_strategy = get_op_opfamily_strategy(clause_op,
+													   index->opfamily[indexcol]);
+				Assert(op_strategy != 0);	/* not a member of opfamily?? */
+				if (op_strategy == BTEqualStrategyNumber)
+					eqQualHere = true;
+			}
+
+			indexBoundQuals = lappend(indexBoundQuals, rinfo);
+		}
+	}
+
+	/*
+	 * If index is unique and we found an '=' clause for each column, we can
+	 * just assume numIndexTuples = 1 and skip the expensive
+	 * clauselist_selectivity calculations.  However, a ScalarArrayOp or
+	 * NullTest invalidates that theory, even though it sets eqQualHere.
+	 */
+	if (index->unique &&
+		indexcol == index->nkeycolumns - 1 &&
+		eqQualHere &&
+		!found_saop &&
+		!found_is_null_op)
+		numIndexTuples = 1.0;
+	else
+	{
+		List	   *selectivityQuals;
+		Selectivity btreeSelectivity;
+
+		/*
+		 * If the index is partial, AND the index predicate with the
+		 * index-bound quals to produce a more accurate idea of the number of
+		 * rows covered by the bound conditions.
+		 */
+		selectivityQuals = add_predicate_to_index_quals(index, indexBoundQuals);
+
+		btreeSelectivity = clauselist_selectivity(root, selectivityQuals,
+												  index->rel->relid,
+												  JOIN_INNER,
+												  NULL);
+		numIndexTuples = btreeSelectivity * index->rel->tuples;
+
+#if PG_VERSION_NUM >= 170000
+
+		/*
+		 * btree automatically combines individual ScalarArrayOpExpr primitive
+		 * index scans whenever the tuples covered by the next set of array
+		 * keys are close to tuples covered by the current set.  That puts a
+		 * natural ceiling on the worst case number of descents -- there
+		 * cannot possibly be more than one descent per leaf page scanned.
+		 *
+		 * Clamp the number of descents to at most 1/3 the number of index
+		 * pages.  This avoids implausibly high estimates with low selectivity
+		 * paths, where scans usually require only one or two descents.  This
+		 * is most likely to help when there are several SAOP clauses, where
+		 * naively accepting the total number of distinct combinations of
+		 * array elements as the number of descents would frequently lead to
+		 * wild overestimates.
+		 *
+		 * We somewhat arbitrarily don't just make the cutoff the total number
+		 * of leaf pages (we make it 1/3 the total number of pages instead) to
+		 * give the btree code credit for its ability to continue on the leaf
+		 * level with low selectivity scans.
+		 */
+		num_sa_scans = Min(num_sa_scans, ceil(index->pages * 0.3333333));
+		num_sa_scans = Max(num_sa_scans, 1);
+#endif
+
+		/*
+		 * As in genericcostestimate(), we have to adjust for any
+		 * ScalarArrayOpExpr quals included in indexBoundQuals, and then round
+		 * to integer.
+		 */
+		numIndexTuples = rint(numIndexTuples / num_sa_scans);
+	}
+
+	/*
+	 * Now do generic index cost estimation.
+	 */
+	costs.numIndexTuples = numIndexTuples;
+#if PG_VERSION_NUM >= 170000
+	costs.num_sa_scans = num_sa_scans;
+#endif
+
+	genericcostestimate(root, path, loop_count, &costs);
+
+	/*
+	 * Add a CPU-cost component to represent the costs of initial btree
+	 * descent.  We don't charge any I/O cost for touching upper btree levels,
+	 * since they tend to stay in cache, but we still have to do about log2(N)
+	 * comparisons to descend a btree of N leaf tuples.  We charge one
+	 * cpu_operator_cost per comparison.
+	 *
+	 * If there are ScalarArrayOpExprs, charge this once per SA scan.  The
+	 * ones after the first one are not startup cost so far as the overall
+	 * plan is concerned, so add them only to "total" cost.
+	 */
+	if (index->tuples > 1)		/* avoid computing log(0) */
+	{
+		descentCost = ceil(log(index->tuples) / log(2.0)) * cpu_operator_cost;
+		costs.indexStartupCost += descentCost;
+		costs.indexTotalCost += costs.num_sa_scans * descentCost;
+	}
+
+	/*
+	 * Even though we're not charging I/O cost for touching upper btree pages,
+	 * it's still reasonable to charge some CPU cost per page descended
+	 * through.  Moreover, if we had no such charge at all, bloated indexes
+	 * would appear to have the same search cost as unbloated ones, at least
+	 * in cases where only a single leaf page is expected to be visited.  This
+	 * cost is somewhat arbitrarily set at 50x cpu_operator_cost per page
+	 * touched.  The number of such pages is btree tree height plus one (ie,
+	 * we charge for the leaf page too).  As above, charge once per SA scan.
+	 */
+	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+	costs.indexStartupCost += descentCost;
+	costs.indexTotalCost += costs.num_sa_scans * descentCost;
+
+	/*
+	 * If we can get an estimate of the first column's ordering correlation C
+	 * from pg_statistic, estimate the index correlation as C for a
+	 * single-column index, or C * 0.75 for multiple columns. (The idea here
+	 * is that multiple columns dilute the importance of the first column's
+	 * ordering, but don't negate it entirely.  Before 8.0 we divided the
+	 * correlation by the number of columns, but that seems too strong.)
+	 */
+	if (index->indexkeys[0] != 0)
+	{
+		/* Simple variable --- look to stats for the underlying table */
+		RangeTblEntry *rte = planner_rt_fetch(index->rel->relid, root);
+
+		Assert(rte->rtekind == RTE_RELATION);
+		relid = rte->relid;
+		Assert(relid != InvalidOid);
+		colnum = index->indexkeys[0];
+
+		if (get_relation_stats_hook &&
+			(*get_relation_stats_hook) (root, rte, colnum, &vardata))
+		{
+			/*
+			 * The hook took control of acquiring a stats tuple.  If it did
+			 * supply a tuple, it'd better have supplied a freefunc.
+			 */
+			if (HeapTupleIsValid(vardata.statsTuple) &&
+				!vardata.freefunc)
+				elog(ERROR, "no function provided to release variable stats with");
+		}
+		else
+		{
+			vardata.statsTuple = SearchSysCache3(STATRELATTINH,
+												 ObjectIdGetDatum(relid),
+												 Int16GetDatum(colnum),
+												 BoolGetDatum(rte->inh));
+			vardata.freefunc = ReleaseSysCache;
+		}
+	}
+	else
+	{
+		/* Expression --- maybe there are stats for the index itself */
+		relid = index->indexoid;
+		colnum = 1;
+
+		if (get_index_stats_hook &&
+			(*get_index_stats_hook) (root, relid, colnum, &vardata))
+		{
+			/*
+			 * The hook took control of acquiring a stats tuple.  If it did
+			 * supply a tuple, it'd better have supplied a freefunc.
+			 */
+			if (HeapTupleIsValid(vardata.statsTuple) &&
+				!vardata.freefunc)
+				elog(ERROR, "no function provided to release variable stats with");
+		}
+		else
+		{
+			vardata.statsTuple = SearchSysCache3(STATRELATTINH,
+												 ObjectIdGetDatum(relid),
+												 Int16GetDatum(colnum),
+												 BoolGetDatum(false));
+			vardata.freefunc = ReleaseSysCache;
+		}
+	}
+
+	if (HeapTupleIsValid(vardata.statsTuple))
+	{
+		Oid			sortop;
+		AttStatsSlot sslot;
+
+		sortop = get_opfamily_member(index->opfamily[0],
+									 index->opcintype[0],
+									 index->opcintype[0],
+									 BTLessStrategyNumber);
+		if (OidIsValid(sortop) &&
+			get_attstatsslot(&sslot, vardata.statsTuple,
+							 STATISTIC_KIND_CORRELATION, sortop,
+							 ATTSTATSSLOT_NUMBERS))
+		{
+			double		varCorrelation;
+
+			Assert(sslot.nnumbers == 1);
+			varCorrelation = sslot.numbers[0];
+
+			if (index->reverse_sort[0])
+				varCorrelation = -varCorrelation;
+
+			if (index->nkeycolumns > 1)
+				costs.indexCorrelation = varCorrelation * 0.75;
+			else
+				costs.indexCorrelation = varCorrelation;
+
+			free_attstatsslot(&sslot);
+		}
+	}
+
+	ReleaseVariableStats(vardata);
+
+	*indexStartupCost = costs.indexStartupCost;
+	*indexTotalCost = costs.indexTotalCost;
+	*indexSelectivity = costs.indexSelectivity;
+	*indexCorrelation = costs.indexCorrelation;
+	*indexPages = costs.numIndexPages;
+}
+
+static void
+validate_index_compress(const char *value)
+{
+	if (value)
+		validate_compress(o_parse_compress(value), "Index");
+}
+
+static bytea *
+orioledb_amoptions(Datum reloptions, bool validate)
+{
+	static bool relopts_set = false;
+	static local_relopts relopts = {0};
+
+	if (!relopts_set)
+	{
+		MemoryContext oldcxt;
+
+		oldcxt = MemoryContextSwitchTo(TopMemoryContext);
+		init_local_reloptions(&relopts, sizeof(OBTOptions));
+
+		add_local_int_reloption(&relopts, "fillfactor",
+								"Packs btree index pages only to "
+								"this percentage",
+								BTREE_DEFAULT_FILLFACTOR, BTREE_MIN_FILLFACTOR,
+								100,
+								offsetof(OBTOptions, bt_options) +
+								offsetof(BTOptions, fillfactor));
+		add_local_real_reloption(&relopts, "vacuum_cleanup_index_scale_factor",
+								 "Deprecated B-Tree parameter.",
+								 -1, 0.0, 1e10,
+								 offsetof(OBTOptions, bt_options) +
+								 offsetof(BTOptions,
+										  vacuum_cleanup_index_scale_factor));
+		add_local_bool_reloption(&relopts, "deduplicate_items",
+								 "Enables \"deduplicate items\" feature for "
+								 "this btree index",
+								 false,
+								 offsetof(OBTOptions, bt_options) +
+								 offsetof(BTOptions, deduplicate_items));
+
+		/* Options for orioledb tables */
+		add_local_string_reloption(&relopts, "compress",
+								   "Compression level of a particular index",
+								   NULL, validate_index_compress, NULL,
+								   offsetof(OBTOptions, compress_offset));
+		add_local_bool_reloption(&relopts, "orioledb_index",
+								 "Use orioledb own implementation of index",
+								 true,
+								 offsetof(OBTOptions, orioledb_index));
+		MemoryContextSwitchTo(oldcxt);
+		relopts_set = true;
+	}
+
+	return (bytea *) build_local_reloptions(&relopts, reloptions, validate);
+}
+
+static bool
+orioledb_amproperty(Oid index_oid, int attno, IndexAMProperty prop,
+					const char *propname, bool *res, bool *isnull)
+{
+	switch (prop)
+	{
+		case AMPROP_RETURNABLE:
+			/* answer only for columns, not AM or whole index */
+			if (attno == 0)
+				return false;
+			/* otherwise, btree can always return data */
+			*res = true;
+			return true;
+
+		default:
+			return false;		/* punt to generic code */
+	}
+}
+
+static char *
+orioledb_ambuildphasename(int64 phasenum)
+{
+	switch (phasenum)
+	{
+		case PROGRESS_CREATEIDX_SUBPHASE_INITIALIZE:
+			return "initializing";
+		case PROGRESS_BTREE_PHASE_INDEXBUILD_TABLESCAN:
+			return "scanning table";
+		case PROGRESS_BTREE_PHASE_PERFORMSORT_1:
+			return "sorting live tuples";
+		case PROGRESS_BTREE_PHASE_PERFORMSORT_2:
+			return "sorting dead tuples";
+		case PROGRESS_BTREE_PHASE_LEAF_LOAD:
+			return "loading tuples in tree";
+		default:
+			return NULL;
+	}
+}
+
+static bool
+orioledb_amvalidate(Oid opclassoid)
+{
+	return true;
+}
+
+static void
+orioledb_amadjustmembers(Oid opfamilyoid, Oid opclassoid, List *operators,
+						 List *functions)
+{
+}
+
+static IndexScanDesc
+orioledb_ambeginscan(Relation rel, int nkeys, int norderbys)
+{
+	OScanState *o_scan;
+	IndexScanDesc scan;
+	ORelOids	oids;
+	OIndexType	ix_type;
+	OIndexDescr *index_descr;
+	OTableDescr *descr;
+	OIndexNumber ix_num;
+	OBTOptions *options = (OBTOptions *) rel->rd_options;
+
+	if (options && !options->orioledb_index)
+	{
+		return btbeginscan(rel, nkeys, norderbys);
+	}
+
+	o_scan = (OScanState *) palloc0(sizeof(OScanState));
+
+	/* get the scan */
+	scan = btbeginscan(rel, nkeys, norderbys);
+	scan->xs_snapshot = NULL;
+	o_scan->scandesc = *scan;
+	pfree(scan);
+
+	scan = &o_scan->scandesc;
+
+	scan->parallel_scan = NULL;
+	scan->xs_temp_snap = false;
+	scan->xs_want_rowid = true;
+
+	ORelOidsSetFromRel(oids, rel);
+	ix_type = o_index_rel_get_ix_type(rel);
+	index_descr = o_fetch_index_descr(oids, ix_type, false, NULL);
+	Assert(index_descr != NULL);
+	descr = o_fetch_table_descr(index_descr->tableOids);
+	Assert(descr != NULL);
+	/* Find ix_num */
+	for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
+	{
+		OIndexDescr *index;
+
+		index = descr->indices[ix_num];
+		if (index->oids.reloid == rel->rd_rel->oid)
+			break;
+	}
+	Assert(ix_num < descr->nIndices);
+	o_scan->ixNum = ix_num;
+
+	o_scan->cxt = AllocSetContextCreate(CurrentMemoryContext,
+										"orioledb_cs plan data",
+										ALLOCSET_DEFAULT_SIZES);
+	return scan;
+}
+
+int
+o_get_num_prefix_exact_keys(ScanKey scankey, int nscankeys)
+{
+	AttrNumber	prevAttr = 0;
+	int			i;
+
+	for (i = 0; i < nscankeys; i++)
+	{
+		if (scankey[i].sk_attno != prevAttr + 1 ||
+			scankey[i].sk_strategy != BTEqualStrategyNumber)
+			break;
+
+		prevAttr = scankey[i].sk_attno;
+	}
+	return i;
+}
+
+int
+o_adjust_num_prefix_exact_keys(BTScanOpaque so, int numPrefixExactKeys)
+{
+	int			adjusted = numPrefixExactKeys;
+
+#if PG_VERSION_NUM >= 180000
+	for (int i = 0; i < so->numArrayKeys; i++)
+	{
+		BTArrayKeyInfo *arrayKey = &so->arrayKeys[i];
+
+		if (arrayKey->num_elems <= 0 && arrayKey->scan_key < adjusted)
+			adjusted = arrayKey->scan_key;
+	}
+#endif
+
+	return adjusted;
+}
+
+static void
+orioledb_amrescan(IndexScanDesc scan, ScanKey scankey, int nscankeys,
+				  ScanKey orderbys, int norderbys)
+{
+	OScanState *o_scan = (OScanState *) scan;
+	OBTOptions *options = (OBTOptions *) scan->indexRelation->rd_options;
+
+	if (options && !options->orioledb_index)
+		return btrescan(scan, scankey, nscankeys, orderbys, norderbys);
+
+	if (o_scan->iterator != NULL)
+		btree_iterator_free(o_scan->iterator);
+	MemoryContextReset(o_scan->cxt);
+	o_scan->iterator = NULL;
+	o_scan->curKeyRangeIsLoaded = false;
+	o_scan->numPrefixExactKeys = o_get_num_prefix_exact_keys(scankey, nscankeys);
+	btrescan(scan, scankey, nscankeys, orderbys, norderbys);
+}
+
+static void
+fill_hitup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
+		   CommitSeqNo tupleCsn, BTreeLocationHint *hint)
+{
+	TupleTableSlot *slot;
+
+	scan->xs_hitupdesc = descr->tupdesc;
+	slot = descr->oldTuple;
+	tts_orioledb_store_tuple(slot, tuple, descr, tupleCsn, PrimaryIndexNumber, true, hint);
+	if (!scan->xs_rowid.isnull)
+	{
+		/* free previously returned rowid */
+		pfree(DatumGetPointer(scan->xs_rowid.value));
+		scan->xs_rowid.isnull = true;
+	}
+	scan->xs_rowid.value = slot_getsysattr(slot, RowIdAttributeNumber, &scan->xs_rowid.isnull);
+	if (scan->xs_hitup)
+	{
+		/* free previously returned tuple */
+		pfree(scan->xs_hitup);
+		scan->xs_hitup = NULL;
+	}
+	scan->xs_hitup = ExecCopySlotHeapTuple(slot);
+
+	/*
+	 * ExecCopySlotHeapTuple above produced an independent HeapTuple, and
+	 * o_new_rowid() (called via slot_getsysattr) already palloc'd its own
+	 * bytea, so neither xs_hitup nor xs_rowid retains a reference to the
+	 * source tuple buffer.  Clear the slot immediately: store_tuple() above
+	 * was called with shouldfree=true, so tts_orioledb_clear() now pfrees
+	 * tuple.data.  Doing the clear at the end of fill_hitup() (rather than
+	 * deferring to the next store_tuple()) is what makes shouldfree=true safe
+	 * here — descr->oldTuple outlives es_query_cxt, so a stale owning
+	 * pointer in the slot would dangle into a freed context across queries.
+	 */
+	ExecClearTuple(slot);
+}
+
+/* Search all duplicates with same original attrnum */
+static inline void
+search_next_dup_range(List *duplicates, int dup_range_lc_id, int *dup_range_start, int *dup_range_end)
+{
+	List	   *duplicate = NIL;
+	ListCell   *dup_range_lc = NULL;
+	int			dup_range_src_attnum = -1;
+
+	*dup_range_start = -1;
+	*dup_range_end = -1;
+	do
+	{
+		if (dup_range_lc_id >= 0)
+			dup_range_lc = list_nth_cell(duplicates, dup_range_lc_id);
+		else
+			dup_range_lc = NULL;
+
+		if (dup_range_lc != NULL)
+		{
+			duplicate = (List *) lfirst(dup_range_lc);
+			if (*dup_range_end < 0)
+			{
+				*dup_range_end = dup_range_lc_id;
+				dup_range_src_attnum = linitial_int(duplicate);
+			}
+			else if (linitial_int(duplicate) != dup_range_src_attnum)
+			{
+				*dup_range_start = dup_range_lc_id + 1;
+			}
+		}
+		else
+		{
+			*dup_range_start = dup_range_lc_id + 1;
+		}
+		dup_range_lc_id--;
+	} while (*dup_range_start < 0);
+}
+
+bytea *
+o_new_rowid(OIndexDescr *primary, TupleTableSlot *slot,
+			Datum *rowid_values, bool *rowid_isnull,
+			CommitSeqNo tupleCsn, BTreeLocationHint *hint)
+{
+	OTableSlot *oslot = (OTableSlot *) slot;
+	Pointer		ptr;
+	int			result_size,
+				tuple_size = 0;
+	bytea	   *rowid;
+
+	if (primary->primaryIsCtid)
+	{
+		ORowIdAddendumCtid addCtid;
+
+		addCtid.hint = *hint;
+		addCtid.csn = tupleCsn;
+		addCtid.version = oslot->version;
+
+		/* Ctid primary key: give hint + tid as rowid */
+		result_size = MAXALIGN(VARHDRSZ) +
+			MAXALIGN(sizeof(ORowIdAddendumCtid)) +
+			MAXALIGN(sizeof(ItemPointerData));
+		if (primary->bridging)
+			result_size += MAXALIGN(sizeof(ORowIdBridgeData));
+		rowid = (bytea *) MemoryContextAllocZero(slot->tts_mcxt, result_size);
+		SET_VARSIZE(rowid, result_size);
+		ptr = (Pointer) rowid + MAXALIGN(VARHDRSZ);
+		memcpy(ptr, &addCtid, sizeof(ORowIdAddendumCtid));
+		ptr += MAXALIGN(sizeof(ORowIdAddendumCtid));
+		memcpy(ptr, &slot->tts_tid, sizeof(ItemPointerData));
+		ptr += MAXALIGN(sizeof(ItemPointerData));
+
+		if (primary->bridging)
+		{
+			ORowIdBridgeData *bridgedData = (ORowIdBridgeData *) ptr;
+
+			bridgedData->bridgeCtid = oslot->bridge_ctid;
+			bridgedData->bridgeChanged = oslot->bridgeChanged;
+		}
+	}
+	else
+	{
+		ORowIdAddendumNonCtid addNonCtid;
+		OTuple		temp_tuple = {0};
+		TupleDesc	pk_tupdesc = NULL;
+		OTupleFixedFormatSpec *pk_spec = NULL;
+
+		/*
+		 * General-case primary key: prepend tuple with maxaligned hint.
+		 */
+
+		result_size = MAXALIGN(VARHDRSZ) + MAXALIGN(sizeof(ORowIdAddendumNonCtid));
+		if (primary->bridging)
+			result_size += MAXALIGN(sizeof(ItemPointerData));
+
+		pk_tupdesc = primary->nonLeafTupdesc;
+		pk_spec = &primary->nonLeafSpec;
+
+		tuple_size = o_new_tuple_size(pk_tupdesc, pk_spec, NULL, NULL, oslot->version,
+									  rowid_values, rowid_isnull, NULL);
+		result_size += MAXALIGN(tuple_size);
+
+		rowid = (bytea *) MemoryContextAllocZero(slot->tts_mcxt, result_size);
+		SET_VARSIZE(rowid, result_size);
+		ptr = (Pointer) rowid + MAXALIGN(VARHDRSZ);
+		if (primary->bridging)
+		{
+			ORowIdBridgeData *bridgedData = (ORowIdBridgeData *) (ptr + MAXALIGN(sizeof(ORowIdAddendumNonCtid)));
+
+			bridgedData->bridgeCtid = oslot->bridge_ctid;
+			bridgedData->bridgeChanged = oslot->bridgeChanged;
+		}
+
+		temp_tuple.data = ptr + MAXALIGN(sizeof(ORowIdAddendumNonCtid));
+		if (primary->bridging)
+			temp_tuple.data += MAXALIGN(sizeof(ORowIdBridgeData));
+		o_tuple_fill(pk_tupdesc, pk_spec,
+					 &temp_tuple, tuple_size, NULL, NULL, oslot->version, rowid_values, rowid_isnull, NULL);
+
+		addNonCtid.hint = *hint;
+		addNonCtid.flags = temp_tuple.formatFlags;
+		addNonCtid.csn = tupleCsn;
+
+		memcpy(ptr, &addNonCtid, sizeof(ORowIdAddendumNonCtid));
+	}
+
+	return rowid;
+}
+
+
+/* TODO: Rewrite */
+static void
+fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
+		  CommitSeqNo tupleCsn, BTreeLocationHint *hint)
+{
+	OScanState *o_scan = (OScanState *) scan;
+	TupleTableSlot *slot;
+	bytea	   *rowid;
+	OIndexDescr *index_descr = descr->indices[o_scan->ixNum];
+	Datum	   *rowid_values = NULL;
+	bool	   *rowid_isnull = NULL;
+	Datum		temp_rowid_values[2 * INDEX_MAX_KEYS];
+	bool		temp_rowid_isnull[2 * INDEX_MAX_KEYS];
+
+	slot = index_descr->index_slot;
+	tts_orioledb_store_tuple(slot, tuple, descr, tupleCsn, o_scan->ixNum, true, hint);
+	slot_getallattrs(slot);
+
+	/*
+	 * moving values from duplicate field places that will be filled during
+	 * index_form_tuple
+	 */
+	if (index_descr->duplicates != NIL)
+	{
+		int			lc_id = 0;
+		ListCell   *lc = NULL;
+		List	   *duplicate = NIL;
+		int			i;
+		int			cur_attr;
+		int			ctid_off = index_descr->primaryIsCtid ? 1 : 0;
+		int			dup_range_start = -1;
+		int			dup_range_end = -1;
+		int			dup_range_diff = -1;
+
+		lc_id = list_length(index_descr->duplicates) - 1;
+
+		search_next_dup_range(index_descr->duplicates, lc_id, &dup_range_start, &dup_range_end);
+		lc = list_nth_cell(index_descr->duplicates, dup_range_end);
+		Assert(lc != NULL);
+		duplicate = (List *) lfirst(lc);
+		dup_range_diff = dup_range_end - dup_range_start + 1;
+
+		lc = list_nth_cell(index_descr->duplicates, lc_id);
+		Assert(lc != NULL);
+		duplicate = (List *) lfirst(lc);
+
+		cur_attr = index_descr->leafTupdesc->natts - 1 - ctid_off;
+		for (i = index_descr->itupdesc->natts - 1; i >= 0; i--)
+		{
+			if (duplicate != NIL &&
+				i >= linitial_int(duplicate) + dup_range_start &&
+				i <= linitial_int(duplicate) + dup_range_start - 1 + dup_range_diff)
+			{
+				slot->tts_values[i] = 0;
+				slot->tts_isnull[i] = true;
+			}
+			else
+			{
+				if (duplicate != NIL && i == linitial_int(duplicate) + dup_range_start - 1)
+				{
+					lc_id = dup_range_start - 1;
+
+					if (lc_id >= 0)
+					{
+						search_next_dup_range(index_descr->duplicates, lc_id, &dup_range_start, &dup_range_end);
+						lc = list_nth_cell(index_descr->duplicates, dup_range_end);
+						Assert(lc != NULL);
+						duplicate = (List *) lfirst(lc);
+						dup_range_diff = dup_range_end - dup_range_start + 1;
+					}
+					else
+					{
+						lc = NULL;
+						duplicate = NIL;
+					}
+				}
+				slot->tts_values[i] = slot->tts_values[cur_attr];
+				slot->tts_isnull[i] = slot->tts_isnull[cur_attr];
+				cur_attr--;
+			}
+		}
+	}
+
+	if (!index_descr->primaryIsCtid)
+	{
+		int			i;
+
+		/*
+		 * Amount of index fields checked in o_define_index_validate
+		 */
+		for (i = 0; i < index_descr->nPrimaryFields; i++)
+		{
+			AttrNumber	attnum = index_descr->primaryFieldsAttnums[i] - 1;
+
+			temp_rowid_values[i] = slot->tts_values[attnum];
+			temp_rowid_isnull[i] = slot->tts_isnull[attnum];
+		}
+
+		/*
+		 * primaryFieldsAttnums covers PK key columns only (see
+		 * add_index_fields(fillPrimary=true), nFields = nkeyfields), but
+		 * o_new_rowid() formats the rowid against primary->nonLeafTupdesc
+		 * whose natts is nkeyfields + nIncludedFields when the PK has INCLUDE
+		 * columns.  Those INCLUDE columns aren't part of the secondary's leaf
+		 * either, so we have no value to plug in -- and refind only matches
+		 * against the key columns anyway.  Fill the tail of
+		 * temp_rowid_isnull[] with `true`s so that o_new_tuple_size doesn't
+		 * read uninitialised memory while computing the rowid tuple's null
+		 * bitmap.
+		 */
+		for (; i < GET_PRIMARY(descr)->nonLeafTupdesc->natts; i++)
+		{
+			temp_rowid_values[i] = (Datum) 0;
+			temp_rowid_isnull[i] = true;
+		}
+
+		if (o_scan->ixNum == PrimaryIndexNumber)
+		{
+			rowid_values = slot->tts_values;
+			rowid_isnull = slot->tts_isnull;
+		}
+		else
+		{
+			rowid_values = temp_rowid_values;
+			rowid_isnull = temp_rowid_isnull;
+		}
+	}
+
+	rowid = o_new_rowid(GET_PRIMARY(descr), slot,
+						rowid_values, rowid_isnull, tupleCsn, hint);
+
+	if (!scan->xs_rowid.isnull)
+	{
+		/* free previously returned rowid */
+		pfree(DatumGetPointer(scan->xs_rowid.value));
+		scan->xs_rowid.isnull = true;
+	}
+	scan->xs_rowid.isnull = false;
+	scan->xs_rowid.value = PointerGetDatum(rowid);
+
+	if (scan->xs_itup)
+	{
+		/* free previously returned tuple */
+		pfree(scan->xs_itup);
+		scan->xs_itup = NULL;
+	}
+
+	/*--
+	 * OrioleDB's internal itupdesc already matches the planner-side
+	 * indextlist layout in both column count and column order:
+	 *
+	 *   itupdesc = [non-duplicate secondary key cols
+	 *               | non-duplicate INCLUDE cols
+	 *               | duplicate cols (refilled from their source columns)
+	 *               | extra PK key cols not already in the secondary],
+	 *
+	 *   planner indextlist = rd_att (all declared cols, including dups)
+	 *                       + (when has_primary, PK key cols not in
+	 *                          rd_att.indexkeys, added by
+	 *                          set_plain_rel_pathlist_hook()).
+	 *
+	 * Their natts agree because the duplicate slots in itupdesc account
+	 * for exactly the same columns as the duplicates inside rd_att, and
+	 * because scan.c's hook only adds PK *key* cols (matching the
+	 * !primaryIsCtid path that populates the PK tail of itupdesc).  The
+	 * duplicate-slot rearrangement done by the block right above this
+	 * comment leaves slot->tts_values in itupdesc order, so we hand the
+	 * pair directly to index_form_tuple.
+	 */
+	scan->xs_itupdesc = index_descr->itupdesc;
+	scan->xs_itup = index_form_tuple(index_descr->itupdesc,
+									 slot->tts_values,
+									 slot->tts_isnull);
+
+	ItemPointerCopy(&slot->tts_tid, &scan->xs_itup->t_tid);
+
+	/*
+	 * index_form_tuple above produced an independent IndexTuple by copying
+	 * each Datum from slot->tts_values (varlenas are deep-copied by
+	 * heap_compute_data_size/heap_fill_tuple), and o_new_rowid() palloc'd its
+	 * own bytea for xs_rowid.  Neither holds a reference to the source tuple
+	 * buffer.  Clear the slot immediately: store_tuple() above was called
+	 * with shouldfree=true, so tts_orioledb_clear() now pfrees tuple.data.
+	 * Doing the clear at the end of fill_itup() (rather than deferring to the
+	 * next store_tuple()) is what makes shouldfree=true safe here —
+	 * index_descr->index_slot outlives es_query_cxt, so a stale owning
+	 * pointer in the slot would dangle into a freed context across queries.
+	 */
+	ExecClearTuple(slot);
+}
+
+
+static bool
+orioledb_amgettuple(IndexScanDesc scan, ScanDirection dir)
+{
+	bool		res;
+	OScanState *o_scan = (OScanState *) scan;
+	OTableDescr *descr;
+	OTuple		tuple;
+	bool		scan_primary;
+	MemoryContext tupleCxt = CurrentMemoryContext;
+	BTreeLocationHint hint = {OInvalidInMemoryBlkno, 0};
+	CommitSeqNo csn;
+	OBTOptions *options = (OBTOptions *) scan->indexRelation->rd_options;
+
+	if (options && !options->orioledb_index)
+	{
+		return btgettuple(scan, dir);
+	}
+
+	o_scan->scanDir = dir;
+
+	if (scan->xs_snapshot->snapshot_type == SNAPSHOT_DIRTY)
+		o_scan->oSnapshot = o_in_progress_snapshot;
+	else if (scan->xs_snapshot->snapshot_type == SNAPSHOT_NON_VACUUMABLE)
+		o_scan->oSnapshot = o_non_deleted_snapshot;
+	else
+		O_LOAD_SNAPSHOT(&o_scan->oSnapshot, scan->xs_snapshot);
+
+	/* btree indexes are never lossy */
+	scan->xs_recheck = false;
+
+	descr = relation_get_descr(scan->heapRelation);
+	scan_primary = o_scan->ixNum == PrimaryIndexNumber || !scan->xs_want_itup;
+	tuple = o_index_scan_getnext(descr, o_scan, &csn, scan_primary,
+								 tupleCxt, &hint);
+
+	if (O_TUPLE_IS_NULL(tuple))
+	{
+		if (!scan->xs_rowid.isnull)
+		{
+			/* free previously returned rowid */
+			pfree(DatumGetPointer(scan->xs_rowid.value));
+			scan->xs_rowid.isnull = true;
+		}
+		if (scan->xs_itup)
+		{
+			/* free previously returned tuple */
+			pfree(scan->xs_itup);
+			scan->xs_itup = NULL;
+		}
+		if (scan->xs_hitup)
+		{
+			/* free previously returned tuple */
+			pfree(scan->xs_hitup);
+			scan->xs_hitup = NULL;
+		}
+		scan->xs_rowid.isnull = true;
+		res = false;
+	}
+	else
+	{
+		if (scan->xs_want_itup)
+			fill_itup(scan, tuple, descr, csn, &hint);
+		else
+			fill_hitup(scan, tuple, descr, csn, &hint);
+		res = true;
+	}
+	return res;
+}
+
+static int64
+orioledb_amgetbitmap(IndexScanDesc scan, TIDBitmap *tbm)
+{
+	OBTOptions *options = (OBTOptions *) scan->indexRelation->rd_options;
+
+	if (options && !options->orioledb_index)
+		return btgetbitmap(scan, tbm);
+	return 0;
+}
+
+static void
+orioledb_amendscan(IndexScanDesc scan)
+{
+	OScanState *o_scan = (OScanState *) scan;
+	OBTOptions *options = (OBTOptions *) scan->indexRelation->rd_options;
+
+	if (options && !options->orioledb_index)
+		return btendscan(scan);
+
+	STOPEVENT(STOPEVENT_SCAN_END, NULL);
+
+	if (o_scan->iterator != NULL)
+		btree_iterator_free(o_scan->iterator);
+	MemoryContextDelete(o_scan->cxt);
+}
+
+static Size
+#if PG_VERSION_NUM >= 180000
+orioledb_amestimateparallelscan(Relation indexRelation, int nkeys, int norderbys)
+#elif PG_VERSION_NUM >= 170000
+orioledb_amestimateparallelscan(int nkeys, int norderbys)
+#else
+orioledb_amestimateparallelscan(void)
+#endif
+{
+	return sizeof(uint8);
+}
+
+static void
+orioledb_aminitparallelscan(void *target)
+{
+}
+
+static void
+orioledb_amparallelrescan(IndexScanDesc scan)
+{
+}
+
+static IndexAmRoutine *
+find_bridged_am(Relation index)
+{
+	IndexAmRoutine *amroutine = NULL;
+	ListCell   *lc;
+
+	foreach(lc, bridged_ams)
+	{
+		BridgedIndexAmRoutine *bridged = lfirst(lc);
+
+		if (bridged->amhandler == index->rd_amhandler)
+		{
+			amroutine = bridged->original_routine;
+			break;
+		}
+	}
+
+	return amroutine;
+}
+
+static IndexBuildResult *
+bridged_ambuild(Relation heap, Relation index, IndexInfo *indexInfo)
+{
+	IndexBuildResult *result;
+	OTableDescr *descr;
+
+	descr = relation_get_descr(heap);
+
+	/*
+	 * During rewrite we are ignoring first ambuild, because we need descr to
+	 * exist in orioledb_index_build_range_scan, but descr for table created
+	 * later. So we performing new reindex_index in redefine_indices after
+	 * descr created.
+	 */
+	if (descr == NULL)
+	{
+		result = (IndexBuildResult *) palloc(sizeof(IndexBuildResult));
+
+		result->heap_tuples = 0.0;
+		result->index_tuples = 0.0;
+
+		return result;
+	}
+	else
+	{
+		IndexAmRoutine *amroutine = find_bridged_am(index);
+
+		Assert(amroutine != NULL);
+
+		return amroutine->ambuild(heap, index, indexInfo);
+	}
+}
+
+static bool
+bridged_aminsert(Relation rel, Datum *values, bool *isnull,
+				 Datum tupleid, Relation heapRel,
+				 IndexUniqueCheck checkUnique,
+				 bool indexUnchanged,
+				 IndexInfo *indexInfo)
+{
+	ORelOids	oids;
+	OTableDescr *descr;
+	bytea	   *rowid;
+	Pointer		p;
+	IndexAmRoutine *amroutine = NULL;
+	ORowIdBridgeData *bridgeData;
+
+	ORelOidsSetFromRel(oids, heapRel);
+
+	descr = o_fetch_table_descr(oids);
+	Assert(descr != NULL);
+
+	rowid = DatumGetByteaP(tupleid);
+	p = (Pointer) rowid + MAXALIGN(VARHDRSZ);
+
+	if (!GET_PRIMARY(descr)->primaryIsCtid)
+	{
+		p += MAXALIGN(sizeof(ORowIdAddendumNonCtid));
+		bridgeData = (ORowIdBridgeData *) p;
+	}
+	else
+	{
+		p += MAXALIGN(sizeof(ORowIdAddendumCtid));
+		p += MAXALIGN(sizeof(ItemPointerData));
+		bridgeData = (ORowIdBridgeData *) p;
+	}
+
+	if (!bridgeData->bridgeChanged)
+		return true;
+
+	tupleid = PointerGetDatum(&bridgeData->bridgeCtid);
+
+	amroutine = find_bridged_am(rel);
+
+	Assert(amroutine != NULL);
+
+	return amroutine->aminsertextended(rel, values, isnull, tupleid, heapRel,
+									   checkUnique, indexUnchanged, indexInfo);
+}
+
+static IndexScanDesc
+bridged_ambeginscan(Relation rel, int nkeys, int norderbys)
+{
+	IndexAmRoutine *amroutine = find_bridged_am(rel);
+
+	Assert(amroutine != NULL);
+
+	return amroutine->ambeginscan(rel, nkeys, norderbys);
 }

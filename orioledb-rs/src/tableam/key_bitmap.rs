@@ -1,402 +1,709 @@
-//! key_bitmap.rs
-//!
-//! Copyright (c) 2021-2026, Oriole DB Inc.
-//! Copyright (c) 2025-2026, Supabase Inc.
-//!
-//! IDENTIFICATION
-//!   contrib/orioledb/orioledb-rs/src/tableam/key_bitmap.rs
+/*-------------------------------------------------------------------------
+ *
+ * key_bitmap.c
+ *		Routines for bitmap scan of orioledb table.
+ *
+ *		The bitmap is a set of uint64 keys, stored densely: the key is split
+ *		into a high part (the chunk, key >> OKBM_CHUNK_BITS) and a low part
+ *		(OKBM_CHUNK_BITS bits).  Each chunk maps to a bitmap covering its
+ *		OKBM_CHUNK_VALUES low-part offsets.  Chunks are held in an adaptive
+ *		radix tree (include/lib/o_radixtree.h), which keeps them ordered so
+ *		iteration and range queries are efficient.
+ *
+ *		Ordered seeks (o_keybitmap_range_is_valid / o_keybitmap_get_next) are
+ *		served from a sorted array of chunk keys built lazily once the bitmap
+ *		stops being mutated (the build phase always precedes the scan phase).
+ *
+ * Copyright (c) 2021-2026, Oriole DB Inc.
+ * Copyright (c) 2025-2026, Supabase Inc.
+ *
+ * IDENTIFICATION
+ *	  contrib/orioledb/src/tableam/key_bitmap.c
+ *-------------------------------------------------------------------------
+ */
+#include "postgres.h"
 
-use std::collections::{BTreeMap, BTreeSet};
+#include "orioledb.h"
 
-pub const OKBM_CHUNK_BITS: u32 = 10;
-pub const OKBM_CHUNK_VALUES: u64 = 1 << OKBM_CHUNK_BITS;
-pub const OKBM_LOW_MASK: u64 = OKBM_CHUNK_VALUES - 1;
-pub const OKBM_BITMAP_BYTES: usize = (OKBM_CHUNK_VALUES / 8) as usize; // 128 bytes
-pub const OKBM_FIXED_BYTES: usize = 24;
+#include "tableam/bitmap_scan.h"
 
-pub struct OKeyBitmap {
-    pub fixed: bool,
-    // Non-fixed mode: chunk id -> 128-byte bitmap
-    pub tree: BTreeMap<u64, [u8; OKBM_BITMAP_BYTES]>,
-    // Fixed mode: set of 24-byte keys
-    pub ftree: BTreeSet<[u8; OKBM_FIXED_BYTES]>,
-    // Seek arrays for finalized queries
-    pub chunks: Vec<u64>,
-    pub fkeys: Vec<[u8; OKBM_FIXED_BYTES]>,
-    pub finalized: bool,
+#include "utils/memutils.h"
+
+#define OKBM_CHUNK_BITS		10
+#define OKBM_CHUNK_VALUES	(UINT64CONST(1) << OKBM_CHUNK_BITS)
+#define OKBM_LOW_MASK		(OKBM_CHUNK_VALUES - 1)
+#define OKBM_BITMAP_BYTES	(OKBM_CHUNK_VALUES / 8)
+
+typedef struct OKeyBitmapChunk
+{
+	uint8		bitmap[OKBM_BITMAP_BYTES];
+} OKeyBitmapChunk;
+
+#define RT_PREFIX okbm
+#define RT_SCOPE static
+#define RT_DECLARE
+#define RT_DEFINE
+#define RT_USE_DELETE
+#define RT_VALUE_TYPE OKeyBitmapChunk
+#include "lib/o_radixtree.h"
+
+/*
+ * Fixed-key mode: for composite / non-int primary keys the key is an
+ * order-preserving byte string of OKBM_FIXED_BYTES bytes (see
+ * include/tableam/bitmap_scan.h).  These are stored, un-densified, in a
+ * fixed-length-key radix tree whose value carries no information.
+ */
+typedef struct OKbmDummy
+{
+	uint8		unused;
+} OKbmDummy;
+
+#define RT_PREFIX okbmf
+#define RT_SCOPE static
+#define RT_DECLARE
+#define RT_DEFINE
+#define RT_USE_DELETE
+#define RT_KEY_SIZE OKBM_FIXED_BYTES
+#define RT_VALUE_TYPE OKbmDummy
+#include "lib/o_radixtree.h"
+
+struct OKeyBitmap
+{
+	bool		fixed;			/* false: uint64 densified; true: fixed-key */
+
+	okbm_radix_tree *tree;		/* uint64 mode */
+	okbmf_radix_tree *ftree;	/* fixed-key mode */
+
+	/* dedicated context owned by the radix tree (reset/freed by okbm*_free) */
+	MemoryContext treeCxt;
+	/* context holding this struct and the seek arrays */
+	MemoryContext cxt;
+
+	/*
+	 * Sorted key arrays, built lazily by okbm_finalize() to serve ordered
+	 * seeks.  Invalidated (finalized = false) on every mutation.  uint64 mode
+	 * stores chunk keys in chunks[]; fixed mode stores whole keys, each
+	 * OKBM_FIXED_BYTES bytes, in fkeys[].
+	 */
+	uint64	   *chunks;
+	uint8	   *fkeys;
+	int			nchunks;
+	int			chunksCapacity;
+	bool		finalized;
+};
+
+/*
+ * Return the first set bit offset >= minOffset within a chunk bitmap, or -1.
+ */
+static int
+find_next_offset(const uint8 *bitmap, int minOffset)
+{
+	int			i;
+	uint8		mask;
+
+	i = minOffset >> 3;
+	mask = 0xFF << (minOffset & 7);
+	while (i < OKBM_BITMAP_BYTES)
+	{
+		mask &= bitmap[i];
+		if (mask)
+		{
+			int			result;
+
+			result = i << 3;
+			while (!(mask & 1))
+			{
+				result++;
+				mask >>= 1;
+			}
+			return result;
+		}
+		mask = 0xFF;
+		i++;
+	}
+	return -1;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_create() -> *mut OKeyBitmap {
-    let bm = Box::new(OKeyBitmap {
-        fixed: false,
-        tree: BTreeMap::new(),
-        ftree: BTreeSet::new(),
-        chunks: Vec::new(),
-        fkeys: Vec::new(),
-        finalized: false,
-    });
-    Box::into_raw(bm)
+OKeyBitmap *
+o_keybitmap_create(void)
+{
+	OKeyBitmap *bm = palloc0(sizeof(OKeyBitmap));
+
+	/* okbm_memory_usage() is part of the generated API but unused here */
+	(void) okbm_memory_usage;
+
+	bm->cxt = CurrentMemoryContext;
+
+	/*
+	 * The radix tree owns the context it is created in: okbm_free() resets it
+	 * and deletes its child contexts.  Give it a dedicated child context so
+	 * that freeing the tree does not clobber this struct or the chunks array,
+	 * which live in bm->cxt.
+	 */
+	bm->treeCxt = AllocSetContextCreate(bm->cxt, "o_keybitmap radix tree",
+										ALLOCSET_SMALL_SIZES);
+	bm->fixed = false;
+	bm->tree = okbm_create(bm->treeCxt);
+	bm->ftree = NULL;
+	bm->chunks = NULL;
+	bm->fkeys = NULL;
+	bm->nchunks = 0;
+	bm->chunksCapacity = 0;
+	bm->finalized = false;
+	return bm;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_create_fixed() -> *mut OKeyBitmap {
-    let bm = Box::new(OKeyBitmap {
-        fixed: true,
-        tree: BTreeMap::new(),
-        ftree: BTreeSet::new(),
-        chunks: Vec::new(),
-        fkeys: Vec::new(),
-        finalized: false,
-    });
-    Box::into_raw(bm)
+OKeyBitmap *
+o_keybitmap_create_fixed(void)
+{
+	OKeyBitmap *bm = palloc0(sizeof(OKeyBitmap));
+
+	/* okbmf_memory_usage() is part of the generated API but unused here */
+	(void) okbmf_memory_usage;
+
+	bm->cxt = CurrentMemoryContext;
+	bm->treeCxt = AllocSetContextCreate(bm->cxt, "o_keybitmap radix tree",
+										ALLOCSET_SMALL_SIZES);
+	bm->fixed = true;
+	bm->tree = NULL;
+	bm->ftree = okbmf_create(bm->treeCxt);
+	bm->chunks = NULL;
+	bm->fkeys = NULL;
+	bm->nchunks = 0;
+	bm->chunksCapacity = 0;
+	bm->finalized = false;
+	return bm;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_free(bm: *mut OKeyBitmap) {
-    if !bm.is_null() {
-        let _ = Box::from_raw(bm);
-    }
+void
+o_keybitmap_free(OKeyBitmap *bm)
+{
+	if (bm->fixed)
+		okbmf_free(bm->ftree);
+	else
+		okbm_free(bm->tree);
+	MemoryContextDelete(bm->treeCxt);
+	if (bm->chunks)
+		pfree(bm->chunks);
+	if (bm->fkeys)
+		pfree(bm->fkeys);
+	pfree(bm);
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_insert_key(bm: *mut OKeyBitmap, key: *const u8) {
-    if bm.is_null() || key.is_null() {
-        return;
-    }
-    let bm = &mut *bm;
-    let mut k = [0u8; OKBM_FIXED_BYTES];
-    std::ptr::copy_nonoverlapping(key, k.as_mut_ptr(), OKBM_FIXED_BYTES);
-    bm.ftree.insert(k);
-    bm.finalized = false;
+/* --- fixed-key mode helpers --- */
+
+static inline okbmf_key
+okbmf_mkkey(const uint8 *key)
+{
+	okbmf_key	k;
+
+	memcpy(k.data, key, OKBM_FIXED_BYTES);
+	return k;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_test_key(bm: *mut OKeyBitmap, key: *const u8) -> bool {
-    if bm.is_null() || key.is_null() {
-        return false;
-    }
-    let bm = &*bm;
-    let mut k = [0u8; OKBM_FIXED_BYTES];
-    std::ptr::copy_nonoverlapping(key, k.as_mut_ptr(), OKBM_FIXED_BYTES);
-    bm.ftree.contains(&k)
+void
+o_keybitmap_insert_key(OKeyBitmap *bm, const uint8 *key)
+{
+	okbmf_key	k = okbmf_mkkey(key);
+
+	Assert(bm->fixed);
+	if (okbmf_find(bm->ftree, k) == NULL)
+	{
+		OKbmDummy	dummy = {0};
+
+		(void) okbmf_set(bm->ftree, k, &dummy);
+	}
+	bm->finalized = false;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_emit_key(bm: *mut OKeyBitmap, key: *const u8) -> bool {
-    if bm.is_null() || key.is_null() {
-        return false;
-    }
-    let bm = &mut *bm;
-    let mut k = [0u8; OKBM_FIXED_BYTES];
-    std::ptr::copy_nonoverlapping(key, k.as_mut_ptr(), OKBM_FIXED_BYTES);
-    if bm.ftree.contains(&k) {
-        false
-    } else {
-        bm.ftree.insert(k);
-        bm.finalized = false;
-        true
-    }
+bool
+o_keybitmap_test_key(OKeyBitmap *bm, const uint8 *key)
+{
+	okbmf_key	k = okbmf_mkkey(key);
+
+	Assert(bm->fixed);
+	return okbmf_find(bm->ftree, k) != NULL;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_insert(bm: *mut OKeyBitmap, value: u64) {
-    if bm.is_null() {
-        return;
-    }
-    let bm = &mut *bm;
-    let chunk = value >> OKBM_CHUNK_BITS;
-    let offset = (value & OKBM_LOW_MASK) as usize;
-    let byte_idx = offset >> 3;
-    let bit_idx = offset & 7;
-    
-    let entry = bm.tree.entry(chunk).or_insert([0u8; OKBM_BITMAP_BYTES]);
-    entry[byte_idx] |= 1 << bit_idx;
-    bm.finalized = false;
+/*
+ * Insert key and report whether it was newly added.  Used as a dedup
+ * test-and-set while streaming a BitmapOr of primary scans: a true return
+ * means this is the first time the key is seen (emit it), false means a prior
+ * branch already produced it (skip).
+ */
+bool
+o_keybitmap_emit_key(OKeyBitmap *bm, const uint8 *key)
+{
+	okbmf_key	k = okbmf_mkkey(key);
+	OKbmDummy	dummy = {0};
+
+	Assert(bm->fixed);
+	if (okbmf_find(bm->ftree, k) != NULL)
+		return false;
+	(void) okbmf_set(bm->ftree, k, &dummy);
+	bm->finalized = false;
+	return true;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_test(bm: *mut OKeyBitmap, value: u64) -> bool {
-    if bm.is_null() {
-        return false;
-    }
-    let bm = &*bm;
-    let chunk = value >> OKBM_CHUNK_BITS;
-    let offset = (value & OKBM_LOW_MASK) as usize;
-    let byte_idx = offset >> 3;
-    let bit_idx = offset & 7;
-    
-    if let Some(entry) = bm.tree.get(&chunk) {
-        (entry[byte_idx] & (1 << bit_idx)) != 0
-    } else {
-        false
-    }
+void
+o_keybitmap_insert(OKeyBitmap *bm, uint64 value)
+{
+	uint64		chunk = value >> OKBM_CHUNK_BITS;
+	int			offset = value & OKBM_LOW_MASK;
+	OKeyBitmapChunk *entry = okbm_find(bm->tree, chunk);
+
+	if (entry == NULL)
+	{
+		OKeyBitmapChunk newentry;
+
+		memset(&newentry, 0, sizeof(newentry));
+		newentry.bitmap[offset >> 3] |= (1 << (offset & 7));
+		(void) okbm_set(bm->tree, chunk, &newentry);
+	}
+	else
+		entry->bitmap[offset >> 3] |= (1 << (offset & 7));
+
+	bm->finalized = false;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_emit(bm: *mut OKeyBitmap, value: u64) -> bool {
-    if bm.is_null() {
-        return false;
-    }
-    let bm = &mut *bm;
-    let chunk = value >> OKBM_CHUNK_BITS;
-    let offset = (value & OKBM_LOW_MASK) as usize;
-    let byte_idx = offset >> 3;
-    let bit_idx = offset & 7;
-    
-    let entry = bm.tree.entry(chunk).or_insert([0u8; OKBM_BITMAP_BYTES]);
-    if (entry[byte_idx] & (1 << bit_idx)) != 0 {
-        false
-    } else {
-        entry[byte_idx] |= 1 << bit_idx;
-        bm.finalized = false;
-        true
-    }
+bool
+o_keybitmap_test(OKeyBitmap *bm, uint64 value)
+{
+	uint64		chunk = value >> OKBM_CHUNK_BITS;
+	int			offset = value & OKBM_LOW_MASK;
+	OKeyBitmapChunk *entry = okbm_find(bm->tree, chunk);
+
+	if (entry == NULL)
+		return false;
+
+	return (entry->bitmap[offset >> 3] & (1 << (offset & 7))) != 0;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_is_empty(bm: *mut OKeyBitmap) -> bool {
-    if bm.is_null() {
-        return true;
-    }
-    let bm = &*bm;
-    if bm.fixed {
-        bm.ftree.is_empty()
-    } else {
-        bm.tree.is_empty()
-    }
+/* uint64 variant of o_keybitmap_emit_key(): insert, return true if newly added. */
+bool
+o_keybitmap_emit(OKeyBitmap *bm, uint64 value)
+{
+	uint64		chunk = value >> OKBM_CHUNK_BITS;
+	int			offset = value & OKBM_LOW_MASK;
+	int			byte = offset >> 3;
+	uint8		mask = 1 << (offset & 7);
+	OKeyBitmapChunk *entry = okbm_find(bm->tree, chunk);
+
+	if (entry == NULL)
+	{
+		OKeyBitmapChunk newentry;
+
+		memset(&newentry, 0, sizeof(newentry));
+		newentry.bitmap[byte] |= mask;
+		(void) okbm_set(bm->tree, chunk, &newentry);
+		bm->finalized = false;
+		return true;
+	}
+	if (entry->bitmap[byte] & mask)
+		return false;
+	entry->bitmap[byte] |= mask;
+	bm->finalized = false;
+	return true;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_union(a: *mut OKeyBitmap, b: *mut OKeyBitmap) {
-    if a.is_null() || b.is_null() {
-        return;
-    }
-    let a = &mut *a;
-    let b = &*b;
-    assert_eq!(a.fixed, b.fixed);
-    if a.fixed {
-        for &k in &b.ftree {
-            a.ftree.insert(k);
-        }
-    } else {
-        for (&chunk, b_entry) in &b.tree {
-            let a_entry = a.tree.entry(chunk).or_insert([0u8; OKBM_BITMAP_BYTES]);
-            for i in 0..OKBM_BITMAP_BYTES {
-                a_entry[i] |= b_entry[i];
-            }
-        }
-    }
-    a.finalized = false;
+bool
+o_keybitmap_is_empty(OKeyBitmap *bm)
+{
+	bool		empty;
+
+	if (bm->fixed)
+	{
+		okbmf_iter *iter = okbmf_begin_iterate(bm->ftree);
+		okbmf_key	k;
+
+		empty = (okbmf_iterate_next(iter, &k) == NULL);
+		okbmf_end_iterate(iter);
+	}
+	else
+	{
+		okbm_iter  *iter = okbm_begin_iterate(bm->tree);
+		uint64		chunk;
+
+		empty = (okbm_iterate_next(iter, &chunk) == NULL);
+		okbm_end_iterate(iter);
+	}
+	return empty;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_intersect(a: *mut OKeyBitmap, b: *mut OKeyBitmap) {
-    if a.is_null() || b.is_null() {
-        return;
-    }
-    let a = &mut *a;
-    let b = &*b;
-    assert_eq!(a.fixed, b.fixed);
-    if a.fixed {
-        a.ftree.retain(|k| b.ftree.contains(k));
-    } else {
-        let mut to_remove = Vec::new();
-        for (chunk, a_entry) in &mut a.tree {
-            if let Some(b_entry) = b.tree.get(chunk) {
-                let mut empty = true;
-                for i in 0..OKBM_BITMAP_BYTES {
-                    a_entry[i] &= b_entry[i];
-                    if a_entry[i] != 0 {
-                        empty = false;
-                    }
-                }
-                if empty {
-                    to_remove.push(*chunk);
-                }
-            } else {
-                to_remove.push(*chunk);
-            }
-        }
-        for chunk in to_remove {
-            a.tree.remove(&chunk);
-        }
-    }
-    a.finalized = false;
+void
+o_keybitmap_union(OKeyBitmap *a, OKeyBitmap *b)
+{
+	okbm_iter  *iter;
+	OKeyBitmapChunk *bentry;
+	uint64		chunk;
+
+	Assert(a->fixed == b->fixed);
+
+	if (a->fixed)
+	{
+		okbmf_iter *fiter = okbmf_begin_iterate(b->ftree);
+		okbmf_key	k;
+
+		while (okbmf_iterate_next(fiter, &k) != NULL)
+		{
+			if (okbmf_find(a->ftree, k) == NULL)
+			{
+				OKbmDummy	dummy = {0};
+
+				(void) okbmf_set(a->ftree, k, &dummy);
+			}
+		}
+		okbmf_end_iterate(fiter);
+		a->finalized = false;
+		return;
+	}
+
+	iter = okbm_begin_iterate(b->tree);
+
+	while ((bentry = okbm_iterate_next(iter, &chunk)) != NULL)
+	{
+		OKeyBitmapChunk *aentry = okbm_find(a->tree, chunk);
+
+		if (aentry == NULL)
+			(void) okbm_set(a->tree, chunk, bentry);
+		else
+		{
+			int			i;
+
+			for (i = 0; i < OKBM_BITMAP_BYTES; i++)
+				aentry->bitmap[i] |= bentry->bitmap[i];
+		}
+	}
+	okbm_end_iterate(iter);
+	a->finalized = false;
 }
 
-unsafe fn okbm_finalize(bm: &mut OKeyBitmap) {
-    if bm.finalized {
-        return;
-    }
-    if bm.fixed {
-        bm.fkeys = bm.ftree.iter().cloned().collect();
-    } else {
-        bm.chunks = bm.tree.keys().cloned().collect();
-    }
-    bm.finalized = true;
+void
+o_keybitmap_intersect(OKeyBitmap *a, OKeyBitmap *b)
+{
+	okbm_iter  *iter;
+	OKeyBitmapChunk *aentry;
+	uint64		chunk;
+	uint64	   *toDelete = NULL;
+	int			nDelete = 0;
+	int			deleteCap = 0;
+	int			i;
+
+	Assert(a->fixed == b->fixed);
+
+	if (a->fixed)
+	{
+		okbmf_iter *fiter = okbmf_begin_iterate(a->ftree);
+		okbmf_key	k;
+		okbmf_key  *fdel = NULL;
+		int			nfdel = 0;
+		int			fcap = 0;
+
+		while (okbmf_iterate_next(fiter, &k) != NULL)
+		{
+			if (okbmf_find(b->ftree, k) == NULL)
+			{
+				if (nfdel >= fcap)
+				{
+					fcap = fcap ? fcap * 2 : 16;
+					if (fdel == NULL)
+						fdel = MemoryContextAlloc(a->cxt, sizeof(okbmf_key) * fcap);
+					else
+						fdel = repalloc(fdel, sizeof(okbmf_key) * fcap);
+				}
+				fdel[nfdel++] = k;
+			}
+		}
+		okbmf_end_iterate(fiter);
+
+		for (i = 0; i < nfdel; i++)
+			(void) okbmf_delete(a->ftree, fdel[i]);
+		if (fdel)
+			pfree(fdel);
+
+		a->finalized = false;
+		return;
+	}
+
+	iter = okbm_begin_iterate(a->tree);
+
+	/*
+	 * AND each of a's chunks in place with the matching chunk of b.  Chunks
+	 * that become empty (or have no counterpart in b) are collected and
+	 * removed after iteration; deleting during iteration would invalidate the
+	 * iterator.  Modifying leaf values in place is safe.
+	 */
+	while ((aentry = okbm_iterate_next(iter, &chunk)) != NULL)
+	{
+		OKeyBitmapChunk *bentry = okbm_find(b->tree, chunk);
+		bool		empty = true;
+
+		if (bentry != NULL)
+		{
+			for (i = 0; i < OKBM_BITMAP_BYTES; i++)
+			{
+				aentry->bitmap[i] &= bentry->bitmap[i];
+				if (aentry->bitmap[i] != 0)
+					empty = false;
+			}
+		}
+
+		if (empty)
+		{
+			if (nDelete >= deleteCap)
+			{
+				deleteCap = deleteCap ? deleteCap * 2 : 16;
+				if (toDelete == NULL)
+					toDelete = MemoryContextAlloc(a->cxt,
+												  sizeof(uint64) * deleteCap);
+				else
+					toDelete = repalloc(toDelete, sizeof(uint64) * deleteCap);
+			}
+			toDelete[nDelete++] = chunk;
+		}
+	}
+	okbm_end_iterate(iter);
+
+	for (i = 0; i < nDelete; i++)
+		(void) okbm_delete(a->tree, toDelete[i]);
+	if (toDelete)
+		pfree(toDelete);
+
+	a->finalized = false;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_range_is_valid(bm: *mut OKeyBitmap, low: u64, high: u64) -> bool {
-    if bm.is_null() || high <= low {
-        return false;
-    }
-    let bm = &mut *bm;
-    okbm_finalize(bm);
-    
-    let chunk_low = low >> OKBM_CHUNK_BITS;
-    let chunk_high = (high - 1) >> OKBM_CHUNK_BITS;
-    
-    let idx = match bm.chunks.binary_search(&chunk_low) {
-        Ok(i) => i,
-        Err(i) => i,
-    };
-    
-    for &chunk in &bm.chunks[idx..] {
-        if chunk > chunk_high {
-            break;
-        }
-        if let Some(entry) = bm.tree.get(&chunk) {
-            let i_start = if chunk == chunk_low {
-                ((low & OKBM_LOW_MASK) >> 3) as usize
-            } else {
-                0
-            };
-            let start_mask = if chunk == chunk_low {
-                0xFF << (low & 7)
-            } else {
-                0xFF
-            };
-            
-            let i_end = if chunk == chunk_high {
-                (((high - 1) & OKBM_LOW_MASK) >> 3) as usize
-            } else {
-                OKBM_BITMAP_BYTES - 1
-            };
-            let end_mask = if chunk == chunk_high {
-                0xFF >> (7 - ((high - 1) & 7))
-            } else {
-                0xFF
-            };
-            
-            for i in i_start..=i_end {
-                let mut mask = if i == i_start { start_mask } else { 0xFF };
-                if i == i_end {
-                    mask &= end_mask;
-                }
-                if (entry[i] & mask) != 0 {
-                    return true;
-                }
-            }
-        }
-    }
-    false
+/*
+ * Build the sorted array of chunk keys.  okbm iteration already yields chunks
+ * in ascending order, so we just collect them.  No-op if already finalized.
+ */
+static void
+okbm_finalize(OKeyBitmap *bm)
+{
+	okbm_iter  *iter;
+	uint64		chunk;
+
+	if (bm->finalized)
+		return;
+
+	bm->nchunks = 0;
+
+	if (bm->fixed)
+	{
+		okbmf_iter *fiter = okbmf_begin_iterate(bm->ftree);
+		okbmf_key	k;
+
+		while (okbmf_iterate_next(fiter, &k) != NULL)
+		{
+			if (bm->nchunks >= bm->chunksCapacity)
+			{
+				bm->chunksCapacity = bm->chunksCapacity ? bm->chunksCapacity * 2 : 64;
+				if (bm->fkeys == NULL)
+					bm->fkeys = MemoryContextAlloc(bm->cxt,
+												   (Size) OKBM_FIXED_BYTES * bm->chunksCapacity);
+				else
+					bm->fkeys = repalloc(bm->fkeys,
+										 (Size) OKBM_FIXED_BYTES * bm->chunksCapacity);
+			}
+			memcpy(bm->fkeys + (Size) bm->nchunks * OKBM_FIXED_BYTES,
+				   k.data, OKBM_FIXED_BYTES);
+			bm->nchunks++;
+		}
+		okbmf_end_iterate(fiter);
+		bm->finalized = true;
+		return;
+	}
+
+	iter = okbm_begin_iterate(bm->tree);
+	while (okbm_iterate_next(iter, &chunk) != NULL)
+	{
+		if (bm->nchunks >= bm->chunksCapacity)
+		{
+			bm->chunksCapacity = bm->chunksCapacity ? bm->chunksCapacity * 2 : 64;
+			if (bm->chunks == NULL)
+				bm->chunks = MemoryContextAlloc(bm->cxt,
+												sizeof(uint64) * bm->chunksCapacity);
+			else
+				bm->chunks = repalloc(bm->chunks,
+									  sizeof(uint64) * bm->chunksCapacity);
+		}
+		bm->chunks[bm->nchunks++] = chunk;
+	}
+	okbm_end_iterate(iter);
+
+	bm->finalized = true;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_get_next(bm: *mut OKeyBitmap, prev: u64, found: *mut bool) -> u64 {
-    if bm.is_null() {
-        if !found.is_null() {
-            *found = false;
-        }
-        return 0;
-    }
-    let bm = &mut *bm;
-    okbm_finalize(bm);
-    
-    let chunk_prev = prev >> OKBM_CHUNK_BITS;
-    let off_prev = (prev & OKBM_LOW_MASK) as usize;
-    
-    let idx = match bm.chunks.binary_search(&chunk_prev) {
-        Ok(i) => i,
-        Err(i) => i,
-    };
-    
-    for &chunk in &bm.chunks[idx..] {
-        if let Some(entry) = bm.tree.get(&chunk) {
-            let start_off = if chunk == chunk_prev { off_prev } else { 0 };
-            let mut i = start_off >> 3;
-            let mut mask = 0xFF << (start_off & 7);
-            while i < OKBM_BITMAP_BYTES {
-                let val = entry[i] & mask;
-                if val != 0 {
-                    let mut result = i << 3;
-                    let mut temp_mask = val;
-                    while (temp_mask & 1) == 0 {
-                        result += 1;
-                        temp_mask >>= 1;
-                    }
-                    if !found.is_null() {
-                        *found = true;
-                    }
-                    return (chunk << OKBM_CHUNK_BITS) + result as u64;
-                }
-                mask = 0xFF;
-                i += 1;
-            }
-        }
-    }
-    
-    if !found.is_null() {
-        *found = false;
-    }
-    0
+/* Index of the first chunk key >= target. */
+static int
+okbm_lower_bound(OKeyBitmap *bm, uint64 target)
+{
+	int			lo = 0,
+				hi = bm->nchunks;
+
+	while (lo < hi)
+	{
+		int			mid = lo + (hi - lo) / 2;
+
+		if (bm->chunks[mid] < target)
+			lo = mid + 1;
+		else
+			hi = mid;
+	}
+	return lo;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_range_is_valid_key(bm: *mut OKeyBitmap, low: *const u8, high: *const u8) -> bool {
-    if bm.is_null() || low.is_null() || high.is_null() {
-        return false;
-    }
-    let bm = &mut *bm;
-    assert!(bm.fixed);
-    
-    let mut l = [0u8; OKBM_FIXED_BYTES];
-    let mut h = [0u8; OKBM_FIXED_BYTES];
-    std::ptr::copy_nonoverlapping(low, l.as_mut_ptr(), OKBM_FIXED_BYTES);
-    std::ptr::copy_nonoverlapping(high, h.as_mut_ptr(), OKBM_FIXED_BYTES);
-    
-    if l >= h {
-        return false;
-    }
-    
-    okbm_finalize(bm);
-    
-    let idx = match bm.fkeys.binary_search(&l) {
-        Ok(i) => i,
-        Err(i) => i,
-    };
-    
-    if idx >= bm.fkeys.len() {
-        return false;
-    }
-    
-    bm.fkeys[idx] < h
+bool
+o_keybitmap_range_is_valid(OKeyBitmap *bm, uint64 low, uint64 high)
+{
+	uint64		chunkLow;
+	uint64		chunkHigh;
+	int			idx;
+
+	if (high <= low)
+		return false;
+
+	okbm_finalize(bm);
+
+	chunkLow = low >> OKBM_CHUNK_BITS;
+	chunkHigh = (high - 1) >> OKBM_CHUNK_BITS;
+
+	for (idx = okbm_lower_bound(bm, chunkLow); idx < bm->nchunks; idx++)
+	{
+		uint64		chunk = bm->chunks[idx];
+		OKeyBitmapChunk *entry;
+		int			iStart,
+					iEnd,
+					i;
+		uint8		startMask,
+					endMask;
+
+		if (chunk > chunkHigh)
+			break;
+
+		entry = okbm_find(bm->tree, chunk);
+
+		if (chunk == chunkLow)
+		{
+			iStart = (low & OKBM_LOW_MASK) >> 3;
+			startMask = 0xFF << (low & 7);
+		}
+		else
+		{
+			iStart = 0;
+			startMask = 0xFF;
+		}
+
+		if (chunk == chunkHigh)
+		{
+			iEnd = ((high - 1) & OKBM_LOW_MASK) >> 3;
+			endMask = 0xFF >> (7 - ((high - 1) & 7));
+		}
+		else
+		{
+			iEnd = OKBM_BITMAP_BYTES - 1;
+			endMask = 0xFF;
+		}
+
+		for (i = iStart; i <= iEnd; i++)
+		{
+			uint8		mask = (i == iStart) ? startMask : 0xFF;
+
+			if (i == iEnd)
+				mask &= endMask;
+
+			if (entry->bitmap[i] & mask)
+				return true;
+		}
+	}
+
+	return false;
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn o_keybitmap_get_next_key(bm: *mut OKeyBitmap, prev: *const u8, result: *mut u8) -> bool {
-    if bm.is_null() || prev.is_null() || result.is_null() {
-        return false;
-    }
-    let bm = &mut *bm;
-    assert!(bm.fixed);
-    
-    let mut p = [0u8; OKBM_FIXED_BYTES];
-    std::ptr::copy_nonoverlapping(prev, p.as_mut_ptr(), OKBM_FIXED_BYTES);
-    
-    okbm_finalize(bm);
-    
-    let idx = match bm.fkeys.binary_search(&p) {
-        Ok(i) => i,
-        Err(i) => i,
-    };
-    
-    if idx >= bm.fkeys.len() {
-        return false;
-    }
-    
-    std::ptr::copy_nonoverlapping(bm.fkeys[idx].as_ptr(), result, OKBM_FIXED_BYTES);
-    true
+uint64
+o_keybitmap_get_next(OKeyBitmap *bm, uint64 prev, bool *found)
+{
+	uint64		chunkPrev = prev >> OKBM_CHUNK_BITS;
+	int			offPrev = prev & OKBM_LOW_MASK;
+	int			idx;
+
+	okbm_finalize(bm);
+
+	for (idx = okbm_lower_bound(bm, chunkPrev); idx < bm->nchunks; idx++)
+	{
+		uint64		chunk = bm->chunks[idx];
+		OKeyBitmapChunk *entry = okbm_find(bm->tree, chunk);
+		int			startOff = (chunk == chunkPrev) ? offPrev : 0;
+		int			nextOff;
+
+		/* chunk came from bm->chunks[], so the tree always has it */
+		Assert(entry != NULL);
+		nextOff = find_next_offset(entry->bitmap, startOff);
+
+		if (nextOff >= 0)
+		{
+			*found = true;
+			return (chunk << OKBM_CHUNK_BITS) + nextOff;
+		}
+	}
+
+	*found = false;
+	return 0;
+}
+
+/* --- fixed-key mode ordered seeks --- */
+
+/* Index of the first key >= target (memcmp order) in the finalized fkeys[]. */
+static int
+okbmf_lower_bound(OKeyBitmap *bm, const uint8 *target)
+{
+	int			lo = 0,
+				hi = bm->nchunks;
+
+	while (lo < hi)
+	{
+		int			mid = lo + (hi - lo) / 2;
+
+		if (memcmp(bm->fkeys + (Size) mid * OKBM_FIXED_BYTES, target,
+				   OKBM_FIXED_BYTES) < 0)
+			lo = mid + 1;
+		else
+			hi = mid;
+	}
+	return lo;
+}
+
+bool
+o_keybitmap_range_is_valid_key(OKeyBitmap *bm, const uint8 *low, const uint8 *high)
+{
+	int			idx;
+
+	Assert(bm->fixed);
+	if (memcmp(low, high, OKBM_FIXED_BYTES) >= 0)
+		return false;
+
+	okbm_finalize(bm);
+
+	idx = okbmf_lower_bound(bm, low);
+	if (idx >= bm->nchunks)
+		return false;
+
+	/* the first key >= low is in range iff it is < high */
+	return memcmp(bm->fkeys + (Size) idx * OKBM_FIXED_BYTES, high,
+				  OKBM_FIXED_BYTES) < 0;
+}
+
+bool
+o_keybitmap_get_next_key(OKeyBitmap *bm, const uint8 *prev, uint8 *result)
+{
+	int			idx;
+
+	Assert(bm->fixed);
+	okbm_finalize(bm);
+
+	idx = okbmf_lower_bound(bm, prev);
+	if (idx >= bm->nchunks)
+		return false;
+
+	memcpy(result, bm->fkeys + (Size) idx * OKBM_FIXED_BYTES, OKBM_FIXED_BYTES);
+	return true;
 }

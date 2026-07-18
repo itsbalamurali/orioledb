@@ -1,358 +1,425 @@
-// Core B-tree types, descriptors, and operations.
-//
-// Ported from `include/btree/btree.h` and `src/btree/btree.c`.
-//
-// Copyright (c) 2021-2026, Oriole DB Inc.
-// Copyright (c) 2025-2026, Supabase Inc.
+/*-------------------------------------------------------------------------
+ *
+ * btree.c
+ *		Routines for OrioleDB B-tree initialization and cleanup.
+ *
+ * Copyright (c) 2021-2026, Oriole DB Inc.
+ * Copyright (c) 2025-2026, Supabase Inc.
+ *
+ * IDENTIFICATION
+ *	  contrib/orioledb/src/btree/btree.c
+ *
+ *-------------------------------------------------------------------------
+ */
+#include "postgres.h"
 
-use pgrx::pg_sys::{Jsonb, JsonbParseState, JsonbValue, Oid};
+#include "orioledb.h"
 
-use crate::transam::oxid::OXid;
-use crate::transam::undo::UndoLogType;
-use crate::utils::page_pool::{OInMemoryBlkno, PagePool};
-use crate::utils::seq_buf::{OIndexKey, SeqBufDescPrivate};
+#include "btree/find.h"
+#include "btree/insert.h"
+#include "btree/io.h"
+#include "btree/page_chunks.h"
+#include "btree/scan.h"
+#include "btree/undo.h"
+#include "catalog/o_tables.h"
+#include "recovery/recovery.h"
+#include "recovery/wal.h"
+#include "tableam/descr.h"
+#include "tableam/tree.h"
+#include "transam/undo.h"
+#include "transam/oxid.h"
+#include "tuple/format.h"
+#include "utils/page_pool.h"
+#include "utils/stopevent.h"
 
-// ---------------------------------------------------------------------------
-// Type aliases
-// ---------------------------------------------------------------------------
+#include "fmgr.h"
+#include "miscadmin.h"
+#include "utils/fmgrprotos.h"
+#include "utils/numeric.h"
 
-pub type OTupleXactInfo = u64;
-pub type OIndexNumber = u16;
-pub type OCompress = i32;
+static void btree_page_stopevent_params_internal(BTreeDescr *desc, Page p,
+												 JsonbParseState **state);
 
-pub const PRIMARY_INDEX_NUMBER: OIndexNumber = 0;
-pub const BRIDGE_INDEX_NUMBER: OIndexNumber = 0xFFFD;
-pub const TOAST_INDEX_NUMBER: OIndexNumber = 0xFFFE;
-pub const INVALID_INDEX_NUMBER: OIndexNumber = 0xFFFF;
+LWLockPadded *unique_locks;
+int			num_unique_locks;
 
-pub const MAX_NUM_DIRTY_PARTS: usize = 4;
-
-// ---------------------------------------------------------------------------
-// Enums
-// ---------------------------------------------------------------------------
-
-/// How keys are interpreted during B-tree traversal and modification.
-///
-/// Mirrors `BTreeKeyType` in `include/btree/btree.h`.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BTreeKeyType {
-    /// Complete leaf tuple.
-    LeafTuple = 0,
-    /// Non-leaf (internal) navigation key.
-    NonLeafKey = 1,
-    /// Search boundary for range scans.
-    Bound = 2,
-    /// Lower bound for unique-constraint checking.
-    UniqueLowerBound = 3,
-    /// Upper bound for unique-constraint checking.
-    UniqueUpperBound = 4,
-    /// Request the leftmost item/page (no comparison performed).
-    None = 5,
-    /// High key of a page (upper bound of all keys on the page).
-    PageHiKey = 6,
-    /// Request the rightmost item/page (no comparison performed).
-    Rightmost = 7,
+void
+o_btree_init_unique_lwlocks(void)
+{
+	num_unique_locks = max_procs * 4;
+	unique_locks = GetNamedLWLockTranche("orioledb_unique_locks");
 }
 
-impl BTreeKeyType {
-    pub fn is_bound(self) -> bool {
-        matches!(
-            self,
-            BTreeKeyType::Bound
-                | BTreeKeyType::UniqueLowerBound
-                | BTreeKeyType::UniqueUpperBound
-        )
-    }
+void
+o_btree_init(BTreeDescr *desc)
+{
+	init_new_btree_page(desc, desc->rootInfo.rootPageBlkno,
+						O_BTREE_FLAGS_ROOT_INIT, 0, false);
+	init_page_first_chunk(desc, O_GET_IN_MEMORY_PAGE(desc->rootInfo.rootPageBlkno), 0);
+	unlock_page(desc->rootInfo.rootPageBlkno);
+	init_meta_page(desc->rootInfo.metaPageBlkno, 1);
+
+	/*
+	 * Always mark root page dirty so that the first checkpoint writes the
+	 * .map file header.  Without this, a tree that gets evicted before
+	 * checkpoint would leave a .map file with an unwritten header.
+	 */
+	MARK_DIRTY(desc, desc->rootInfo.rootPageBlkno);
 }
 
-/// Persistence model of a B-tree.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BTreeStorageType {
-    /// In-memory only; no eviction or checkpoint support.
-    InMemory = 0,
-    /// Can evict to disk but has no checkpoint.
-    Temporary = 1,
-    /// Like `Persistence` but without WAL for data modifications.
-    Unlogged = 2,
-    /// Full checkpoint + eviction support.
-    Persistence = 3,
+static bool
+get_page_children(OInMemoryBlkno blkno, uint32 pageChangeCount,
+				  OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS],
+				  uint32 childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS],
+				  int *childPagesCount)
+{
+	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
+	OrioleDBPageDesc *desc = O_GET_IN_MEMORY_PAGEDESC(blkno);
+	BTreePageItemLocator loc;
+	int			ionum;
+
+retry:
+	lock_page(blkno);
+	if (desc->ionum >= 0)
+	{
+		ionum = desc->ionum;
+		unlock_page(blkno);
+
+		wait_for_io_completion(ionum);
+		goto retry;
+	}
+	*childPagesCount = 0;
+
+	if (O_PAGE_GET_CHANGE_COUNT(p) != pageChangeCount)
+	{
+		/*
+		 * It seems that page has been evicted concurrently.  So, nothing to
+		 * do.
+		 */
+		unlock_page(blkno);
+		return false;
+	}
+
+	if (!O_PAGE_IS(p, LEAF))
+	{
+		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
+		{
+			BTreeNonLeafTuphdr *tuphdr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, &loc);
+
+			if (DOWNLINK_IS_IN_IO(tuphdr->downlink))
+			{
+				ionum = DOWNLINK_GET_IO_LOCKNUM(tuphdr->downlink);
+				unlock_page(blkno);
+
+				wait_for_io_completion(ionum);
+				goto retry;
+			}
+			else if (DOWNLINK_IS_IN_MEMORY(tuphdr->downlink))
+			{
+				childPageNumbers[*childPagesCount] = DOWNLINK_GET_IN_MEMORY_BLKNO(tuphdr->downlink);
+				childPageChangeCounts[*childPagesCount] = DOWNLINK_GET_IN_MEMORY_CHANGECOUNT(tuphdr->downlink);
+				(*childPagesCount)++;
+			}
+		}
+	}
+	return true;
 }
 
-/// The DML operation that triggered a B-tree callback.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BTreeOperationType {
-    Insert = 0,
-    Lock = 1,
-    Update = 2,
-    Delete = 3,
+/*
+ * Recursively sets O_BTREE_FLAG_PRE_CLEANUP to the given page and all its
+ * children.
+ */
+static void
+mark_page_pre_cleanup(OInMemoryBlkno blkno, uint32 pageChangeCount)
+{
+	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
+	BTreePageHeader *header = (BTreePageHeader *) p;
+	OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS];
+	uint32		childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS];
+	int			childPagesCount;
+	int			i,
+				ionum;
+
+	if (!get_page_children(blkno, pageChangeCount,
+						   childPageNumbers, childPageChangeCounts,
+						   &childPagesCount))
+		return;
+
+	page_block_reads(blkno);
+	header->flags |= O_BTREE_FLAG_PRE_CLEANUP;
+	ionum = O_GET_IN_MEMORY_PAGEDESC(blkno)->ionum;
+	unlock_page(blkno);
+
+	if (ionum >= 0)
+		wait_for_io_completion(ionum);
+
+	for (i = 0; i < childPagesCount; i++)
+		mark_page_pre_cleanup(childPageNumbers[i],
+							  childPageChangeCounts[i]);
 }
 
-/// Deletion status of a leaf tuple.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BTreeLeafTupleDeletedStatus {
-    NonDeleted = 0,
-    Deleted = 1,
-    MovedPartitions = 2,
-    PkChanged = 3,
+/*
+ * Frees given page and all of its children recursively.
+ */
+static void
+free_page(PagePool *pool, OInMemoryBlkno blkno, uint32 pageChangeCount)
+{
+	OInMemoryBlkno childPageNumbers[BTREE_PAGE_MAX_CHUNK_ITEMS];
+	uint32		childPageChangeCounts[BTREE_PAGE_MAX_CHUNK_ITEMS];
+	int			childPagesCount;
+	int			i;
+
+	if (!get_page_children(blkno, pageChangeCount,
+						   childPageNumbers, childPageChangeCounts,
+						   &childPagesCount))
+		return;
+	Assert(O_PAGE_IS(O_GET_IN_MEMORY_PAGE(blkno), PRE_CLEANUP));
+	Assert(O_PAGE_GET_CHANGE_COUNT(O_GET_IN_MEMORY_PAGE(blkno)) == pageChangeCount);
+	Assert(O_GET_IN_MEMORY_PAGEDESC(blkno)->ionum < 0);
+	unlock_page(blkno);
+
+	for (i = 0; i < childPagesCount; i++)
+		free_page(pool,
+				  childPageNumbers[i],
+				  childPageChangeCounts[i]);
+
+	lock_page(blkno);
+	Assert(O_PAGE_IS(O_GET_IN_MEMORY_PAGE(blkno), PRE_CLEANUP));
+	Assert(O_PAGE_GET_CHANGE_COUNT(O_GET_IN_MEMORY_PAGE(blkno)) == pageChangeCount);
+	Assert(O_GET_IN_MEMORY_PAGEDESC(blkno)->ionum < 0);
+	page_block_reads(blkno);
+	CLEAN_DIRTY(pool, blkno);
+	ppool_free_page(pool, blkno, true);
 }
 
-/// What a modify-callback should do with the tuple it found.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OBTreeModifyCallbackAction {
-    DoNothing = 1,
-    Update = 2,
-    Delete = 3,
-    Lock = 4,
-    Undo = 5,
+static inline void
+free_meta_page(PagePool *pool, OInMemoryBlkno metaPageBlkno)
+{
+	BTreeMetaPage *meta_page;
+	int			i,
+				j;
+
+	meta_page = (BTreeMetaPage *) O_GET_IN_MEMORY_PAGE(metaPageBlkno);
+
+	for (i = 0; i < 2; i++)
+	{
+		FREE_PAGE_IF_VALID(pool, meta_page->freeBuf.pages[i]);
+		for (j = 0; j < 2; j++)
+		{
+			FREE_PAGE_IF_VALID(pool, meta_page->nextChkp[j].pages[i]);
+			FREE_PAGE_IF_VALID(pool, meta_page->tmpBuf[j].pages[i]);
+		}
+	}
+
+	/*
+	 * Additional protection: the resource owner might not have released its
+	 * seq scans yet (other transactions are excluded by locks).  Defer
+	 * freeing the meta page until the last scan is released.
+	 */
+	if (meta_page_get_num_seq_scans(metaPageBlkno) == 0)
+		ppool_free_page(pool, metaPageBlkno, false);
+	else
+		meta_page->toBeFreedOnSeqScanRelease = true;
 }
 
-/// What a wait-callback should do when it finds a conflicting XID.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OBTreeWaitCallbackAction {
-    XidNoWait = 1,
-    XidWait = 2,
-    XidExit = 3,
+/*
+ * Two phase algorithm for pages cleanup, which can run concurrently
+ * to walk_page().
+ *
+ * The first phase sets O_BTREE_FLAG_PRE_CLEANUP preventing walk_page() from
+ * evicting or writing these pages.
+ *
+ * The second phase cleans pages previously marked with
+ * O_BTREE_FLAG_PRE_CLEANUP flag from bottom to top.
+ *
+ * Therefore walk_page() never gets in trouble trying to find parent page
+ * using find_page().
+ */
+void
+o_btree_cleanup_pages(OInMemoryBlkno rootPageBlkno, OInMemoryBlkno metaPageBlkno, uint32 rootPageChangeCount)
+{
+	PagePool   *pool = get_ppool_by_blkno(rootPageBlkno);
+
+	Assert(OInMemoryBlknoIsValid(rootPageBlkno));
+	Assert(OInMemoryBlknoIsValid(metaPageBlkno));
+	Assert(pool != NULL);
+
+	mark_page_pre_cleanup(rootPageBlkno, rootPageChangeCount);
+	free_page(pool, rootPageBlkno, rootPageChangeCount);
+
+	free_meta_page(pool, metaPageBlkno);
 }
 
-/// Result of a B-tree modify operation.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OBTreeModifyResult {
-    Inserted = 1,
-    Updated = 2,
-    Deleted = 3,
-    Locked = 4,
-    Found = 5,
-    NotFound = 6,
+void
+o_btree_check_size_of_tuple(int len, char *relation_name, bool index)
+{
+	if (len > O_BTREE_MAX_TUPLE_SIZE)
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+				 errmsg("index row size %d exceeds orioledb maximum %zu for %s \"%s\"",
+						len,
+						O_BTREE_MAX_TUPLE_SIZE,
+						index ? "index" : "table",
+						relation_name)));
 }
 
-// ---------------------------------------------------------------------------
-// Core structs
-// ---------------------------------------------------------------------------
+ItemPointerData
+btree_ctid_get_and_inc(BTreeDescr *desc)
+{
+	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	ItemPointerData result;
+	uint64		ctid = pg_atomic_fetch_add_u64(&metaPageBlkno->ctid, 1);
 
-/// An OrioleDB tuple: a (data pointer, format-flags) pair.
-///
-/// Mirrors `OTuple` in `include/btree/btree.h`.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct OTuple {
-    pub data: *mut u8,
-    pub format_flags: u8,
+	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc));
+	Assert(ctid / (MaxOffsetNumber - FirstOffsetNumber) < InvalidBlockNumber);
+
+	ItemPointerSet(&result,
+				   (uint32) (ctid / (MaxOffsetNumber - FirstOffsetNumber)),
+				   (OffsetNumber) (ctid % (MaxOffsetNumber - FirstOffsetNumber) + FirstOffsetNumber));
+	return result;
 }
 
-impl OTuple {
-    pub const NULL: OTuple = OTuple {
-        data: std::ptr::null_mut(),
-        format_flags: 0,
-    };
+void
+btree_ctid_update_if_needed(BTreeDescr *desc, ItemPointerData ctid)
+{
+	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	uint64		old_ctid,
+				new_ctid;
 
-    pub fn is_null(self) -> bool {
-        self.data.is_null()
-    }
+	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc));
+	new_ctid = (uint64) ItemPointerGetBlockNumber(&ctid) * (MaxOffsetNumber - FirstOffsetNumber);
+	new_ctid += ctid.ip_posid - FirstOffsetNumber;
+	Assert(new_ctid < (uint64) (MaxOffsetNumber - FirstOffsetNumber) * (uint64) InvalidBlockNumber);
+
+	new_ctid++;
+	do
+	{
+		old_ctid = pg_atomic_read_u64(&metaPageBlkno->ctid);
+		if (old_ctid >= new_ctid)
+			break;
+	} while (!pg_atomic_compare_exchange_u64(&metaPageBlkno->ctid, &old_ctid, new_ctid));
 }
 
-/// Root-page location hint (block number + change count).
-///
-/// Mirrors `BTreeRootInfo` in `include/btree/btree.h`.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct BTreeRootInfo {
-    pub root_page_blkno: OInMemoryBlkno,
-    pub root_page_change_count: u32,
-    pub meta_page_blkno: OInMemoryBlkno,
+ItemPointerData
+btree_bridge_ctid_get_and_inc(BTreeDescr *desc, bool *overflow)
+{
+	BTreeMetaPage *metaPageBlkno = BTREE_GET_META(desc);
+	ItemPointerData result;
+	uint64		ctid = pg_atomic_fetch_add_u64(&metaPageBlkno->bridge_ctid, 1);
+
+	BlockNumber max_block_number = MaxBlockNumber;
+
+	Assert(ORootPageIsValid(desc) && OMetaPageIsValid(desc));
+
+	if (BlockNumberIsValid(max_bridge_ctid_blkno))
+		max_block_number = max_bridge_ctid_blkno;
+
+	*overflow = ctid / MaxHeapTuplesPerPage >= max_block_number;
+
+	ItemPointerSet(&result,
+				   (uint32) (ctid / MaxHeapTuplesPerPage % max_block_number),
+				   (OffsetNumber) (ctid % MaxHeapTuplesPerPage + FirstOffsetNumber));
+	return result;
 }
 
-/// Pending S3 dirty-part entries for a single data-file.
-///
-/// Mirrors `BTreeS3PartsInfo` in `include/btree/btree.h`.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct BTreeS3PartsInfo {
-    pub dirty_parts: [DirtyPart; MAX_NUM_DIRTY_PARTS],
-    pub write_max_location: u64,
+static inline OIndexDescr *
+o_get_tree_def(BTreeDescr *desc)
+{
+	return desc->arg;
 }
 
-/// A single dirty part entry.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct DirtyPart {
-    pub chkp_num: u32,
-    pub seg_num: i32,
-    pub part_num: i32,
+void
+btree_desc_stopevent_params_internal(BTreeDescr *desc, JsonbParseState **state)
+{
+	jsonb_push_int8_key(state, "datoid", desc->oids.datoid);
+	jsonb_push_int8_key(state, "reloid", desc->oids.reloid);
+	jsonb_push_int8_key(state, "relnode", desc->oids.relnode);
+
+	if (IS_SYS_TREE_OIDS(desc->oids))
+		jsonb_push_string_key(state, "treeName", "sys_tree");
+	else if (desc->type == oIndexToast)
+		jsonb_push_string_key(state, "treeName", "toast");
+	else
+		jsonb_push_string_key(state, "treeName", o_get_tree_def(desc)->name.data);
 }
 
-/// Backend-local free-extent list for temporary trees.
-///
-/// Mirrors `BTreeLocalFreeExtents` in `include/btree/btree.h`.
-#[repr(C)]
-pub struct BTreeLocalFreeExtents {
-    pub items: *mut crate::utils::seq_buf::FileExtent,
-    pub size: i32,
-    pub capacity: i32,
+static void
+btree_page_stopevent_params_internal(BTreeDescr *desc, Page p,
+									 JsonbParseState **state)
+{
+	jsonb_push_int8_key(state, "level", PAGE_GET_LEVEL(p));
+	jsonb_push_int8_key(state, "pageChangeCount", O_PAGE_GET_CHANGE_COUNT(p));
+
+	jsonb_push_key(state, "hikey");
+	if (!O_PAGE_IS(p, RIGHTMOST))
+	{
+		OTuple		hikey;
+
+		BTREE_PAGE_GET_HIKEY(hikey, p);
+		(void) o_btree_key_to_jsonb(desc, hikey, state);
+	}
+	else
+	{
+		JsonbValue	jval;
+
+		jval.type = jbvNull;
+		(void) pushJsonbValue(state, WJB_VALUE, &jval);
+	}
 }
 
-/// The set of vtable operations for a B-tree.
-///
-/// Mirrors `BTreeOps` in `include/btree/btree.h`.
-///
-/// All function pointers are optional except `len`, `cmp`, and `hash`.
-#[repr(C)]
-pub struct BTreeOps {
-    pub len: unsafe extern "C" fn(
-        desc: *mut BTreeDescr,
-        tuple: OTuple,
-        length_type: i32,
-    ) -> i32,
-    pub tuple_make_key: unsafe extern "C" fn(
-        desc: *mut BTreeDescr,
-        tuple: OTuple,
-        data: *mut u8,
-        keep_version: bool,
-        allocated: *mut bool,
-    ) -> OTuple,
-    pub key_to_jsonb: unsafe extern "C" fn(
-        desc: *mut BTreeDescr,
-        key: OTuple,
-        state: *mut *mut JsonbParseState,
-    ) -> *mut JsonbValue,
-    pub needs_undo: Option<
-        unsafe extern "C" fn(
-            desc: *mut BTreeDescr,
-            action: BTreeOperationType,
-            old_tuple: OTuple,
-            old_xact_info: OTupleXactInfo,
-            old_deleted: bool,
-            new_tuple: OTuple,
-            new_oxid: OXid,
-        ) -> bool,
-    >,
-    pub hash: unsafe extern "C" fn(
-        desc: *mut BTreeDescr,
-        tuple: OTuple,
-        tuple_type: BTreeKeyType,
-    ) -> u32,
-    pub unique_hash: unsafe extern "C" fn(desc: *mut BTreeDescr, tuple: OTuple) -> u32,
-    pub cmp: unsafe extern "C" fn(
-        desc: *mut BTreeDescr,
-        p1: *mut std::ffi::c_void,
-        k1: BTreeKeyType,
-        p2: *mut std::ffi::c_void,
-        k2: BTreeKeyType,
-    ) -> i32,
+Jsonb *
+btree_page_stopevent_params(BTreeDescr *desc, Page p)
+{
+	JsonbParseState *state = NULL;
+	Jsonb	   *res;
+	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
+
+	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	btree_desc_stopevent_params_internal(desc, &state);
+	btree_page_stopevent_params_internal(desc, p, &state);
+	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
+	MemoryContextSwitchTo(mctx);
+
+	return res;
 }
 
-/// The main B-tree descriptor — one per index, kept in backend memory.
-///
-/// Mirrors `BTreeDescr` in `include/btree/btree.h`.
-#[repr(C)]
-pub struct BTreeDescr {
-    pub root_info: BTreeRootInfo,
-    pub arg: *mut std::ffi::c_void,
-    /// Storage manager handle (opaque union in C).
-    pub smgr: [u8; std::mem::size_of::<usize>() * 2],
-    pub oids: OIndexKey,
-    pub tablespace: Oid,
-    /// Index type (oIndexPrimary, oIndexUnique, etc.).
-    pub index_type: i32,
-    pub ppool: *mut PagePool,
-    pub compress: OCompress,
-    pub fillfactor: u8,
-    pub undo_type: UndoLogType,
-    pub storage_type: BTreeStorageType,
-    pub free_buf: SeqBufDescPrivate,
-    pub next_chkp: [SeqBufDescPrivate; 2],
-    pub tmp_buf: [SeqBufDescPrivate; 2],
-    pub build_parts_info: [BTreeS3PartsInfo; 2],
-    pub create_oxid: OXid,
-    pub ops: *mut BTreeOps,
-    pub local_free_extents: *mut BTreeLocalFreeExtents,
-}
+Jsonb *
+btree_downlink_stopevent_params(BTreeDescr *desc, Page p, BTreePageItemLocator *loc)
+{
+	JsonbParseState *state = NULL;
+	Jsonb	   *res;
+	MemoryContext mctx = MemoryContextSwitchTo(stopevents_cxt);
+	BTreeNonLeafTuphdr *internal_ptr;
 
-/// Inline location hint for a B-tree leaf tuple.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct BTreeLocationHint {
-    pub blkno: OInMemoryBlkno,
-    pub page_change_count: u32,
-}
+	internal_ptr = (BTreeNonLeafTuphdr *) BTREE_PAGE_LOCATOR_GET_ITEM(p, loc);
 
-// ---------------------------------------------------------------------------
-// Extern C declarations
-// ---------------------------------------------------------------------------
+	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	btree_desc_stopevent_params_internal(desc, &state);
+	btree_page_stopevent_params_internal(desc, p, &state);
 
-extern "C" {
-    pub static mut unique_locks: *mut u8; // LWLockPadded*
-    pub static mut num_unique_locks: i32;
+	jsonb_push_key(&state, "downlink");
+	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	jsonb_push_int8_key(&state, "blkno", DOWNLINK_GET_IN_MEMORY_BLKNO(internal_ptr->downlink));
+	jsonb_push_int8_key(&state, "pageChangeCount", DOWNLINK_GET_IN_MEMORY_CHANGECOUNT(internal_ptr->downlink));
+	jsonb_push_key(&state, "key");
+	if (BTREE_PAGE_LOCATOR_GET_OFFSET(p, loc) > 0)
+	{
+		OTuple		key;
 
-    pub fn o_btree_check_size_of_tuple(len: i32, relation_name: *mut i8, index: bool);
-    pub fn o_btree_init_unique_lwlocks();
-    pub fn o_btree_init(descr: *mut BTreeDescr);
-    pub fn o_btree_cleanup_pages(
-        root: OInMemoryBlkno,
-        meta_page_blkno: OInMemoryBlkno,
-        root_page_change_count: u32,
-    );
-    pub fn btree_ctid_get_and_inc(desc: *mut BTreeDescr) -> pgrx::pg_sys::ItemPointerData;
-    pub fn btree_bridge_ctid_get_and_inc(
-        desc: *mut BTreeDescr,
-        overflow: *mut bool,
-    ) -> pgrx::pg_sys::ItemPointerData;
-    pub fn btree_ctid_update_if_needed(desc: *mut BTreeDescr, ctid: pgrx::pg_sys::ItemPointerData);
-    pub fn btree_desc_stopevent_params_internal(
-        desc: *mut BTreeDescr,
-        state: *mut *mut JsonbParseState,
-    );
-    pub fn btree_page_stopevent_params(desc: *mut BTreeDescr, p: *mut u8) -> *mut Jsonb;
-    pub fn btree_downlink_stopevent_params(
-        desc: *mut BTreeDescr,
-        p: *mut u8,
-        loc: *mut std::ffi::c_void, // BTreePageItemLocator*
-    ) -> *mut Jsonb;
-    pub fn o_new_rowid(
-        primary: *mut std::ffi::c_void, // OIndexDescr*
-        slot: *mut pgrx::pg_sys::TupleTableSlot,
-        rowid_values: *mut pgrx::pg_sys::Datum,
-        rowid_isnull: *mut bool,
-        tuple_csn: crate::CommitSeqNo,
-        hint: *mut BTreeLocationHint,
-    ) -> *mut pgrx::pg_sys::varlena;
-}
+		BTREE_PAGE_READ_INTERNAL_TUPLE(key, p, loc);
+		(void) o_btree_key_to_jsonb(desc, key, &state);
+	}
+	else
+	{
+		JsonbValue	jval;
 
-// ---------------------------------------------------------------------------
-// Safe inline wrappers
-// ---------------------------------------------------------------------------
+		jval.type = jbvNull;
+		(void) pushJsonbValue(&state, WJB_VALUE, &jval);
+	}
+	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 
-/// Call the B-tree length function.
-///
-/// # Safety
-/// `desc` and its vtable must be valid.
-pub unsafe fn o_btree_len(desc: *mut BTreeDescr, tuple: OTuple, length_type: i32) -> i32 {
-    ((*(*desc).ops).len)(desc, tuple, length_type)
-}
+	res = JsonbValueToJsonb(pushJsonbValue(&state, WJB_END_OBJECT, NULL));
+	MemoryContextSwitchTo(mctx);
 
-/// Call the B-tree comparison function.
-///
-/// # Safety
-/// `desc` and its vtable must be valid.
-pub unsafe fn o_btree_cmp(
-    desc: *mut BTreeDescr,
-    p1: *mut std::ffi::c_void,
-    k1: BTreeKeyType,
-    p2: *mut std::ffi::c_void,
-    k2: BTreeKeyType,
-) -> i32 {
-    ((*(*desc).ops).cmp)(desc, p1, k1, p2, k2)
-}
-
-/// Return `true` when the tree descriptor has valid OIDs.
-///
-/// Mirrors the `TREE_HAS_OIDS` macro.
-pub fn tree_has_oids(desc: &BTreeDescr) -> bool {
-    desc.oids.oids.is_valid()
+	return res;
 }

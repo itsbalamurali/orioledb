@@ -1,528 +1,594 @@
-// Usage count map (UCM) implementation.
-//
-// Real Rust port of include/utils/ucm.h and src/utils/ucm.c.
-//
-// Copyright (c) 2021-2026, Oriole DB Inc.
-// Copyright (c) 2025-2026, Supabase Inc.
+/*-------------------------------------------------------------------------
+ *
+ * ucm.c
+ *		OrioleDB usage count map (UCM) implementation.
+ *
+ * Copyright (c) 2021-2026, Oriole DB Inc.
+ * Copyright (c) 2025-2026, Supabase Inc.
+ *
+ * IDENTIFICATION
+ *	  contrib/orioledb/src/utils/ucm.c
+ *
+ *-------------------------------------------------------------------------
+ */
+#include "c.h"
+#include "postgres.h"
 
-use pgrx::pg_sys::{self, pg_atomic_uint32, pg_atomic_uint64};
+#include "orioledb.h"
 
-use crate::utils::page_pool::OInMemoryBlkno;
+#include "btree/page_state.h"
+#include "utils/dsa.h"
+#include "utils/ucm.h"
 
-pub const UCM_INVALID_LEVEL: u32 = 0xF;
-pub const UCM_USAGE_LEVELS: u32 = 0x7;
-pub const UCM_FREE_PAGES_LEVEL: u32 = 0x7;
-pub const UCM_LEVELS: u32 = 0x8;
+#define UCM_BRANCH_FACTOR	15
+#define UCM_LEVEL_BITS		4
+#define UCM_LEVEL_MASK		0xF
 
-const UCM_BRANCH_FACTOR: u32 = 15;
-const UCM_LEVEL_BITS: u32 = 4;
-const UCM_LEVEL_MASK: u32 = 0xF;
+bool		skip_ucm = false;
 
-#[no_mangle]
-pub static mut skip_ucm: bool = false;
+static int	init_ucm_non_leaf_recursive(UsageCountMap *map, int i);
+static void ucm_inc_recursive(UsageCountMap *map, int i, int prev, int next);
+static bool ucm_check_recursive(UsageCountMap *map, int i);
 
-const PAGE_STATE_CHANGE_USAGE_COUNT_MASK: u64 = 0x00F0_0000_0000_0000;
-const PAGE_STATE_CHANGE_USAGE_COUNT_SHIFT: u32 = 52;
+/*
+ * Estimate shaed memory space for UCM data structure.
+ */
+Size
+estimate_ucm_space(UsageCountMap *map, OInMemoryBlkno offset, OInMemoryBlkno size)
+{
+	int			n_leaf_groups;
+	int			n_leaf_vars;
+	int			n_non_leaf_vars;
+	int			n;
 
-#[inline]
-fn page_state_get_usage_count(state: u64) -> u32 {
-    ((state & PAGE_STATE_CHANGE_USAGE_COUNT_MASK) >> PAGE_STATE_CHANGE_USAGE_COUNT_SHIFT) as u32
+	map->offset = offset;
+	map->size = size;
+	n_leaf_groups = (map->size + UCM_BRANCH_FACTOR - 1) / UCM_BRANCH_FACTOR;
+	n_leaf_vars = n_leaf_groups;
+
+	n_non_leaf_vars = 0;
+	n = n_leaf_vars;
+	map->rootFactor = UCM_BRANCH_FACTOR;
+	while (n > UCM_BRANCH_FACTOR)
+	{
+		n_non_leaf_vars += 1;
+		n_non_leaf_vars *= UCM_BRANCH_FACTOR;
+		n += UCM_BRANCH_FACTOR - 1;
+		n /= UCM_BRANCH_FACTOR;
+		map->rootFactor *= UCM_BRANCH_FACTOR;
+	}
+
+	map->total = n_non_leaf_vars + n_leaf_vars;
+	map->nonLeaf = n_non_leaf_vars;
+	return PG_CACHE_LINE_SIZE + sizeof(pg_atomic_uint32) * map->total;
 }
 
-#[inline]
-fn page_state_set_usage_count(state: u64, usage_count: u32) -> u64 {
-    (state & !PAGE_STATE_CHANGE_USAGE_COUNT_MASK)
-        | ((usage_count as u64) << PAGE_STATE_CHANGE_USAGE_COUNT_SHIFT)
+static int
+get_value_frame(uint32 value)
+{
+	int			i;
+	uint32		mask = UCM_LEVEL_MASK,
+				one = 1,
+				result = 0;
+
+	for (i = 0; i < UCM_LEVELS; i++)
+	{
+		if (value & mask)
+			result += one;
+
+		one <<= UCM_LEVEL_BITS;
+		mask <<= UCM_LEVEL_BITS;
+	}
+
+	return result;
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct OrioleDBPageHeader {
-    pub state: pg_atomic_uint64,
-    pub page_change_count: u32,
-    pub checkpoint_num: u32,
+static int
+init_ucm_non_leaf_recursive(UsageCountMap *map, int i)
+{
+	if (i < map->nonLeaf)
+	{
+		int			j;
+		uint32		value;
+
+		value = 0;
+		for (j = (i + 1) * UCM_BRANCH_FACTOR; j < (i + 2) * UCM_BRANCH_FACTOR; j++)
+		{
+			value += get_value_frame(init_ucm_non_leaf_recursive(map, j));
+		}
+		pg_atomic_init_u32(&map->ucm[i], value);
+		return value;
+	}
+	else if (i < map->total)
+	{
+		return pg_atomic_read_u32(&map->ucm[i]);
+	}
+	else
+	{
+		return 0;
+	}
 }
 
-#[repr(C)]
-pub struct UsageCountMap {
-    pub epoch: *mut pg_atomic_uint32,
-    pub ucm: *mut pg_atomic_uint32,
-    pub offset: OInMemoryBlkno,
-    pub size: OInMemoryBlkno,
-    pub total: i32,
-    pub non_leaf: i32,
-    pub root_factor: i32,
-    pub usage_counter: u32,
+/*
+ * Initialize UCM shared memory.
+ */
+void
+init_ucm(UsageCountMap *map, Pointer ptr, bool found)
+{
+	int			i;
+	OInMemoryBlkno blkno;
+
+	map->epoch = (pg_atomic_uint32 *) ptr;
+	ptr += PG_CACHE_LINE_SIZE;
+
+	map->ucm = (pg_atomic_uint32 *) ptr;
+
+	if (found)
+		return;
+
+	pg_atomic_init_u32(map->epoch, 0);
+
+	/* Init leaf variables */
+	blkno = 0;
+	for (i = map->nonLeaf; i < map->total; i++)
+	{
+		uint32		pagesCount = Min(map->size - blkno, UCM_BRANCH_FACTOR);
+
+		pg_atomic_init_u32(&map->ucm[i],
+						   pagesCount << (UCM_FREE_PAGES_LEVEL * UCM_LEVEL_BITS));
+		blkno += UCM_BRANCH_FACTOR;
+	}
+
+	/* Recursively inin non-leaf variables */
+	for (i = 0; i < UCM_BRANCH_FACTOR; i++)
+		init_ucm_non_leaf_recursive(map, i);
 }
 
-#[inline]
-fn atomic_u32_read(ptr: *mut pg_atomic_uint32) -> u32 {
-    unsafe { pg_sys::pg_atomic_read_u32(ptr) }
+/*
+ * Worker function, which recursively increments value of ucm map.
+ */
+static void
+ucm_inc_recursive(UsageCountMap *map, int i, int32 prev, int32 next)
+{
+	uint32		val,
+				new_val,
+				prev_mask,
+				next_mask,
+				prev_one,
+				next_one;
+
+	Assert(prev < UCM_LEVELS || prev == UCM_INVALID_LEVEL);
+	Assert(next < UCM_LEVELS || next == UCM_INVALID_LEVEL);
+
+	if (prev != UCM_INVALID_LEVEL)
+	{
+		prev_mask = UCM_LEVEL_MASK << (prev * UCM_LEVEL_BITS);
+		prev_one = 1 << (prev * UCM_LEVEL_BITS);
+	}
+	else
+	{
+		prev_mask = 0;
+		prev_one = 0;
+	}
+
+	if (next != UCM_INVALID_LEVEL)
+	{
+		next_mask = UCM_LEVEL_MASK << (next * UCM_LEVEL_BITS);
+		next_one = 1 << (next * UCM_LEVEL_BITS);
+	}
+	else
+	{
+		next_mask = 0;
+		next_one = 0;
+	}
+
+	val = pg_atomic_read_u32(&map->ucm[i]);
+	while (true)
+	{
+		if ((val & prev_mask) < prev_one || (val & next_mask) > (next_mask - next_one))
+		{
+			SpinDelayStatus delayStatus;
+
+			init_local_spin_delay(&delayStatus);
+
+			while ((val & prev_mask) < prev_one || (val & next_mask) > (next_mask - next_one))
+			{
+				perform_spin_delay(&delayStatus);
+				val = pg_atomic_read_u32(&map->ucm[i]);
+			}
+			finish_spin_delay(&delayStatus);
+		}
+
+		new_val = val - prev_one + next_one;
+
+		if (pg_atomic_compare_exchange_u32(&map->ucm[i], &val, new_val))
+			break;
+	}
+
+	if (i >= UCM_BRANCH_FACTOR)
+		ucm_inc_recursive(map, (i / UCM_BRANCH_FACTOR) - 1,
+						  ((new_val & prev_mask) == 0) ? prev : UCM_INVALID_LEVEL,
+						  ((val & next_mask) == 0) ? next : UCM_INVALID_LEVEL);
 }
 
-#[inline]
-fn atomic_u32_init(ptr: *mut pg_atomic_uint32, val: u32) {
-    unsafe { pg_sys::pg_atomic_init_u32(ptr, val) }
+void
+ucm_inc(UsageCountMap *map, OInMemoryBlkno blkno, int prev, int next)
+{
+	ucm_inc_recursive(map, map->nonLeaf + blkno / UCM_BRANCH_FACTOR, prev, next);
 }
 
-#[inline]
-fn atomic_u32_cas(ptr: *mut pg_atomic_uint32, current: &mut u32, new: u32) -> bool {
-    unsafe { pg_sys::pg_atomic_compare_exchange_u32(ptr, current, new) }
+static void
+page_inc_usage_count_internal(UsageCountMap *map, OInMemoryBlkno blkno,
+							  uint64 state)
+{
+	uint32		epoch = pg_atomic_read_u32(map->epoch),
+				mask;
+	uint32		usageCount = O_PAGE_STATE_GET_USAGE_COUNT(state);
+
+	Assert(usageCount < UCM_USAGE_LEVELS);
+
+	map->usageCounter++;
+
+	mask = (1 << ((UCM_USAGE_LEVELS + usageCount - epoch) % UCM_USAGE_LEVELS)) - 1;
+
+	if ((map->usageCounter & mask) == 0 && (usageCount + 1) % UCM_USAGE_LEVELS != epoch)
+	{
+		Page		p = O_GET_IN_MEMORY_PAGE(blkno);
+
+		if (pg_atomic_compare_exchange_u64(&(O_PAGE_HEADER(p)->state),
+										   &state,
+										   O_PAGE_STATE_SET_USAGE_COUNT(state, (usageCount + 1) % UCM_USAGE_LEVELS)))
+		{
+			ucm_inc(map, blkno - map->offset, usageCount, (usageCount + 1) % UCM_USAGE_LEVELS);
+		}
+	}
 }
 
-#[inline]
-fn atomic_u64_read(ptr: *mut pg_atomic_uint64) -> u64 {
-    unsafe { pg_sys::pg_atomic_read_u64(ptr) }
+void
+page_inc_usage_count(UsageCountMap *map, OInMemoryBlkno blkno)
+{
+	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
+	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	uint64		state = pg_atomic_read_u64(&header->state);
+	uint32		usageCount = O_PAGE_STATE_GET_USAGE_COUNT(state);
+
+	if (usageCount == UCM_INVALID_LEVEL ||
+		usageCount == UCM_FREE_PAGES_LEVEL ||
+		skip_ucm)
+		return;
+
+	page_inc_usage_count_internal(map, blkno, state);
 }
 
-#[inline]
-fn atomic_u64_cas(ptr: *mut pg_atomic_uint64, current: &mut u64, new: u64) -> bool {
-    unsafe { pg_sys::pg_atomic_compare_exchange_u64(ptr, current, new) }
+void
+page_change_usage_count(UsageCountMap *map, OInMemoryBlkno blkno, uint32 usageCount)
+{
+	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
+	OrioleDBPageHeader *header = (OrioleDBPageHeader *) p;
+	uint64		state = pg_atomic_read_u64(&header->state);
+
+	while (true)
+	{
+		if (pg_atomic_compare_exchange_u64(&(O_PAGE_HEADER(p)->state),
+										   &state,
+										   O_PAGE_STATE_SET_USAGE_COUNT(state, usageCount)))
+			break;
+	}
+	ucm_inc(map, blkno - map->offset, O_PAGE_STATE_GET_USAGE_COUNT(state), usageCount);
 }
 
-#[inline]
-unsafe fn page_header_of(blkno: OInMemoryBlkno) -> *mut OrioleDBPageHeader {
-    debug_assert!(!crate::o_shared_buffers.is_null());
-    debug_assert!((blkno as usize) < crate::orioledb_buffers_count);
-    crate::o_shared_buffers.add((blkno as usize) * 8192) as *mut OrioleDBPageHeader
+static bool
+page_try_change_usage_count(UsageCountMap *map, OInMemoryBlkno blkno,
+							uint64 oldState, uint32 newUsageCount)
+{
+	Page		p = O_GET_IN_MEMORY_PAGE(blkno);
+	uint32		oldUsageCount = O_PAGE_STATE_GET_USAGE_COUNT(oldState);
+	uint64		newState = O_PAGE_STATE_SET_USAGE_COUNT(oldState, newUsageCount);
+
+	if (pg_atomic_compare_exchange_u64(&(O_PAGE_HEADER(p)->state),
+									   &oldState,
+									   newState))
+	{
+		ucm_inc(map, blkno - map->offset, oldUsageCount, newUsageCount);
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
-#[inline]
-unsafe fn page_state_ptr_of(blkno: OInMemoryBlkno) -> *mut pg_atomic_uint64 {
-    std::ptr::addr_of_mut!((*page_header_of(blkno)).state)
+static bool
+ucm_check_recursive(UsageCountMap *map, int i)
+{
+	if (i < map->nonLeaf)
+	{
+		/* Non-leaf */
+		int			j,
+					j_max;
+		uint32		expected = 0,
+					value;
+		bool		result = true;
+
+		value = pg_atomic_read_u32(&map->ucm[i]);
+		j_max = Min((i + 2) * UCM_BRANCH_FACTOR, map->total);
+		for (j = (i + 1) * UCM_BRANCH_FACTOR; j < j_max; j++)
+		{
+			result = result && ucm_check_recursive(map, j);
+			expected += get_value_frame(pg_atomic_read_u32(&map->ucm[j]));
+		}
+
+		if (value != expected)
+		{
+			elog(NOTICE, "wrong value of internal ucm[%d]: expected %x, have %x",
+				 i, expected, value);
+			result = false;
+		}
+		return result;
+	}
+	else if (i < map->total)
+	{
+		int			group_num = i - map->nonLeaf,
+					blkno,
+					blkno_max;
+		bool		result = true;
+		uint32		expected = 0,
+					value,
+					usageCount;
+
+		value = pg_atomic_read_u32(&map->ucm[i]);
+		blkno_max = Min((group_num + 1) * UCM_BRANCH_FACTOR, map->size);
+		for (blkno = group_num * UCM_BRANCH_FACTOR; blkno < blkno_max; blkno++)
+		{
+			Page		p = O_GET_IN_MEMORY_PAGE(blkno + map->offset);
+
+			usageCount = O_PAGE_STATE_GET_USAGE_COUNT(pg_atomic_read_u64(&(O_PAGE_HEADER(p)->state)));
+
+			if (usageCount < UCM_LEVELS)
+			{
+				expected += (1 << (UCM_LEVEL_BITS * usageCount));
+			}
+			else if (usageCount != UCM_INVALID_LEVEL)
+			{
+				elog(NOTICE, "wrong value of ucm[%d]: expected %x, have %x",
+					 i, expected, value);
+				result = false;
+			}
+		}
+
+		if (value != expected)
+		{
+			elog(NOTICE, "wrong value of leaf ucm[%d]: expected %x, have %x",
+				 i, expected, value);
+			result = false;
+		}
+
+		return result;
+	}
+	else
+	{
+		return 0;
+	}
 }
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn estimate_ucm_space(map: *mut UsageCountMap, offset: OInMemoryBlkno, size: OInMemoryBlkno) -> usize {
-    let n_leaf_groups = (size + UCM_BRANCH_FACTOR - 1) / UCM_BRANCH_FACTOR;
-    let n_leaf_vars = n_leaf_groups;
+bool
+ucm_check_map(UsageCountMap *map)
+{
+	bool		result = true;
+	int			i;
 
-    let mut n_non_leaf_vars = 0u32;
-    let mut n = n_leaf_vars;
-    (*map).root_factor = UCM_BRANCH_FACTOR as i32;
-    while n > UCM_BRANCH_FACTOR {
-        n_non_leaf_vars += 1;
-        n_non_leaf_vars *= UCM_BRANCH_FACTOR;
-        n += UCM_BRANCH_FACTOR - 1;
-        n /= UCM_BRANCH_FACTOR;
-        (*map).root_factor *= UCM_BRANCH_FACTOR as i32;
-    }
+	for (i = 0; i < UCM_BRANCH_FACTOR; i++)
+		result = result && ucm_check_recursive(map, i);
 
-    (*map).offset = offset;
-    (*map).size = size;
-    (*map).total = (n_non_leaf_vars + n_leaf_vars) as i32;
-    (*map).non_leaf = n_non_leaf_vars as i32;
-    std::mem::size_of::<u32>() + std::mem::size_of::<pg_atomic_uint32>() * (*map).total as usize
+	return result;
 }
 
-fn get_value_frame(value: u32) -> u32 {
-    let mut result = 0u32;
-    let mut mask = UCM_LEVEL_MASK;
-    let mut one: u32 = 1;
-    for _ in 0..UCM_LEVELS {
-        if value & mask != 0 {
-            result += one;
-        }
-        one <<= UCM_LEVEL_BITS;
-        mask <<= UCM_LEVEL_BITS;
-    }
-    result
+bool
+ucm_epoch_needs_shift(UsageCountMap *map)
+{
+	uint32		mask,
+				epoch;
+	int			i;
+
+	epoch = pg_atomic_read_u32(map->epoch);
+	mask = 0xFFFFFFFF;
+	for (i = UCM_USAGE_LEVELS - 2; i < UCM_USAGE_LEVELS; i++)
+	{
+		int			shift = ((i + epoch) % UCM_USAGE_LEVELS) * UCM_LEVEL_BITS;
+
+		mask &= ~(UCM_LEVEL_MASK << shift);
+	}
+
+	for (i = 0; i < UCM_BRANCH_FACTOR; i++)
+	{
+		if (pg_atomic_read_u32(&map->ucm[i]) & mask)
+			return false;
+	}
+	return true;
 }
 
-fn init_ucm_non_leaf_recursive(map: &UsageCountMap, i: i32) -> u32 {
-    if i < map.non_leaf {
-        let mut value = 0u32;
-        for j in (i + 1) * UCM_BRANCH_FACTOR as i32..(i + 2) * UCM_BRANCH_FACTOR as i32 {
-            value += get_value_frame(init_ucm_non_leaf_recursive(map, j));
-        }
-        atomic_u32_init(unsafe { map.ucm.add(i as usize) }, value);
-        value
-    } else if i < map.total {
-        atomic_u32_read(unsafe { map.ucm.add(i as usize) })
-    } else {
-        0
-    }
+void
+ucm_epoch_shift(UsageCountMap *map)
+{
+	uint32		epoch,
+				next_epoch;
+
+	epoch = pg_atomic_read_u32(map->epoch);
+	if (epoch == UCM_USAGE_LEVELS - 1)
+		next_epoch = 0;
+	else
+		next_epoch = epoch + 1;
+	pg_atomic_compare_exchange_u32(map->epoch, &epoch, next_epoch);
 }
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn init_ucm(map: *mut UsageCountMap, ptr: *mut u8, found: bool) {
-    let epoch = ptr as *mut pg_atomic_uint32;
-    let ucm = ptr.add(64) as *mut pg_atomic_uint32;
-    (*map).epoch = epoch;
-    (*map).ucm = ucm;
+OInMemoryBlkno
+ucm_next_blkno(UsageCountMap *map, OInMemoryBlkno init_blkno,
+			   uint32 mask_src)
+{
+	int64		location;
+	int64		i;
+	int64		factor,
+				base;
+	int64		num_iterations;
+	uint32		mask;
+	uint32		epoch;
 
-    if found {
-        return;
-    }
+	epoch = pg_atomic_read_u32(map->epoch);
 
-    atomic_u32_init(epoch, 0);
+retry:
 
-    let mut blkno = 0u32;
-    for i in (*map).non_leaf..(*map).total {
-        let pages_count = std::cmp::min((*map).size - blkno, UCM_BRANCH_FACTOR);
-        atomic_u32_init(
-            (*map).ucm.add(i as usize),
-            (pages_count as u32) << (UCM_FREE_PAGES_LEVEL * UCM_LEVEL_BITS),
-        );
-        blkno += UCM_BRANCH_FACTOR;
-    }
+	mask = 0;
+	for (i = 0; i < UCM_USAGE_LEVELS; i++)
+	{
+		if (mask_src & (1 << i))
+		{
+			int			shift = ((i + epoch) % UCM_USAGE_LEVELS) * UCM_LEVEL_BITS;
 
-    for i in 0..UCM_BRANCH_FACTOR as i32 {
-        init_ucm_non_leaf_recursive(&*map, i);
-    }
+			mask |= UCM_LEVEL_MASK << shift;
+		}
+	}
+
+	location = init_blkno - map->offset;
+	factor = map->rootFactor;
+	base = 0;
+	num_iterations = 0;
+	while (true)
+	{
+		i = base + (location / factor) % UCM_BRANCH_FACTOR;
+
+		if (factor == 1 && location < map->size)
+		{
+			/* Work with pages themselves */
+			OrioleDBPageHeader *header = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(location + map->offset);
+			uint64		state;
+			uint32		usageCount;
+
+			state = pg_atomic_read_u64(&header->state);
+			usageCount = O_PAGE_STATE_GET_USAGE_COUNT(state);
+			if (usageCount < UCM_LEVELS)
+			{
+				int			j = (UCM_LEVELS + usageCount - epoch) % UCM_LEVELS;
+
+				if (mask_src & (1 << j))
+				{
+					page_inc_usage_count_internal(map, location + map->offset,
+												  state);
+					return location + map->offset;
+				}
+			}
+		}
+
+		if (i < map->total && (pg_atomic_read_u32(&map->ucm[i]) & mask))
+		{
+			/* Required usage counts should be here, so step into */
+			base = (i + 1) * UCM_BRANCH_FACTOR;
+			factor /= UCM_BRANCH_FACTOR;
+			num_iterations = 0;
+		}
+		else
+		{
+			/* Not found, so step over */
+			int64		j;
+
+			if (num_iterations > 2 * UCM_BRANCH_FACTOR)
+			{
+				/*
+				 * Made two rounds and didn't found required usage counts.  So
+				 * give up and retry at upper level.
+				 */
+				if (base == 0)
+				{
+					uint32		next_epoch;
+
+					if (epoch == UCM_USAGE_LEVELS - 1)
+						next_epoch = 0;
+					else
+						next_epoch = epoch + 1;
+
+					pg_atomic_compare_exchange_u32(map->epoch,
+												   &epoch,
+												   next_epoch);
+					goto retry;
+				}
+				factor *= UCM_BRANCH_FACTOR;
+				i = (i / UCM_BRANCH_FACTOR) - 1;
+				base = (i / UCM_BRANCH_FACTOR) * UCM_BRANCH_FACTOR;
+				num_iterations = 0;
+			}
+
+			j = (location / factor) % UCM_BRANCH_FACTOR;
+			location = (location / factor) * factor;
+			location += ((j + 1) % UCM_BRANCH_FACTOR - j) * factor;
+			num_iterations++;
+		}
+	}
 }
 
-fn ucm_inc_recursive(map: &UsageCountMap, i: i32, prev: i32, next: i32) {
-    let prev_mask = if prev != UCM_INVALID_LEVEL as i32 {
-        UCM_LEVEL_MASK << (prev as u32 * UCM_LEVEL_BITS)
-    } else {
-        0
-    };
-    let prev_one = if prev != UCM_INVALID_LEVEL as i32 {
-        1u32 << (prev as u32 * UCM_LEVEL_BITS)
-    } else {
-        0
-    };
-    let next_mask = if next != UCM_INVALID_LEVEL as i32 {
-        UCM_LEVEL_MASK << (next as u32 * UCM_LEVEL_BITS)
-    } else {
-        0
-    };
-    let next_one = if next != UCM_INVALID_LEVEL as i32 {
-        1u32 << (next as u32 * UCM_LEVEL_BITS)
-    } else {
-        0
-    };
+OInMemoryBlkno
+ucm_occupy_free_page(UsageCountMap *map)
+{
+	int64		location;
+	int64		i;
+	int64		factor,
+				base;
+	int64		num_iterations;
+	uint32		mask;
 
-    let mut val = atomic_u32_read(unsafe { map.ucm.add(i as usize) });
-    let new_val = loop {
-        if (val & prev_mask) < prev_one || (val & next_mask) > (next_mask - next_one) {
-            loop {
-                if (val & prev_mask) >= prev_one && (val & next_mask) <= (next_mask - next_one) {
-                    break;
-                }
-                val = atomic_u32_read(unsafe { map.ucm.add(i as usize) });
-            }
-        }
+	mask = UCM_LEVEL_MASK << (UCM_FREE_PAGES_LEVEL * UCM_LEVEL_BITS);
+	location = 0;
+	factor = map->rootFactor;
+	base = 0;
+	num_iterations = 0;
+	while (true)
+	{
+		Assert(factor > 0);
 
-        let nv = val - prev_one + next_one;
+		i = base + (location / factor) % UCM_BRANCH_FACTOR;
 
-        if atomic_u32_cas(unsafe { map.ucm.add(i as usize) }, &mut val, nv) {
-            break nv;
-        }
-    };
+		if (factor == 1 && location < map->size)
+		{
+			/* Work with pages themselves */
+			OInMemoryBlkno blkno = location + map->offset;
+			OrioleDBPageHeader *header = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
+			uint64		state;
 
-    if i >= UCM_BRANCH_FACTOR as i32 {
-        ucm_inc_recursive(
-            map,
-            (i / UCM_BRANCH_FACTOR as i32) - 1,
-            if (new_val & prev_mask) == 0 {
-                prev
-            } else {
-                UCM_INVALID_LEVEL as i32
-            },
-            if (val & next_mask) == 0 {
-                next
-            } else {
-                UCM_INVALID_LEVEL as i32
-            },
-        );
-    }
-}
+			state = pg_atomic_read_u64(&header->state);
+			if (O_PAGE_STATE_GET_USAGE_COUNT(state) == UCM_FREE_PAGES_LEVEL &&
+				page_try_change_usage_count(map, blkno,
+											state, UCM_INVALID_LEVEL))
+			{
+				return blkno;
+			}
+		}
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn ucm_inc(map: *const UsageCountMap, blkno: OInMemoryBlkno, prev: i32, next: i32) {
-    ucm_inc_recursive(
-        &*map,
-        (*map).non_leaf + (blkno / UCM_BRANCH_FACTOR) as i32,
-        prev,
-        next,
-    );
-}
+		if (i < map->total && (pg_atomic_read_u32(&map->ucm[i]) & mask))
+		{
+			/* Required usage counts should be here, so step into */
+			base = (i + 1) * UCM_BRANCH_FACTOR;
+			factor /= UCM_BRANCH_FACTOR;
+			num_iterations = 0;
+		}
+		else
+		{
+			/* Not found, so step over */
+			int64		j;
 
-pub fn ucm_update_state(map: &mut UsageCountMap, _blkno: OInMemoryBlkno, state: u64) -> u64 {
-    let epoch = atomic_u32_read(map.epoch);
-    let usage_count = page_state_get_usage_count(state);
+			if (num_iterations > 2 * UCM_BRANCH_FACTOR && base != 0)
+			{
+				/*
+				 * Made two rounds and didn't found required usage counts.  So
+				 * give up and retry at upper level.
+				 */
+				factor *= UCM_BRANCH_FACTOR;
+				i = (i / UCM_BRANCH_FACTOR) - 1;
+				base = (i / UCM_BRANCH_FACTOR) * UCM_BRANCH_FACTOR;
+				num_iterations = 0;
+			}
 
-    if usage_count == UCM_INVALID_LEVEL || usage_count == UCM_FREE_PAGES_LEVEL {
-        return state;
-    }
-
-    debug_assert!(usage_count < UCM_USAGE_LEVELS);
-
-    map.usage_counter += 1;
-
-    let mask = (1u32 << ((UCM_USAGE_LEVELS + usage_count - epoch) % UCM_USAGE_LEVELS)) - 1;
-
-    if (map.usage_counter & mask) == 0
-        && (usage_count + 1) % UCM_USAGE_LEVELS != epoch
-    {
-        page_state_set_usage_count(state, (usage_count + 1) % UCM_USAGE_LEVELS)
-    } else {
-        state
-    }
-}
-
-pub fn ucm_after_update_state(map: &UsageCountMap, blkno: OInMemoryBlkno, old_state: u64, new_state: u64) {
-    let old_usage = page_state_get_usage_count(old_state);
-    let new_usage = page_state_get_usage_count(new_state);
-
-    if old_usage != new_usage {
-        unsafe {
-            ucm_inc(map, blkno - map.offset, old_usage as i32, new_usage as i32);
-        }
-    }
-}
-
-fn page_inc_usage_count_internal(map: &mut UsageCountMap, blkno: OInMemoryBlkno, mut state: u64) {
-    let epoch = atomic_u32_read(map.epoch);
-    let usage_count = page_state_get_usage_count(state);
-
-    debug_assert!(usage_count < UCM_USAGE_LEVELS);
-
-    let page_state_ptr = unsafe { page_state_ptr_of(blkno) };
-
-    map.usage_counter += 1;
-
-    let mask = (1u32 << ((UCM_USAGE_LEVELS + usage_count - epoch) % UCM_USAGE_LEVELS)) - 1;
-
-    if (map.usage_counter & mask) == 0 && (usage_count + 1) % UCM_USAGE_LEVELS != epoch {
-        let new_state = page_state_set_usage_count(state, (usage_count + 1) % UCM_USAGE_LEVELS);
-        if atomic_u64_cas(page_state_ptr, &mut state, new_state) {
-            unsafe {
-                ucm_inc(
-                    map,
-                    blkno - map.offset,
-                    usage_count as i32,
-                    ((usage_count + 1) % UCM_USAGE_LEVELS) as i32,
-                );
-            }
-        }
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn page_inc_usage_count(map: *mut UsageCountMap, blkno: OInMemoryBlkno) {
-    let page_state_ptr = page_state_ptr_of(blkno);
-    let state = atomic_u64_read(page_state_ptr);
-    let usage_count = page_state_get_usage_count(state);
-
-    if usage_count == UCM_INVALID_LEVEL
-        || usage_count == UCM_FREE_PAGES_LEVEL
-        || skip_ucm
-    {
-        return;
-    }
-
-    page_inc_usage_count_internal(&mut *map, blkno, state);
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn page_change_usage_count(map: *const UsageCountMap, blkno: OInMemoryBlkno, usage_count: u32) {
-    let page_state_ptr = page_state_ptr_of(blkno);
-    let mut state = atomic_u64_read(page_state_ptr);
-
-    loop {
-        let new_state = page_state_set_usage_count(state, usage_count);
-        if atomic_u64_cas(page_state_ptr, &mut state, new_state) {
-            break;
-        }
-    }
-    ucm_inc(
-        map,
-        blkno - (*map).offset,
-        page_state_get_usage_count(state) as i32,
-        usage_count as i32,
-    );
-}
-
-fn page_try_change_usage_count(map: &UsageCountMap, blkno: OInMemoryBlkno, old_state: u64, new_usage_count: u32) -> bool {
-    let page_state_ptr = unsafe { page_state_ptr_of(blkno) };
-    let old_usage = page_state_get_usage_count(old_state);
-    let new_state = page_state_set_usage_count(old_state, new_usage_count);
-    let mut cur = old_state;
-
-    if atomic_u64_cas(page_state_ptr, &mut cur, new_state) {
-        unsafe {
-            ucm_inc(map, blkno - map.offset, old_usage as i32, new_usage_count as i32);
-        }
-        true
-    } else {
-        false
-    }
-}
-
-fn ucm_check_recursive(map: &UsageCountMap, i: i32) -> bool {
-    if i < map.non_leaf {
-        let value = atomic_u32_read(unsafe { map.ucm.add(i as usize) });
-        let j_max = std::cmp::min((i + 2) * UCM_BRANCH_FACTOR as i32, map.total);
-        let mut expected = 0u32;
-        let mut result = true;
-        for j in (i + 1) * UCM_BRANCH_FACTOR as i32..j_max {
-            result = result && ucm_check_recursive(map, j);
-            expected += get_value_frame(atomic_u32_read(unsafe { map.ucm.add(j as usize) }));
-        }
-        if value != expected {
-            pgrx::notice!("wrong value of internal ucm [{}]: expected {:#x}, have {:#x}", i, expected, value);
-            result = false;
-        }
-        result
-    } else if i < map.total {
-        let group_num = i - map.non_leaf;
-        let blkno_max = std::cmp::min((group_num + 1) * UCM_BRANCH_FACTOR as i32, map.size as i32) as u32;
-        let mut expected = 0u32;
-        let value = atomic_u32_read(unsafe { map.ucm.add(i as usize) });
-        let mut result = true;
-        for blkno in (group_num as u32 * UCM_BRANCH_FACTOR)..blkno_max {
-            let page_state_ptr = unsafe { page_state_ptr_of(blkno + map.offset) };
-            let usage_count = page_state_get_usage_count(atomic_u64_read(page_state_ptr));
-            if usage_count < UCM_LEVELS {
-                expected += 1 << (UCM_LEVEL_BITS * usage_count);
-            } else if usage_count != UCM_INVALID_LEVEL {
-                pgrx::notice!("wrong value of ucm [{}]: expected {:#x}, have {:#x}", i, expected, value);
-                result = false;
-            }
-        }
-        if value != expected {
-            pgrx::notice!("wrong value of leaf ucm [{}]: expected {:#x}, have {:#x}", i, expected, value);
-            result = false;
-        }
-        result
-    } else {
-        true
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn ucm_check_map(map: *const UsageCountMap) -> bool {
-    let mut result = true;
-    for i in 0..UCM_BRANCH_FACTOR as i32 {
-        result = result && ucm_check_recursive(&*map, i);
-    }
-    result
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn ucm_epoch_needs_shift(map: *const UsageCountMap) -> bool {
-    let epoch = atomic_u32_read((*map).epoch);
-    let mut mask = 0xFFFF_FFFFu32;
-    for i in (UCM_USAGE_LEVELS - 2)..UCM_USAGE_LEVELS {
-        let shift = ((i + epoch) % UCM_USAGE_LEVELS) * UCM_LEVEL_BITS;
-        mask &= !(UCM_LEVEL_MASK << shift);
-    }
-    for i in 0..UCM_BRANCH_FACTOR as i32 {
-        if atomic_u32_read((*map).ucm.add(i as usize)) & mask != 0 {
-            return false;
-        }
-    }
-    true
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn ucm_epoch_shift(map: *const UsageCountMap) {
-    let epoch = atomic_u32_read((*map).epoch);
-    let next_epoch = if epoch == UCM_USAGE_LEVELS - 1 { 0 } else { epoch + 1 };
-    let mut cur = epoch;
-    atomic_u32_cas((*map).epoch, &mut cur, next_epoch);
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn ucm_next_blkno(map: *mut UsageCountMap, init_blkno: OInMemoryBlkno, mask_src: u32) -> OInMemoryBlkno {
-    let epoch = atomic_u32_read((*map).epoch);
-
-    let mut mask: u32 = 0;
-    for i in 0..UCM_USAGE_LEVELS {
-        if mask_src & (1 << i) != 0 {
-            let shift = ((i + epoch) % UCM_USAGE_LEVELS) * UCM_LEVEL_BITS;
-            mask |= UCM_LEVEL_MASK << shift;
-        }
-    }
-
-    let mut location = (init_blkno - (*map).offset) as i64;
-    let mut factor = (*map).root_factor as i64;
-    let mut base = 0i64;
-    let mut num_iterations = 0i64;
-
-    loop {
-        let i = base + (location / factor) % UCM_BRANCH_FACTOR as i64;
-
-        if factor == 1 && location < (*map).size as i64 {
-            let page_state_ptr = page_state_ptr_of((location as u32) + (*map).offset);
-            let state = atomic_u64_read(page_state_ptr);
-            let usage_count = page_state_get_usage_count(state);
-            if usage_count < UCM_LEVELS {
-                let j = ((UCM_LEVELS + usage_count - epoch) % UCM_LEVELS) as u32;
-                if mask_src & (1 << j) != 0 {
-                    page_inc_usage_count_internal(&mut *map, (location as u32) + (*map).offset, state);
-                    return (location as u32) + (*map).offset;
-                }
-            }
-        }
-
-        if i < (*map).total as i64 && atomic_u32_read((*map).ucm.add(i as usize)) & mask != 0 {
-            base = (i + 1) * UCM_BRANCH_FACTOR as i64;
-            factor /= UCM_BRANCH_FACTOR as i64;
-            num_iterations = 0;
-        } else {
-            if num_iterations > 2 * UCM_BRANCH_FACTOR as i64 {
-                if base == 0 {
-                    let next_epoch = if epoch == UCM_USAGE_LEVELS - 1 { 0 } else { epoch + 1 };
-                    let mut cur = epoch;
-                    atomic_u32_cas((*map).epoch, &mut cur, next_epoch);
-                    return ucm_next_blkno(map, init_blkno, mask_src);
-                }
-                factor *= UCM_BRANCH_FACTOR as i64;
-                let new_i = (i / UCM_BRANCH_FACTOR as i64) - 1;
-                base = (new_i / UCM_BRANCH_FACTOR as i64) * UCM_BRANCH_FACTOR as i64;
-                num_iterations = 0;
-            }
-            let j = (location / factor) % UCM_BRANCH_FACTOR as i64;
-            location = (location / factor) * factor;
-            location += (((j + 1) % UCM_BRANCH_FACTOR as i64) - j) * factor;
-            num_iterations += 1;
-        }
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn ucm_occupy_free_page(map: *const UsageCountMap) -> OInMemoryBlkno {
-    let mask = UCM_LEVEL_MASK << (UCM_FREE_PAGES_LEVEL * UCM_LEVEL_BITS);
-    let mut location = 0i64;
-    let mut factor = (*map).root_factor as i64;
-    let mut base = 0i64;
-    let mut num_iterations = 0i64;
-
-    loop {
-        debug_assert!(factor > 0);
-
-        let i = base + (location / factor) % UCM_BRANCH_FACTOR as i64;
-
-        if factor == 1 && location < (*map).size as i64 {
-            let blkno = (location as u32) + (*map).offset;
-            let page_state_ptr = page_state_ptr_of(blkno);
-            let state = atomic_u64_read(page_state_ptr);
-            if page_state_get_usage_count(state) == UCM_FREE_PAGES_LEVEL
-                && page_try_change_usage_count(&*map, blkno, state, UCM_INVALID_LEVEL)
-            {
-                return blkno;
-            }
-        }
-
-        if i < (*map).total as i64 && atomic_u32_read((*map).ucm.add(i as usize)) & mask != 0 {
-            base = (i + 1) * UCM_BRANCH_FACTOR as i64;
-            factor /= UCM_BRANCH_FACTOR as i64;
-            num_iterations = 0;
-        } else {
-            if num_iterations > 2 * UCM_BRANCH_FACTOR as i64 && base != 0 {
-                factor *= UCM_BRANCH_FACTOR as i64;
-                let new_i = (i / UCM_BRANCH_FACTOR as i64) - 1;
-                base = (new_i / UCM_BRANCH_FACTOR as i64) * UCM_BRANCH_FACTOR as i64;
-                num_iterations = 0;
-            }
-            let j = (location / factor) % UCM_BRANCH_FACTOR as i64;
-            location = (location / factor) * factor;
-            location += (((j + 1) % UCM_BRANCH_FACTOR as i64) - j) * factor;
-            num_iterations += 1;
-        }
-    }
+			j = (location / factor) % UCM_BRANCH_FACTOR;
+			location = (location / factor) * factor;
+			location += ((j + 1) % UCM_BRANCH_FACTOR - j) * factor;
+			num_iterations++;
+		}
+	}
 }

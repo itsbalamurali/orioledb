@@ -1,378 +1,334 @@
-// Catalog module: o_database_cache.
-//
-// Ported from `include/catalog/o_sys_cache.h` and `src/catalog/o_database_cache.c`.
-//
-// Copyright (c) 2021-2026, Oriole DB Inc.
-// Copyright (c) 2025-2026, Supabase Inc.
+/*-------------------------------------------------------------------------
+ *
+ *  o_database_cache.c
+ *		Routines for orioledb database cache.
+ *
+ * database_cache is tree that contains cached metadata from pg_database.
+ *
+ * Copyright (c) 2021-2026, Oriole DB Inc.
+ * Copyright (c) 2025-2026, Supabase Inc.
+ *
+ * IDENTIFICATION
+ *	  contrib/orioledb/src/catalog/o_database_cache.c
+ *
+ *-------------------------------------------------------------------------
+ */
 
-use crate::catalog::o_sys_cache::{
-    self, OSysCache, OSysCacheFuncs, OSysCacheKey, OSysCacheKey1, OSysCacheKeyCommon,
+#include "postgres.h"
+
+#include "orioledb.h"
+
+#include "catalog/o_sys_cache.h"
+
+#include "catalog/pg_collation.h"
+#include "catalog/pg_database.h"
+#if PG_VERSION_NUM >= 180000
+#include "utils/memutils.h"
+#endif
+#include "utils/syscache.h"
+#include "mb/pg_wchar.h"
+
+static OSysCache *database_cache = NULL;
+
+typedef struct ODatabase
+{
+	OSysCacheKey1 key;
+	uint16		data_version;
+	int32		encoding;
+	char		datlocprovider;
+#if PG_VERSION_NUM >= 170000
+	char	   *datlocale;
+	char	   *daticurules;
+#endif
+	char	   *datcollate;
+#if PG_VERSION_NUM >= 180000
+	char	   *datctype;
+#endif
+} ODatabase;
+
+static void o_database_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+										Pointer arg);
+static void o_database_cache_free_entry(Pointer entry);
+static Pointer o_database_cache_serialize_entry(Pointer entry, int *len);
+static Pointer o_database_cache_deserialize_entry(MemoryContext mcxt,
+												  Pointer data, Size length);
+
+O_SYS_CACHE_FUNCS(database_cache, ODatabase, 1);
+
+static OSysCacheFuncs database_cache_funcs =
+{
+	.free_entry = o_database_cache_free_entry,
+	.fill_entry = o_database_cache_fill_entry,
+	.toast_serialize_entry = o_database_cache_serialize_entry,
+	.toast_deserialize_entry = o_database_cache_deserialize_entry,
 };
-use pgrx::pg_sys::{self, Datum, Oid, XLogRecPtr, MemoryContext};
-use std::ffi::{c_char, c_void};
 
-pub static mut database_cache: *mut OSysCache = std::ptr::null_mut();
+/*
+ * Initializes the database sys cache memory.
+ */
+O_SYS_CACHE_INIT_FUNC(database_cache)
+{
+	Oid			keytypes[] = {OIDOID};
 
-#[repr(C)]
-pub struct ODatabase {
-    pub key: OSysCacheKey1,
-    pub data_version: u16,
-    pub encoding: i32,
-    pub datlocprovider: std::ffi::c_char,
-    pub datlocale: *mut std::ffi::c_char,
-    pub daticurules: *mut std::ffi::c_char,
-    pub datcollate: *mut std::ffi::c_char,
-    pub datctype: *mut std::ffi::c_char,
+	database_cache = o_create_sys_cache(SYS_TREES_DATABASE_CACHE, true,
+										DatabaseOidIndexId, DATABASEOID, 1,
+										keytypes, 0, fastcache, mcxt,
+										&database_cache_funcs);
 }
 
-unsafe fn get_struct(tup: pg_sys::HeapTuple) -> *mut c_char {
-    ((*tup).t_data as *mut c_char).add((*(*tup).t_data).t_hoff as usize)
+static void
+o_database_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key,
+							Pointer arg)
+{
+	HeapTuple	databasetup;
+	Form_pg_database dbform;
+	ODatabase  *o_database = (ODatabase *) *entry_ptr;
+	MemoryContext prev_context;
+	Oid			dboid;
+	Datum		datum;
+	bool		isNull;
+
+	dboid = DatumGetObjectId(key->keys[0]);
+
+	databasetup = SearchSysCache1(DATABASEOID, key->keys[0]);
+	if (!HeapTupleIsValid(databasetup))
+		elog(ERROR, "cache lookup failed for database (%u)", dboid);
+	dbform = (Form_pg_database) GETSTRUCT(databasetup);
+
+	prev_context = MemoryContextSwitchTo(database_cache->mcxt);
+	if (o_database != NULL)		/* Existed o_database updated */
+	{
+		Assert(false);
+	}
+	else
+	{
+		o_database = palloc0(sizeof(ODatabase));
+		*entry_ptr = (Pointer) o_database;
+	}
+
+	o_database->data_version = ORIOLEDB_SYS_TREE_VERSION;
+	o_database->encoding = dbform->encoding;
+	o_database->datlocprovider = dbform->datlocprovider;
+
+	datum = SysCacheGetAttr(DATABASEOID, databasetup,
+							Anum_pg_database_datcollate, &isNull);
+	if (!isNull)
+		o_database->datcollate = TextDatumGetCString(datum);
+	else
+		o_database->datcollate = NULL;
+
+#if PG_VERSION_NUM >= 170000
+	datum = SysCacheGetAttr(DATABASEOID, databasetup,
+							Anum_pg_database_datlocale, &isNull);
+	if (!isNull)
+		o_database->datlocale = TextDatumGetCString(datum);
+	else
+		o_database->datlocale = NULL;
+
+	datum = SysCacheGetAttr(DATABASEOID, databasetup,
+							Anum_pg_database_daticurules, &isNull);
+	if (!isNull)
+		o_database->daticurules = TextDatumGetCString(datum);
+	else
+		o_database->daticurules = NULL;
+#endif
+
+#if PG_VERSION_NUM >= 180000
+	datum = SysCacheGetAttr(DATABASEOID, databasetup,
+							Anum_pg_database_datctype, &isNull);
+	if (!isNull)
+		o_database->datctype = TextDatumGetCString(datum);
+	else
+		o_database->datctype = NULL;
+#endif
+
+	MemoryContextSwitchTo(prev_context);
+	ReleaseSysCache(databasetup);
 }
 
-extern "C" {
-    pub fn o_serialize_string(s: *const c_char, str_info: pg_sys::StringInfo);
-    pub fn o_deserialize_string(ptr: *mut *mut c_char) -> *mut c_char;
+static void
+o_database_cache_free_entry(Pointer entry)
+{
+	pfree(entry);
 }
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_init(fastcache: bool, mcxt: MemoryContext) {
-    static mut DATABASE_CACHE_FUNCS: OSysCacheFuncs = OSysCacheFuncs {
-        free_entry: Some(o_database_cache_free_entry),
-        fill_entry: Some(o_database_cache_fill_entry),
-        toast_serialize_entry: Some(o_database_cache_serialize_entry),
-        toast_deserialize_entry: Some(o_database_cache_deserialize_entry),
-    };
+int32
+o_database_cache_get_database_encoding()
+{
+	XLogRecPtr	cur_lsn;
+	ODatabase  *o_database;
 
-    let mut keytypes = [pg_sys::OIDOID];
-
-    database_cache = o_sys_cache::o_create_sys_cache(
-        13, // SYS_TREES_DATABASE_CACHE
-        true,
-        Oid::from(pg_sys::DatabaseOidIndexId),
-        pg_sys::DATABASEOID,
-        1,
-        keytypes.as_mut_ptr(),
-        0,
-        fastcache,
-        mcxt,
-        std::ptr::addr_of_mut!(DATABASE_CACHE_FUNCS),
-    );
+	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
+	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
+										 database_cache->nkeys);
+	return o_database ? o_database->encoding : PG_SQL_ASCII;
 }
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_search(
-    datoid: Oid,
-    arg1: Datum,
-    search_lsn: XLogRecPtr,
-    nkeys_arg: std::ffi::c_int,
-) -> *mut ODatabase {
-    let mut key = OSysCacheKey1 {
-        common: OSysCacheKeyCommon {
-            datoid,
-            lsn: search_lsn,
-            deleted: false,
-            dataLength: 0,
-        },
-        keys: [arg1],
-    };
-    o_sys_cache::o_sys_cache_search(
-        database_cache,
-        nkeys_arg,
-        std::ptr::addr_of_mut!(key) as *mut OSysCacheKey,
-    ) as *mut ODatabase
+void
+o_database_cache_set_database_encoding()
+{
+	int32		encoding = o_database_cache_get_database_encoding();
+
+	SetDatabaseEncoding(encoding);
 }
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_delete(
-    datoid: Oid,
-    arg1: Datum,
-) -> bool {
-    let mut key = OSysCacheKey1 {
-        common: OSysCacheKeyCommon {
-            datoid,
-            lsn: 0,
-            deleted: false,
-            dataLength: 0,
-        },
-        keys: [arg1],
-    };
-    o_sys_cache::o_sys_cache_delete(
-        database_cache,
-        std::ptr::addr_of_mut!(key) as *mut OSysCacheKey,
-    )
+#if PG_VERSION_NUM >= 170000
+void
+o_database_cache_set_default_locale_provider()
+{
+	XLogRecPtr	cur_lsn;
+	ODatabase  *o_database;
+
+	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
+	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
+										 database_cache->nkeys);
+	if (o_database)
+	{
+#if PG_VERSION_NUM >= 180000
+		if (default_locale == NULL)
+			default_locale = MemoryContextAllocZero(TopMemoryContext,
+													sizeof(struct pg_locale_struct));
+
+		if (o_database->datlocprovider == COLLPROVIDER_BUILTIN)
+		{
+			init_pg_locale_builtin(default_locale, o_database->datlocale,
+								   TopMemoryContext);
+		}
+		else if (o_database->datlocprovider == COLLPROVIDER_ICU)
+		{
+			init_pg_locale_icu(default_locale, o_database->datlocale,
+							   o_database->daticurules, true,
+							   TopMemoryContext);
+		}
+		else if (o_database->datlocprovider == COLLPROVIDER_LIBC)
+		{
+			init_pg_locale_libc(default_locale, o_database->datcollate,
+								o_database->datctype);
+		}
+#else
+		if (o_database->datlocprovider == COLLPROVIDER_BUILTIN)
+		{
+			default_locale.info.builtin.locale = MemoryContextStrdup(TopMemoryContext,
+																	 o_database->datlocale);
+		}
+		else if (o_database->datlocprovider == COLLPROVIDER_ICU)
+		{
+			make_icu_collator(o_database->datlocale, o_database->daticurules,
+							  &default_locale);
+		}
+		default_locale.provider = o_database->datlocprovider;
+		default_locale.deterministic = true;
+#endif
+	}
+	else
+	{
+#if PG_VERSION_NUM >= 180000
+		pg_locale_t loc = default_locale;
+#else
+		pg_locale_t loc = &default_locale;
+#endif
+		if (loc != NULL)
+		{
+			loc->provider = COLLPROVIDER_DEFAULT;
+			loc->deterministic = true;
+		}
+	}
+}
+#endif
+
+void
+o_database_cache_set_lc_collate()
+{
+	XLogRecPtr	cur_lsn;
+	ODatabase  *o_database;
+
+	o_sys_cache_set_datoid_lsn(&cur_lsn, NULL);
+	o_database = o_database_cache_search(Template1DbOid, Template1DbOid, cur_lsn,
+										 database_cache->nkeys);
+	if (o_database && o_database->datcollate)
+	{
+		if (pg_perm_setlocale(LC_COLLATE, o_database->datcollate) == NULL)
+			ereport(FATAL,
+					(errmsg("database locale is incompatible with operating system"),
+					 errdetail("The database was initialized with LC_COLLATE \"%s\", "
+							   " which is not recognized by setlocale().", o_database->datcollate),
+					 errhint("Recreate the database with another locale or install the missing locale.")));
+	}
 }
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_update_if_needed(
-    datoid: Oid,
-    arg1: Datum,
-    arg: *mut c_void,
-) {
-    let mut key = OSysCacheKey1 {
-        common: OSysCacheKeyCommon {
-            datoid,
-            lsn: 0,
-            deleted: false,
-            dataLength: 0,
-        },
-        keys: [arg1],
-    };
-    o_sys_cache::o_sys_cache_update_if_needed(
-        database_cache,
-        std::ptr::addr_of_mut!(key) as *mut OSysCacheKey,
-        arg,
-    );
+static Pointer
+o_database_cache_serialize_entry(Pointer entry, int *len)
+{
+	StringInfoData str;
+	ODatabase  *o_database = (ODatabase *) entry;
+
+	if (o_database->data_version != ORIOLEDB_SYS_TREE_VERSION)
+		elog(FATAL,
+			 "ORIOLEDB_SYS_TREE_VERSION %u of OrioleDB cluster is not among supported for conversion from %u",
+			 o_database->data_version, ORIOLEDB_SYS_TREE_VERSION);
+
+	initStringInfo(&str);
+	appendBinaryStringInfo(&str, (Pointer) o_database,
+						   offsetof(ODatabase, datlocprovider));
+
+#if PG_VERSION_NUM >= 170000
+	appendBinaryStringInfo(&str, ((Pointer) o_database) + offsetof(ODatabase, datlocprovider),
+						   offsetof(ODatabase, datlocale) - offsetof(ODatabase, datlocprovider));
+	o_serialize_string(o_database->datlocale, &str);
+	o_serialize_string(o_database->daticurules, &str);
+#else
+	appendBinaryStringInfo(&str, ((Pointer) o_database) + offsetof(ODatabase, datlocprovider),
+						   offsetof(ODatabase, datcollate) - offsetof(ODatabase, datlocprovider));
+#endif
+	o_serialize_string(o_database->datcollate, &str);
+
+#if PG_VERSION_NUM >= 180000
+	o_serialize_string(o_database->datctype, &str);
+#endif
+
+	*len = str.len;
+	return str.data;
 }
 
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_add_if_needed(
-    datoid: Oid,
-    arg1: Datum,
-    insert_lsn: XLogRecPtr,
-    arg: *mut c_void,
-) {
-    let mut key = OSysCacheKey1 {
-        common: OSysCacheKeyCommon {
-            datoid,
-            lsn: insert_lsn,
-            deleted: false,
-            dataLength: 0,
-        },
-        keys: [arg1],
-    };
-    o_sys_cache::o_sys_cache_add_if_needed(
-        database_cache,
-        std::ptr::addr_of_mut!(key) as *mut OSysCacheKey,
-        insert_lsn,
-        arg,
-    );
-}
+static Pointer
+o_database_cache_deserialize_entry(MemoryContext mcxt, Pointer data,
+								   Size length)
+{
+	Pointer		ptr = data;
+	ODatabase  *o_database;
+	int			len;
 
-unsafe extern "C-unwind" fn o_database_cache_fill_entry(
-    entry_ptr: *mut *mut c_void,
-    key: *mut OSysCacheKey,
-    _arg: *mut c_void,
-) {
-    let key_ptr = key as *mut OSysCacheKey1;
-    let dboid = Oid::from(Datum::from((*key_ptr).keys[0]));
+	o_database = (ODatabase *) palloc0(sizeof(ODatabase));
+	len = offsetof(ODatabase, datlocprovider);
+	Assert((ptr - data) + len <= length);
+	memcpy(o_database, ptr, len);
+	ptr += len;
+	if (o_database->data_version != ORIOLEDB_SYS_TREE_VERSION)
+		elog(FATAL,
+			 "ORIOLEDB_SYS_TREE_VERSION %u of OrioleDB cluster is not among supported for conversion to %u",
+			 o_database->data_version, ORIOLEDB_SYS_TREE_VERSION);
 
-    let databasetup = pg_sys::SearchSysCache1(pg_sys::DATABASEOID as i32, (*key_ptr).keys[0]);
-    if databasetup.is_null() {
-        pg_sys::ereport!(
-            pgrx::PgLogLevel::ERROR,
-            pg_sys::errcodes::PgSqlErrorCode::ERRCODE_INTERNAL_ERROR,
-            format!("cache lookup failed for database ({})", dboid.to_u32())
-        );
-    }
+#if PG_VERSION_NUM >= 170000
+	len = offsetof(ODatabase, datlocale) - offsetof(ODatabase, datlocprovider);
+#else
+	len = offsetof(ODatabase, datcollate) - offsetof(ODatabase, datlocprovider);
+#endif
+	Assert((ptr - data) + len <= length);
+	memcpy(((Pointer) o_database) + offsetof(ODatabase, datlocprovider), ptr, len);
+	ptr += len;
 
-    let dbform = get_struct(databasetup) as *mut pg_sys::FormData_pg_database;
+#if PG_VERSION_NUM >= 170000
+	o_database->datlocale = o_deserialize_string(&ptr);
+	o_database->daticurules = o_deserialize_string(&ptr);
+#endif
 
-    let prev_context = pg_sys::MemoryContextSwitchTo((*database_cache).mcxt);
+	if ((ptr - data) != length)
+		o_database->datcollate = o_deserialize_string(&ptr);
 
-    let mut o_database = *entry_ptr as *mut ODatabase;
-    if !o_database.is_null() {
-        panic!("Assert failed: o_database is not null");
-    } else {
-        o_database = pg_sys::palloc0(std::mem::size_of::<ODatabase>()) as *mut ODatabase;
-        *entry_ptr = o_database as *mut c_void;
-    }
+#if PG_VERSION_NUM >= 180000
+	if ((ptr - data) != length)
+		o_database->datctype = o_deserialize_string(&ptr);
+#endif
 
-    (*o_database).data_version = pg_sys::ORIOLEDB_SYS_TREE_VERSION as u16;
-    (*o_database).encoding = (*dbform).encoding;
-    (*o_database).datlocprovider = (*dbform).datlocprovider;
-
-    let mut is_null = false;
-
-    let datum_collate = pg_sys::SysCacheGetAttr(
-        pg_sys::DATABASEOID as i32,
-        databasetup,
-        pg_sys::Anum_pg_database_datcollate as i32,
-        std::ptr::addr_of_mut!(is_null),
-    );
-    (*o_database).datcollate = if !is_null {
-        pg_sys::TextDatumGetCString(datum_collate)
-    } else {
-        std::ptr::null_mut()
-    };
-
-    let datum_locale = pg_sys::SysCacheGetAttr(
-        pg_sys::DATABASEOID as i32,
-        databasetup,
-        pg_sys::Anum_pg_database_datlocale as i32,
-        std::ptr::addr_of_mut!(is_null),
-    );
-    (*o_database).datlocale = if !is_null {
-        pg_sys::TextDatumGetCString(datum_locale)
-    } else {
-        std::ptr::null_mut()
-    };
-
-    let datum_icurules = pg_sys::SysCacheGetAttr(
-        pg_sys::DATABASEOID as i32,
-        databasetup,
-        pg_sys::Anum_pg_database_daticurules as i32,
-        std::ptr::addr_of_mut!(is_null),
-    );
-    (*o_database).daticurules = if !is_null {
-        pg_sys::TextDatumGetCString(datum_icurules)
-    } else {
-        std::ptr::null_mut()
-    };
-
-    let datum_ctype = pg_sys::SysCacheGetAttr(
-        pg_sys::DATABASEOID as i32,
-        databasetup,
-        pg_sys::Anum_pg_database_datctype as i32,
-        std::ptr::addr_of_mut!(is_null),
-    );
-    (*o_database).datctype = if !is_null {
-        pg_sys::TextDatumGetCString(datum_ctype)
-    } else {
-        std::ptr::null_mut()
-    };
-
-    pg_sys::MemoryContextSwitchTo(prev_context);
-    pg_sys::ReleaseSysCache(databasetup);
-}
-
-unsafe extern "C-unwind" fn o_database_cache_free_entry(entry: *mut c_void) {
-    pg_sys::pfree(entry);
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_get_database_encoding() -> i32 {
-    let mut cur_lsn: XLogRecPtr = 0;
-    let template1_dboid = Oid::from(1);
-    o_sys_cache::o_sys_cache_set_datoid_lsn(&mut cur_lsn, std::ptr::null_mut());
-    let o_database = o_database_cache_search(
-        template1_dboid,
-        Datum::from(template1_dboid),
-        cur_lsn,
-        (*database_cache).nkeys,
-    );
-    if !o_database.is_null() {
-        (*o_database).encoding
-    } else {
-        pg_sys::PG_SQL_ASCII as i32
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_set_database_encoding() {
-    let encoding = o_database_cache_get_database_encoding();
-    pg_sys::SetDatabaseEncoding(encoding);
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_set_default_locale_provider() {
-    // No-op under unpatched PostgreSQL 18
-}
-
-#[no_mangle]
-pub unsafe extern "C-unwind" fn o_database_cache_set_lc_collate() {
-    let mut cur_lsn: XLogRecPtr = 0;
-    let template1_dboid = Oid::from(1);
-    o_sys_cache::o_sys_cache_set_datoid_lsn(&mut cur_lsn, std::ptr::null_mut());
-    let o_database = o_database_cache_search(
-        template1_dboid,
-        Datum::from(template1_dboid),
-        cur_lsn,
-        (*database_cache).nkeys,
-    );
-    if !o_database.is_null() && !(*o_database).datcollate.is_null() {
-        if pg_sys::pg_perm_setlocale(pg_sys::LC_COLLATE as i32, (*o_database).datcollate).is_null() {
-            pg_sys::ereport!(
-                pgrx::PgLogLevel::FATAL,
-                pg_sys::errcodes::PgSqlErrorCode::ERRCODE_INTERNAL_ERROR,
-                "database locale is incompatible with operating system",
-                format!("The database was initialized with LC_COLLATE \"{:?}\", which is not recognized by setlocale().", std::ffi::CStr::from_ptr((*o_database).datcollate))
-            );
-        }
-    }
-}
-
-unsafe extern "C-unwind" fn o_database_cache_serialize_entry(
-    entry: *mut c_void,
-    len: *mut std::ffi::c_int,
-) -> *mut std::ffi::c_char {
-    let o_database = entry as *mut ODatabase;
-
-    if (*o_database).data_version != pg_sys::ORIOLEDB_SYS_TREE_VERSION as u16 {
-        pg_sys::elog(
-            pg_sys::FATAL as i32,
-            b"ORIOLEDB_SYS_TREE_VERSION %u of OrioleDB cluster is not among supported for conversion from %u\0"
-                .as_ptr() as *const c_char,
-            (*o_database).data_version as std::ffi::c_uint,
-            pg_sys::ORIOLEDB_SYS_TREE_VERSION as std::ffi::c_uint,
-        );
-    }
-
-    let mut str_info = std::mem::zeroed::<pg_sys::StringInfoData>();
-    pg_sys::initStringInfo(std::ptr::addr_of_mut!(str_info));
-
-    let offset_provider = memoffset::offset_of!(ODatabase, datlocprovider);
-    pg_sys::appendBinaryStringInfo(
-        std::ptr::addr_of_mut!(str_info),
-        o_database as *mut c_char,
-        offset_provider as std::ffi::c_int,
-    );
-
-    let offset_locale = memoffset::offset_of!(ODatabase, datlocale);
-    pg_sys::appendBinaryStringInfo(
-        std::ptr::addr_of_mut!(str_info),
-        (o_database as *mut c_char).add(offset_provider),
-        (offset_locale - offset_provider) as std::ffi::c_int,
-    );
-
-    o_serialize_string((*o_database).datlocale, std::ptr::addr_of_mut!(str_info));
-    o_serialize_string((*o_database).daticurules, std::ptr::addr_of_mut!(str_info));
-    o_serialize_string((*o_database).datcollate, std::ptr::addr_of_mut!(str_info));
-    o_serialize_string((*o_database).datctype, std::ptr::addr_of_mut!(str_info));
-
-    *len = str_info.len;
-    str_info.data
-}
-
-unsafe extern "C-unwind" fn o_database_cache_deserialize_entry(
-    _mcxt: pg_sys::MemoryContext,
-    data: *mut std::ffi::c_char,
-    length: pg_sys::Size,
-) -> *mut std::ffi::c_char {
-    let mut ptr = data;
-    let o_database = pg_sys::palloc0(std::mem::size_of::<ODatabase>()) as *mut ODatabase;
-
-    let offset_provider = memoffset::offset_of!(ODatabase, datlocprovider);
-    assert!((ptr as usize - data as usize) + offset_provider <= length as usize);
-    std::ptr::copy_nonoverlapping(ptr, o_database as *mut std::ffi::c_char, offset_provider);
-    ptr = ptr.add(offset_provider);
-
-    if (*o_database).data_version != pg_sys::ORIOLEDB_SYS_TREE_VERSION as u16 {
-        pg_sys::elog(
-            pg_sys::FATAL as i32,
-            b"ORIOLEDB_SYS_TREE_VERSION %u of OrioleDB cluster is not among supported for conversion to %u\0"
-                .as_ptr() as *const c_char,
-            (*o_database).data_version as std::ffi::c_uint,
-            pg_sys::ORIOLEDB_SYS_TREE_VERSION as std::ffi::c_uint,
-        );
-    }
-
-    let offset_locale = memoffset::offset_of!(ODatabase, datlocale);
-    let len = offset_locale - offset_provider;
-    assert!((ptr as usize - data as usize) + len <= length as usize);
-    std::ptr::copy_nonoverlapping(ptr, (o_database as *mut std::ffi::c_char).add(offset_provider), len);
-    ptr = ptr.add(len);
-
-    let mut ptr_ptr = ptr;
-    (*o_database).datlocale = o_deserialize_string(std::ptr::addr_of_mut!(ptr_ptr));
-    (*o_database).daticurules = o_deserialize_string(std::ptr::addr_of_mut!(ptr_ptr));
-
-    if (ptr_ptr as usize - data as usize) != length as usize {
-        (*o_database).datcollate = o_deserialize_string(std::ptr::addr_of_mut!(ptr_ptr));
-    }
-
-    if (ptr_ptr as usize - data as usize) != length as usize {
-        (*o_database).datctype = o_deserialize_string(std::ptr::addr_of_mut!(ptr_ptr));
-    }
-
-    o_database as *mut std::ffi::c_char
+	return (Pointer) o_database;
 }

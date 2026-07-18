@@ -1,90 +1,152 @@
-// Control file for OrioleDB checkpoints.
-//
-// Ported from `include/checkpoint/control.h` and `src/checkpoint/control.c`.
-//
-// Copyright (c) 2024-2026, Oriole DB Inc.
-// Copyright (c) 2025-2026, Supabase Inc.
+/*-------------------------------------------------------------------------
+ *
+ * control.c
+ *		Routines to work with control file.
+ *
+ * Copyright (c) 2024-2026, Oriole DB Inc.
+ * Copyright (c) 2025-2026, Supabase Inc.
+ *
+ * IDENTIFICATION
+ *	  contrib/orioledb/src/checkpoint/control.c
+ *
+ *-------------------------------------------------------------------------
+ */
 
-use pgrx::pg_sys::XLogRecPtr;
-use crate::CommitSeqNo;
+#include "postgres.h"
 
-use crate::transam::oxid::OXid;
-use crate::transam::undo::{UndoLocation, UNDO_LOGS_COUNT};
+#include <unistd.h>
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+#include "orioledb.h"
 
-/// Path to the OrioleDB control file.
-pub const CONTROL_FILENAME: &str = "orioledb_data/control";
+#include "btree/io.h"
+#include "checkpoint/control.h"
 
-/// Binary format version stored in `CheckpointControl::control_file_version`.
-pub const ORIOLEDB_CHECKPOINT_CONTROL_VERSION: u32 = 1;
+#include "utils/wait_event.h"
 
-/// Physical size of the control file on disk (kept constant across versions).
-pub const CHECKPOINT_CONTROL_FILE_SIZE: usize = 8192;
+/*
+ * Read checkpoint control file data from the disk.
+ *
+ * Returns false if the control file doesn't exist.
+ */
+bool
+get_checkpoint_control_data(CheckpointControl *control)
+{
+	int			controlFile;
+	Size		readBytes;
 
-/// Number of undo logs covered by `CheckpointControl::undo_info`.
-pub const NUM_CHECKPOINTABLE_UNDO_LOGS: usize = 2;
+	controlFile = BasicOpenFile(CONTROL_FILENAME, O_RDONLY | PG_BINARY);
+	if (controlFile < 0)
+	{
+		/*
+		 * If we couldn't find the control file the we consider this case as
+		 * if there wasn't any checkpoint before.
+		 */
+		if (errno == ENOENT)
+			return false;
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not open file \"%s\": %m",
+						CONTROL_FILENAME)));
+	}
 
-/// Undo-log information saved per-checkpoint.
-///
-/// Mirrors `CheckpointUndoInfo` in `include/checkpoint/control.h`.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct CheckpointUndoInfo {
-    pub last_undo_location: UndoLocation,
-    pub checkpoint_retain_start_location: UndoLocation,
-    pub checkpoint_retain_end_location: UndoLocation,
+	readBytes = read(controlFile, (Pointer) control, sizeof(CheckpointControl));
+
+	/*
+	 * Handle special case when the control file is empty.  We consider this
+	 * case as if there wasn't created the control file and checkpoint never
+	 * finished successfully.
+	 */
+	if (readBytes == 0)
+		return false;
+	else if (readBytes != sizeof(CheckpointControl))
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not read data from control file \"%s\": %m",
+						CONTROL_FILENAME)));
+
+	close(controlFile);
+
+	check_checkpoint_control(control);
+
+	return true;
 }
 
-/// Full checkpoint control block persisted to `orioledb_data/control`.
-///
-/// **IMPORTANT:** The `crc` field must always remain last; the layout between
-/// `control_file_version` and `crc` may change between versions.
-///
-/// Mirrors `CheckpointControl` in `include/checkpoint/control.h`.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct CheckpointControl {
-    pub control_identifier: u64,
-    pub last_checkpoint_number: u32,
-    pub control_file_version: u32,
-    pub last_csn: CommitSeqNo,
-    pub last_xid: OXid,
-    pub last_undo_location: UndoLocation,
-    pub toast_consistent_ptr: XLogRecPtr,
-    pub replay_start_ptr: XLogRecPtr,
-    pub sys_trees_start_ptr: XLogRecPtr,
-    pub mmap_data_length: u64,
-    pub undo_info: [CheckpointUndoInfo; NUM_CHECKPOINTABLE_UNDO_LOGS],
-    pub checkpoint_retain_start_location: UndoLocation,
-    pub checkpoint_retain_end_location: UndoLocation,
-    pub checkpoint_retain_xmin: OXid,
-    pub checkpoint_retain_xmax: OXid,
-    pub binary_version: u32,
-    pub s3_mode: bool,
-    /// CRC of all preceding fields — must be last.
-    pub crc: u32,
+/*
+ * Check checkpoint control data
+ *   - Check CRC
+ *   - Check control parameters
+ */
+void
+check_checkpoint_control(CheckpointControl *control)
+{
+	pg_crc32c	crc;
+
+	INIT_CRC32C(crc);
+	COMP_CRC32C(crc, control, offsetof(CheckpointControl, crc));
+	FIN_CRC32C(crc);
+
+	if (crc != control->crc)
+		elog(ERROR, "Wrong CRC in control file");
+
+	if (control->controlFileVersion != ORIOLEDB_CHECKPOINT_CONTROL_VERSION)
+	{
+		/*
+		 * Now we have only one control version. When we bump
+		 * ORIOLEDB_CHECKPOINT_CONTROL_VERSION this is the place to write
+		 * routine for on-the-flight convesion of data read from control file
+		 * to CheckpointControl contents.
+		 */
+		ereport(FATAL,
+				(errmsg("checkpoint files are incompatible with server"),
+				 errdetail("OrioleDB checkpount control file was initialized with version %d,"
+						   " but the currently required version is %d.",
+						   control->controlFileVersion, ORIOLEDB_CHECKPOINT_CONTROL_VERSION)));
+	}
+
+	if (control->binaryVersion != ORIOLEDB_BINARY_VERSION)
+		ereport(FATAL,
+				(errmsg("database files are incompatible with server"),
+				 errdetail("OrioleDB was initialized with binary version %d,"
+						   " but the extension is compiled with binary version %d.",
+						   control->binaryVersion, ORIOLEDB_BINARY_VERSION),
+				 errhint("It looks like you need to initdb.")));
+
+	if (control->s3Mode != orioledb_s3_mode)
+		ereport(FATAL,
+				(errmsg("database files are incompatible with server"),
+				 errdetail("OrioleDB was initialized with S3 mode %s,"
+						   " but the extension is configured with S3 mode %s.",
+						   control->s3Mode ? "on" : "off",
+						   orioledb_s3_mode ? "on" : "off")));
 }
 
-// ---------------------------------------------------------------------------
-// Extern C declarations
-// ---------------------------------------------------------------------------
+/*
+ * Write checkpoint control file to the disk (and sync).
+ */
+void
+write_checkpoint_control(CheckpointControl *control)
+{
+	File		controlFile;
+	char		buffer[CHECKPOINT_CONTROL_FILE_SIZE];
 
-extern "C" {
-    /// Read and validate the control file into `control`.
-    ///
-    /// Returns `false` when the file does not exist.
-    pub fn get_checkpoint_control_data(control: *mut CheckpointControl) -> bool;
+	INIT_CRC32C(control->crc);
+	COMP_CRC32C(control->crc, control, offsetof(CheckpointControl, crc));
+	FIN_CRC32C(control->crc);
 
-    /// Validate a control block read from disk, reporting errors via `ereport`.
-    pub fn check_checkpoint_control(control: *mut CheckpointControl);
+	memset(buffer, 0, CHECKPOINT_CONTROL_FILE_SIZE);
+	memcpy(buffer, control, sizeof(CheckpointControl));
 
-    /// Persist `control` to `orioledb_data/control`.
-    pub fn write_checkpoint_control(control: *mut CheckpointControl);
+	controlFile = PathNameOpenFile(CONTROL_FILENAME, O_RDWR | O_CREAT | PG_BINARY);
+	if (controlFile < 0)
+		ereport(FATAL, (errcode_for_file_access(),
+						errmsg("could not open checkpoint control file %s: %m", CONTROL_FILENAME)));
+
+	if (OFileWrite(controlFile, buffer, CHECKPOINT_CONTROL_FILE_SIZE, 0,
+				   WAIT_EVENT_SLRU_WRITE) != CHECKPOINT_CONTROL_FILE_SIZE ||
+		FileSync(controlFile, WAIT_EVENT_SLRU_SYNC) != 0)
+		ereport(FATAL, (errcode_for_file_access(),
+						errmsg("could not write checkpoint control to file %s: %m", CONTROL_FILENAME)));
+
+	FileClose(controlFile);
 }
