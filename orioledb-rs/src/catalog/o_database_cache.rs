@@ -1,3 +1,12 @@
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_collation;
+use crate::catalog::pg_database;
+use crate::mb::pg_wchar;
+use crate::orioledb;
+use crate::utils::memutils;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_database_cache.c
@@ -14,19 +23,9 @@
 // -------------------------------------------------------------------------
 //
 
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-
-#include "catalog/pg_collation.h"
-#include "catalog/pg_database.h"
 #if PG_VERSION_NUM >= 180000
-#include "utils/memutils.h"
+
 #endif
-#include "utils/syscache.h"
-#include "mb/pg_wchar.h"
 
 static OSysCache *database_cache = NULL;
 

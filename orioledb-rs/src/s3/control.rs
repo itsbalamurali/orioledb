@@ -1,3 +1,16 @@
+use crate::checkpoint::control;
+use crate::fcntl;
+use crate::orioledb;
+use crate::s3::control;
+use crate::s3::requests;
+use crate::storage::fd;
+use crate::sys::time;
+use crate::unistd;
+use crate::utils::builtins;
+use crate::utils::elog;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // control.c
@@ -11,24 +24,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include <fcntl.h>
-#include <sys/time.h>
-#include <unistd.h>
-
-#include "orioledb.h"
-
-#include "checkpoint/control.h"
-#include "s3/control.h"
-#include "s3/requests.h"
-
-#include "miscadmin.h"
-#include "storage/fd.h"
-#include "utils/builtins.h"
-#include "utils/elog.h"
-#include "utils/wait_event.h"
 
 #define LOCK_FILENAME		ORIOLEDB_DATA_DIR "/s3_lock"
 

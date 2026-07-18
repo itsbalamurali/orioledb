@@ -1,3 +1,24 @@
+use crate::c;
+use crate::catalog::indices;
+use crate::commands::dbcommands;
+use crate::nodes::execnodes;
+use crate::orioledb;
+use crate::pgstat;
+use crate::postmaster::bgworker;
+use crate::recovery::recovery;
+use crate::storage::condition_variable;
+use crate::storage::proclist;
+use crate::storage::shmem;
+use crate::utils::builtins;
+use crate::utils::guc;
+use crate::utils::jsonpath;
+use crate::utils::memutils;
+use crate::utils::rel;
+use crate::utils::stopevent;
+use crate::utils::stopevents_data;
+use crate::varatt;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // stopevent.c
@@ -11,30 +32,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "c.h"
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "utils/stopevent.h"
-
-#include "commands/dbcommands.h"
-#include "catalog/indices.h"
-#include "miscadmin.h"
-#include "nodes/execnodes.h"
-#include "pgstat.h"
-#include "postmaster/bgworker.h"
-#include "recovery/recovery.h"
-#include "storage/condition_variable.h"
-#include "storage/proclist.h"
-#include "storage/shmem.h"
-#include "utils/builtins.h"
-#include "utils/guc.h"
-#include "utils/jsonpath.h"
-#include "utils/memutils.h"
-#include "utils/rel.h"
-#include "utils/stopevents_data.h"
-#include "varatt.h"
 
 #define QUERY_BUFFER_SIZE 1024
 

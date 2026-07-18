@@ -1,3 +1,51 @@
+use crate::access::hash;
+use crate::access::heapam;
+use crate::access::transam;
+use crate::btree::btree;
+use crate::btree::io;
+use crate::btree::undo;
+use crate::catalog::heap;
+use crate::catalog::namespace;
+use crate::catalog::o_indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::pg_am;
+use crate::catalog::pg_amop;
+use crate::catalog::pg_collation;
+use crate::catalog::pg_language;
+use crate::catalog::pg_proc;
+use crate::catalog::pg_range;
+use crate::catalog::pg_tablespace_d;
+use crate::catalog::pg_type;
+use crate::checkpoint::checkpoint;
+use crate::commands::defrem;
+use crate::executor::execExpr;
+use crate::executor::functions;
+use crate::funcapi;
+use crate::nodes::nodeFuncs;
+use crate::optimizer::optimizer;
+use crate::orioledb;
+use crate::parser::parse_relation;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::tableam::operations;
+use crate::transam::oxid;
+use crate::tuple::toast;
+use crate::utils::array;
+use crate::utils::builtins;
+use crate::utils::datum;
+use crate::utils::elog;
+use crate::utils::fmgrtab;
+use crate::utils::inval;
+use crate::utils::lsyscache;
+use crate::utils::memutils;
+use crate::utils::planner;
+use crate::utils::rel;
+use crate::utils::ruleutils;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_tables.c
@@ -11,58 +59,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/io.h"
-#include "btree/undo.h"
-#include "checkpoint/checkpoint.h"
-#include "catalog/o_indices.h"
-#include "catalog/o_tables.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/pg_amop.h"
-#include "postgres_ext.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "tableam/operations.h"
-#include "transam/oxid.h"
-#include "tuple/toast.h"
-#include "utils/elog.h"
-#include "utils/planner.h"
-
-#include "access/hash.h"
-#include "access/heapam.h"
-#include "access/transam.h"
-#include "catalog/heap.h"
-#include "catalog/namespace.h"
-#include "catalog/pg_am.h"
-#include "catalog/pg_collation.h"
-#include "catalog/pg_language.h"
-#include "catalog/pg_proc.h"
-#include "catalog/pg_range.h"
-#include "catalog/pg_tablespace_d.h"
-#include "catalog/pg_type.h"
-#include "commands/defrem.h"
-#include "executor/execExpr.h"
-#include "executor/functions.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "nodes/nodeFuncs.h"
-#include "optimizer/optimizer.h"
-#include "parser/parse_relation.h"
-#include "pgstat.h"
-#include "utils/array.h"
-#include "utils/builtins.h"
-#include "utils/datum.h"
-#include "utils/fmgrtab.h"
-#include "utils/inval.h"
-#include "utils/lsyscache.h"
-#include "utils/memutils.h"
-#include "utils/rel.h"
-#include "utils/ruleutils.h"
-#include "utils/syscache.h"
 
 //
 // Relation locks from recovery workers may conflict with PostgreSQL WAL locks

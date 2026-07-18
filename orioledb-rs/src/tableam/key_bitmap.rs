@@ -1,3 +1,9 @@
+use crate::lib::o_radixtree;
+use crate::orioledb;
+use crate::tableam::bitmap_scan;
+use crate::utils::memutils;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // key_bitmap.c
@@ -21,13 +27,6 @@
 // contrib/orioledb/src/tableam/key_bitmap.c
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "tableam/bitmap_scan.h"
-
-#include "utils/memutils.h"
 
 #define OKBM_CHUNK_BITS		10
 #define OKBM_CHUNK_VALUES	(UINT64CONST(1) << OKBM_CHUNK_BITS)
@@ -45,7 +44,6 @@ typedef struct OKeyBitmapChunk
 #define RT_DEFINE
 #define RT_USE_DELETE
 #define RT_VALUE_TYPE OKeyBitmapChunk
-#include "lib/o_radixtree.h"
 
 //
 // Fixed-key mode: for composite / non-int primary keys the key is an
@@ -65,7 +63,6 @@ typedef struct OKbmDummy
 #define RT_USE_DELETE
 #define RT_KEY_SIZE OKBM_FIXED_BYTES
 #define RT_VALUE_TYPE OKbmDummy
-#include "lib/o_radixtree.h"
 
 struct OKeyBitmap
 {

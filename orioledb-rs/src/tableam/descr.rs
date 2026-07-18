@@ -1,3 +1,37 @@
+use crate::access::nbtree;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::btree::modify;
+use crate::btree::undo;
+use crate::catalog::free_extents;
+use crate::catalog::o_indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::pg_opfamily;
+use crate::catalog::sys_trees;
+use crate::checkpoint::checkpoint;
+use crate::common::hashfn;
+use crate::executor::functions;
+use crate::funcapi;
+use crate::orioledb;
+use crate::parser::parse_coerce;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::tableam::handler;
+use crate::tableam::toast;
+use crate::tableam::tree;
+use crate::transam::undo;
+use crate::tuple::slot;
+use crate::utils::builtins;
+use crate::utils::fmgrtab;
+use crate::utils::lsyscache;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::resowner;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // descr.c
@@ -11,44 +45,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "btree/modify.h"
-#include "btree/undo.h"
-#include "checkpoint/checkpoint.h"
-#include "catalog/free_extents.h"
-#include "catalog/o_indices.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/o_tables.h"
-#include "catalog/sys_trees.h"
-#include "postgres_ext.h"
-#include "recovery/recovery.h"
-#include "tableam/handler.h"
-#include "tableam/toast.h"
-#include "tableam/tree.h"
-#include "tuple/slot.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-
-#include "access/nbtree.h"
-#include "catalog/pg_opfamily.h"
-#include "common/hashfn.h"
-#include "executor/functions.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "parser/parse_coerce.h"
-#include "utils/builtins.h"
-#include "utils/fmgrtab.h"
-#include "utils/lsyscache.h"
-#include "utils/memutils.h"
-#include "utils/resowner.h"
-#include "utils/syscache.h"
-#include "pgstat.h"
 
 static void o_invalidate_comparator_cache(Oid opfamily, Oid lefttype,
 										  Oid righttype);
@@ -85,7 +81,6 @@ PG_FUNCTION_INFO_V1(orioledb_get_table_descrs);
 PG_FUNCTION_INFO_V1(orioledb_get_index_descrs);
 PG_FUNCTION_INFO_V1(orioledb_get_evicted_trees);
 
-
 typedef struct DeferredDescrInvalidation
 {
 	Oid			datoid;
@@ -104,7 +99,6 @@ typedef struct DeferredDescrInvalidation
 //
 static bool saving_inval_messages = false;
 static List *saved_descr_invals = NIL;
-
 
 struct OComparatorKey
 {
@@ -748,7 +742,6 @@ table_descr_free(OTableDescr *descr)
 		FreeTupleDesc(descr->tupdesc);
 }
 
-
 void
 o_free_tmp_table_descr(OTableDescr *descr)
 {
@@ -777,7 +770,6 @@ o_free_tmp_table_descr(OTableDescr *descr)
 	if (descr->tupdesc)
 		FreeTupleDesc(descr->tupdesc);
 }
-
 
 static void
 table_descr_delete_from_hash(OTableDescr *descr)

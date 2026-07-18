@@ -1,3 +1,28 @@
+use crate::access::genam;
+use crate::access::relation;
+use crate::access::table;
+use crate::btree::btree;
+use crate::catalog::indices;
+use crate::catalog::o_indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::pg_tablespace_d;
+use crate::catalog::pg_type_d;
+use crate::checkpoint::checkpoint;
+use crate::commands::defrem;
+use crate::funcapi;
+use crate::optimizer::optimizer;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::tableam::descr;
+use crate::tuple::slot;
+use crate::tuple::toast;
+use crate::utils::builtins;
+use crate::utils::lsyscache;
+use crate::utils::planner;
+use crate::utils::rel;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_indices.c
@@ -11,35 +36,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "catalog/indices.h"
-#include "catalog/o_indices.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/o_tables.h"
-#include "checkpoint/checkpoint.h"
-#include "commands/defrem.h"
-#include "recovery/recovery.h"
-#include "tableam/descr.h"
-#include "tuple/slot.h"
-#include "tuple/toast.h"
-#include "utils/planner.h"
-
-#include "access/genam.h"
-#include "access/relation.h"
-#include "access/table.h"
-#include "catalog/pg_opclass_d.h"
-#include "catalog/pg_tablespace_d.h"
-#include "catalog/pg_type_d.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "optimizer/optimizer.h"
-#include "utils/builtins.h"
-#include "utils/lsyscache.h"
-#include "utils/rel.h"
 
 PG_FUNCTION_INFO_V1(orioledb_index_oids);
 PG_FUNCTION_INFO_V1(orioledb_index_description);

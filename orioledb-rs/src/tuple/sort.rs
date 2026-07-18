@@ -1,3 +1,13 @@
+use crate::catalog::pg_collation_d;
+use crate::orioledb;
+use crate::tableam::descr;
+use crate::tuple::format;
+use crate::tuple::sort;
+use crate::tuple::toast;
+use crate::utils::fmgroids;
+use crate::utils::tuplesort;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // sort.c
@@ -11,19 +21,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "tableam/descr.h"
-#include "tuple/format.h"
-#include "tuple/sort.h"
-#include "tuple/toast.h"
-
-#include "catalog/pg_collation_d.h"
-#include "catalog/pg_opclass_d.h"
-#include "utils/fmgroids.h"
-#include "utils/tuplesort.h"
 
 typedef struct
 {

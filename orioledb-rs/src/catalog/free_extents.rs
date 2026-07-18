@@ -1,3 +1,19 @@
+use crate::access::transam;
+use crate::btree::btree;
+use crate::btree::find;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::btree::merge;
+use crate::btree::modify;
+use crate::btree::page_chunks;
+use crate::catalog::free_extents;
+use crate::orioledb;
+use crate::tableam::descr;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // free_extents.c
@@ -22,25 +38,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/find.h"
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "btree/merge.h"
-#include "btree/modify.h"
-#include "btree/page_chunks.h"
-#include "catalog/free_extents.h"
-#include "tableam/descr.h"
-#include "utils/stopevent.h"
-#include "utils/page_pool.h"
-
-#include "access/transam.h"
-#include "miscadmin.h"
-#include "utils/wait_event.h"
 
 #define EXTENTS_IX_EQ(ex1, ex2) ((ex1).ixType == (ex2).ixType && \
 								 (ex1).datoid == (ex2).datoid && \

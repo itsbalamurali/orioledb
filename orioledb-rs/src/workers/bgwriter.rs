@@ -1,3 +1,26 @@
+use crate::btree::undo;
+use crate::orioledb;
+use crate::pgstat;
+use crate::postmaster::bgworker;
+use crate::postmaster::bgwriter;
+use crate::postmaster::interrupt;
+use crate::s3::headers;
+use crate::storage::bufmgr;
+use crate::storage::latch;
+use crate::storage::proc;
+use crate::storage::procsignal;
+use crate::storage::sinvaladt;
+use crate::transam::undo;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::snapmgr;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use crate::utils::timeout;
+use crate::utils::ucm;
+use crate::workers::bgwriter;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // bgwriter.c
@@ -11,33 +34,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/undo.h"
-#include "s3/headers.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-#include "utils/ucm.h"
-#include "utils/stopevent.h"
-#include "workers/bgwriter.h"
-
-#include "miscadmin.h"
-#include "postmaster/bgworker.h"
-#include "postmaster/bgwriter.h"
-#include "postmaster/interrupt.h"
-#include "storage/bufmgr.h"
-#include "storage/latch.h"
-#include "storage/proc.h"
-#include "storage/procsignal.h"
-#include "storage/sinvaladt.h"
-#include "utils/memutils.h"
-#include "utils/snapmgr.h"
-#include "utils/syscache.h"
-#include "utils/timeout.h"
-
-#include "pgstat.h"
 
 bool		IsBGWriter = false;
 int			BGWriterNum = -1;

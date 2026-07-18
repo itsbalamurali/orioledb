@@ -1,3 +1,10 @@
+use crate::btree::io;
+use crate::checkpoint::control;
+use crate::orioledb;
+use crate::unistd;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // control.c
@@ -11,17 +18,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include <unistd.h>
-
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "checkpoint/control.h"
-
-#include "utils/wait_event.h"
 
 //
 // Read checkpoint control file data from the disk.

@@ -1,3 +1,8 @@
+use crate::orioledb;
+use crate::s3::queue;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // queue.c
@@ -11,14 +16,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "s3/queue.h"
-
-#include "utils/wait_event.h"
 
 //
 // Meta-information about S3 tasks queue.

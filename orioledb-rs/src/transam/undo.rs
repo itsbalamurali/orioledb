@@ -1,3 +1,41 @@
+use crate::access::transam;
+use crate::btree::find;
+use crate::btree::iterator;
+use crate::btree::modify;
+use crate::btree::page_chunks;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::c;
+use crate::catalog::o_sys_cache;
+use crate::catalog::storage;
+use crate::catalog::sys_trees;
+use crate::checkpoint::checkpoint;
+use crate::funcapi;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::replication::slot;
+use crate::replication::syncrep;
+use crate::rewind::rewind;
+use crate::storage::fd;
+use crate::storage::lmgr;
+use crate::storage::md;
+use crate::storage::proc;
+use crate::storage::procarray;
+use crate::sys::stat;
+use crate::tableam::descr;
+use crate::tableam::handler;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::unistd;
+use crate::utils::memutils;
+use crate::utils::o_buffers;
+use crate::utils::page_pool;
+use crate::utils::snapshot;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // undo.c
@@ -11,48 +49,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "c.h"
-#include "postgres.h"
-
-#include <sys/stat.h>
-#include <unistd.h>
-
-#include "orioledb.h"
-
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "btree/find.h"
-#include "btree/page_chunks.h"
-#include "catalog/storage.h"
-#include "catalog/o_sys_cache.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "storage/procarray.h"
-#include "tableam/descr.h"
-#include "tableam/handler.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "utils/o_buffers.h"
-#include "utils/page_pool.h"
-#include "utils/snapshot.h"
-#include "utils/stopevent.h"
-#include "replication/syncrep.h"
-#include "rewind/rewind.h"
-#include "catalog/sys_trees.h"
-#include "btree/modify.h"
-
-#include "access/transam.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "storage/fd.h"
-#include "storage/lmgr.h"
-#include "storage/md.h"
-#include "storage/proc.h"
-#include "utils/memutils.h"
-#include "btree/iterator.h"
-#include "replication/slot.h"
 
 static const char *get_undo_type_name(UndoLogType undoType);
 static void write_shared_undo_locations(UndoStackSharedLocations *to, UndoStackLocations *from);
@@ -178,7 +174,6 @@ static UndoItemTypeDescr undoItemTypeDescrs[] = {
 		.callOnCommit = true
 	},
 };
-
 
 PG_FUNCTION_INFO_V1(orioledb_has_retained_undo);
 
@@ -1041,7 +1036,6 @@ orioledb_insert_sys_xid_undo_location(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-
 //
 // Reserve an undo location for the current process.  Called from
 // get_undo_record() before actually allocating the undo record.
@@ -1357,7 +1351,6 @@ walk_undo_range_with_buf(UndoLogType undoType,
 	return location;
 }
 
-
 //
 // Apply undo branches: parts of transaction undo chain, which should be already
 // aborted.  This is used during recovery: despite some parts of chain are
@@ -1384,8 +1377,6 @@ apply_undo_branches(UndoLogType undoType, OXid oxid)
 	}
 	free_undo_item_buf(&buf);
 }
-
-
 
 //
 // Walk transaction undo stack chain during (sub)transaction abort or
@@ -1803,7 +1794,6 @@ evict_undo_to_disk(UndoLogType undoType,
 	if (minProcReservedLocation < targetUndoLocation)
 		wait_for_reserved_location(undoType, targetUndoLocation + circularBufferSize);
 
-
 	//
 // Persist [retainUndoLocation, targetUndoLocation) page by page.  A page
 // whose dirty bit is set is written to o_buffers dirty as usual.  A page
@@ -1912,7 +1902,6 @@ reserve_undo_size_extended(UndoLogType undoType, Size size,
 			}
 		}
 	}
-
 
 	if (reserved_undo_sizes[(int) undoType] >= size)
 		return true;
@@ -2565,7 +2554,6 @@ undo_xact_callback(XactEvent event, void *arg)
 					 " logicalXid %u top heapXid %u current heapXid %u useHeap %d",
 					 oxid, logicalXidContext.xid, heapXid,
 					 GetCurrentTransactionIdIfAny(), logicalXidContext.useHeap);
-
 
 				if (!RecoveryInProgress())
 					wal_rollback(oxid, logicalXidContext.xid, false);
@@ -3337,7 +3325,6 @@ orioledb_snapshot_hook(Snapshot snapshot)
 		if (lastUsedLocation - lastUsedUndoLocationWhenUpdatedMinLocation > o_undo_circular_sizes[(int) undoType] / 10)
 			update_min_undo_locations(undoType, false, true);
 	}
-
 
 	snapshot->undoRegularRowLocationPhNode.undoLocation = set_my_snapshot_retain_location(UndoLogRegular);
 	snapshot->undoRegularPageLocationPhNode.undoLocation = set_my_snapshot_retain_location(UndoLogRegularPageLevel);

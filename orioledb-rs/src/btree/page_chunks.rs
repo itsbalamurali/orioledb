@@ -1,3 +1,17 @@
+use crate::access::transam;
+use crate::btree::find;
+use crate::btree::insert;
+use crate::btree::page_chunks;
+use crate::btree::undo;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::transam::undo;
+use crate::tuple::format;
+use crate::utils::memdebug;
+use crate::utils::page_pool;
+use crate::utils::ucm;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // page_chunks.c
@@ -12,23 +26,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/insert.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "recovery/recovery.h"
-#include "transam/undo.h"
-#include "tuple/format.h"
-#include "utils/page_pool.h"
-#include "utils/ucm.h"
-
-#include "access/transam.h"
-#include "miscadmin.h"
-#include "utils/memdebug.h"
 
 //
 // Load chunk to the partial page.
@@ -852,7 +849,6 @@ page_split_chunk(Page p, BTreePageItemLocator *locator,
 				leftItemsCount,
 				rightItemsCount;
 	BTreePageHeader *header = (BTreePageHeader *) p;
-
 
 	Assert(hikeySize == MAXALIGN(hikeySize));
 

@@ -1,3 +1,17 @@
+use crate::access::stratnum;
+use crate::btree::btree;
+use crate::catalog::pg_proc;
+use crate::catalog::pg_type;
+use crate::optimizer::optimizer;
+use crate::orioledb;
+use crate::parser::parse_coerce;
+use crate::tableam::key_range;
+use crate::tableam::tree;
+use crate::utils::array;
+use crate::utils::arrayaccess;
+use crate::utils::lsyscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // key_range.c
@@ -12,23 +26,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "tableam/key_range.h"
-#include "tableam/tree.h"
-
-#include "access/stratnum.h"
-#include "catalog/pg_proc.h"
-#include "catalog/pg_type.h"
-#include "optimizer/optimizer.h"
-#include "parser/parse_coerce.h"
-#include "utils/array.h"
-#include "utils/arrayaccess.h"
-#include "utils/lsyscache.h"
 
 static bool o_key_range_is_unbounded(OBTreeKeyRange *range, int attnum);
 static void o_fill_key_bounds(Datum v, Oid type,

@@ -1,3 +1,70 @@
+use crate::access::heapam;
+use crate::access::table;
+use crate::access::xlog_internal;
+use crate::btree::find;
+use crate::btree::io;
+use crate::btree::scan;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::pg_enum;
+use crate::catalog::sys_trees;
+use crate::checkpoint::checkpoint;
+use crate::common::file_perm;
+use crate::dirent;
+use crate::executor::execExpr;
+use crate::funcapi;
+use crate::indexam::handler;
+use crate::libpq::auth;
+use crate::optimizer::optimizer;
+use crate::optimizer::plancat;
+use crate::orioledb;
+use crate::postmaster::autovacuum;
+use crate::postmaster::bgwriter;
+use crate::postmaster::postmaster;
+use crate::postmaster::startup;
+use crate::recovery::logical;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::recovery::wal_reader;
+use crate::replication::message;
+use crate::replication::snapbuild;
+use crate::replication::walsender;
+use crate::rewind::rewind;
+use crate::s3::control;
+use crate::s3::headers;
+use crate::s3::queue;
+use crate::s3::requests;
+use crate::s3::worker;
+use crate::storage::ipc;
+use crate::storage::lwlock;
+use crate::storage::proclist;
+use crate::storage::standby;
+use crate::sys::mman;
+use crate::sys::stat;
+use crate::tableam::bitmap_scan;
+use crate::tableam::handler;
+use crate::tableam::scan;
+use crate::tableam::toast;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::toast;
+use crate::utils::builtins;
+use crate::utils::compress;
+use crate::utils::dsa;
+use crate::utils::guc;
+use crate::utils::inval;
+use crate::utils::memdebug;
+use crate::utils::page_pool;
+use crate::utils::pg_locale;
+use crate::utils::pg_lsn;
+use crate::utils::rangetypes;
+use crate::utils::snapmgr;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use crate::utils::ucm;
+use crate::workers::bgwriter;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // orioledb.c
@@ -12,77 +79,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/io.h"
-#include "btree/scan.h"
-#include "catalog/o_tables.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/sys_trees.h"
-#include "checkpoint/checkpoint.h"
-#include "common/file_perm.h"
-#include "indexam/handler.h"
-#include "recovery/logical.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "recovery/wal_reader.h"
-#include "replication/snapbuild.h"
-#include "s3/control.h"
-#include "s3/headers.h"
-#include "s3/queue.h"
-#include "s3/requests.h"
-#include "s3/worker.h"
-#include "storage/standby.h"
-#include "tableam/bitmap_scan.h"
-#include "tableam/handler.h"
-#include "tableam/scan.h"
-#include "tableam/toast.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "tuple/toast.h"
-#include "utils/compress.h"
-#include "utils/dsa.h"
-#include "utils/guc.h"
-#include "utils/memdebug.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-#include "utils/ucm.h"
-#include "workers/bgwriter.h"
-#include "rewind/rewind.h"
-
-#include "access/heapam.h"
-#include "access/table.h"
-#include "access/xlog_internal.h"
-#include "catalog/pg_enum.h"
-#include "executor/execExpr.h"
-#include "funcapi.h"
-#include "libpq/auth.h"
-#include "miscadmin.h"
-#include "optimizer/optimizer.h"
-#include "optimizer/plancat.h"
-#include "postmaster/autovacuum.h"
-#include "postmaster/bgwriter.h"
-#include "postmaster/postmaster.h"
-#include "postmaster/startup.h"
-#include "replication/message.h"
-#include "replication/walsender.h"
-#include "storage/ipc.h"
-#include "storage/lwlock.h"
-#include "storage/proclist.h"
-#include "utils/builtins.h"
-#include "utils/pg_lsn.h"
-#include "utils/inval.h"
-#include "utils/rangetypes.h"
-#include "utils/pg_locale.h"
-#include "utils/snapmgr.h"
-#include "utils/syscache.h"
-
-#include <dirent.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
 
 PG_MODULE_MAGIC;
 
@@ -238,7 +234,6 @@ static ShmemItem shmemItems[] = {
 	{s3_headers_shmem_needs, s3_headers_shmem_init},
 	{rewind_shmem_needs, rewind_init_shmem}
 };
-
 
 static Size orioledb_memsize(void);
 static void orioledb_shmem_request(void);
@@ -433,7 +428,6 @@ orioledb_enable_rewind_check_hook(bool *newval, void **extra, GucSource source)
 	return true;
 }
 
-
 //
 // GUC check_hook for orioledb.replay_until_lsn
 //
@@ -598,7 +592,6 @@ _PG_init(void)
 							NULL,
 							NULL,
 							NULL);
-
 
 	DefineCustomRealVariable("orioledb.regular_block_undo_circular_buffer_fraction",
 							 "Fraction of cirucular buffer for block-level undo of regular tables.",

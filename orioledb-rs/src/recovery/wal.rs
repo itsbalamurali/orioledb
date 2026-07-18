@@ -1,3 +1,16 @@
+use crate::access::xloginsert;
+use crate::catalog::sys_trees;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::recovery::wal_record;
+use crate::replication::message;
+use crate::replication::origin;
+use crate::storage::proc;
+use crate::tableam::descr;
+use crate::transam::oxid;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // wal.c
@@ -11,21 +24,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "access/xloginsert.h"
-#include "catalog/sys_trees.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "recovery/wal_record.h"
-#include "tableam/descr.h"
-#include "transam/oxid.h"
-
-#include "replication/message.h"
-#include "replication/origin.h"
-#include "storage/proc.h"
 
 static void add_rel_wal_record(ORelOids oids, OIndexType type, uint32 version, uint32 base_version);
 
@@ -110,7 +108,6 @@ add_modify_wal_record_extended(uint8 rec_type, BTreeDescr *desc,
 		Assert(!O_TUPLE_IS_NULL(tuple2));
 		required_length = sizeof(WALRecModify2) + length + length2;
 	}
-
 
 	elog(DEBUG4, "add_modify_wal_record_extended length1 %d length2 %d", length, length2);
 	if (!ORelOidsIsEqual(local_wal.oids, oids) || type != local_wal.ix_type)

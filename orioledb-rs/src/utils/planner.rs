@@ -1,3 +1,33 @@
+use crate::access::genam;
+use crate::access::hash;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_aggregate;
+use crate::catalog::pg_am;
+use crate::catalog::pg_amop;
+use crate::catalog::pg_amproc;
+use crate::catalog::pg_authid;
+use crate::catalog::pg_language;
+use crate::catalog::pg_opclass;
+use crate::catalog::pg_operator;
+use crate::catalog::pg_proc;
+use crate::commands::defrem;
+use crate::executor::functions;
+use crate::funcapi;
+use crate::nodes::makefuncs;
+use crate::nodes::nodeFuncs;
+use crate::nodes::pathnodes;
+use crate::orioledb;
+use crate::parser::analyze;
+use crate::parser::parse_target;
+use crate::rewrite::rewriteHandler;
+use crate::tcop::tcopprot;
+use crate::utils::builtins;
+use crate::utils::fmgroids;
+use crate::utils::lsyscache;
+use crate::utils::planner;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // planner.c
@@ -11,38 +41,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-#include "utils/planner.h"
-
-#include "access/genam.h"
-#include "access/hash.h"
-#include "catalog/pg_aggregate.h"
-#include "catalog/pg_am.h"
-#include "catalog/pg_amop.h"
-#include "catalog/pg_amproc.h"
-#include "catalog/pg_authid.h"
-#include "catalog/pg_language.h"
-#include "catalog/pg_opclass.h"
-#include "catalog/pg_operator.h"
-#include "catalog/pg_proc.h"
-#include "commands/defrem.h"
-#include "executor/functions.h"
-#include "funcapi.h"
-#include "nodes/makefuncs.h"
-#include "nodes/nodeFuncs.h"
-#include "nodes/pathnodes.h"
-#include "parser/analyze.h"
-#include "parser/parse_target.h"
-#include "rewrite/rewriteHandler.h"
-#include "tcop/tcopprot.h"
-#include "utils/builtins.h"
-#include "utils/fmgroids.h"
-#include "utils/lsyscache.h"
-#include "utils/syscache.h"
 
 typedef struct
 {
@@ -200,7 +198,6 @@ o_process_sql_function(HeapTuple procedureTuple, WalkerFunc walker,
 			}
 		}
 	}
-
 
 	//
 // The single command must be a simple "SELECT expression".

@@ -1,3 +1,28 @@
+use crate::access::genam;
+use crate::access::relation;
+use crate::btree::build;
+use crate::btree::insert;
+use crate::btree::io;
+use crate::btree::page_chunks;
+use crate::btree::split;
+use crate::catalog::index;
+use crate::catalog::namespace;
+use crate::checkpoint::checkpoint;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::s3::worker;
+use crate::tableam::descr;
+use crate::transam::oxid;
+use crate::tuple::sort;
+use crate::tuple::toast;
+use crate::utils::lsyscache;
+use crate::utils::memdebug;
+use crate::utils::page_pool;
+use crate::utils::seq_buf;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // build.c
@@ -11,34 +36,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/build.h"
-#include "btree/insert.h"
-#include "btree/io.h"
-#include "btree/page_chunks.h"
-#include "btree/split.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "s3/worker.h"
-#include "tableam/descr.h"
-#include "tuple/toast.h"
-#include "tuple/sort.h"
-#include "transam/oxid.h"
-#include "utils/seq_buf.h"
-#include "utils/page_pool.h"
-
-#include "access/genam.h"
-#include "access/relation.h"
-#include "catalog/index.h"
-#include "catalog/namespace.h"
-#include "commands/defrem.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "utils/lsyscache.h"
-#include "utils/memdebug.h"
 
 typedef struct OIndexBuildStackItem
 {

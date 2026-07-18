@@ -1,3 +1,22 @@
+use crate::access::transam;
+use crate::btree::check;
+use crate::btree::io;
+use crate::btree::page_chunks;
+use crate::catalog::free_extents;
+use crate::catalog::sys_trees;
+use crate::checkpoint::checkpoint;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::storage::latch;
+use crate::tableam::descr;
+use crate::utils::compress;
+use crate::utils::memdebug;
+use crate::utils::page_pool;
+use crate::utils::seq_buf;
+use crate::utils::ucm;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // check.c
@@ -11,27 +30,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/check.h"
-#include "btree/io.h"
-#include "btree/page_chunks.h"
-#include "catalog/free_extents.h"
-#include "catalog/sys_trees.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "tableam/descr.h"
-#include "utils/compress.h"
-#include "utils/memdebug.h"
-#include "utils/page_pool.h"
-#include "utils/seq_buf.h"
-#include "utils/ucm.h"
-
-#include "pgstat.h"
-#include "access/transam.h"
-#include "storage/latch.h"
 
 //
 // Dynamic array of file extents.
@@ -206,7 +204,6 @@ check_btree(BTreeDescr *desc, bool force_file_check, bool wait_for_checkpoint)
 										checkpoint_number - 1,
 										&found);
 		tag.type = 'm';
-
 
 		if (seq_buf_file_exist(&tag))
 		{

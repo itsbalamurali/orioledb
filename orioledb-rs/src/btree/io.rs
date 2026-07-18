@@ -1,3 +1,40 @@
+use crate::access::relation;
+use crate::access::transam;
+use crate::btree::find;
+use crate::btree::io;
+use crate::btree::merge;
+use crate::btree::page_chunks;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::catalog::free_extents;
+use crate::catalog::o_sys_cache;
+use crate::checkpoint::checkpoint;
+use crate::common::hashfn;
+use crate::fcntl;
+use crate::funcapi;
+use crate::lib::simplehash;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::s3::headers;
+use crate::s3::worker;
+use crate::storage::bufmgr;
+use crate::sys::mman;
+use crate::sys::stat;
+use crate::tableam::descr;
+use crate::tableam::handler;
+use crate::unistd;
+use crate::utils::compress;
+use crate::utils::elog;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::seq_buf;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use crate::utils::ucm;
+use crate::workers::bgwriter;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // io.c
@@ -11,45 +48,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <common/hashfn.h>
-
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "btree/find.h"
-#include "btree/merge.h"
-#include "btree/page_chunks.h"
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "checkpoint/checkpoint.h"
-#include "catalog/free_extents.h"
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-#include "s3/headers.h"
-#include "s3/worker.h"
-#include "tableam/descr.h"
-#include "tableam/handler.h"
-#include "utils/compress.h"
-#include "utils/elog.h"
-#include "utils/page_pool.h"
-#include "utils/seq_buf.h"
-#include "utils/stopevent.h"
-#include "utils/ucm.h"
-#include "workers/bgwriter.h"
-
-#include "access/transam.h"
-#include "access/relation.h"
-#include "pgstat.h"
-#include "storage/bufmgr.h"
-#include "utils/memutils.h"
-#include "utils/syscache.h"
-#include "funcapi.h"
 
 static int	btree_smgr_read(BTreeDescr *desc, char *buffer, uint32 chkpNum,
 							int amount, off_t offset);
@@ -213,7 +211,6 @@ typedef struct
 #define SH_SCOPE static inline
 #define SH_DEFINE
 #define SH_DECLARE
-#include "lib/simplehash.h"
 
 char *
 btree_filename(OIndexKey key, int segno, uint32 chkpNum)

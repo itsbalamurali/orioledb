@@ -1,3 +1,21 @@
+use crate::btree::btree;
+use crate::btree::find;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::btree::page_chunks;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::orioledb;
+use crate::tableam::descr;
+use crate::transam::oxid;
+use crate::tuple::slot;
+use crate::utils::page_pool;
+use crate::utils::resowner;
+use crate::utils::sampling;
+use crate::utils::stopevent;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // scan.c
@@ -42,28 +60,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/find.h"
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "btree/page_chunks.h"
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "tableam/descr.h"
-#include "transam/oxid.h"
-#include "tableam/descr.h"
-#include "tuple/slot.h"
-#include "utils/page_pool.h"
-#include "utils/resowner.h"
-#include "utils/sampling.h"
-#include "utils/stopevent.h"
-
-#include "miscadmin.h"
-#include "utils/wait_event.h"
 
 typedef enum
 {
@@ -260,7 +256,6 @@ btree_scan_init_shmem(Pointer ptr, bool found)
 	LWLockRegisterTranche(btreeScanShmem->downlinksPublishTrancheId,
 						  "OBTreeScanDownlinksPublishTrancheId");
 }
-
 
 //
 // Materialize the data chunk that `loc` points into for a partially-read leaf
@@ -1377,7 +1372,6 @@ check_in_memory_leaf_page(BTreeSeqScan *scan, OTuple keyRangeLow, OTuple keyRang
 		scan_make_iterator(scan, keyRangeLow, keyRangeHigh);
 	}
 }
-
 
 //
 // Interates the internal page till we either:

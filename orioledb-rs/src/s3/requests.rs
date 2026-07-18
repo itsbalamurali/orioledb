@@ -1,3 +1,15 @@
+use crate::common::base64;
+use crate::curl::curl;
+use crate::lib::stringinfo;
+use crate::openssl::hmac;
+use crate::openssl::sha;
+use crate::orioledb;
+use crate::s3::requests;
+use crate::stdbool;
+use crate::unistd;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // requests.c
@@ -11,23 +23,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include <stdbool.h>
-#include <unistd.h>
-
-#include "orioledb.h"
-
-#include "s3/requests.h"
-
-#include "common/base64.h"
-#include "lib/stringinfo.h"
-#include "utils/wait_event.h"
-
-#include "curl/curl.h"
-#include "openssl/hmac.h"
-#include "openssl/sha.h"
 
 PG_FUNCTION_INFO_V1(s3_get);
 PG_FUNCTION_INFO_V1(s3_put);

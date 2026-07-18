@@ -1,3 +1,31 @@
+use crate::access::xlog_internal;
+use crate::btree::io;
+use crate::c;
+use crate::catalog::o_sys_cache;
+use crate::fcntl;
+use crate::openssl::sha;
+use crate::orioledb;
+use crate::pgstat;
+use crate::postmaster::bgworker;
+use crate::postmaster::bgwriter;
+use crate::postmaster::interrupt;
+use crate::s3::checksum;
+use crate::s3::headers;
+use crate::s3::queue;
+use crate::s3::requests;
+use crate::s3::worker;
+use crate::storage::bufmgr;
+use crate::storage::latch;
+use crate::storage::proc;
+use crate::storage::sinvaladt;
+use crate::transam::undo;
+use crate::unistd;
+use crate::utils::memutils;
+use crate::utils::snapmgr;
+use crate::utils::syscache;
+use crate::utils::timeout;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // worker.c
@@ -11,40 +39,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "c.h"
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "catalog/o_sys_cache.h"
-#include "s3/checksum.h"
-#include "s3/headers.h"
-#include "s3/queue.h"
-#include "s3/requests.h"
-#include "s3/worker.h"
-
-#include "access/xlog_internal.h"
-#include "miscadmin.h"
-#include "postmaster/bgworker.h"
-#include "postmaster/bgwriter.h"
-#include "postmaster/interrupt.h"
-#include "storage/bufmgr.h"
-#include "storage/latch.h"
-#include "storage/proc.h"
-#include "storage/sinvaladt.h"
-#include "transam/undo.h"
-#include "utils/memutils.h"
-#include "utils/snapmgr.h"
-#include "utils/syscache.h"
-#include "utils/timeout.h"
-
-#include "pgstat.h"
-
-#include "openssl/sha.h"
-#include <fcntl.h>
-#include <unistd.h>
-
 
 static S3TaskLocation s3_schedule_file_part_read(uint32 chkpNum, OIndexKey key,
 												 int32 segNum, int32 partNum);
@@ -766,7 +760,6 @@ s3_schedule_undo_file_write(UndoLogType undoType, uint64 fileNum)
 
 	return location;
 }
-
 
 //
 // Schedule the load of given downlink from S3 to local storage.

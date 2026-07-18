@@ -1,3 +1,24 @@
+use crate::btree::find;
+use crate::btree::insert;
+use crate::btree::io;
+use crate::btree::merge;
+use crate::btree::modify;
+use crate::btree::page_chunks;
+use crate::btree::undo;
+use crate::catalog::o_tables;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::tableam::descr;
+use crate::tableam::key_range;
+use crate::tableam::toast;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::utils::lsyscache;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // modify.c
@@ -11,26 +32,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/insert.h"
-#include "btree/io.h"
-#include "btree/merge.h"
-#include "btree/modify.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "catalog/o_tables.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "transam/undo.h"
-#include "transam/oxid.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-
-#include "miscadmin.h"
 
 #define IsRelationTree(desc) (ORelOidsIsValid(desc->oids) && !IS_SYS_TREE_OIDS(desc->oids))
 
@@ -701,7 +702,6 @@ o_btree_modify_item_rollback(BTreeModifyInternalContext *context)
 	return applyResult;
 }
 
-
 static void
 o_btree_modify_insert_update(BTreeModifyInternalContext *context)
 {
@@ -1097,12 +1097,6 @@ o_btree_normal_modify(BTreeDescr *desc, BTreeOperationType action,
 								   lockMode, deleted, pageReserveKind,
 								   callbackInfo);
 }
-
-#include "tableam/descr.h"
-#include "tableam/key_range.h"
-#include "tableam/toast.h"
-
-#include "utils/lsyscache.h"
 
 static bool
 page_unique_check(BTreeDescr *desc, Page p, BTreePageItemLocator *locator,

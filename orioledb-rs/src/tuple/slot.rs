@@ -1,3 +1,20 @@
+use crate::access::detoast;
+use crate::access::toast_internals;
+use crate::btree::btree;
+use crate::c;
+use crate::catalog::heap;
+use crate::catalog::pg_type_d;
+use crate::nodes::nodeFuncs;
+use crate::orioledb;
+use crate::tableam::toast;
+use crate::tuple::slot;
+use crate::tuple::toast;
+use crate::utils::datum;
+use crate::utils::expandeddatum;
+use crate::utils::lsyscache;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // slot.c
@@ -11,26 +28,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "c.h"
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "tableam/toast.h"
-#include "tuple/toast.h"
-#include "tuple/slot.h"
-
-#include "access/detoast.h"
-#include "access/toast_internals.h"
-#include "catalog/heap.h"
-#include "catalog/pg_type_d.h"
-#include "storage/itemptr.h"
-#include "utils/expandeddatum.h"
-#include "utils/datum.h"
-#include "utils/lsyscache.h"
-
-#include "nodes/nodeFuncs.h"
 
 static void tts_orioledb_init_reader(TupleTableSlot *slot);
 static void tts_orioledb_get_index_values(TupleTableSlot *slot,

@@ -1,3 +1,14 @@
+use crate::btree::iterator;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_amop;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::utils::builtins;
+use crate::utils::catcache;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_amop_cache.c
@@ -13,21 +24,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/iterator.h"
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-
-#include "catalog/pg_amop.h"
-#include "commands/defrem.h"
-#include "miscadmin.h"
-#include "utils/builtins.h"
-#include "utils/catcache.h"
-#include "utils/syscache.h"
 
 static OSysCache *amop_cache = NULL;
 static OSysCache *amop_strat_cache = NULL;
@@ -81,7 +77,6 @@ O_SYS_CACHE_INIT_FUNC(amop_strat_cache)
 										  fastcache, mcxt,
 										  &amop_strat_cache_funcs);
 }
-
 
 static void
 o_amop_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)

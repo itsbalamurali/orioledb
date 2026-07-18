@@ -1,3 +1,33 @@
+use crate::btree::modify;
+use crate::catalog::indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::orioledb;
+use crate::postmaster::bgworker;
+use crate::postmaster::interrupt;
+use crate::recovery::internal;
+use crate::recovery::recovery;
+use crate::storage::condition_variable;
+use crate::storage::ipc;
+use crate::storage::latch;
+use crate::storage::pmsignal;
+use crate::storage::proc;
+use crate::storage::procsignal;
+use crate::storage::shm_mq;
+use crate::storage::sinvaladt;
+use crate::tableam::descr;
+use crate::tableam::operations;
+use crate::tableam::tree;
+use crate::transam::oxid;
+use crate::tuple::slot;
+use crate::utils::inval;
+use crate::utils::syscache;
+use crate::utils::timeout;
+use crate::utils::wait_event;
+use crate::workers::interrupt;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // worker.c
@@ -11,39 +41,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/modify.h"
-#include "catalog/indices.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/o_tables.h"
-#include "recovery/recovery.h"
-#include "recovery/internal.h"
-#include "storage/itemptr.h"
-#include "tableam/descr.h"
-#include "tableam/operations.h"
-#include "tableam/tree.h"
-#include "transam/oxid.h"
-#include "tuple/slot.h"
-#include "workers/interrupt.h"
-
-#include "miscadmin.h"
-#include "postmaster/bgworker.h"
-#include "postmaster/interrupt.h"
-#include "storage/condition_variable.h"
-#include "storage/ipc.h"
-#include "storage/latch.h"
-#include "storage/pmsignal.h"
-#include "storage/procsignal.h"
-#include "storage/proc.h"
-#include "storage/shm_mq.h"
-#include "storage/sinvaladt.h"
-#include "utils/inval.h"
-#include "utils/syscache.h"
-#include "utils/timeout.h"
-#include "utils/wait_event.h"
 
 #define QUEUE_READ_USLEEP_BASE		(10)
 #define QUEUE_READ_USLEEP_MULTIPLER	(2)

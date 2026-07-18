@@ -1,3 +1,11 @@
+use crate::access::htup_details;
+use crate::orioledb;
+use crate::tableam::toast;
+use crate::tuple::format;
+use crate::tuple::slot;
+use crate::tuple::toast;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // format.c
@@ -11,16 +19,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "tableam/toast.h"
-#include "tuple/slot.h"
-#include "tuple/toast.h"
-#include "tuple/format.h"
-
-#include "access/htup_details.h"
 
 // Does att's datatype allow packing into the 1-byte-header varlena format?
 #define ATT_IS_PACKABLE(att) \
@@ -292,7 +290,6 @@ o_toast_nocachegetattr_ptr(OTuple tuple,
 
 	return result;
 }
-
 
 //
 // nocachegetattr analog for tuples that can consist
@@ -712,7 +709,6 @@ o_tuple_fill(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 			continue;
 		}
 
-
 		//
 // XXX we use the att_align macros on the pointer value itself, not on
 // an offset.  This is a bit of a hack.
@@ -809,7 +805,6 @@ o_form_tuple(TupleDesc tupleDesc, OTupleFixedFormatSpec *spec,
 	o_tuple_fill(tupleDesc, spec, &result, len, NULL, bridge_data, version, values, isnull, NULL);
 	return result;
 }
-
 
 uint32
 o_tuple_get_version(OTuple tuple)

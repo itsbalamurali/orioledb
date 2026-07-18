@@ -1,3 +1,10 @@
+use crate::btree::page_contents;
+use crate::catalog::sys_trees;
+use crate::orioledb;
+use crate::recovery::wal;
+use crate::recovery::wal_reader;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // wal_reader.c
@@ -18,14 +25,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/page_contents.h"
-#include "catalog/sys_trees.h"
-#include "recovery/wal_reader.h"
-#include "recovery/wal.h"
 
 // Parsers
 static WalParseResult wal_parse_empty(WalReaderState *r, WalRecord *rec);

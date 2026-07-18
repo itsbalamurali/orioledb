@@ -1,3 +1,92 @@
+use crate::access::heapam;
+use crate::access::reloptions;
+use crate::access::tableam;
+use crate::access::toast_compression;
+use crate::access::transam;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::catalog::catalog;
+use crate::catalog::heap;
+use crate::catalog::index;
+use crate::catalog::indices;
+use crate::catalog::namespace;
+use crate::catalog::o_indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::objectaccess;
+use crate::catalog::pg_am;
+use crate::catalog::pg_attrdef;
+use crate::catalog::pg_authid;
+use crate::catalog::pg_class;
+use crate::catalog::pg_collation;
+use crate::catalog::pg_constraint;
+use crate::catalog::pg_database;
+use crate::catalog::pg_depend;
+use crate::catalog::pg_enum;
+use crate::catalog::pg_extension;
+use crate::catalog::pg_inherits;
+use crate::catalog::pg_namespace;
+use crate::catalog::pg_opclass;
+use crate::catalog::pg_tablespace;
+use crate::catalog::pg_type;
+use crate::catalog::toasting;
+use crate::commands::createas;
+use crate::commands::dbcommands;
+use crate::commands::defrem;
+use crate::commands::event_trigger;
+use crate::commands::matview;
+use crate::commands::prepare;
+use crate::commands::tablecmds;
+use crate::commands::tablespace;
+use crate::commands::vacuum;
+use crate::commands::view;
+use crate::mb::pg_wchar;
+use crate::nodes::makefuncs;
+use crate::nodes::nodeFuncs;
+use crate::nodes::pg_list;
+use crate::nodes::primnodes;
+use crate::optimizer::optimizer;
+use crate::optimizer::planner;
+use crate::orioledb;
+use crate::parser::parse_coerce;
+use crate::parser::parse_collate;
+use crate::parser::parse_expr;
+use crate::parser::parse_relation;
+use crate::parser::parse_type;
+use crate::parser::parse_utilcmd;
+use crate::partitioning::partdesc;
+use crate::pgstat;
+use crate::recovery::wal;
+use crate::rewrite::rewriteHandler;
+use crate::storage::copydir;
+use crate::storage::ipc;
+use crate::storage::lmgr;
+use crate::storage::lockdefs;
+use crate::storage::lwlock;
+use crate::storage::smgr;
+use crate::sys::stat;
+use crate::tableam::descr;
+use crate::tableam::operations;
+use crate::tableam::toast;
+use crate::tcop::dest;
+use crate::tcop::utility;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::slot;
+use crate::unistd;
+use crate::utils::acl;
+use crate::utils::builtins;
+use crate::utils::compress;
+use crate::utils::datum;
+use crate::utils::fmgroids;
+use crate::utils::inval;
+use crate::utils::lsyscache;
+use crate::utils::resowner;
+use crate::utils::rls;
+use crate::utils::snapmgr;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // ddl.c
@@ -11,102 +100,10 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
 
-#include "orioledb.h"
-
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "catalog/indices.h"
-#include "catalog/o_indices.h"
-#include "catalog/o_tables.h"
-#include "catalog/o_sys_cache.h"
-#include "storage/lockdefs.h"
-#include "tableam/descr.h"
-#include "storage/copydir.h"
-#include "tableam/operations.h"
-#include "catalog/pg_am.h"
-#include "tableam/toast.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "tuple/slot.h"
-#include "utils/compress.h"
-#include "recovery/wal.h"
-
-#include "access/heapam.h"
-#include "access/reloptions.h"
-#include "access/tableam.h"
-#include "access/toast_compression.h"
-#include "access/transam.h"
-#include "catalog/catalog.h"
-#include "catalog/heap.h"
-#include "catalog/index.h"
-#include "catalog/namespace.h"
-#include "catalog/objectaccess.h"
-#include "catalog/pg_attrdef.h"
-#include "catalog/pg_authid.h"
-#include "catalog/pg_class.h"
-#include "catalog/pg_constraint.h"
-#include "catalog/pg_collation.h"
-#include "catalog/pg_database.h"
-#include "catalog/pg_depend.h"
-#include "catalog/pg_enum.h"
-#include "catalog/pg_extension.h"
-#include "catalog/pg_inherits.h"
-#include "catalog/pg_namespace.h"
-#include "catalog/pg_opclass.h"
-#include "catalog/pg_tablespace.h"
-#include "catalog/pg_type.h"
-#include "catalog/toasting.h"
-#include "commands/createas.h"
-#include "commands/dbcommands.h"
-#include "commands/defrem.h"
-#include "commands/event_trigger.h"
-#include "commands/matview.h"
-#include "commands/prepare.h"
-#include "commands/tablespace.h"
-#include "commands/vacuum.h"
-#include "commands/view.h"
-#include "commands/tablecmds.h"
-#include "fmgr.h"
-#include "mb/pg_wchar.h"
-#include "miscadmin.h"
-#include "nodes/nodeFuncs.h"
-#include "nodes/makefuncs.h"
-#include "nodes/pg_list.h"
-#include "nodes/primnodes.h"
-#include "optimizer/optimizer.h"
-#include "optimizer/planner.h"
-#include "parser/parse_coerce.h"
-#include "parser/parse_collate.h"
-#include "parser/parse_expr.h"
-#include "parser/parse_relation.h"
-#include "parser/parse_type.h"
-#include "parser/parse_utilcmd.h"
-#include "partitioning/partdesc.h"
-#include "pgstat.h"
 #if PG_VERSION_NUM >= 180000
-#include "rewrite/rewriteHandler.h"
-#endif
-#include "storage/ipc.h"
-#include "storage/lmgr.h"
-#include "storage/lwlock.h"
-#include "storage/smgr.h"
-#include "tcop/dest.h"
-#include "tcop/utility.h"
-#include "utils/acl.h"
-#include "utils/builtins.h"
-#include "utils/datum.h"
-#include "utils/fmgroids.h"
-#include "utils/inval.h"
-#include "utils/lsyscache.h"
-#include "utils/resowner.h"
-#include "utils/rls.h"
-#include "utils/syscache.h"
-#include "utils/snapmgr.h"
 
-#include <sys/stat.h>
-#include <unistd.h>
+#endif
 
 static IndexBuildResult o_pkey_result;
 static void o_drop_table(ORelOids oids);
@@ -176,7 +173,6 @@ orioledb_setup_ddl_hooks(void)
 	old_objectaccess_hook = object_access_hook;
 	object_access_hook = orioledb_object_access_hook;
 }
-
 
 static const char *
 alter_table_type_to_string(AlterTableType cmdtype)
@@ -334,7 +330,6 @@ is_alter_table_partition(PlannedStmt *pstmt)
 	}
 	return false;
 }
-
 
 //
 // Given a VacuumRelation, fill in the table OID if it wasn't specified,
@@ -1923,7 +1918,6 @@ o_find_composite_type_dependencies(Oid typeOid, Relation origRelation)
 					}
 
 				}
-
 
 				if (found && !o_composite_alter_index_safe)
 				{
@@ -4374,7 +4368,6 @@ orioledb_object_access_hook(ObjectAccessType access, Oid classId, Oid objectId,
 		Form_pg_database dbform;
 		int32		cluster_encoding;
 
-
 		if (IsTransactionState())
 		{
 			XLogRecPtr	cur_lsn;
@@ -4935,7 +4928,6 @@ o_check_movedb(const AlterDatabaseStmt *stmt, movedb_params *movedb)
 // Lets standard processing of moving datatabase generates an error.
 //
 		return;
-
 
 	foreach(option, stmt->options)
 	{

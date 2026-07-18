@@ -1,3 +1,26 @@
+use crate::access::transam;
+use crate::btree::find;
+use crate::btree::io;
+use crate::btree::page_chunks;
+use crate::btree::undo;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::storage::proc;
+use crate::storage::proclist;
+use crate::storage::s_lock;
+use crate::tableam::descr;
+use crate::tableam::key_range;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::utils::dsa;
+use crate::utils::memdebug;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use crate::utils::ucm;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // page_state.c
@@ -11,32 +34,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/io.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "recovery/recovery.h"
-#include "storage/itemptr.h"
-#include "tableam/descr.h"
-#include "tableam/key_range.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "utils/dsa.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-#include "utils/ucm.h"
-
-#include "access/transam.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "storage/proc.h"
-#include "storage/proclist.h"
-#include "storage/s_lock.h"
-#include "utils/memdebug.h"
 
 // Maximum simultaneously locked pages per process
 #define MAX_PAGES_PER_PROCESS 8
@@ -401,7 +398,6 @@ state_changed_or_queue(OInMemoryBlkno blkno, uint32 pgprocnum,
 
 	return state;
 }
-
 
 //
 // Place exclusive lock on the page.  Doesn't block readers before

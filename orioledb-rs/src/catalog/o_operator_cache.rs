@@ -1,3 +1,14 @@
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_am;
+use crate::catalog::pg_operator;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::utils::builtins;
+use crate::utils::catcache;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_operator_cache.c
@@ -13,20 +24,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-#include "catalog/pg_operator.h"
-#include "catalog/pg_am.h"
-#include "commands/defrem.h"
-#include "miscadmin.h"
-#include "utils/builtins.h"
-#include "utils/catcache.h"
-#include "utils/syscache.h"
 
 static OSysCache *operator_cache = NULL;
 
@@ -54,7 +51,6 @@ O_SYS_CACHE_INIT_FUNC(operator_cache)
 										keytypes, 0, fastcache, mcxt,
 										&operator_cache_funcs);
 }
-
 
 static void
 o_operator_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)

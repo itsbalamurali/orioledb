@@ -1,3 +1,39 @@
+use crate::access::heapam;
+use crate::access::tableam;
+use crate::btree::btree;
+use crate::btree::find;
+use crate::btree::insert;
+use crate::btree::iterator;
+use crate::btree::modify;
+use crate::btree::undo;
+use crate::catalog::index;
+use crate::catalog::storage;
+use crate::commands::vacuum;
+use crate::indexam::handler;
+use crate::nodes::execnodes;
+use crate::orioledb;
+use crate::parser::parsetree;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::replication::conflict;
+use crate::replication::worker_internal;
+use crate::storage::bufmgr;
+use crate::tableam::descr;
+use crate::tableam::handler;
+use crate::tableam::operations;
+use crate::tableam::tree;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::slot;
+use crate::utils::datum;
+use crate::utils::fmgroids;
+use crate::utils::lsyscache;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // operations.c
@@ -11,46 +47,10 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
 
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/find.h"
-#include "btree/insert.h"
-#include "btree/iterator.h"
-#include "btree/modify.h"
-#include "btree/undo.h"
-#include "utils/page_pool.h"
-#include "indexam/handler.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "storage/itemptr.h"
-#include "tableam/descr.h"
-#include "tableam/handler.h"
-#include "tableam/operations.h"
-#include "tableam/tree.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "tuple/slot.h"
-#include "utils/stopevent.h"
-
-#include "access/heapam.h"
-#include "access/tableam.h"
-#include "catalog/index.h"
-#include "catalog/storage.h"
-#include "commands/vacuum.h"
-#include "nodes/execnodes.h"
-#include "parser/parsetree.h"
-#include "pgstat.h"
 #if PG_VERSION_NUM >= 180000
-#include "replication/conflict.h"
-#include "replication/worker_internal.h"
+
 #endif
-#include "storage/bufmgr.h"
-#include "utils/datum.h"
-#include "utils/fmgroids.h"
-#include "utils/lsyscache.h"
 
 static void set_pending_sk_marker_from_slot(UndoLocation pkUndoLoc, void *arg);
 static void set_pending_sk_marker_from_modify_arg(UndoLocation pkUndoLoc,
@@ -1919,7 +1919,6 @@ o_is_index_predicate_satisfied(OIndexDescr *idx, TupleTableSlot *slot,
 	}
 	return result;
 }
-
 
 // fills key bound from tuple or index tuple that belongs to current BTree
 static void

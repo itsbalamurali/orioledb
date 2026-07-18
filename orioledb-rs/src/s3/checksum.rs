@@ -1,3 +1,11 @@
+use crate::common::string;
+use crate::openssl::sha;
+use crate::orioledb;
+use crate::s3::checksum;
+use crate::storage::fd;
+use crate::utils::hsearch;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // checksum.c
@@ -11,18 +19,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "s3/checksum.h"
-
-#include "common/string.h"
-#include "storage/fd.h"
-#include "utils/hsearch.h"
-
-#include "openssl/sha.h"
 
 static void initHashTable(S3ChecksumState *state, const char *filename);
 

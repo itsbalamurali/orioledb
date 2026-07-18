@@ -1,3 +1,33 @@
+use crate::access::amapi;
+use crate::access::relation;
+use crate::btree::iterator;
+use crate::btree::modify;
+use crate::catalog::indices;
+use crate::catalog::o_tables;
+use crate::commands::progress;
+use crate::commands::vacuum;
+use crate::indexam::handler;
+use crate::math;
+use crate::nodes::pathnodes;
+use crate::nodes::pg_list;
+use crate::optimizer::optimizer;
+use crate::orioledb;
+use crate::parser::parsetree;
+use crate::tableam::index_scan;
+use crate::tableam::operations;
+use crate::tableam::tree;
+use crate::tuple::slot;
+use crate::utils::compress;
+use crate::utils::fmgroids;
+use crate::utils::index_selfuncs;
+use crate::utils::lsyscache;
+use crate::utils::planner;
+use crate::utils::relcache;
+use crate::utils::selfuncs;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // handler.c
@@ -12,40 +42,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/iterator.h"
-#include "btree/modify.h"
-#include "catalog/indices.h"
-#include "catalog/o_tables.h"
-#include "indexam/handler.h"
-#include "tableam/index_scan.h"
-#include "tableam/operations.h"
-#include "tableam/tree.h"
-#include "tuple/slot.h"
-#include "utils/compress.h"
-#include "utils/planner.h"
-#include "utils/relcache.h"
-#include "utils/stopevent.h"
-
-#include "access/amapi.h"
-#include "access/relation.h"
-#include "commands/progress.h"
-#include "commands/vacuum.h"
-#include "nodes/pathnodes.h"
-#include "optimizer/optimizer.h"
-#include "parser/parsetree.h"
-#include "utils/fmgroids.h"
-#include "utils/index_selfuncs.h"
-#include "utils/selfuncs.h"
-#include "utils/syscache.h"
-#include "utils/lsyscache.h"
-#include "nodes/pg_list.h"
-
-#include <math.h>
 
 #define DEFAULT_PAGE_CPU_MULTIPLIER 50.0
 
@@ -246,9 +242,7 @@ orioledb_indexam_routine_hook(Oid tamoid, Oid amhandler)
 	return NULL;
 }
 
-
 // Check if name is used
-
 
 static void
 orioledb_amreuse(Relation index)
@@ -262,7 +256,6 @@ orioledb_amreuse(Relation index)
 		o_reuse_indices = list_make1_oid(index->rd_id);
 	}
 }
-
 
 static IndexBuildResult *
 orioledb_ambuild(Relation heap, Relation index, IndexInfo *indexInfo)
@@ -310,7 +303,6 @@ orioledb_ambuild(Relation heap, Relation index, IndexInfo *indexInfo)
 
 	result->heap_tuples = 0.0;
 	result->index_tuples = 0.0;
-
 
 	if (in_nontransactional_truncate || !OidIsValid(o_saved_relrewrite))
 	{
@@ -426,7 +418,6 @@ o_report_duplicate(Relation rel, OIndexDescr *id, TupleTableSlot *slot)
 									"pk" : "sk")));
 	}
 }
-
 
 static void
 append_rowid_values(OIndexDescr *id,
@@ -1732,7 +1723,6 @@ o_new_rowid(OIndexDescr *primary, TupleTableSlot *slot,
 	return rowid;
 }
 
-
 // TODO: Rewrite
 static void
 fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
@@ -1923,7 +1913,6 @@ fill_itup(IndexScanDesc scan, OTuple tuple, OTableDescr *descr,
 //
 	ExecClearTuple(slot);
 }
-
 
 static bool
 orioledb_amgettuple(IndexScanDesc scan, ScanDirection dir)

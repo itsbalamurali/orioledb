@@ -1,3 +1,49 @@
+use crate::access::xlog_internal;
+use crate::access::xlogarchive;
+use crate::btree::insert;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::btree::merge;
+use crate::btree::modify;
+use crate::btree::page_chunks;
+use crate::btree::undo;
+use crate::c;
+use crate::catalog::free_extents;
+use crate::catalog::o_indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::pg_database;
+use crate::catalog::sys_trees;
+use crate::checkpoint::checkpoint;
+use crate::checkpoint::control;
+use crate::common::hashfn;
+use crate::orioledb;
+use crate::pgstat;
+use crate::postmaster::bgwriter;
+use crate::recovery::internal;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::s3::checkpoint;
+use crate::s3::worker;
+use crate::storage::bufmgr;
+use crate::storage::proc;
+use crate::sys::file;
+use crate::sys::mman;
+use crate::sys::stat;
+use crate::sys::time;
+use crate::tableam::toast;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::unistd;
+use crate::utils::memdebug;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::rel;
+use crate::utils::seq_buf;
+use crate::utils::stopevent;
+use crate::utils::ucm;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // checkpoint.c
@@ -11,56 +57,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "c.h"
-#include "postgres.h"
-
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <sys/mman.h>
-
-#include "orioledb.h"
-
-#include "btree/insert.h"
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "btree/merge.h"
-#include "btree/modify.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "catalog/free_extents.h"
-#include "catalog/o_indices.h"
-#include "catalog/o_tables.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/sys_trees.h"
-#include "checkpoint/checkpoint.h"
-#include "checkpoint/control.h"
-#include "recovery/internal.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "s3/checkpoint.h"
-#include "s3/worker.h"
-#include "tableam/toast.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-#include "utils/seq_buf.h"
-#include "utils/stopevent.h"
-#include "utils/ucm.h"
-
-#include "access/xlog_internal.h"
-#include "access/xlogarchive.h"
-#include "catalog/pg_database.h"
-#include "common/hashfn.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "postmaster/bgwriter.h"
-#include "storage/bufmgr.h"
-#include "storage/proc.h"
-#include "utils/memdebug.h"
-#include "utils/memutils.h"
-#include "utils/rel.h"
 
 static void before_writing_xids_file(int chkpnum);
 
@@ -1945,7 +1941,6 @@ o_after_checkpoint_cleanup_hook(XLogRecPtr checkPointRedo, int flags)
 	s3_queue_wait_for_location(maxLocation);
 }
 
-
 static uint64
 append_file_contents(File target, char *source_filename, uint64 offset)
 {
@@ -3044,7 +3039,6 @@ checkpoint_ix(int flags, BTreeDescr *descr)
 								 chkpNum);
 	return true;
 }
-
 
 //
 // Checkpointer walk over particular B-tree. Returns rootPageBlkno page offset.
@@ -4352,7 +4346,6 @@ autonomous_stack_flush_to_disk(BTreeDescr *descr, CheckpointState *state,
 	}
 }
 
-
 static void
 checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 						 CheckpointWriteBack *writeback,
@@ -4977,7 +4970,6 @@ checkpoint_internal_pass(BTreeDescr *descr, CheckpointState *state,
 	BTREE_PAGE_ITEMS_COUNT(img) = 0;
 }
 
-
 //
 // Prepare particular leaf B-tree page for checkpointing.  Checkpointer
 // state stack item is already filled and page is locked.
@@ -5220,7 +5212,6 @@ checkpoint_tables_callback(OIndexType type, ORelOids treeOids,
 			}
 		}
 
-
 		acquire_chkp_lock_drain(&checkpoint_state->oTablesMetaLock);
 	}
 	else if (descr != NULL)
@@ -5418,8 +5409,6 @@ checkpointable_tree_fill_seq_buffers(BTreeDescr *td, bool init,
 					  &meta_page->nextChkp[chkp_index],
 					  &cur_chkp_tag, true, init, sizeof(CheckpointFileHeader), evicted_next))
 		return false;
-
-
 
 	if (!init_seq_buf(&td->nextChkp[1 - chkp_index],
 					  &meta_page->nextChkp[1 - chkp_index],

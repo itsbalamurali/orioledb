@@ -1,3 +1,34 @@
+use crate::access::genam;
+use crate::access::relation;
+use crate::access::table;
+use crate::access::tupmacs;
+use crate::btree::btree;
+use crate::btree::check;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::btree::page_chunks;
+use crate::btree::page_contents;
+use crate::catalog::indices;
+use crate::catalog::o_tables;
+use crate::catalog::pg_attribute;
+use crate::catalog::pg_type_d;
+use crate::commands::defrem;
+use crate::funcapi;
+use crate::orioledb;
+use crate::pgstat;
+use crate::tableam::descr;
+use crate::tableam::handler;
+use crate::tableam::toast;
+use crate::tuple::format;
+use crate::tuple::toast;
+use crate::utils::builtins;
+use crate::utils::compress;
+use crate::utils::datum;
+use crate::utils::fmgroids;
+use crate::utils::lsyscache;
+use crate::utils::rel;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // func.c
@@ -11,41 +42,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/check.h"
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "btree/page_chunks.h"
-#include "btree/page_contents.h"
-#include "catalog/indices.h"
-#include "catalog/o_tables.h"
-#include "tableam/descr.h"
-#include "tableam/handler.h"
-#include "tableam/toast.h"
-#include "tuple/format.h"
-#include "tuple/toast.h"
-#include "utils/compress.h"
-
-#include "access/genam.h"
-#include "access/relation.h"
-#include "access/table.h"
-#include "access/tupmacs.h"
-#include "catalog/pg_attribute.h"
-#include "catalog/pg_type_d.h"
-#include "commands/defrem.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "utils/builtins.h"
-#include "utils/datum.h"
-#include "utils/fmgroids.h"
-#include "utils/lsyscache.h"
-#include "utils/rel.h"
 
 PG_FUNCTION_INFO_V1(orioledb_tbl_structure);
 PG_FUNCTION_INFO_V1(orioledb_idx_structure);
@@ -472,8 +468,6 @@ append_bits(StringInfo str, Page p, OffsetNumber *offset,
 		level--;                                                              \
 	} while (0)
 
-
-
 //
 // Print contents of give B-tree page.  If non-leaf page is given, recursively
 // print childredn.
@@ -782,7 +776,6 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 	}
 	level--;					// CHUNKS END
 
-
 	if (!O_PAGE_IS(p, LEAF))
 	{
 		BTREE_PAGE_FOREACH_ITEMS(p, &loc)
@@ -811,7 +804,6 @@ print_page_bin_structure(BTreeDescr *desc, OInMemoryBlkno blkno,
 								 print_bytes, depthLeft, outbuf);
 	}
 }
-
 
 static void
 tree_bin_structure(StringInfo buf, OIndexDescr *id, bool print_bytes,
@@ -1678,7 +1670,6 @@ fetch_index_descr_by_oid(Oid relid)
 
 	return descr->indices[ixnum];
 }
-
 
 static void
 add_page_stat(BTreeDescr *desc, Page p, ORelationStat *stat)

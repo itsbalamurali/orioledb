@@ -1,3 +1,38 @@
+use crate::access::relation;
+use crate::access::table;
+use crate::btree::iterator;
+use crate::btree::scan;
+use crate::commands::explain_format;
+use crate::common::hashfn;
+use crate::executor::executor;
+use crate::executor::nodeIndexscan;
+use crate::executor::nodeModifyTable;
+use crate::math;
+use crate::nodes::makefuncs;
+use crate::nodes::nodeFuncs;
+use crate::optimizer::cost;
+use crate::optimizer::optimizer;
+use crate::optimizer::plancat;
+use crate::optimizer::planmain;
+use crate::optimizer::restrictinfo;
+use crate::orioledb;
+use crate::parser::parsetree;
+use crate::recovery::recovery;
+use crate::tableam::bitmap_scan;
+use crate::tableam::descr;
+use crate::tableam::handler;
+use crate::tableam::index_scan;
+use crate::tableam::scan;
+use crate::transam::oxid;
+use crate::tuple::slot;
+use crate::utils::json;
+use crate::utils::lsyscache;
+use crate::utils::rel;
+use crate::utils::snapmgr;
+use crate::utils::spccache;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // scan.c
@@ -12,47 +47,9 @@
 // -------------------------------------------------------------------------
 //
 
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/iterator.h"
-#include "btree/scan.h"
-#include "recovery/recovery.h"
-#include "tableam/bitmap_scan.h"
-#include "tableam/descr.h"
-#include "tableam/handler.h"
-#include "tableam/index_scan.h"
-#include "tableam/scan.h"
-#include "transam/oxid.h"
-#include "tuple/slot.h"
-#include "utils/stopevent.h"
-
-#include "access/relation.h"
-#include "access/table.h"
-#include "common/hashfn.h"
-#include "executor/executor.h"
-#include "executor/nodeIndexscan.h"
-#include "executor/nodeModifyTable.h"
 #if PG_VERSION_NUM >= 180000
-#include "commands/explain_format.h"
-#endif
-#include "miscadmin.h"
-#include "nodes/makefuncs.h"
-#include "nodes/nodeFuncs.h"
-#include "optimizer/cost.h"
-#include "optimizer/optimizer.h"
-#include "optimizer/restrictinfo.h"
-#include "optimizer/plancat.h"
-#include "optimizer/planmain.h"
-#include "parser/parsetree.h"
-#include "utils/json.h"
-#include "utils/lsyscache.h"
-#include "utils/rel.h"
-#include "utils/snapmgr.h"
-#include "utils/spccache.h"
 
-#include <math.h>
+#endif
 
 typedef enum OPathTag
 {

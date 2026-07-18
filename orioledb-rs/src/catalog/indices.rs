@@ -1,3 +1,50 @@
+use crate::access::genam;
+use crate::access::relation;
+use crate::access::table;
+use crate::btree::build;
+use crate::btree::io;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::catalog::heap;
+use crate::catalog::index;
+use crate::catalog::indices;
+use crate::catalog::namespace;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_proc;
+use crate::catalog::pg_type;
+use crate::checkpoint::checkpoint;
+use crate::commands::defrem;
+use crate::commands::event_trigger;
+use crate::commands::progress;
+use crate::commands::tablecmds;
+use crate::nodes::nodeFuncs;
+use crate::optimizer::paths;
+use crate::optimizer::plancat;
+use crate::orioledb;
+use crate::parser::parse_utilcmd;
+use crate::pgstat;
+use crate::recovery::internal;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::storage::predicate;
+use crate::tableam::operations;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::slot;
+use crate::tuple::sort;
+use crate::tuple::toast;
+use crate::utils::builtins;
+use crate::utils::compress;
+use crate::utils::lsyscache;
+use crate::utils::page_pool;
+use crate::utils::planner;
+use crate::utils::resowner;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use crate::utils::tuplesort;
+use crate::workers::interrupt;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // indices.c
@@ -11,56 +58,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/build.h"
-#include "btree/io.h"
-#include "btree/undo.h"
-#include "btree/scan.h"
-#include "checkpoint/checkpoint.h"
-#include "catalog/indices.h"
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-#include "recovery/internal.h"
-#include "recovery/wal.h"
-#include "tableam/operations.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "tuple/slot.h"
-#include "tuple/sort.h"
-#include "tuple/toast.h"
-#include "utils/compress.h"
-#include "utils/planner.h"
-#include "utils/resowner.h"
-#include "utils/stopevent.h"
-#include "utils/page_pool.h"
-#include "workers/interrupt.h"
-
-#include "access/genam.h"
-#include "access/relation.h"
-#include "access/table.h"
-#include "catalog/heap.h"
-#include "catalog/index.h"
-#include "catalog/namespace.h"
-#include "catalog/pg_proc.h"
-#include "catalog/pg_type.h"
-#include "commands/defrem.h"
-#include "commands/event_trigger.h"
-#include "commands/tablecmds.h"
-#include "commands/progress.h"
-#include "miscadmin.h"
-#include "nodes/nodeFuncs.h"
-#include "parser/parse_utilcmd.h"
-#include "pgstat.h"
-#include "storage/predicate.h"
-#include "utils/builtins.h"
-#include "utils/lsyscache.h"
-#include "utils/syscache.h"
-#include "utils/tuplesort.h"
-#include "optimizer/plancat.h"
-#include "optimizer/paths.h"
 
 // copied from nbtsort.c with modifications
 
@@ -151,7 +148,6 @@ static void rebuild_indices_worker_heap_scan(OTableDescr *old_descr, OTableDescr
 static int	o_calculate_index_workers(BTreeDescr *primary, bool shmem_loaded, int nindices);
 static int	o_estimate_parallel_workers(double table_pages, double index_pages,
 										int max_workers);
-
 
 // copied from tablecmds.c
 typedef struct NewColumnValue
@@ -1881,7 +1877,6 @@ rebuild_indices_worker_heap_scan(OTableDescr *old_descr, OTableDescr *descr,
 	TupleTableSlot *primarySlot;
 
 	primarySlot = MakeSingleTupleTableSlot(old_descr->tupdesc, &TTSOpsOrioleDB);
-
 
 	sscan = make_btree_seq_scan(&GET_PRIMARY(old_descr)->desc, &o_in_progress_snapshot, poscan);
 

@@ -1,3 +1,31 @@
+use crate::access::transam;
+use crate::btree::undo;
+use crate::checkpoint::checkpoint;
+use crate::orioledb;
+use crate::pgstat;
+use crate::postmaster::autovacuum;
+use crate::postmaster::bgworker;
+use crate::postmaster::bgwriter;
+use crate::rewind::rewind;
+use crate::storage::bufmgr;
+use crate::storage::ipc;
+use crate::storage::latch;
+use crate::storage::proc;
+use crate::storage::sinvaladt;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::unistd;
+use crate::utils::dsa;
+use crate::utils::elog;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::snapmgr;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use crate::utils::timeout;
+use crate::utils::ucm;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // rewind.c
@@ -11,37 +39,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/undo.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "utils/dsa.h"
-#include "utils/page_pool.h"
-#include "utils/ucm.h"
-#include "utils/stopevent.h"
-#include "rewind/rewind.h"
-
-#include "access/transam.h"
-#include "miscadmin.h"
-#include "postmaster/bgworker.h"
-#include "postmaster/bgwriter.h"
-#include "postmaster/autovacuum.h"
-#include "storage/bufmgr.h"
-#include "storage/ipc.h"
-#include "storage/latch.h"
-#include "storage/proc.h"
-#include "storage/sinvaladt.h"
-#include "utils/elog.h"
-#include "utils/memutils.h"
-#include "utils/snapmgr.h"
-#include "utils/syscache.h"
-#include "utils/timeout.h"
-#include "checkpoint/checkpoint.h"
-#include <unistd.h>
-#include "pgstat.h"
 
 static volatile sig_atomic_t shutdown_requested = false;
 static int	RewindHorizonCheckDelay = 1000; // Time between checking in ms
@@ -671,7 +668,6 @@ orioledb_rewind_internal(int rewind_mode, int rewind_time, OXid rewind_oxid, Tra
 	long		secs;
 	int			usecs;
 
-
 	if (!enable_rewind)
 	{
 		ereport(ERROR,
@@ -684,7 +680,6 @@ orioledb_rewind_internal(int rewind_mode, int rewind_time, OXid rewind_oxid, Tra
 	if (rewind_mode == REWIND_MODE_TIME)
 	{
 		elog(LOG, "Rewind requested, for %d s", rewind_time);
-
 
 		if (rewind_time > rewind_max_time)
 		{
@@ -1587,7 +1582,6 @@ get_precommit_xid_subxids(int *nsubxids, TransactionId **subxids)
 	return precommit_xid;
 }
 
-
 void
 add_to_rewind_buffer(OXid oxid, TransactionId xid, int nsubxids, TransactionId *subxids)
 {
@@ -1934,7 +1928,6 @@ get_rewind_run_xmin(void)
 {
 	return pg_atomic_read_u64(&rewindMeta->runXmin);
 }
-
 
 //
 // try_restart_pg

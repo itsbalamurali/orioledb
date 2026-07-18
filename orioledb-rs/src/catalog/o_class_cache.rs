@@ -1,3 +1,21 @@
+use crate::access::htup_details;
+use crate::access::relation;
+use crate::access::xlogrecovery;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_class;
+use crate::catalog::pg_enum;
+use crate::catalog::pg_range;
+use crate::catalog::sys_trees;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::tuple::format;
+use crate::utils::catcache;
+use crate::utils::memutils;
+use crate::utils::rel;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_class_cache.c
@@ -13,28 +31,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-#include "catalog/sys_trees.h"
-#include "recovery/recovery.h"
-
-#include "access/htup_details.h"
-#include "access/relation.h"
-#include "access/xlogrecovery.h"
-#include "catalog/pg_class.h"
-#include "catalog/pg_enum.h"
-#include "catalog/pg_range.h"
-#include "commands/defrem.h"
-#include "miscadmin.h"
-#include "tuple/format.h"
-#include "utils/catcache.h"
-#include "utils/memutils.h"
-#include "utils/rel.h"
-#include "utils/syscache.h"
 
 static OSysCache *class_cache = NULL;
 

@@ -1,3 +1,20 @@
+use crate::btree::check;
+use crate::btree::iterator;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_tablespace;
+use crate::catalog::sys_trees;
+use crate::checkpoint::checkpoint;
+use crate::common::hashfn;
+use crate::funcapi;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::tableam::descr;
+use crate::tableam::handler;
+use crate::transam::undo;
+use crate::utils::builtins;
+use crate::utils::page_pool;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // sys_trees.c
@@ -11,27 +28,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/check.h"
-#include "btree/iterator.h"
-#include "catalog/sys_trees.h"
-#include "catalog/o_sys_cache.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "tableam/descr.h"
-#include "tableam/handler.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-
-#include "catalog/pg_tablespace.h"
-#include "common/hashfn.h"
-#include "funcapi.h"
-#include "utils/builtins.h"
-#include "utils/fmgrprotos.h"
 
 typedef struct
 {
@@ -471,7 +467,6 @@ sys_trees_shmem_init(Pointer ptr, bool found)
 	memset(sysTreesDescrs, 0, sizeof(sysTreesDescrs));
 	ptr += mul_size(sizeof(SysTreeShmemHeader), SYS_TREES_NUM);
 }
-
 
 BTreeDescr *
 get_sys_tree(int tree_num)

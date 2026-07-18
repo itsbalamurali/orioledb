@@ -1,3 +1,20 @@
+use crate::btree::find;
+use crate::btree::insert;
+use crate::btree::page_chunks;
+use crate::btree::page_contents;
+use crate::btree::scan;
+use crate::btree::split;
+use crate::btree::undo;
+use crate::checkpoint::checkpoint;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::transam::undo;
+use crate::tuple::format;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // insert.c
@@ -11,26 +28,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/insert.h"
-#include "btree/split.h"
-#include "btree/page_contents.h"
-#include "btree/page_chunks.h"
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "transam/undo.h"
-#include "tuple/format.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-
-#include "miscadmin.h"
-#include "utils/memutils.h"
 
 // In order to avoid use of the recursion in insert_leaf() we use context.
 typedef struct BTreeInsertStackItem
@@ -901,7 +898,6 @@ o_btree_insert_split(BTreeInsertStackItem *insert_item,
 		insert_item->rightBlkno = right_blkno;
 
 	}
-
 
 	if (STOPEVENT_CONDITION(STOPEVENT_SPLIT_FAIL, params))
 		elog(ERROR, "Debug condition: page has been split.");

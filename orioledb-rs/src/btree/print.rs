@@ -1,3 +1,18 @@
+use crate::access::transam;
+use crate::btree::btree;
+use crate::btree::merge;
+use crate::btree::page_chunks;
+use crate::btree::print;
+use crate::btree::undo;
+use crate::orioledb;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::format;
+use crate::utils::builtins;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // print.c
@@ -11,24 +26,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/merge.h"
-#include "btree/page_chunks.h"
-#include "btree/print.h"
-#include "btree/undo.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "tuple/format.h"
-#include "utils/page_pool.h"
-
-#include "access/transam.h"
-#include "utils/builtins.h"
-#include "miscadmin.h"
-#include "utils/memutils.h"
 
 typedef struct
 {
@@ -114,7 +111,6 @@ static void pdata_set_min_csn(BTreePrintData *printData,
 static List *ladd_unique_undo(List *list,
 							  UndoLogType undoType,
 							  UndoLocation location);
-
 
 //
 // Recursively print contents of B-tree pages with given depth.  Uses
@@ -557,7 +553,6 @@ btree_calculate_min_values(UndoLogType undoType, OInMemoryBlkno blkno,
 	BTreePageItemLocator loc;
 	bool		found;
 	UndoLogType pageUndoType = GET_PAGE_LEVEL_UNDO_TYPE(undoType);
-
 
 	// if page number is not in hash, then add new value to hash
 	pageHashEntry = (PageHashEntry *) hash_search(printData->pageHash,

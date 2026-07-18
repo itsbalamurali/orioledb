@@ -1,3 +1,18 @@
+use crate::btree::io;
+use crate::btree::page_contents;
+use crate::btree::undo;
+use crate::checkpoint::checkpoint;
+use crate::orioledb;
+use crate::tableam::handler;
+use crate::transam::undo;
+use crate::utils::elog;
+use crate::utils::memdebug;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::palloc;
+use crate::utils::ucm;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // page_pool.c
@@ -11,23 +26,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "btree/page_contents.h"
-#include "btree/undo.h"
-#include "checkpoint/checkpoint.h"
-#include "tableam/handler.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-#include "utils/elog.h"
-#include "utils/memutils.h"
-#include "utils/palloc.h"
-#include "utils/ucm.h"
-
-#include "utils/memdebug.h"
 
 // Shared memory based page pool operations
 
@@ -752,7 +750,6 @@ local_ppool_run_maintenance(PagePool *pool, bool evict, volatile sig_atomic_t *s
 			break;
 		}
 	}
-
 
 	//
 // The caller might have the undo location reserved.  We need to carefully

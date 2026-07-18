@@ -1,3 +1,21 @@
+use crate::access::transam;
+use crate::btree::find;
+use crate::btree::page_chunks;
+use crate::btree::undo;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::storage::proc;
+use crate::storage::proclist;
+use crate::storage::s_lock;
+use crate::tableam::descr;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::utils::memdebug;
+use crate::utils::page_pool;
+use crate::utils::ucm;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // page_contents.c
@@ -11,27 +29,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "recovery/recovery.h"
-#include "tableam/descr.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-#include "utils/ucm.h"
-
-#include "access/transam.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "storage/proc.h"
-#include "storage/proclist.h"
-#include "storage/s_lock.h"
-#include "utils/memdebug.h"
 
 static void clear_fixed_tuple(OFixedTuple *dst);
 
@@ -847,7 +844,6 @@ btree_page_update_max_key_len(BTreeDescr *desc, Page p)
 		maxKeyLen = BTREE_PAGE_GET_HIKEY_SIZE(p);
 	else
 		maxKeyLen = 0;
-
 
 	BTREE_PAGE_FOREACH_ITEMS(p, &loc)
 	{

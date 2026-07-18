@@ -1,3 +1,62 @@
+use crate::access::heapam;
+use crate::access::heaptoast;
+use crate::access::multixact;
+use crate::access::reloptions;
+use crate::access::tableam;
+use crate::btree::btree;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::catalog::heap;
+use crate::catalog::index;
+use crate::catalog::indices;
+use crate::catalog::namespace;
+use crate::catalog::o_indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::pg_am;
+use crate::catalog::pg_collation;
+use crate::catalog::storage;
+use crate::catalog::storage_xlog;
+use crate::commands::progress;
+use crate::commands::vacuum;
+use crate::common::relpath;
+use crate::funcapi;
+use crate::math;
+use crate::nodes::execnodes;
+use crate::optimizer::optimizer;
+use crate::optimizer::plancat;
+use crate::orioledb;
+use crate::parser::parse_coerce;
+use crate::parser::parse_relation;
+use crate::parser::parse_type;
+use crate::parser::parsetree;
+use crate::pgstat;
+use crate::recovery::wal;
+use crate::replication::origin;
+use crate::storage::bufmgr;
+use crate::sys::stat;
+use crate::tableam::descr;
+use crate::tableam::handler;
+use crate::tableam::operations;
+use crate::tableam::tree;
+use crate::tableam::vacuum;
+use crate::tcop::utility;
+use crate::transam::oxid;
+use crate::tuple::slot;
+use crate::utils::backend_progress;
+use crate::utils::builtins;
+use crate::utils::compress;
+use crate::utils::datum;
+use crate::utils::fmgroids;
+use crate::utils::lsyscache;
+use crate::utils::rel;
+use crate::utils::sampling;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // handler.c
@@ -11,69 +70,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include <math.h>
-#include <sys/stat.h>
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "catalog/indices.h"
-#include "catalog/o_indices.h"
-#include "catalog/o_tables.h"
-#include "catalog/o_sys_cache.h"
-#include "recovery/wal.h"
-#include "tableam/descr.h"
-#include "tableam/handler.h"
-#include "tableam/operations.h"
-#include "tableam/tree.h"
-#include "tableam/vacuum.h"
-#include "transam/oxid.h"
-#include "tuple/slot.h"
-#include "utils/compress.h"
-#include "utils/rel.h"
-#include "utils/stopevent.h"
-
-#include "access/heapam.h"
-#include "access/heaptoast.h"
-#include "access/multixact.h"
-#include "access/reloptions.h"
-#include "access/tableam.h"
-#include "catalog/heap.h"
-#include "catalog/index.h"
-#include "catalog/namespace.h"
-#include "catalog/pg_am.h"
-#include "catalog/pg_collation.h"
-#include "catalog/storage.h"
-#include "catalog/storage_xlog.h"
-#include "commands/progress.h"
-#include "commands/vacuum.h"
-#include "common/relpath.h"
-#include "miscadmin.h"
-#include "nodes/execnodes.h"
-#include "optimizer/optimizer.h"
-#include "optimizer/plancat.h"
-#include "parser/parse_coerce.h"
-#include "parser/parse_relation.h"
-#include "parser/parse_type.h"
-#include "parser/parsetree.h"
-#include "pgstat.h"
-#include "replication/origin.h"
-#include "storage/bufmgr.h"
-#include "tcop/utility.h"
-#include "utils/builtins.h"
-#include "utils/backend_progress.h"
-#include "utils/datum.h"
-#include "utils/fmgroids.h"
-#include "utils/lsyscache.h"
-#include "utils/sampling.h"
-#include "utils/syscache.h"
-#include "funcapi.h"
 
 static Size orioledb_parallelscan_estimate(Relation rel);
 static Size orioledb_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan);
@@ -267,7 +263,6 @@ orioledb_index_fetch_tuple(struct IndexFetchTableData *scan,
 	return true;
 }
 
-
 // ------------------------------------------------------------------------
 // Callbacks for non-modifying operations on individual tuples for heap AM
 // ------------------------------------------------------------------------
@@ -291,7 +286,6 @@ fetch_row_version_callback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot,
 	else
 		return OTupleFetchNext;
 }
-
 
 //
 // Fetches last committed row version for given tupleid.
@@ -422,7 +416,6 @@ orioledb_tuple_get_transaction_info(TupleTableSlot *slot, TransactionId *xmin,
 	return false;
 }
 #endif
-
 
 // ----------------------------------------------------------------------------
 // Functions for manipulations of physical tuples for heap AM.
@@ -862,7 +855,6 @@ orioledb_finish_bulk_insert(Relation relation, int options)
 	// Do nothing here
 }
 
-
 // ------------------------------------------------------------------------
 // DDL related callbacks for heap AM.
 // ------------------------------------------------------------------------
@@ -1256,7 +1248,6 @@ orioledb_index_build_range_scan(Relation heapRelation,
 		FreeExecutorState(estate);
 		free_btree_seq_scan(seq_scan);
 
-
 		// These may have been pointing to the now-gone estate
 		indexInfo->ii_ExpressionsState = NIL;
 		indexInfo->ii_PredicateState = NULL;
@@ -1274,7 +1265,6 @@ orioledb_index_validate_scan(Relation heapRelation,
 {
 	elog(ERROR, "Not implemented: %s", PG_FUNCNAME_MACRO);
 }
-
 
 // ------------------------------------------------------------------------
 // Miscellaneous callbacks for the heap AM
@@ -1550,7 +1540,6 @@ orioledb_estimate_rel_size(Relation rel, int32 *attr_widths,
 		*allvisfrac = (double) relallvisible / curpages;
 }
 
-
 // ------------------------------------------------------------------------
 // Executor related callbacks for the heap AM
 // ------------------------------------------------------------------------
@@ -1682,7 +1671,6 @@ orioledb_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 
 	orioledb_parallelscan_initialize_internal(pscan);
 }
-
 
 static TableScanDesc
 orioledb_beginscan(Relation relation, Snapshot snapshot,
@@ -2064,7 +2052,6 @@ orioledb_acquire_sample_rows(Relation relation, int elevel,
 										   &scanEnd, NULL);
 	}
 	free_btree_seq_scan(scan);
-
 
 	//
 // If we didn't find as many tuples as we wanted then we're done. No sort

@@ -1,3 +1,16 @@
+use crate::access::table;
+use crate::access::xlogrecovery;
+use crate::btree::iterator;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_enum;
+use crate::catalog::pg_type;
+use crate::funcapi;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::utils::fmgroids;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_enum_cache.c
@@ -16,23 +29,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/iterator.h"
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-
-#include "access/table.h"
-#include "access/xlogrecovery.h"
-#include "catalog/pg_enum.h"
-#include "catalog/pg_type.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "utils/fmgroids.h"
-#include "utils/syscache.h"
 
 static OSysCache *enum_cache = NULL;
 static OSysCache *enumoid_cache = NULL;

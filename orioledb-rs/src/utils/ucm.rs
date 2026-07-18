@@ -1,3 +1,10 @@
+use crate::btree::page_state;
+use crate::c;
+use crate::orioledb;
+use crate::utils::dsa;
+use crate::utils::ucm;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // ucm.c
@@ -11,14 +18,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "c.h"
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/page_state.h"
-#include "utils/dsa.h"
-#include "utils/ucm.h"
 
 #define UCM_BRANCH_FACTOR	15
 #define UCM_LEVEL_BITS		4

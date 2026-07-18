@@ -1,3 +1,13 @@
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_amproc;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::utils::builtins;
+use crate::utils::catcache;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_amproc_cache.c
@@ -13,19 +23,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-#include "catalog/pg_amproc.h"
-#include "commands/defrem.h"
-#include "miscadmin.h"
-#include "utils/builtins.h"
-#include "utils/catcache.h"
-#include "utils/syscache.h"
 
 static OSysCache *amproc_cache = NULL;
 
@@ -53,7 +50,6 @@ O_SYS_CACHE_INIT_FUNC(amproc_cache)
 									  4, keytypes, 0, fastcache, mcxt,
 									  &amproc_cache_funcs);
 }
-
 
 static void
 o_amproc_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)

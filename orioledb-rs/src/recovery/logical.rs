@@ -1,3 +1,22 @@
+use crate::access::detoast;
+use crate::access::toast_compression;
+use crate::btree::page_contents;
+use crate::catalog::pg_tablespace;
+use crate::catalog::sys_trees;
+use crate::orioledb;
+use crate::recovery::internal;
+use crate::recovery::logical;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::recovery::wal_reader;
+use crate::replication::origin;
+use crate::replication::reorderbuffer;
+use crate::replication::snapbuild;
+use crate::tableam::descr;
+use crate::tuple::slot;
+use crate::tuple::toast;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // logical.c
@@ -11,27 +30,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/page_contents.h"
-#include "catalog/sys_trees.h"
-#include "recovery/logical.h"
-#include "recovery/recovery.h"
-#include "recovery/internal.h"
-#include "recovery/wal.h"
-#include "recovery/wal_reader.h"
-#include "tableam/descr.h"
-#include "tuple/slot.h"
-
-#include "catalog/pg_tablespace.h"
-#include "replication/origin.h"
-#include "replication/reorderbuffer.h"
-#include "replication/snapbuild.h"
-#include "access/toast_compression.h"
-#include "access/detoast.h"
-#include "tuple/toast.h"
 
 static inline bool FilterByOrigin(LogicalDecodingContext *ctx, RepOriginId origin_id);
 
@@ -393,7 +391,6 @@ o_convert_toast_chunk(ReorderBuffer *reorderbuf, OIndexDescr *indexDescr,
 
 	return result;
 }
-
 
 static void
 o_decode_modify_tuples(ReorderBuffer *reorderbuf, WalRecordType rec_type,

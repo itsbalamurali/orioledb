@@ -1,3 +1,23 @@
+use crate::access::transam;
+use crate::access::twophase;
+use crate::c;
+use crate::funcapi;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::rewind::rewind;
+use crate::storage::lmgr;
+use crate::storage::proc;
+use crate::storage::procsignal;
+use crate::storage::sinvaladt;
+use crate::transam::oxid;
+use crate::utils::dsa;
+use crate::utils::memutils;
+use crate::utils::o_buffers;
+use crate::utils::snapmgr;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // oxid.c
@@ -11,31 +31,10 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "c.h"
-#include "postgres.h"
 
-#include "orioledb.h"
-
-#include "recovery/recovery.h"
-#include "transam/oxid.h"
-#include "utils/dsa.h"
-#include "utils/o_buffers.h"
-
-#include "access/transam.h"
-#include "access/twophase.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "rewind/rewind.h"
-#include "storage/lmgr.h"
-#include "storage/sinvaladt.h"
-#include "storage/procsignal.h"
-#include "storage/proc.h"
 #if PG_VERSION_NUM >= 180000
-#include "utils/memutils.h"
+
 #endif
-#include "utils/snapmgr.h"
-#include "utils/stopevent.h"
-#include "recovery/wal.h"
 
 #define XID_FILE_SIZE (0x1000000)
 #define OXID_BUFFERS_TAG (0)
@@ -781,7 +780,6 @@ set_oxid_xlog_ptr(OXid oxid, XLogRecPtr ptr)
 	set_oxid_xlog_ptr_internal(oxid, ptr);
 }
 
-
 //
 // Read csn of given xid from xidmap.
 // If getRawCsn is true outputs raw csn, otherwise clears COMMITSEQNO_RETAINED_FOR_REWIND flag.
@@ -1261,7 +1259,6 @@ oxid_notify_all(void)
 	if (!proclock)
 		elog(PANIC, "failed to re-find shared proclock object");
 
-
 	waitQueue = &lock->waitProcs;
 
 	dclist_foreach(iter, waitQueue)
@@ -1464,7 +1461,6 @@ advance_oxids(OXid new_xid)
 		pg_atomic_write_u64(&xid_meta->nextXid, xmax);
 	}
 }
-
 
 //
 // Get current OrioleDB xid (oxid).  Assign new oxid it's not done yet.

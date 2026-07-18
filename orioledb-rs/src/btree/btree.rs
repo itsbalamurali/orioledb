@@ -1,3 +1,23 @@
+use crate::btree::find;
+use crate::btree::insert;
+use crate::btree::io;
+use crate::btree::page_chunks;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::catalog::o_tables;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::tableam::descr;
+use crate::tableam::tree;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::format;
+use crate::utils::numeric;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // btree.c
@@ -11,31 +31,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/insert.h"
-#include "btree/io.h"
-#include "btree/page_chunks.h"
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "catalog/o_tables.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "tableam/descr.h"
-#include "tableam/tree.h"
-#include "transam/undo.h"
-#include "transam/oxid.h"
-#include "tuple/format.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-
-#include "fmgr.h"
-#include "miscadmin.h"
-#include "utils/fmgrprotos.h"
-#include "utils/numeric.h"
 
 static void btree_page_stopevent_params_internal(BTreeDescr *desc, Page p,
 												 JsonbParseState **state);

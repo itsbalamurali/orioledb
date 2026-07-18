@@ -1,3 +1,15 @@
+use crate::btree::find;
+use crate::btree::io;
+use crate::btree::merge;
+use crate::btree::page_chunks;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::checkpoint::checkpoint;
+use crate::orioledb;
+use crate::transam::undo;
+use crate::utils::page_pool;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // merge.c
@@ -11,21 +23,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/io.h"
-#include "btree/merge.h"
-#include "btree/page_chunks.h"
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "checkpoint/checkpoint.h"
-#include "utils/page_pool.h"
-#include "transam/undo.h"
-
-#include "miscadmin.h"
 
 //
 // If the ratio of free to total space on a leaf page is greater than the value
@@ -42,7 +39,6 @@ static bool can_be_merged(BTreeDescr *desc, Page left, Page right,
 						  CommitSeqNo csn);
 static void merge_pages(BTreeDescr *desc, OInMemoryBlkno left_blkno,
 						Page right, CommitSeqNo csn);
-
 
 //
 // Try to merge right page to the left page.  Returns true iff succeed.
@@ -251,7 +247,6 @@ btree_try_merge_pages(BTreeDescr *desc,
 
 	return true;
 }
-
 
 //
 // Returns true if page is successfully merged to the left or to the right.

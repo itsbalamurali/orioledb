@@ -1,3 +1,13 @@
+use crate::btree::undo;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_tablespace_d;
+use crate::common::relpath;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::tableam::descr;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_tablespace_cache.c
@@ -11,19 +21,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/undo.h"
-#include "catalog/o_sys_cache.h"
-#include "tableam/descr.h"
-
-#include "catalog/pg_tablespace_d.h"
-#include "common/relpath.h"
-#include "recovery/recovery.h"
-#include "utils/syscache.h"
 
 // Silent cppcheck
 #ifndef TABLESPACE_VERSION_DIRECTORY

@@ -1,3 +1,16 @@
+use crate::btree::find;
+use crate::btree::page_chunks;
+use crate::btree::split;
+use crate::btree::undo;
+use crate::checkpoint::checkpoint;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::transam::undo;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // split.c
@@ -11,22 +24,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/split.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-
-#include "miscadmin.h"
-#include "utils/memutils.h"
 
 void
 make_split_items(BTreeDescr *desc, Page page,

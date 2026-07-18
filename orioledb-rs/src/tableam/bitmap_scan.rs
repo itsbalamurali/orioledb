@@ -1,3 +1,20 @@
+use crate::access::relation;
+use crate::access::table;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::btree::page_chunks;
+use crate::catalog::pg_type;
+use crate::executor::nodeIndexscan;
+use crate::math;
+use crate::nodes::execnodes;
+use crate::orioledb;
+use crate::tableam::bitmap_scan;
+use crate::tableam::index_scan;
+use crate::tableam::tree;
+use crate::tuple::slot;
+use crate::utils::memutils;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // bitmap_scan.c
@@ -10,27 +27,6 @@
 // contrib/orioledb/src/tableam/bitmap_scan.c
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "btree/page_chunks.h"
-#include "tableam/bitmap_scan.h"
-#include "tableam/index_scan.h"
-#include "tableam/tree.h"
-#include "tuple/slot.h"
-
-#include "access/relation.h"
-#include "access/table.h"
-#include "catalog/pg_type.h"
-#include "executor/nodeIndexscan.h"
-#include "nodes/execnodes.h"
-#include "utils/memutils.h"
-
-#include <math.h>
-
 
 typedef struct BitmapSeqScanArg
 {
@@ -781,7 +777,6 @@ o_index_getbitmap(OBitmapHeapPlanState *bitmap_state,
 				 node->biss_NumScanKeys, NULL, 0);
 		ostate.numPrefixExactKeys = o_get_num_prefix_exact_keys(node->biss_ScanKeys, node->biss_NumScanKeys);
 	}
-
 
 	if (is_explain_analyze(&node->ss.ps))
 	{

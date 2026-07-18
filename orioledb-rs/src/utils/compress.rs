@@ -1,3 +1,10 @@
+use crate::orioledb;
+use crate::utils::compress;
+use crate::utils::elog;
+use crate::utils::memdebug;
+use crate::zstd;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // compress.c
@@ -11,16 +18,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "utils/compress.h"
-
-#include "utils/elog.h"
-#include "utils/memdebug.h"
-
-#include <zstd.h>
 
 static ZSTD_CCtx *zstd_cctx = NULL;
 static ZSTD_DCtx *zstd_dctx = NULL;

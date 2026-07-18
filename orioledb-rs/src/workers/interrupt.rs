@@ -1,3 +1,8 @@
+use crate::orioledb;
+use crate::postmaster::interrupt;
+use crate::workers::interrupt;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // interrupt.c
@@ -11,14 +16,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "workers/interrupt.h"
-
-#include "postmaster/interrupt.h"
 
 static void o_worker_shutdown(int elevel);
 

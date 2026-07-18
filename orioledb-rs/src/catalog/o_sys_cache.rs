@@ -1,3 +1,41 @@
+use crate::access::hash;
+use crate::access::heaptoast;
+use crate::access::relation;
+use crate::btree::btree;
+use crate::btree::modify;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_aggregate;
+use crate::catalog::pg_amop;
+use crate::catalog::pg_amproc;
+use crate::catalog::pg_authid;
+use crate::catalog::pg_collation;
+use crate::catalog::pg_database;
+use crate::catalog::pg_enum;
+use crate::catalog::pg_opclass;
+use crate::catalog::pg_operator;
+use crate::catalog::pg_proc;
+use crate::catalog::pg_range;
+use crate::catalog::pg_type;
+use crate::catalog::sys_trees;
+use crate::commands::defrem;
+use crate::common::hashfn;
+use crate::executor::functions;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::transam::oxid;
+use crate::tuple::toast;
+use crate::utils::builtins;
+use crate::utils::fmgroids;
+use crate::utils::fmgrtab;
+use crate::utils::inval;
+use crate::utils::lsyscache;
+use crate::utils::memutils;
+use crate::utils::planner;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_sys_cache.c
@@ -11,48 +49,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/modify.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/sys_trees.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "transam/oxid.h"
-#include "tuple/toast.h"
-#include "utils/planner.h"
-
-#include "access/hash.h"
-#include "access/heaptoast.h"
-#include "access/relation.h"
-#include "commands/defrem.h"
-#include "catalog/pg_aggregate.h"
-#include "catalog/pg_amop.h"
-#include "catalog/pg_amproc.h"
-#include "catalog/pg_authid.h"
-#include "catalog/pg_collation.h"
-#include "catalog/pg_database.h"
-#include "catalog/pg_enum.h"
-#include "catalog/pg_opclass.h"
-#include "catalog/pg_operator.h"
-#include "catalog/pg_proc.h"
-#include "catalog/pg_range.h"
-#include "catalog/pg_type.h"
-#include "common/hashfn.h"
-#include "executor/functions.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "utils/builtins.h"
-#include "utils/fmgroids.h"
-#include "utils/fmgrtab.h"
-#include "utils/inval.h"
-#include "utils/lsyscache.h"
-#include "utils/memutils.h"
-#include "utils/syscache.h"
 
 static void orioledb_setup_syscache_hooks(void);
 
@@ -102,7 +98,6 @@ static uint32 oSysCacheToastGetTupleChunknum(OTuple tuple, void *arg);
 static uint32 oSysCacheToastGetTupleDataSize(OTuple tuple, void *arg);
 
 static HeapTuple o_auth_cache_search_htup(TupleDesc tupdesc, Oid authoid);
-
 
 static ToastAPI oSysCacheToastAPI = {
 	.getBTreeDesc = oSysCacheToastGetBTreeDesc,
@@ -793,7 +788,6 @@ o_sys_cache_update_deleted_callback(BTreeDescr *descr,
 	return OBTreeCallbackActionUpdate;
 }
 
-
 static BTreeModifyCallbackInfo callbackInfo =
 {
 	.waitCallback = o_sys_cache_wait_callback,
@@ -1136,7 +1130,6 @@ o_sys_caches_delete_by_lsn(XLogRecPtr checkPointRedo)
 		o_sys_cache_delete_by_lsn(sys_cache, checkPointRedo);
 	}
 }
-
 
 static BTreeDescr *
 oSysCacheToastGetBTreeDesc(void *arg)

@@ -1,3 +1,35 @@
+use crate::access::htup_details;
+use crate::access::toast_compression;
+use crate::access::xlogrecovery;
+use crate::catalog::o_sys_cache;
+use crate::catalog::o_tables;
+use crate::catalog::pg_am;
+use crate::catalog::pg_authid;
+use crate::catalog::pg_language;
+use crate::catalog::pg_proc;
+use crate::catalog::pg_type;
+use crate::catalog::sys_trees;
+use crate::commands::defrem;
+use crate::executor::functions;
+use crate::funcapi;
+use crate::nodes::nodeFuncs;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::rewrite::rewriteHandler;
+use crate::tcop::tcopprot;
+use crate::tcop::utility;
+use crate::tuple::format;
+use crate::utils::builtins;
+use crate::utils::datum;
+use crate::utils::fmgrtab;
+use crate::utils::lsyscache;
+use crate::utils::memutils;
+use crate::utils::planner;
+use crate::utils::snapmgr;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_proc_cache.c
@@ -13,42 +45,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_tables.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/sys_trees.h"
-#include "recovery/recovery.h"
-#include "tuple/format.h"
-
-#include "access/htup_details.h"
-#include "access/toast_compression.h"
-#include "access/xlogrecovery.h"
-#include "catalog/pg_am.h"
-#include "catalog/pg_authid.h"
-#include "catalog/pg_language.h"
-#include "catalog/pg_proc.h"
-#include "catalog/pg_type.h"
-#include "commands/defrem.h"
-#include "executor/functions.h"
-#include "funcapi.h"
-#include "miscadmin.h"
-#include "nodes/nodeFuncs.h"
-#include "rewrite/rewriteHandler.h"
-#include "pgstat.h"
-#include "tcop/tcopprot.h"
-#include "tcop/utility.h"
-#include "utils/builtins.h"
-#include "utils/datum.h"
-#include "utils/fmgrtab.h"
-#include "utils/lsyscache.h"
-#include "utils/memutils.h"
-#include "utils/planner.h"
-#include "utils/snapmgr.h"
-#include "utils/syscache.h"
 
 static OSysCache *proc_cache = NULL;
 
@@ -889,7 +885,6 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK,
 
 		// Remember whether we're returning setof something
 		fcache->returnsSet = procedureStruct->proretset;
-
 
 		// Remember if function is STABLE/IMMUTABLE
 		fcache->readonly_func =

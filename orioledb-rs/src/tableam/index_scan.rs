@@ -1,3 +1,21 @@
+use crate::access::nbtree;
+use crate::access::skey;
+use crate::btree::io;
+use crate::btree::iterator;
+use crate::commands::explain_format;
+use crate::executor::nodeIndexscan;
+use crate::orioledb;
+use crate::parser::parse_coerce;
+use crate::pgstat;
+use crate::tableam::bitmap_scan;
+use crate::tableam::descr;
+use crate::tableam::index_scan;
+use crate::tableam::key_range;
+use crate::tableam::tree;
+use crate::tuple::slot;
+use crate::utils::datum;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // index_scan.c
@@ -11,28 +29,10 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
 
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "btree/iterator.h"
-#include "tableam/bitmap_scan.h"
-#include "tableam/index_scan.h"
-#include "tableam/descr.h"
-#include "tableam/key_range.h"
-#include "tableam/tree.h"
-#include "tuple/slot.h"
-
-#include "access/nbtree.h"
-#include "access/skey.h"
-#include "executor/nodeIndexscan.h"
 #if PG_VERSION_NUM >= 180000
-#include "commands/explain_format.h"
-#include "utils/datum.h"
+
 #endif
-#include "parser/parse_coerce.h"
-#include "pgstat.h"
 
 static void eanalyze_counter_explain(OEACallsCounter *counter, char *label,
 									 char *ix_name, ExplainState *es);

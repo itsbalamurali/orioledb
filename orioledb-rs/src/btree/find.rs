@@ -1,3 +1,14 @@
+use crate::access::transam;
+use crate::btree::fastpath;
+use crate::btree::find;
+use crate::btree::insert;
+use crate::btree::io;
+use crate::btree::page_chunks;
+use crate::orioledb;
+use crate::tableam::descr;
+use crate::utils::stopevent;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // find.c
@@ -11,19 +22,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/fastpath.h"
-#include "btree/find.h"
-#include "btree/insert.h"
-#include "btree/io.h"
-#include "btree/page_chunks.h"
-#include "tableam/descr.h"
-#include "utils/stopevent.h"
-
-#include "access/transam.h"
 
 typedef struct
 {
@@ -94,8 +92,6 @@ init_page_find_context(OBTreeFindPageContext *context, BTreeDescr *desc,
 	O_TUPLE_SET_NULL(context->insertTuple);
 	O_TUPLE_SET_NULL(context->lokey.tuple);
 }
-
-
 
 static OBTreeFastPathFindResult
 page_find_downlink(OBTreeFindPageInternalContext *intCxt,
@@ -502,7 +498,6 @@ find_page(OBTreeFindPageContext *context, void *key, BTreeKeyType keyType,
 	intCxt.targetLevel = targetLevel;
 	intCxt.inserted = false;
 	context->parentImgDeferred = false;
-
 
 	ASAN_UNPOISON_MEMORY_REGION(&fastpathMeta, sizeof(fastpathMeta));
 	if (STOPEVENTS_ENABLED())
@@ -1708,7 +1703,6 @@ find_left_page(OBTreeFindPageContext *context, OFixedKey *hikey)
 						refresh_context_leaf_lokey(context, &loc);
 						continue;
 					}
-
 
 					if (success &&
 						PAGE_GET_LEVEL(context->img) == level &&

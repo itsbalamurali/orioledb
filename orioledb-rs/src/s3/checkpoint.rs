@@ -1,3 +1,47 @@
+use crate::access::xlog_internal;
+use crate::access::xlogarchive;
+use crate::access::xlogbackup;
+use crate::access::xloginsert;
+use crate::catalog::pg_control;
+use crate::checkpoint::checkpoint;
+use crate::commands::defrem;
+use crate::common::compression;
+use crate::common::controldata_utils;
+use crate::common::file_perm;
+use crate::common::file_utils;
+use crate::lib::stringinfo;
+use crate::nodes::pg_list;
+use crate::orioledb;
+use crate::pgstat;
+use crate::pgtar;
+use crate::port;
+use crate::postmaster::syslogger;
+use crate::replication::walsender;
+use crate::replication::walsender_private;
+use crate::s3::checkpoint;
+use crate::s3::checksum;
+use crate::s3::headers;
+use crate::s3::requests;
+use crate::s3::worker;
+use crate::storage::bufpage;
+use crate::storage::checksum;
+use crate::storage::dsm_impl;
+use crate::storage::fd;
+use crate::storage::ipc;
+use crate::storage::reinit;
+use crate::sys::stat;
+use crate::time;
+use crate::unistd;
+use crate::utils::builtins;
+use crate::utils::guc;
+use crate::utils::memdebug;
+use crate::utils::ps_status;
+use crate::utils::relcache;
+use crate::utils::resowner;
+use crate::utils::timestamp;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // checkpoint.c
@@ -11,56 +55,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "checkpoint/checkpoint.h"
-#include "s3/checkpoint.h"
-#include "s3/checksum.h"
-#include "s3/headers.h"
-#include "s3/requests.h"
-#include "s3/worker.h"
-
-#include "utils/wait_event.h"
-
-#include <sys/stat.h>
-#include <unistd.h>
-#include <time.h>
-
-#include "access/xlog_internal.h"
-#include "access/xlogarchive.h"
-#include "access/xlogbackup.h"
-#include "access/xloginsert.h"
-#include "catalog/pg_control.h"
-#include "commands/defrem.h"
-#include "common/controldata_utils.h"
-#include "common/compression.h"
-#include "common/file_perm.h"
-#include "common/file_utils.h"
-#include "lib/stringinfo.h"
-#include "miscadmin.h"
-#include "nodes/pg_list.h"
-#include "pgstat.h"
-#include "pgtar.h"
-#include "port.h"
-#include "postmaster/syslogger.h"
-#include "replication/walsender.h"
-#include "replication/walsender_private.h"
-#include "storage/bufpage.h"
-#include "storage/checksum.h"
-#include "storage/dsm_impl.h"
-#include "storage/fd.h"
-#include "storage/ipc.h"
-#include "storage/reinit.h"
-#include "utils/builtins.h"
-#include "utils/guc.h"
-#include "utils/memdebug.h"
-#include "utils/ps_status.h"
-#include "utils/relcache.h"
-#include "utils/resowner.h"
-#include "utils/timestamp.h"
 
 //
 // How much data do we want to send in one CopyData message? Note that

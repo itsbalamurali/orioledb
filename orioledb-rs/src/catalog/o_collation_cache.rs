@@ -1,3 +1,9 @@
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_collation;
+use crate::orioledb;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_collation_cache.c
@@ -13,14 +19,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-#include "catalog/pg_collation.h"
-#include "utils/syscache.h"
 
 static OSysCache *collation_cache = NULL;
 

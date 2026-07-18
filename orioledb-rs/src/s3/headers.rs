@@ -1,3 +1,18 @@
+use crate::btree::btree;
+use crate::btree::io;
+use crate::catalog::pg_tablespace;
+use crate::checkpoint::checkpoint;
+use crate::common::file_utils;
+use crate::common::hashfn;
+use crate::common::pg_prng;
+use crate::orioledb;
+use crate::pgstat;
+use crate::s3::headers;
+use crate::s3::worker;
+use crate::sys::stat;
+use crate::unistd;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // headers.c
@@ -11,24 +26,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include <sys/stat.h>
-#include <unistd.h>
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/io.h"
-#include "checkpoint/checkpoint.h"
-#include "s3/headers.h"
-#include "s3/worker.h"
-
-#include "catalog/pg_tablespace.h"
-#include "common/file_utils.h"
-#include "common/hashfn.h"
-#include "common/pg_prng.h"
-#include "pgstat.h"
 
 #define S3_HEADER_BUFFERS_PER_GROUP 4
 #define S3_HEADER_BUFFERS_PER_GROUP_NUM_BITS 2
@@ -308,7 +305,6 @@ change_buffer(S3HeadersBuffersGroup *group, int index, S3HeaderTag tag)
 
 	LWLockRelease(&group->groupCtlLock);
 
-
 	if (OidIsValid(tag.key.oids.datoid) && OidIsValid(tag.key.oids.relnode))
 	{
 		read_from_file(tag, newValues, &newDirty);
@@ -474,7 +470,6 @@ check_unlink_file(S3HeaderTag tag)
 		change_buffer(group, victim, newTag);
 	}
 }
-
 
 static uint32
 s3_header_read_value(S3HeaderTag tag, int index)
@@ -654,7 +649,6 @@ s3_header_compare_and_swap(S3HeaderTag tag, int index,
 	return s3_header_compare_and_swap_extended(tag, index, oldValue,
 											   newValue, NULL);
 }
-
 
 //
 // We allow only one part to be locked simultaneosly.

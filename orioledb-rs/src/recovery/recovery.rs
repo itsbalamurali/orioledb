@@ -1,3 +1,57 @@
+use crate::access::hash;
+use crate::access::xlog_internal;
+use crate::access::xlogrecovery;
+use crate::access::xlogutils;
+use crate::btree::btree;
+use crate::btree::io;
+use crate::btree::modify;
+use crate::btree::page_chunks;
+use crate::btree::undo;
+use crate::catalog::free_extents;
+use crate::catalog::indices;
+use crate::catalog::o_indices;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_database;
+use crate::checkpoint::checkpoint;
+use crate::fcntl;
+use crate::lib::ilist;
+use crate::lib::pairingheap;
+use crate::orioledb;
+use crate::pgstat;
+use crate::postmaster::postmaster;
+use crate::postmaster::startup;
+use crate::recovery::internal;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::recovery::wal_reader;
+use crate::replication::message;
+use crate::replication::walreceiver;
+use crate::storage::copydir;
+use crate::storage::ipc;
+use crate::storage::lmgr;
+use crate::storage::shm_mq;
+use crate::storage::standby;
+use crate::sys::stat;
+use crate::tableam::descr;
+use crate::tableam::operations;
+use crate::tableam::tree;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::slot;
+use crate::unistd;
+use crate::utils::dsa;
+use crate::utils::elog;
+use crate::utils::inval;
+use crate::utils::memdebug;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use crate::utils::typcache;
+use crate::workers::interrupt;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // recovery.c
@@ -11,64 +65,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/io.h"
-#include "btree/modify.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "catalog/free_extents.h"
-#include "catalog/indices.h"
-#include "catalog/o_indices.h"
-#include "catalog/o_sys_cache.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "recovery/internal.h"
-#include "recovery/wal.h"
-#include "recovery/wal_reader.h"
-#include "replication/walreceiver.h"
-#include "storage/itemptr.h"
-#include "storage/copydir.h"
-#include "tableam/descr.h"
-#include "tableam/operations.h"
-#include "tableam/tree.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "tuple/slot.h"
-#include "utils/dsa.h"
-#include "utils/elog.h"
-#include "utils/inval.h"
-#include "utils/page_pool.h"
-#include "utils/stopevent.h"
-#include "utils/syscache.h"
-#include "workers/interrupt.h"
-
-#include "access/hash.h"
-#include "access/xlog_internal.h"
-#include "access/xlogrecovery.h"
-#include "access/xlogutils.h"
-#include "lib/ilist.h"
-#include "lib/pairingheap.h"
-#include "miscadmin.h"
-#include "postmaster/postmaster.h"
-#include "postmaster/startup.h"
-#include "pgstat.h"
-#include "replication/message.h"
-#include "storage/ipc.h"
-#include "storage/shm_mq.h"
-#include "storage/standby.h"
-#include "storage/lmgr.h"
-#include "utils/memdebug.h"
-#include "utils/memutils.h"
-#include "utils/typcache.h"
-#include "catalog/pg_database.h"
-
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 static pg_atomic_uint64 *recovery_main_retain_ptr;
 static pg_atomic_uint64 *recovery_index_next_pos;
@@ -1219,7 +1215,6 @@ orioledb_redo(XLogReaderState *record)
 
 	}
 
-
 	if (record->ReadRecPtr >= checkpoint_state->controlToastConsistentPtr && !toast_consistent)
 	{
 		//
@@ -1520,7 +1515,6 @@ recovery_map_oxid_csn(OXid oxid, bool *found)
 	}
 	return 0;
 }
-
 
 //
 // Initializes a new recovery process, recovery transaction support.
@@ -3315,7 +3309,6 @@ cleanup_tablespace_old_files(char *path, uint32 chkp_num, bool before_recovery)
 	char	   *filename;
 	char		ext[5];
 
-
 	dir = opendir(path);
 	if (dir == NULL)
 		return;
@@ -3692,7 +3685,6 @@ handle_o_tables_meta_unlock(ORelOids oids, Oid oldRelnode)
 			old_o_table = o_tables_get(oldOids);
 		}
 		Assert(old_o_table);
-
 
 		nindices = Max(old_o_table->nindices, new_o_table->nindices);
 		for (ix_num = 0; ix_num < nindices - 1; ix_num++)
@@ -5059,7 +5051,6 @@ workers_synchronize(XLogRecPtr ptr, bool send_synchronize)
 		}
 	}
 }
-
 
 //
 // Notify workers that toast reached consistent state.

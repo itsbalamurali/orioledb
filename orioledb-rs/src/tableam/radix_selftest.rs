@@ -1,3 +1,11 @@
+use crate::lib::o_radixtree;
+use crate::lib::qunique;
+use crate::orioledb;
+use crate::tableam::bitmap_scan;
+use crate::utils::builtins;
+use crate::utils::memutils;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // radix_selftest.c
@@ -12,15 +20,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "fmgr.h"
-#include "lib/qunique.h"
-#include "tableam/bitmap_scan.h"
-#include "utils/builtins.h"
-#include "utils/memutils.h"
 
 // Two instances: a multiple-of-8 length and an odd length.
 #define RT_PREFIX rtst12
@@ -34,7 +33,6 @@ typedef struct
 	uint32		id;
 } RtstVal;
 #define RT_VALUE_TYPE RtstVal
-#include "lib/o_radixtree.h"
 
 #define RT_PREFIX rtst5
 #define RT_SCOPE static
@@ -43,7 +41,6 @@ typedef struct
 #define RT_USE_DELETE
 #define RT_KEY_SIZE 5
 #define RT_VALUE_TYPE RtstVal
-#include "lib/o_radixtree.h"
 
 PG_FUNCTION_INFO_V1(orioledb_radixtree_selftest);
 PG_FUNCTION_INFO_V1(orioledb_encode_selftest);

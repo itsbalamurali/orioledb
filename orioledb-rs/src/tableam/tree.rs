@@ -1,3 +1,21 @@
+use crate::access::nbtree;
+use crate::btree::btree;
+use crate::btree::io;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_type;
+use crate::catalog::sys_trees;
+use crate::orioledb;
+use crate::parser::parse_coerce;
+use crate::recovery::recovery;
+use crate::tableam::toast;
+use crate::tableam::tree;
+use crate::tuple::toast;
+use crate::utils::builtins;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // tree.c
@@ -12,28 +30,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/io.h"
-#include "catalog/o_sys_cache.h"
-#include "catalog/sys_trees.h"
-#include "recovery/recovery.h"
-#include "storage/itemptr.h"
-#include "tableam/toast.h"
-#include "tableam/tree.h"
-#include "tuple/toast.h"
-#include "utils/stopevent.h"
-
-#include "access/nbtree.h"
-#include "catalog/pg_type.h"
-#include "miscadmin.h"
-#include "parser/parse_coerce.h"
-#include "utils/builtins.h"
-#include "utils/syscache.h"
 
 static uint32 o_idx_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind);
 static uint32 o_toast_hash(BTreeDescr *desc, OTuple tuple, BTreeKeyType kind);
@@ -83,7 +79,6 @@ static BTreeOps primaryOps = {
 	.hash = o_toast_hash,
 	.unique_hash = NULL
 };
-
 
 void
 index_btree_desc_init(BTreeDescr *desc, OCompress compress, int fillfactor,

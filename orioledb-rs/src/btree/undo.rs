@@ -1,3 +1,25 @@
+use crate::access::transam;
+use crate::btree::find;
+use crate::btree::io;
+use crate::btree::merge;
+use crate::btree::page_chunks;
+use crate::btree::scan;
+use crate::btree::undo;
+use crate::catalog::o_sys_cache;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::rewind::rewind;
+use crate::tableam::descr;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::utils::inval;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::palloc;
+use crate::utils::stopevent;
+use crate::utils::wait_event;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // undo.c
@@ -11,31 +33,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/find.h"
-#include "btree/io.h"
-#include "btree/merge.h"
-#include "btree/page_chunks.h"
-#include "btree/scan.h"
-#include "btree/undo.h"
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-#include "rewind/rewind.h"
-#include "tableam/descr.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "utils/memutils.h"
-#include "utils/palloc.h"
-#include "utils/stopevent.h"
-#include "utils/page_pool.h"
-
-#include "access/transam.h"
-#include "miscadmin.h"
-#include "utils/inval.h"
-#include "utils/wait_event.h"
 
 static void clean_chain_has_locks_flag(UndoLogType undoType,
 									   UndoLocation location,
@@ -1645,7 +1642,6 @@ clean_chain_has_locks_flag(UndoLogType undoType, UndoLocation location,
 		location = tuphdr.undoLocation;
 	}
 }
-
 
 //
 // Check for row-level lock conflict

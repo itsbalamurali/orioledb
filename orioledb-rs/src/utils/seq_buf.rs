@@ -1,3 +1,13 @@
+use crate::btree::io;
+use crate::catalog::o_sys_cache;
+use crate::orioledb;
+use crate::pgstat;
+use crate::sys::stat;
+use crate::unistd;
+use crate::utils::memdebug;
+use crate::utils::seq_buf;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // seq_buf.c
@@ -22,19 +32,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/io.h"
-#include "catalog/o_sys_cache.h"
-#include "utils/seq_buf.h"
-
-#include "pgstat.h"
-#include "sys/stat.h"
-#include "utils/memdebug.h"
-
-#include <unistd.h>
 
 //
 // We does not use orioledb page header and should not

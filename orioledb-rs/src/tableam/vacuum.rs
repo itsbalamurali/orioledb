@@ -1,3 +1,27 @@
+use crate::access::multixact;
+use crate::btree::btree;
+use crate::btree::find;
+use crate::btree::page_chunks;
+use crate::btree::page_contents;
+use crate::commands::dbcommands;
+use crate::commands::progress;
+use crate::commands::vacuum;
+use crate::orioledb;
+use crate::pgstat;
+use crate::postmaster::autovacuum;
+use crate::recovery::wal;
+use crate::storage::block;
+use crate::storage::off;
+use crate::tableam::descr;
+use crate::tableam::key_range;
+use crate::tableam::vacuum;
+use crate::utils::fmgroids;
+use crate::utils::lsyscache;
+use crate::utils::page_pool;
+use crate::utils::pg_rusage;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // vacuum.c
@@ -11,32 +35,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/find.h"
-#include "btree/page_chunks.h"
-#include "btree/page_contents.h"
-#include "recovery/wal.h"
-#include "storage/block.h"
-#include "storage/itemptr.h"
-#include "storage/off.h"
-#include "tableam/descr.h"
-#include "tableam/key_range.h"
-#include "tableam/vacuum.h"
-#include "utils/page_pool.h"
-
-#include "access/multixact.h"
-#include "commands/dbcommands.h"
-#include "commands/progress.h"
-#include "commands/vacuum.h"
-#include "pgstat.h"
-#include "postmaster/autovacuum.h"
-#include "utils/fmgroids.h"
-#include "utils/lsyscache.h"
-#include "utils/pg_rusage.h"
 
 #if PG_VERSION_NUM >= 170000
 #define NUM_ITEMS(vacrel) ((vacrel)->dead_items_info->num_items)

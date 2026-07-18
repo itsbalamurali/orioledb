@@ -1,3 +1,23 @@
+use crate::access::relation;
+use crate::access::transam;
+use crate::btree::btree;
+use crate::btree::find;
+use crate::btree::iterator;
+use crate::btree::page_chunks;
+use crate::btree::undo;
+use crate::catalog::sys_trees;
+use crate::orioledb;
+use crate::tableam::descr;
+use crate::tableam::key_range;
+use crate::transam::oxid;
+use crate::transam::undo;
+use crate::tuple::format;
+use crate::utils::builtins;
+use crate::utils::memutils;
+use crate::utils::page_pool;
+use crate::utils::resowner;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // iterator.c
@@ -11,26 +31,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/find.h"
-#include "btree/iterator.h"
-#include "btree/page_chunks.h"
-#include "btree/undo.h"
-#include "catalog/sys_trees.h"
-#include "tableam/descr.h"
-#include "tableam/key_range.h"
-#include "transam/oxid.h"
-#include "transam/undo.h"
-#include "utils/page_pool.h"
-
-#include "access/transam.h"
-#include "miscadmin.h"
-#include "utils/memutils.h"
-#include "utils/resowner.h"
 
 // Iterates through undo images
 typedef struct
@@ -650,7 +650,6 @@ o_btree_find_tuple_by_key(BTreeDescr *desc, void *key, BTreeKeyType kind,
 										out_csn, mcxt, hint, NULL, NULL, NULL);
 }
 
-
 //
 // Finds appropriate tuple version by traversing the undo chain.
 //
@@ -1086,7 +1085,6 @@ get_lokey_if_exists(BTreeIterator *it)
 		result = btree_find_context_lokey(&it->context);
 	else
 		O_TUPLE_SET_NULL(result);
-
 
 	return result;
 }
@@ -1709,7 +1707,6 @@ iterator_maybe_switch_to_image(BTreeIterator *it)
 		BTREE_PAGE_FIND_SET(&it->context, IMAGE);
 	}
 }
-
 
 //
 // Checks if the page contains the given iteration end key.  More practically,
@@ -2359,11 +2356,6 @@ undo_it_find_internal(UndoIterator *undoIt, void *key, BTreeKeyType kind)
 // the SQL bindings are registered in the 1.8->1.9 dev migration.  See
 // test/sql/iterator.sql for the test driver.
 // ------------------------------------------------------------------------
-
-#include "access/relation.h"
-#include "fmgr.h"
-#include "tuple/format.h"
-#include "utils/builtins.h"
 
 //
 // Whitebox test: prove that the premature it->curKeyReturned = true at

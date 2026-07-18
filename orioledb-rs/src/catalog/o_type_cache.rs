@@ -1,3 +1,18 @@
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_am;
+use crate::catalog::pg_amop;
+use crate::catalog::pg_amproc;
+use crate::catalog::pg_opclass;
+use crate::catalog::pg_range;
+use crate::catalog::pg_type;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::utils::builtins;
+use crate::utils::catcache;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_type_cache.c
@@ -13,25 +28,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-#include "recovery/recovery.h"
-
-#include "catalog/pg_am.h"
-#include "catalog/pg_amop.h"
-#include "catalog/pg_amproc.h"
-#include "catalog/pg_opclass.h"
-#include "catalog/pg_range.h"
-#include "catalog/pg_type.h"
-#include "commands/defrem.h"
-#include "miscadmin.h"
-#include "utils/builtins.h"
-#include "utils/catcache.h"
-#include "utils/syscache.h"
 
 static OSysCache *type_cache = NULL;
 

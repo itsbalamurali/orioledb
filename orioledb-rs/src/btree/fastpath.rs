@@ -1,3 +1,12 @@
+use crate::btree::btree;
+use crate::btree::fastpath;
+use crate::btree::find;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::tableam::key_range;
+use pgrx::pg_sys::ItemPointerData;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // fastpath.c
@@ -18,19 +27,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/fastpath.h"
-#include "btree/find.h"
-#include "postgres_ext.h"
-#include "storage/itemptr.h"
-#include "tableam/key_range.h"
-
-#include "catalog/pg_opclass_d.h"
-#include "commands/defrem.h"
 
 typedef struct
 {

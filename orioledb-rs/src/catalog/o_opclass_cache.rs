@@ -1,3 +1,25 @@
+use crate::access::nbtree;
+use crate::btree::iterator;
+use crate::btree::modify;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_am;
+use crate::catalog::pg_amop;
+use crate::catalog::pg_amproc;
+use crate::catalog::pg_opclass;
+use crate::catalog::pg_type;
+use crate::checkpoint::checkpoint;
+use crate::commands::defrem;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::utils::builtins;
+use crate::utils::lsyscache;
+use crate::utils::memutils;
+use crate::utils::planner;
+use crate::utils::stopevent;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_opclass_cache.c
@@ -14,32 +36,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/iterator.h"
-#include "btree/modify.h"
-#include "catalog/o_sys_cache.h"
-#include "checkpoint/checkpoint.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "utils/planner.h"
-#include "utils/stopevent.h"
-
-#include "access/nbtree.h"
-#include "catalog/pg_am.h"
-#include "catalog/pg_amop.h"
-#include "catalog/pg_amproc.h"
-#include "catalog/pg_opclass.h"
-#include "catalog/pg_type.h"
-#include "commands/defrem.h"
-#include "miscadmin.h"
-#include "utils/builtins.h"
-#include "utils/lsyscache.h"
-#include "utils/memutils.h"
-#include "utils/syscache.h"
 
 static OSysCache *opclass_cache = NULL;
 
@@ -67,7 +63,6 @@ O_SYS_CACHE_INIT_FUNC(opclass_cache)
 									   0, fastcache, mcxt,
 									   &opclass_cache_funcs);
 }
-
 
 //
 // o_opclass_get

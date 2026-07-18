@@ -1,3 +1,11 @@
+use crate::btree::btree;
+use crate::btree::io;
+use crate::orioledb;
+use crate::pgstat;
+use crate::unistd;
+use crate::utils::o_buffers;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_buffers.c
@@ -11,17 +19,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include <unistd.h>
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/io.h"
-#include "utils/o_buffers.h"
-
-#include "pgstat.h"
 
 #define O_BUFFERS_PER_GROUP 4
 

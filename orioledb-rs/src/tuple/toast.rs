@@ -1,3 +1,22 @@
+use crate::access::detoast;
+use crate::access::heapam;
+use crate::access::htup_details;
+use crate::btree::btree;
+use crate::btree::modify;
+use crate::catalog::pg_type;
+use crate::orioledb;
+use crate::recovery::recovery;
+use crate::recovery::wal;
+use crate::recovery::wal_record;
+use crate::tableam::descr;
+use crate::tableam::toast;
+use crate::transam::oxid;
+use crate::tuple::format;
+use crate::tuple::sort;
+use crate::tuple::toast;
+use crate::utils::builtins;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // toast.c
@@ -11,28 +30,6 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "btree/btree.h"
-#include "btree/modify.h"
-#include "recovery/recovery.h"
-#include "recovery/wal.h"
-#include "recovery/wal_record.h"
-#include "tableam/descr.h"
-#include "tableam/toast.h"
-#include "transam/oxid.h"
-#include "tuple/toast.h"
-#include "tuple/format.h"
-#include "tuple/sort.h"
-
-#include "access/heapam.h"
-#include "access/htup_details.h"
-#include "access/detoast.h"
-#include "catalog/pg_type.h"
-#include "utils/builtins.h"
-#include "miscadmin.h"
 
 static void generic_toast_sort_add(ToastAPI *api, void *key, Pointer data,
 								   Size data_size, Tuplesortstate *sortstate,
@@ -217,7 +214,6 @@ o_toast_needs_undo(BTreeDescr *desc, BTreeOperationType action,
 
 	return true;
 }
-
 
 struct varlena *
 o_detoast(struct varlena *attr)
@@ -411,7 +407,6 @@ tableVersionCallback(OTuple tuple, OXid tupOxid, OSnapshot *oSnapshot, void *arg
 		return OTupleFetchNext;
 }
 
-
 ToastAPI	tableToastAPI = {
 	.getBTreeDesc = tableGetBTreeDesc,
 	.getBTreeVersion = tableGetBTreeVersion,
@@ -491,7 +486,6 @@ generic_toast_insert_optional_wal(ToastAPI *api, void *key, Pointer data,
 
 	return inserted;
 }
-
 
 //
 // Insert TOAST data with optional WAL logging.

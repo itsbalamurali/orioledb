@@ -1,3 +1,21 @@
+use crate::access::hash;
+use crate::access::htup_details;
+use crate::access::xlogrecovery;
+use crate::catalog::o_sys_cache;
+use crate::catalog::pg_amproc;
+use crate::catalog::pg_opclass;
+use crate::catalog::pg_range;
+use crate::catalog::pg_type;
+use crate::catalog::sys_trees;
+use crate::orioledb;
+use crate::pgstat;
+use crate::recovery::recovery;
+use crate::utils::fmgrtab;
+use crate::utils::lsyscache;
+use crate::utils::memutils;
+use crate::utils::syscache;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // o_range_cache.c
@@ -13,28 +31,6 @@
 //
 // -------------------------------------------------------------------------
 //
-
-#include "postgres.h"
-
-#include "orioledb.h"
-
-#include "catalog/o_sys_cache.h"
-#include "catalog/sys_trees.h"
-#include "recovery/recovery.h"
-
-#include "access/hash.h"
-#include "access/htup_details.h"
-#include "access/xlogrecovery.h"
-#include "catalog/pg_amproc.h"
-#include "catalog/pg_opclass.h"
-#include "catalog/pg_range.h"
-#include "catalog/pg_type.h"
-#include "miscadmin.h"
-#include "pgstat.h"
-#include "utils/fmgrtab.h"
-#include "utils/lsyscache.h"
-#include "utils/memutils.h"
-#include "utils/syscache.h"
 
 static OSysCache *range_cache = NULL;
 
@@ -92,7 +88,6 @@ o_range_cache_fill_entry(Pointer *entry_ptr, OSysCacheKey *key, Pointer arg)
 	MemoryContextSwitchTo(prev_context);
 	ReleaseSysCache(rangetup);
 }
-
 
 static void
 o_range_cache_free_entry(Pointer entry)

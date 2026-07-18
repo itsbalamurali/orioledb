@@ -1,3 +1,12 @@
+use crate::archive::archive_module;
+use crate::common::hashfn;
+use crate::orioledb;
+use crate::s3::queue;
+use crate::s3::requests;
+use crate::s3::worker;
+use crate::utils::memutils;
+use pgrx::pg_sys;
+
 // -------------------------------------------------------------------------
 //
 // archive.c
@@ -11,20 +20,10 @@
 //
 // -------------------------------------------------------------------------
 //
-#include "postgres.h"
 
-#include "orioledb.h"
-
-#include "s3/queue.h"
-#include "s3/requests.h"
-#include "s3/worker.h"
-
-#include "archive/archive_module.h"
-#include "common/hashfn.h"
 #if PG_VERSION_NUM >= 180000
-#include "utils/memutils.h"
-#endif
 
+#endif
 
 typedef struct
 {
@@ -33,7 +32,6 @@ typedef struct
 } PreloadHashItem;
 
 static HTAB *preloadHash = NULL;
-
 
 static uint32
 preload_item_hash(const void *key, Size keysize)
