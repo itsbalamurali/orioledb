@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [features]
-default = ["pg13"]
+default = ["pg18"]
 pg13 = ["pgrx/pg13", "pgrx-tests/pg13" ]
 pg14 = ["pgrx/pg14", "pgrx-tests/pg14" ]
 pg15 = ["pgrx/pg15", "pgrx-tests/pg15" ]
@@ -23,6 +23,7 @@ pgrx = "=0.19.1"
 zstd = "0.13.3"
 zstd-safe = "7.2.4"
 libc = "0.2"
+memoffset = "0.9"
 
 [dependencies.pgrx-bench]
 version = "=0.19.1"

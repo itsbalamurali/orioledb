@@ -8,6 +8,7 @@
 #![allow(non_snake_case, non_camel_case_types)]
 
 use pgrx::pg_sys::{
+    LWLock, slock_t,
     CommandId, Oid, SubTransactionId, TransactionId, XLogRecPtr,
 };
 use crate::CommitSeqNo;
