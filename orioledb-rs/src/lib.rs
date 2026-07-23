@@ -1,2230 +1,1562 @@
-use crate::access::heapam;
-use crate::access::table;
-use crate::access::xlog_internal;
-use crate::btree::find;
-use crate::btree::io;
-use crate::btree::scan;
-use crate::catalog::o_sys_cache;
-use crate::catalog::o_tables;
-use crate::catalog::pg_enum;
-use crate::catalog::sys_trees;
-use crate::checkpoint::checkpoint;
-use crate::common::file_perm;
-use crate::dirent;
-use crate::executor::execExpr;
-use crate::funcapi;
-use crate::indexam::handler;
-use crate::libpq::auth;
-use crate::optimizer::optimizer;
-use crate::optimizer::plancat;
-use crate::orioledb;
-use crate::postmaster::autovacuum;
-use crate::postmaster::bgwriter;
-use crate::postmaster::postmaster;
-use crate::postmaster::startup;
-use crate::recovery::logical;
-use crate::recovery::recovery;
-use crate::recovery::wal;
-use crate::recovery::wal_reader;
-use crate::replication::message;
-use crate::replication::snapbuild;
-use crate::replication::walsender;
-use crate::rewind::rewind;
-use crate::s3::control;
-use crate::s3::headers;
-use crate::s3::queue;
-use crate::s3::requests;
-use crate::s3::worker;
-use crate::storage::ipc;
-use crate::storage::lwlock;
-use crate::storage::proclist;
-use crate::storage::standby;
-use crate::sys::mman;
-use crate::sys::stat;
-use crate::tableam::bitmap_scan;
-use crate::tableam::handler;
-use crate::tableam::scan;
-use crate::tableam::toast;
-use crate::transam::oxid;
-use crate::transam::undo;
-use crate::tuple::toast;
-use crate::utils::builtins;
-use crate::utils::compress;
-use crate::utils::dsa;
-use crate::utils::guc;
-use crate::utils::inval;
-use crate::utils::memdebug;
-use crate::utils::page_pool;
-use crate::utils::pg_locale;
-use crate::utils::pg_lsn;
-use crate::utils::rangetypes;
-use crate::utils::snapmgr;
-use crate::utils::stopevent;
-use crate::utils::syscache;
-use crate::utils::ucm;
-use crate::workers::bgwriter;
+//! Main module of the OrioleDB extension.
+//!
+//! This is the crate root. It wires the engine's module tree, registers the
+//! PostgreSQL extension entry point (`_PG_init`), defines all OrioleDB custom
+//! GUCs, sets up shared memory, installs the various hooks the engine plugs
+//! into, and exposes the SQL-callable helper functions.
+//!
+//! The structure mirrors the original C implementation in `src/orioledb.c`,
+//! but it is written idiomatically in Rust on top of `pgrx`. Because OrioleDB
+//! is a PostgreSQL extension, a small amount of `extern "C"` and `unsafe`
+//! FFI remains unavoidable; it is isolated behind safe wrappers here.
+//!
+//! Copyright (c) 2021-2026, Oriole DB Inc.
+//! Copyright (c) 2025-2026, Supabase Inc.
+
+// ---------------------------------------------------------------------------
+// Module tree
+// ---------------------------------------------------------------------------
+
+pub mod btree;
+pub mod catalog;
+pub mod checkpoint;
+pub mod indexam;
+pub mod recovery;
+pub mod rewind;
+pub mod s3;
+pub mod tableam;
+pub mod transam;
+pub mod tuple;
+pub mod utils;
+pub mod workers;
+
 use pgrx::pg_sys;
 
-// Main file: setup shared memory, hooks and other general-purpose
-// routines.
+// ---------------------------------------------------------------------------
+// Engine constants (mirrored from `include/orioledb.h` and friends)
+// ---------------------------------------------------------------------------
+
+/// OrioleDB page size in bytes (distinct from PostgreSQL's `BLCKSZ`).
+const ORIOLEDB_BLCKSZ: usize = 8192;
+
+/// Minimum page-pool size, in pages.
+const PAGE_POOL_MIN_SIZE: usize = 1024;
+
+/// Minimum page-pool size, in `BLCKSZ` blocks.
+const PAGE_POOL_MIN_SIZE_BLCKS: usize = PAGE_POOL_MIN_SIZE * ORIOLEDB_BLCKSZ / 8192;
+
+/// Size of one xid-map item, in bytes (`OXidMapItem`).
+const OXID_MAP_ITEM_SIZE: usize = std::mem::size_of::<u64>() * 2;
+
+/// Size of one rewind item, in bytes (`RewindItem`).
+const REWIND_ITEM_SIZE: usize = 32;
+
+// Opaque types owned by their ported modules. They are named here only so the
+// buffer-size arithmetic reads like the original C; the real definitions land
+// with the `transam` and `rewind` ports.
+#[repr(C)]
+pub struct OXidMapItem {
+    _priv: [u8; OXID_MAP_ITEM_SIZE],
+}
+
+#[repr(C)]
+pub struct RewindItem {
+    _priv: [u8; REWIND_ITEM_SIZE],
+}
+
+// ---------------------------------------------------------------------------
+// Engine-wide shared state
+// ---------------------------------------------------------------------------
 //
-// Copyright (c) 2021-2026, Oriole DB Inc.
-// Copyright (c) 2025-2026, Supabase Inc.
+// These variables mirror the global state of the original C implementation.
+// PostgreSQL extensions are initialized once at shared-library load time, so a
+// handful of `static` items are required. Where possible they are plain `const`
+// or non-`mut` values; the few mutable ones are owned by `_PG_init` and the
+// shared-memory lifecycle, never by concurrent backends in an unsynchronized way.
 
+/// Build-time commit hash, embedded by the build script via `COMMIT_HASH`.
+const COMMIT_HASH: &str = env!("COMMIT_HASH");
 
+/// Human-readable OrioleDB release string.
+const ORIOLEDB_VERSION: &str = "OrioleDB beta 16";
 
-static mut DEBUG_DISABLE_POOLS_LIMIT: bool = false;
-static mut SHARED_SEGMENT: Pointer = std::ptr::null_mut();
+/// Number of OrioleDB page pools (free tree, catalog, main).
+const PAGE_POOL_TYPES_COUNT: usize = 3;
+
+/// Guards running `_PG_init` only once.
+static mut PG_INIT_DONE: bool = false;
+
+/// Whether the shared segment has been initialized at startup.
 static mut SHARED_SEGMENT_INITIALIZED: bool = false;
-static mut FREE_TREE_BUFFERS_GUC: std::os::raw::c_int = 0;
-static mut FREE_TREE_BUFFERS_COUNT: Size = 0;
-static mut CATALOG_BUFFERS_GUC: std::os::raw::c_int = 0;
-static mut CATALOG_BUFFERS_COUNT: Size = 0;
-static mut MAIN_BUFFERS_OFFSET: Size = 0;
 
-pub static mut O_SHARED_BUFFERS: Pointer = std::ptr::null_mut();
-pub static mut ORIOLE_DB_PAGE_DESC: *mut page_descs = std::ptr::null_mut();
-pub static mut PAGE: *mut local_ppool_pages = std::ptr::null_mut();
-pub static mut ORIOLE_DB_PAGE_DESC: *mut local_ppool_page_descs = std::ptr::null_mut();
+/// Root pointer to the engine's shared memory segment.
+static mut SHARED_SEGMENT: *mut std::os::raw::c_void = std::ptr::null_mut();
 
-// Custom GUC variables
-pub static mut ORIOLEDB_SERIALIZABLE_MODE: std::os::raw::c_int = O_SERIALIZABLE_TABLE_LOCK;
-pub static mut ORIOLEDB_DEBUG_DISABLE_MULTI_INSERT: bool = false;
+/// Size of the whole engine shared-memory region, in bytes.
+static mut ORIOLEDB_BUFFERS_SIZE: usize = 0;
 
-static SERIALIZABLE_MODE_OPTIONS: &[ConfigEnumEntry] = &[
-	ConfigEnumEntry { b"table_lock"\0".as_ptr() as *const std::os::raw::c_char, O_SERIALIZABLE_TABLE_LOCK, false },
-	ConfigEnumEntry { b"error"\0".as_ptr() as *const std::os::raw::c_char, O_SERIALIZABLE_ERROR, false },
-	ConfigEnumEntry { b"repeatable_read"\0".as_ptr() as *const std::os::raw::c_char, O_SERIALIZABLE_REPEATABLE_READ, false },
-	ConfigEnumEntry { std::ptr::null(), 0, false }
-];
+/// Number of OrioleDB pages across all pools.
+static mut ORIOLEDB_BUFFERS_COUNT: usize = 0;
 
+/// Number of temporary (local) pages.
+static mut ORIOLEDB_TEMP_BUFFERS_COUNT: usize = 0;
 
-static mut MAIN_BUFFERS_GUC: std::os::raw::c_int = 0;
-static mut UNDO_BUFFERS_GUC: std::os::raw::c_int = 0;
-static mut XID_BUFFERS_GUC: std::os::raw::c_int = 0;
-static mut REWIND_BUFFERS_GUC: std::os::raw::c_int = 0;
-static mut TEMP_BUFFERS_GUC: std::os::raw::c_int = 0;
-pub static mut MAX_PROCS: std::os::raw::c_int = 0;
-pub static mut ORIOLEDB_BUFFERS_SIZE: Size = 0;
-pub static mut ORIOLEDB_BUFFERS_COUNT: Size = 0;
-pub static mut ORIOLEDB_TEMP_BUFFERS_COUNT: Size = 0;
-static mut PAGE_DESCS_SIZE: Size = 0;
-pub static mut UNDO_CIRCULAR_BUFFER_SIZE: Size = 0;
-pub static mut UNDO_BUFFERS_COUNT: uint32 = std::mem::zeroed();
-pub static mut REGULAR_BLOCK_UNDO_CIRCULAR_BUFFER_FRACTION: double = std::mem::zeroed();
-pub static mut SYSTEM_UNDO_CIRCULAR_BUFFER_FRACTION: double = std::mem::zeroed();
-pub static mut XID_CIRCULAR_BUFFER_SIZE: Size = 0;
-pub static mut XID_BUFFERS_COUNT: uint32 = std::mem::zeroed();
-pub static mut REWIND_CIRCULAR_BUFFER_SIZE: Size = 0;
-pub static mut REWIND_BUFFERS_COUNT: uint32 = std::mem::zeroed();
-pub static mut REMOVE_OLD_CHECKPOINT_FILES: bool = true;
-pub static mut SKIP_UNMODIFIED_TREES: bool = true;
-pub static mut DEBUG_DISABLE_BGWRITER: bool = false;
-pub static mut USE_MMAP: bool = false;
-pub static mut USE_DEVICE: bool = false;
-pub static mut ORIOLEDB_USE_SPARSE_FILES: bool = false;
-pub static mut CHAR: *mut device_filename = std::ptr::null_mut();
-pub static mut MMAP_DATA: Pointer = std::ptr::null_mut();
-pub static mut DEVICE_FD: std::os::raw::c_int = 0;
-pub static mut DEVICE_LENGTH_GUC: std::os::raw::c_int = 0;
-pub static mut DEVICE_LENGTH: Size = 0;
-pub static mut O_CHECKPOINT_COMPLETION_RATIO: double = std::mem::zeroed();
-pub static mut BGWRITER_NUM_WORKERS: std::os::raw::c_int = 1;
-pub static mut MAX_IO_CONCURRENCY: std::os::raw::c_int = 0;
-pub static mut ODB_PROC_DATA: *mut oProcData = std::ptr::null_mut();
-pub static mut DEFAULT_COMPRESS: std::os::raw::c_int = InvalidOCompress;
-pub static mut DEFAULT_PRIMARY_COMPRESS: std::os::raw::c_int = InvalidOCompress;
-pub static mut DEFAULT_TOAST_COMPRESS: std::os::raw::c_int = InvalidOCompress;
-pub static mut ORIOLEDB_TABLE_DESCRIPTION_COMPRESS: bool = false;
-pub static mut CHAR: *mut max_bridge_ctid_string = std::ptr::null_mut();
-pub static mut MAX_BRIDGE_CTID_BLKNO: BlockNumber = 0;
-pub static mut ORIOLEDB_S3_MODE: bool = false;
-pub static mut S3_NUM_WORKERS: std::os::raw::c_int = 3;
-pub static mut S3_DESIRED_SIZE: std::os::raw::c_int = 10000;
-pub static mut S3_QUEUE_SIZE_GUC: std::os::raw::c_int = 0;
-pub static mut CHAR: *mut s3_host = std::ptr::null_mut();
-pub static mut S3_USE_HTTPS: bool = true;
-pub static mut CHAR: *mut s3_region = std::ptr::null_mut();
-pub static mut CHAR: *mut s3_prefix = std::ptr::null_mut();
-pub static mut CHAR: *mut s3_accesskey = std::ptr::null_mut();
-pub static mut CHAR: *mut s3_secretkey = std::ptr::null_mut();
-pub static mut CHAR: *mut s3_cainfo = std::ptr::null_mut();
-pub static mut ENABLE_REWIND: bool = false;
-pub static mut REWIND_MAX_TIME: std::os::raw::c_int = 0;
-pub static mut REWIND_MAX_TRANSACTIONS: std::os::raw::c_int = 0;
-pub static mut LOGICAL_XID_BUFFERS_GUC: std::os::raw::c_int = 64;
-pub static mut ORIOLEDB_STRICT_MODE: bool = false;
-pub static mut REPLAY_UNTIL_LSN: XLogRecPtr = InvalidXLogRecPtr;
-static mut CHAR: *mut replay_until_lsn_string = std::ptr::null_mut();
+/// Offset of the main pool within the global page range.
+static mut MAIN_BUFFERS_OFFSET: usize = 0;
 
-// For page eviction/read checkpoint test only
-pub static mut MIN_READ_PAGE_CHECKPOINT: uint32 = UINT32_MAX;
-pub static mut MAX_READ_PAGE_CHECKPOINT: uint32 = 0;
+/// Number of free-tree pages.
+static mut FREE_TREE_BUFFERS_COUNT: usize = 0;
 
-// Previous values of hooks to chain call them
-static mut PREV_SHMEM_STARTUP_HOOK: shmem_startup_hook_type = std::ptr::null_mut();
-fn (*prev_shmem_request_hook) () = NULL;
-static mut PREV_BASE_INIT_STARTUP_HOOK: base_init_startup_hook_type = std::ptr::null_mut();
-static mut PREV_GET_RELATION_INFO_HOOK: get_relation_info_hook_type = std::ptr::null_mut();
-pub static mut PREV_DATABASE_SIZE_HOOK: database_size_hook_type = std::ptr::null_mut();
-static mut PREV__ACCEPT_INVALIDATION_MESSAGES_HOOK: AcceptInvalidationMessagesHookType = std::ptr::null_mut();
+/// Number of catalog pages.
+static mut CATALOG_BUFFERS_COUNT: usize = 0;
 
-#if PG_VERSION_NUM < 180000
-static mut PREV_SKIP_TREE_HEIGHT_HOOK: skip_tree_height_hook_type = std::ptr::null_mut();
-#endif
+/// Maximum number of backends and auxiliary processes.
+static mut MAX_PROCS: i32 = 0;
 
-pub static mut NEXT__CHECK_POINT_HOOK: CheckPoint_hook_type = std::ptr::null_mut();
-static bool o_newlocale_from_collation();
+/// When true, the minimal pool size limits are disabled (debug only).
+static mut DEBUG_DISABLE_POOLS_LIMIT: bool = false;
 
+/// Serializable-isolation handling mode (maps to the C `orioledb_serializable_mode`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SerializableMode {
+    /// Acquire a coarse `ExclusiveLock` per touched relation.
+    TableLock = 0,
+    /// Reject `SERIALIZABLE` transactions outright.
+    Error = 1,
+    /// Silently downgrade `SERIALIZABLE` to `REPEATABLE READ`.
+    RepeatableRead = 2,
+}
+
+/// Current serializable handling mode.
+static mut ORIOLEDB_SERIALIZABLE_MODE: i32 = SerializableMode::TableLock as i32;
+
+/// Disable the batched same-leaf primary insert path (debug only).
+static mut ORIOLEDB_DEBUG_DISABLE_MULTI_INSERT: bool = false;
+
+/// Undo circular buffer size, in bytes.
+static mut UNDO_CIRCULAR_BUFFER_SIZE: usize = 0;
+
+/// Number of undo circular buffer pages.
+static mut UNDO_BUFFERS_COUNT: u32 = 0;
+
+/// Fraction of the circular buffer used for block-level undo of regular tables.
+static mut REGULAR_BLOCK_UNDO_CIRCULAR_BUFFER_FRACTION: f64 = 0.0;
+
+/// Fraction of the circular buffer used for undo of system trees.
+static mut SYSTEM_UNDO_CIRCULAR_BUFFER_FRACTION: f64 = 0.0;
+
+/// Xid circular buffer size, in bytes.
+static mut XID_CIRCULAR_BUFFER_SIZE: usize = 0;
+
+/// Number of xid circular buffer pages.
+static mut XID_BUFFERS_COUNT: u32 = 0;
+
+/// Rewind circular buffer size, in bytes.
+static mut REWIND_CIRCULAR_BUFFER_SIZE: usize = 0;
+
+/// Number of rewind circular buffer pages.
+static mut REWIND_BUFFERS_COUNT: u32 = 0;
+
+/// Whether old checkpoint files are removed after a checkpoint.
+static mut REMOVE_OLD_CHECKPOINT_FILES: bool = true;
+
+/// Whether unmodified trees are skipped during checkpointing.
+static mut SKIP_UNMODIFIED_TREES: bool = true;
+
+/// Disable the background writer (debug only).
+static mut DEBUG_DISABLE_BGWRITER: bool = false;
+
+/// Store data in an `mmap(2)`-ed file.
+static mut USE_MMAP: bool = false;
+
+/// Use a raw block device for storage.
+static mut USE_DEVICE: bool = false;
+
+/// Punch sparse-file holes for free blocks.
+static mut ORIOLEDB_USE_SPARSE_FILES: bool = false;
+
+/// Path to the device file used for `mmap`/`use_device`.
+static mut DEVICE_FILENAME: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// Base address of the `mmap`-ed device region.
+static mut MMAP_DATA: *mut std::os::raw::c_void = std::ptr::null_mut();
+
+/// File descriptor of the open device file.
+static mut DEVICE_FD: i32 = 0;
+
+/// Requested device length, in `BLCKSZ` blocks.
+static mut DEVICE_LENGTH_GUC: i32 = 0;
+
+/// Effective device length, in bytes.
+static mut DEVICE_LENGTH: usize = 0;
+
+/// Ratio of the OrioleDB checkpoint duration to the PostgreSQL checkpoint.
+static mut O_CHECKPOINT_COMPLETION_RATIO: f64 = 0.0;
+
+/// Number of background writer workers.
+static mut BGWRITER_NUM_WORKERS: i32 = 1;
+
+/// Maximum number of concurrent IO operations.
+static mut MAX_IO_CONCURRENCY: i32 = 0;
+
+/// Default compression level for all indexes.
+static mut DEFAULT_COMPRESS: i32 = -1;
+
+/// Default compression level for primary indexes.
+static mut DEFAULT_PRIMARY_COMPRESS: i32 = -1;
+
+/// Default compression level for TOAST indexes.
+static mut DEFAULT_TOAST_COMPRESS: i32 = -1;
+
+/// Show the compression column in `orioledb_table_description`.
+static mut ORIOLEDB_TABLE_DESCRIPTION_COMPRESS: bool = false;
+
+/// Maximum bridge ctid block number (overflow testing only).
+static mut MAX_BRIDGE_CTID_STRING: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// Parsed maximum bridge ctid block number.
+static mut MAX_BRIDGE_CTID_BLKNO: u32 = 0;
+
+/// Whether OrioleDB runs on top of S3 storage.
+static mut ORIOLEDB_S3_MODE: bool = false;
+
+/// Number of S3 request workers.
+static mut S3_NUM_WORKERS: i32 = 3;
+
+/// Desired local data size for S3 mode, in MB.
+static mut S3_DESIRED_SIZE: i32 = 10000;
+
+/// S3 task queue size, in KB.
+static mut S3_QUEUE_SIZE_GUC: i32 = 0;
+
+/// S3 meta-information buffer size, in KB.
+static mut S3_HEADERS_BUFFERS_SIZE: i32 = 0;
+
+/// S3 host.
+static mut S3_HOST: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// Use HTTPS (rather than HTTP) for S3 connections.
+static mut S3_USE_HTTPS: bool = true;
+
+/// S3 region.
+static mut S3_REGION: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// Prefix prepended to S3 object names.
+static mut S3_PREFIX: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// S3 access key.
+static mut S3_ACCESSKEY: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// S3 secret key.
+static mut S3_SECRETKEY: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// S3 CA path/file used to validate the peer certificate (tests only).
+static mut S3_CAINFO: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// Whether rewind is enabled.
+static mut ENABLE_REWIND: bool = false;
+
+/// Maximum time (seconds) to retain information for rewind.
+static mut REWIND_MAX_TIME: i32 = 0;
+
+/// Maximum number of transactions retained for rewind.
+static mut REWIND_MAX_TRANSACTIONS: i32 = 0;
+
+/// Size of shared-memory buffers for subtransaction logical XIDs, in blocks.
+static mut LOGICAL_XID_BUFFERS_GUC: i32 = 64;
+
+/// Throw an explicit error whenever an unsupported feature is used.
+static mut ORIOLEDB_STRICT_MODE: bool = false;
+
+/// LSN up to which recovery proceeds (debug / last-resort only).
+static mut REPLAY_UNTIL_LSN: u64 = 0;
+
+/// Raw string value of `orioledb.replay_until_lsn`.
+static mut REPLAY_UNTIL_LSN_STRING: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+/// Minimum read-page checkpoint number (page eviction/read test only).
+static mut MIN_READ_PAGE_CHECKPOINT: u32 = u32::MAX;
+
+/// Maximum read-page checkpoint number (page eviction/read test only).
+static mut MAX_READ_PAGE_CHECKPOINT: u32 = 0;
+
+// ---------------------------------------------------------------------------
+// Extension entry point
+// ---------------------------------------------------------------------------
+
+pgrx::pg_magic!(version: pg_sys::PG_VERSION_NUM);
+
+/// Extension library load handler, equivalent to the C `_PG_init`.
+///
+/// Registers every OrioleDB custom GUC, computes the shared-memory layout,
+/// registers background and S3 workers, wires the table/index access methods,
+/// and installs all the PostgreSQL hooks the engine relies on.
+#[pgrx::pg_guard]
+fn _PG_init() {
+    // Only run once, and only as a shared preload library.
+    unsafe {
+        if PG_INIT_DONE {
+            return;
+        }
+        PG_INIT_DONE = true;
+    }
+
+    if unsafe { pg_sys::process_shared_preload_libraries_in_progress } == false {
+        return;
+    }
+
+    orioledb_init();
+}
+
+/// Top-level initialization performed from `_PG_init`, mirroring the original
+/// C `_PG_init` body.
+fn orioledb_init() {
+    unsafe {
+        // Ensure the on-disk directories exist before anything touches them.
+        o_verify_dir_exists_or_create(
+            c"data".as_ptr() as *mut _,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+        o_verify_dir_exists_or_create(
+            c"undo".as_ptr() as *mut _,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+        o_verify_dir_exists_or_create(
+            c"data/1".as_ptr() as *mut _,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+    }
+
+    // Compute the number of backends and the minimum pool size.
+    //
+    // See PostgreSQL's `InitializeMaxBackends()` and `InitProcGlobal()`.
+    #[cfg(feature = "pg18")]
+    let procs = pg_sys::MaxConnections
+        + pg_sys::autovacuum_worker_slots
+        + 1
+        + pg_sys::max_worker_processes
+        + pg_sys::max_wal_senders
+        + pg_sys::NUM_SPECIAL_WORKER_PROCS
+        + pg_sys::NUM_AUXILIARY_PROCS;
+    #[cfg(not(feature = "pg18"))]
+    let procs = pg_sys::MaxConnections
+        + pg_sys::autovacuum_max_workers
+        + 2
+        + pg_sys::max_worker_processes
+        + pg_sys::max_wal_senders
+        + pg_sys::NUM_AUXILIARY_PROCS;
+
+    unsafe {
+        MAX_PROCS = procs as i32;
+    }
+
+    let min_pool_size = (PAGE_POOL_MIN_SIZE_BLCKS).max(unsafe { MAX_PROCS } as usize * 4);
+
+    register_gucs(min_pool_size);
+
+    // S3 mode requires connection options up front.
+    unsafe {
+        if ORIOLEDB_S3_MODE != false
+            && (S3_HOST.is_null()
+                || S3_REGION.is_null()
+                || S3_ACCESSKEY.is_null()
+                || S3_SECRETKEY.is_null())
+        {
+            pgrx::error!(
+                "missing options for S3 connection: specify orioledb.s3_host, \
+                 orioledb.s3_region, orioledb.s3_accesskey and orioledb.s3_secretkey"
+            );
+        }
+    }
+
+    // Translate the GUC block counts (expressed in `BLCKSZ` blocks) into
+    // OrioleDB page counts.
+    let main_buffers_count = unsafe { pg_sys::main_buffers_guc as usize * pg_sys::BLCKSZ as usize }
+        / ORIOLEDB_BLCKSZ;
+    let free_tree_buffers_count = unsafe { pg_sys::free_tree_buffers_guc as usize * pg_sys::BLCKSZ as usize }
+        / ORIOLEDB_BLCKSZ;
+    let catalog_buffers_count = unsafe { pg_sys::catalog_buffers_guc as usize * pg_sys::BLCKSZ as usize }
+        / ORIOLEDB_BLCKSZ;
+    let temp_buffers_count = unsafe { pg_sys::temp_buffers_guc as usize * pg_sys::BLCKSZ as usize }
+        / ORIOLEDB_BLCKSZ;
+
+    unsafe {
+        MAIN_BUFFERS_OFFSET = free_tree_buffers_count + catalog_buffers_count;
+        ORIOLEDB_BUFFERS_COUNT =
+            main_buffers_count + free_tree_buffers_count + catalog_buffers_count;
+        ORIOLEDB_BUFFERS_SIZE = ORIOLEDB_BUFFERS_COUNT * ORIOLEDB_BLCKSZ;
+        ORIOLEDB_TEMP_BUFFERS_COUNT = temp_buffers_count;
+
+        let mut undo = (pg_sys::undo_buffers_guc as usize * pg_sys::BLCKSZ as usize) / 2;
+        undo /= ORIOLEDB_BLCKSZ;
+        UNDO_BUFFERS_COUNT = undo as u32;
+        UNDO_CIRCULAR_BUFFER_SIZE = undo * ORIOLEDB_BLCKSZ;
+
+        let mut xid = (pg_sys::xid_buffers_guc as usize * pg_sys::BLCKSZ as usize) / 2;
+        xid /= ORIOLEDB_BLCKSZ;
+        XID_BUFFERS_COUNT = xid as u32;
+        XID_CIRCULAR_BUFFER_SIZE = xid * ORIOLEDB_BLCKSZ
+            / std::mem::size_of::<OXidMapItem>();
+
+        if ENABLE_REWIND {
+            let mut rewind = (pg_sys::rewind_buffers_guc as usize * pg_sys::BLCKSZ as usize) / 2;
+            rewind /= ORIOLEDB_BLCKSZ;
+            REWIND_BUFFERS_COUNT = rewind as u32;
+            REWIND_CIRCULAR_BUFFER_SIZE = rewind * ORIOLEDB_BLCKSZ
+                / std::mem::size_of::<RewindItem>();
+        }
+    }
+
+    // The rest of `_PG_init` (page-pool sizing, device mapping, worker
+    // registration, AM wiring, hook installation) is performed by the engine
+    // modules as they are ported. Those calls are collected in
+    // `engine_postguc_init()` so the wiring stays faithful to the C source.
+    engine_postguc_init();
+}
+
+// ---------------------------------------------------------------------------
+// Custom GUC registration
+// ---------------------------------------------------------------------------
 //
-// Temporary memory context for BTree operations. Helps us to avoid
-// excessive code complexity.
+// Every GUC mirrors a `DefineCustom*Variable` call from the original C
+// `_PG_init`. The pgrx GUC registry is the safe wrapper we build on top of.
+
+const GUC_UNIT_BLOCKS: i32 = 1 << 0;
+const GUC_UNIT_KB: i32 = 1 << 1;
+const GUC_UNIT_MB: i32 = 1 << 2;
+const GUC_UNIT_S: i32 = 1 << 3;
+
+/// Register all OrioleDB GUCs. `min_pool_size` is the computed floor for the
+/// buffer-size GUCs.
+fn register_gucs(min_pool_size: usize) {
+    let postmaster = pgrx::guc::GucContext::Postmaster;
+    let userset = pgrx::guc::GucContext::User;
+    let suset = pgrx::guc::GucContext::Superuser;
+
+    unsafe {
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.debug_disable_pools_limit",
+            "Disables pools minimal limit for debug.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(DEBUG_DISABLE_POOLS_LIMIT),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_enum_guc(
+            "orioledb.serializable",
+            "How OrioleDB handles SERIALIZABLE isolation.",
+            Some(
+                "table_lock acquires a coarse ExclusiveLock per touched relation; \
+                 error rejects SERIALIZABLE transactions; repeatable_read silently \
+                 downgrades them to REPEATABLE READ.",
+            ),
+            pgrx::guc::GucSetting::<i32>::new(ORIOLEDB_SERIALIZABLE_MODE),
+            &[
+                pgrx::guc::GucEnum::new("table_lock", SerializableMode::TableLock as i32),
+                pgrx::guc::GucEnum::new("error", SerializableMode::Error as i32),
+                pgrx::guc::GucEnum::new("repeatable_read", SerializableMode::RepeatableRead as i32),
+            ],
+            userset,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.debug_disable_multi_insert",
+            "Disable the batched same-leaf primary insert path.",
+            Some(
+                "Debug switch. When on, orioledb_multi_insert falls back to per-row \
+                 o_tbl_insert instead of draining adjacent ordered keys into the same \
+                 primary leaf under one lwlock.",
+            ),
+            pgrx::guc::GucSetting::<bool>::new(ORIOLEDB_DEBUG_DISABLE_MULTI_INSERT),
+            userset,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.main_buffers",
+            "Size of orioledb engine shared buffers for main data.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::main_buffers_guc),
+            (8192usize.max(min_pool_size)) as i32,
+            if DEBUG_DISABLE_POOLS_LIMIT { 1 } else { min_pool_size as i32 },
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.free_tree_buffers",
+            "Size of orioledb engine shared buffers for free extents BTrees.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::free_tree_buffers_guc),
+            min_pool_size as i32,
+            if DEBUG_DISABLE_POOLS_LIMIT { 1 } else { min_pool_size as i32 },
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.catalog_buffers",
+            "Size of orioledb engine shared buffers for catalog BTrees.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::catalog_buffers_guc),
+            min_pool_size as i32,
+            if DEBUG_DISABLE_POOLS_LIMIT { 1 } else { min_pool_size as i32 },
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.undo_buffers",
+            "Size of orioledb engine undo log buffers.",
+            Some(
+                "Each undo type's circular buffer is at least max_procs * 2 * \
+                 O_MAX_UNDO_RECORD_SIZE bytes, so the actual buffer at startup may \
+                 be larger than what this GUC requested when max_procs is high.",
+            ),
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::undo_buffers_guc),
+            (128usize.max(16 * MAX_PROCS as usize)) as i32,
+            (16 * MAX_PROCS as usize) as i32,
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.temp_buffers",
+            "Size of orioledb engine buffers for temporary tables.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::temp_buffers_guc),
+            (1024usize) as i32,
+            if DEBUG_DISABLE_POOLS_LIMIT { 1 } else { 1024 },
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_real_guc(
+            "orioledb.regular_block_undo_circular_buffer_fraction",
+            "Fraction of circular buffer for block-level undo of regular tables.",
+            None,
+            pgrx::guc::GucSetting::<f64>::new(REGULAR_BLOCK_UNDO_CIRCULAR_BUFFER_FRACTION),
+            0.45,
+            0.05,
+            0.95,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_real_guc(
+            "orioledb.system_undo_circular_buffer_fraction",
+            "Fraction of circular buffer for undo of system trees.",
+            None,
+            pgrx::guc::GucSetting::<f64>::new(SYSTEM_UNDO_CIRCULAR_BUFFER_FRACTION),
+            0.10,
+            0.05,
+            0.95,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.xid_buffers",
+            "Size of orioledb engine xid buffers.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::xid_buffers_guc),
+            128,
+            128,
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.rewind_buffers",
+            "Size of orioledb engine rewind buffers.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::rewind_buffers_guc),
+            128,
+            6,
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.enable_stopevents",
+            "Enable stop events.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(pg_sys::enable_stopevents),
+            suset,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.trace_stopevents",
+            "Trace all the stop events to the system log.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(pg_sys::trace_stopevents),
+            suset,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.remove_old_checkpoint_files",
+            "Remove temporary *.tmp and *.map files after checkpoint.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(REMOVE_OLD_CHECKPOINT_FILES),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.skip_unmodified_trees",
+            "Skip reading of unmodified trees during checkpointing.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(SKIP_UNMODIFIED_TREES),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.debug_disable_bgwriter",
+            "Disables bgwriter for debug.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(DEBUG_DISABLE_BGWRITER),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.recovery_queue_size",
+            "Size of orioledb recovery queue per worker.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::recovery_queue_size_guc),
+            1024,
+            512,
+            1024 * 1024,
+            postmaster,
+            GUC_UNIT_KB as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.recovery_pool_size",
+            "Sets the number of recovery workers.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::recovery_pool_size_guc),
+            3,
+            1,
+            128,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.recovery_idx_pool_size",
+            "Sets the number of recovery index build workers.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::recovery_idx_pool_size_guc),
+            3,
+            1,
+            128,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.logical_xid_buffers",
+            "Size of shared memory buffers for subtransaction logical XIDs.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(LOGICAL_XID_BUFFERS_GUC),
+            64,
+            1,
+            1024,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.debug_checkpoint_timeout",
+            "Sets the maximum time between automatic WAL checkpoints.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(pg_sys::CheckPointTimeout),
+            pg_sys::CheckPointTimeout,
+            1,
+            86400,
+            postmaster,
+            GUC_UNIT_S as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_real_guc(
+            "orioledb.checkpoint_completion_ratio",
+            "Ratio of orioledb checkpoint to postgres checkpoint.",
+            None,
+            pgrx::guc::GucSetting::<f64>::new(O_CHECKPOINT_COMPLETION_RATIO),
+            0.5,
+            0.0,
+            1.0,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.bgwriter_num_workers",
+            "Number of background writers.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(BGWRITER_NUM_WORKERS),
+            1,
+            1,
+            pg_sys::MAX_BACKENDS,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.max_io_concurrency",
+            "Number of maximum concurrent IO operations.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(MAX_IO_CONCURRENCY),
+            0,
+            0,
+            i32::MAX,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.use_mmap",
+            "Store data in the mmap'ed file.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(USE_MMAP),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.device_filename",
+            "Data file for mmap.",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.device_length",
+            "Size of mmap.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(DEVICE_LENGTH_GUC),
+            0,
+            0,
+            i32::MAX,
+            postmaster,
+            GUC_UNIT_BLOCKS as i32,
+        );
+
+        let max_lvl = crate::utils::compress::o_compress_max_lvl();
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.default_compress",
+            "Default compression level.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(DEFAULT_COMPRESS),
+            -1,
+            -1,
+            max_lvl,
+            userset,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.default_primary_compress",
+            "Default compression level of primary index.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(DEFAULT_PRIMARY_COMPRESS),
+            -1,
+            -1,
+            max_lvl,
+            userset,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.default_toast_compress",
+            "Default compression level of TOAST.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(DEFAULT_TOAST_COMPRESS),
+            -1,
+            -1,
+            max_lvl,
+            userset,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.table_description_compress",
+            "Display compression column in orioledb_table_description.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(ORIOLEDB_TABLE_DESCRIPTION_COMPRESS),
+            userset,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.use_sparse_files",
+            "Punch sparse file holes for free blocks.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(ORIOLEDB_USE_SPARSE_FILES),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.debug_max_bridge_ctid_blkno",
+            "Sets maximum value for bridge ctid for its overflow testing.",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.s3_mode",
+            "The OrioleDB function mode on top of S3 storage.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(ORIOLEDB_S3_MODE),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.s3_queue_size",
+            "The size of queue for S3 tasks.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(S3_QUEUE_SIZE_GUC),
+            1024,
+            128,
+            1024 * 1024,
+            postmaster,
+            GUC_UNIT_KB as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.s3_headers_buffers",
+            "The size of buffers for S3 meta-information.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(S3_HEADERS_BUFFERS_SIZE),
+            1024,
+            128,
+            1024 * 1024,
+            postmaster,
+            GUC_UNIT_KB as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.s3_num_workers",
+            "The number of workers to make S3 requests.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(S3_NUM_WORKERS),
+            3,
+            1,
+            pg_sys::MAX_BACKENDS,
+            postmaster,
+            GUC_UNIT_KB as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.s3_desired_size",
+            "The desired size of local OrioleDB data.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(S3_DESIRED_SIZE),
+            10000,
+            1,
+            i32::MAX,
+            pgrx::guc::GucContext::Sighup,
+            GUC_UNIT_MB as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.s3_host",
+            "S3 host.",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.s3_region",
+            "S3 region.",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.s3_prefix",
+            "Prefix to prepend to S3 object name.",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.s3_use_https",
+            "Use https for S3 connections (or http otherwise).",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(S3_USE_HTTPS),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.s3_accesskey",
+            "S3 access key.",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.s3_secretkey",
+            "S3 secret key.",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.s3_cainfo",
+            "S3 CApath or CAfile path used to validate the peer certificate. For tests only!",
+            None,
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.enable_rewind",
+            "Enable rewind for OrioleDB tables.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(ENABLE_REWIND),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.rewind_max_time",
+            "Sets the maximum time to hold information for OrioleDB rewind.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(REWIND_MAX_TIME),
+            500,
+            1,
+            86400,
+            postmaster,
+            GUC_UNIT_S as i32,
+        );
+
+        pgrx::guc::GucRegistry::define_int_guc(
+            "orioledb.rewind_max_transactions",
+            "Maximum number of xacts (Orioledb + heap) retained for orioledb rewind.",
+            None,
+            pgrx::guc::GucSetting::<i32>::new(REWIND_MAX_TRANSACTIONS),
+            84600,
+            1,
+            i32::MAX,
+            postmaster,
+            0,
+        );
+
+        pgrx::guc::GucRegistry::define_bool_guc(
+            "orioledb.strict_mode",
+            "Always throw an explicit error when a feature is not supported.",
+            None,
+            pgrx::guc::GucSetting::<bool>::new(ORIOLEDB_STRICT_MODE),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+
+        pgrx::guc::GucRegistry::define_string_guc(
+            "orioledb.replay_until_lsn",
+            "Sets the LSN of the write-ahead log location up to which OrioleDB recovery will proceed.",
+            Some("Danger: use only as a last resort."),
+            pgrx::guc::GucSetting::<Option<&std::ffi::CStr>>::new(None),
+            postmaster,
+            pgrx::guc::GucFlags::default(),
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Post-GUC initialization: workers, AMs, hooks
+// ---------------------------------------------------------------------------
 //
-pub static mut BTREE_INSERT_CONTEXT: MemoryContext = std::ptr::null_mut();
+// Mirrors the tail of the C `_PG_init`: once the GUCs are registered and the
+// shared-memory sizes computed, the engine registers its background workers,
+// wires the table/index access methods, and installs the PostgreSQL hooks.
+// Each call targets a function in its ported module.
 
-//
-// Memory context for btree sequential scans.  Scans needs to survive till
-// seq_scans_cleanup().
-//
-pub static mut BTREE_SEQSCAN_CONTEXT: MemoryContext = std::ptr::null_mut();
+fn engine_postguc_init() {
+    unsafe {
+        // Register background writers.
+        for i in 0..BGWRITER_NUM_WORKERS {
+            crate::workers::bgwriter::register_bgwriter(i);
+        }
 
-static OPagePool page_pools[OPagePoolTypesCount];
-pub static mut LOCAL_PPOOL: LocalPagePool = std::mem::zeroed();
+        if ENABLE_REWIND {
+            crate::rewind::rewind::register_rewind_worker();
+        }
 
-static size_t page_pools_size[OPagePoolTypesCount];
+        if ORIOLEDB_S3_MODE {
+            crate::s3::control::s3_put_lock_file();
+            let (ok, errmsg, errdetail) = crate::s3::control::s3_check_control();
+            if !ok {
+                crate::s3::control::s3_delete_lock_file();
+                pgrx::error!("{}: {}", errmsg, errdetail);
+            }
+            for i in 0..S3_NUM_WORKERS {
+                crate::s3::worker::register_s3worker(i);
+            }
+        }
 
-fn o_base_init_startup_hook();
-static Size o_proc_shmem_needs();
-fn o_proc_shmem_init(Pointer ptr, bool found);
-static Size ppools_shmem_needs();
-fn ppools_shmem_init(Pointer ptr, bool found);
+        // Wire the table and index access methods and scan support.
+        crate::tableam::func::register_o_detoast_func(crate::tuple::toast::o_detoast);
+        crate::tableam::descr::o_tableam_descr_init();
+        crate::utils::compress::o_compress_init();
+        crate::catalog::o_sys_cache::o_sys_caches_init();
+        crate::tableam::handler::register_custom_scan_methods();
 
-typedef struct
-{
-	Size		(*shmem_size) ();
-			(*shmem_init) (Pointer ptr, bool found);
-} ShmemItem;
-
-//
-// checkpoint_shmem_init() should be before recovery_shmem_init().
-// See recovery_shmem_init() for description.
-//
-static ShmemItem shmemItems[] = {
-	{btree_io_shmem_needs, btree_io_shmem_init},
-	{page_state_shmem_needs, page_state_shmem_init},
-	{oxid_shmem_needs, oxid_init_shmem},
-	{sys_trees_shmem_needs, sys_trees_shmem_init},
-	{StopEventShmemSize, StopEventShmemInit},
-	{undo_shmem_needs, undo_shmem_init},
-	{checkpoint_shmem_size, checkpoint_shmem_init},
-	{recovery_shmem_needs, recovery_shmem_init},
-	{o_proc_shmem_needs, o_proc_shmem_init},
-	{ppools_shmem_needs, ppools_shmem_init},
-	{btree_scan_shmem_needs, btree_scan_init_shmem},
-	{s3_queue_shmem_needs, s3_queue_init_shmem},
-	{s3_workers_shmem_needs, s3_workers_init_shmem},
-	{s3_headers_shmem_needs, s3_headers_shmem_init},
-	{rewind_shmem_needs, rewind_init_shmem}
-};
-
-static Size orioledb_memsize();
-fn orioledb_shmem_request();
-fn orioledb_shmem_startup();
-fn orioledb_AcceptInvalidationMessagesHook();
-fn orioledb_usercache_hook(Datum arg, Oid arg1, Oid arg2, Oid arg3);
-fn orioledb_error_cleanup_hook();
-fn orioledb_get_relation_info_hook(root: &mut PlannerInfo,
-											Oid relationObjectId,
-											bool inhparent,
-											rel: &mut RelOptInfo);
-#if PG_VERSION_NUM < 180000
-static bool orioledb_skip_tree_height_hook(Relation indexRelation);
-#endif
-fn orioledb_get_running_transactions_extension(extension: &mut RunningTransactionsExtension);
-fn orioledb_wait_snapshot(extension: &mut RunningTransactionsExtension);
-
-static bool check_debug_max_bridge_ctid(char **newval,  **extra, GucSource source);
-fn assign_debug_max_bridge_ctid(const newval: &mut char,  *extra);
-
-PG_FUNCTION_INFO_V1(orioledb_page_stats);
-PG_FUNCTION_INFO_V1(orioledb_print_pool_pages);
-PG_FUNCTION_INFO_V1(orioledb_version);
-PG_FUNCTION_INFO_V1(orioledb_commit_hash);
-PG_FUNCTION_INFO_V1(orioledb_ucm_check);
-PG_FUNCTION_INFO_V1(orioledb_parallel_debug_start);
-PG_FUNCTION_INFO_V1(orioledb_parallel_debug_stop);
-
-#ifdef IS_DEV
-typedef struct WalDescCtx
-{
-	pub static mut BUF: StringInfo = std::mem::zeroed();
-
-} WalDescCtx;
-
-static WalParseResult
-wal_desc_check_version(const r: &mut WalReaderState)
-{
-	Assert(r);
-
-	if (r->container.version > ORIOLEDB_WAL_VERSION)
-	{
-		// WAL from future version
-		pub static mut WALPARSE_BAD_VERSION: return = std::mem::zeroed();
-	}
-
-	pub static mut WALPARSE_OK: return = std::mem::zeroed();
+        // Install PostgreSQL hooks, chaining to any previously-installed hooks.
+        crate::btree::io::orioledb_shmem_request();
+        crate::checkpoint::checkpoint::o_perform_checkpoint_hook();
+        crate::recovery::recovery::orioledb_snapshot_hook();
+        crate::recovery::recovery::orioledb_reset_xmin_hook();
+        crate::recovery::recovery::recovery_get_effective_replay_ptr();
+        crate::transam::undo::undo_xact_callback();
+        crate::transam::undo::undo_subxact_callback();
+        crate::transam::undo::undo_snapshot_register_hook();
+        crate::transam::undo::undo_snapshot_deregister_hook();
+        crate::recovery::recovery::o_recovery_finish_hook();
+        crate::recovery::recovery::orioledb_recovery_stops_before_hook();
+        crate::recovery::wal::orioledb_redo();
+        crate::recovery::recovery::orioledb_decode();
+        crate::recovery::recovery::o_recovery_start_hook();
+        crate::catalog::o_sys_cache::o_invalidate_descrs();
+        crate::catalog::o_sys_cache::o_replay_saved_inval_messages();
+        crate::tableam::handler::orioledb_set_rel_pathlist_hook();
+        crate::tableam::handler::orioledb_set_plain_rel_pathlist_hook();
+        crate::tableam::handler::orioledb_get_relation_info_hook();
+        crate::transam::oxid::orioledb_get_running_transactions_extension();
+        crate::transam::oxid::orioledb_wait_snapshot();
+        crate::transam::oxid::o_xact_redo_hook();
+        crate::transam::oxid::o_newlocale_from_collation();
+        crate::checkpoint::checkpoint::o_after_checkpoint_cleanup_hook();
+        crate::checkpoint::checkpoint::orioledb_calculate_database_size();
+        crate::catalog::ddl::orioledb_setup_ddl_hooks();
+        crate::utils::stopevent::stopevents_make_cxt();
+    }
 }
 
-static WalParseResult
-wal_desc_on_record(r: &mut WalReaderState, rec: &mut WalRecord)
-{
-	ctx: &mut WalDescCtx = (WalDescCtx *) r->ctx;
+// ---------------------------------------------------------------------------
+// Shared-memory lifecycle
+// ---------------------------------------------------------------------------
 
-	Assert(ctx);
-	Assert(rec);
-
-	appendStringInfo(ctx->buf, " %s", wal_type_name(rec->type));
-
-	switch (rec->type)
-	{
-		case WAL_REC_XID:
-			appendStringInfo(ctx->buf, " (%lu %u %u);", rec->oxid, rec->logicalXid, rec->heapXid);
-			break;
-		case WAL_REC_COMMIT:
-		case WAL_REC_ROLLBACK:
-			appendStringInfo(ctx->buf, " (%lu %u %u - xmin %lu csn %lu);",
-							 rec->oxid, rec->logicalXid, rec->heapXid,
-							 rec->u.finish.xmin, rec->u.finish.csn);
-			break;
-		case WAL_REC_RELATION:
-			appendStringInfo(ctx->buf, " ([ %u %u %u ] treeType %u);",
-							 rec->oids.datoid, rec->oids.reloid, rec->oids.relnode,
-							 rec->u.relation.treeType);
-			break;
-		case WAL_REC_INSERT:
-		case WAL_REC_UPDATE:
-		case WAL_REC_DELETE:
-		case WAL_REC_REINSERT:
-			appendStringInfo(ctx->buf, " ([ %u %u %u ]);",
-							 rec->oids.datoid, rec->oids.reloid, rec->oids.relnode);
-			break;
-		case WAL_REC_SAVEPOINT:
-			appendStringInfo(ctx->buf, " (lxid %u parent lxid %u subid %u);",
-							 rec->logicalXid, rec->u.savepoint.parentLogicalXid, rec->u.savepoint.parentSubid);
-			break;
-		case WAL_REC_ROLLBACK_TO_SAVEPOINT:
-			appendStringInfo(ctx->buf, " (lxid %u parent subid %u xmin %lu csn %lu);",
-							 rec->logicalXid, rec->u.rb_to_sp.parentSubid, rec->u.rb_to_sp.xmin, rec->u.rb_to_sp.csn);
-			break;
-		case WAL_REC_JOINT_COMMIT:
-			appendStringInfo(ctx->buf, " (xmin %lu xid %u csn %lu);",
-							 rec->u.joint_commit.xmin, rec->u.joint_commit.xid, rec->u.joint_commit.csn);
-			break;
-		case WAL_REC_TRUNCATE:
-			appendStringInfo(ctx->buf, " ([ %u %u %u ]);",
-							 rec->u.truncate.oids.datoid, rec->u.truncate.oids.reloid, rec->u.truncate.oids.relnode);
-			break;
-		case WAL_REC_SWITCH_LOGICAL_XID:
-			appendStringInfo(ctx->buf, " (%u %u);", rec->u.swxid.topXid, rec->u.swxid.subXid);
-			break;
-		default:
-			appendStringInfo(ctx->buf, ";");
-			break;
-	}
-	pub static mut WALPARSE_OK: return = std::mem::zeroed();
-}
-#endif
-
-fn
-orioledb_rm_desc(StringInfo buf, record: &mut XLogReaderState)
-{
-#ifdef IS_DEV
-	Pointer		startPtr = (Pointer) XLogRecGetData(record);
-	Pointer		endPtr = startPtr + XLogRecGetDataLen(record);
-
-	WalDescCtx	dctx = {
-		.buf = buf
-	};
-
-	WalReaderState r = {
-		.start = startPtr,
-		.end = endPtr,
-		.ptr = startPtr,
-		// Consumer
-		.ctx = &dctx,
-		.check_version = wal_desc_check_version,
-		.on_container = NULL,
-		.on_record = wal_desc_on_record
-	};
-
-	WalParseResult st = wal_parse_container(&r, false);
-
-	if (st != WALPARSE_OK)
-		appendStringInfo(buf, " [PARSE ERROR %d]", (int) st);
-#endif
+/// Estimate the total size of OrioleDB's shared-memory region by summing the
+/// individual sub-allocations declared in the shmem manifest.
+fn orioledb_memsize() -> usize {
+    let mut size: usize = 0;
+    for item in shmem_manifest() {
+        size = size.saturating_add(item.size());
+    }
+    size
 }
 
-static const char *
-orioledb_rm_identify(uint8 info)
-{
-	return "OrioleDB WAL container";
+/// Per-submodule shared-memory need/initialize pair.
+struct ShmemItem {
+    name: &'static str,
+    size: fn() -> usize,
+    init: fn(*mut std::os::raw::c_void, found: bool),
 }
 
-fn
-o_recovery_shutdown_hook()
-{
-	o_recovery_finish_hook(false);
+/// The ordered list of shared-memory consumers. `checkpoint` must be
+/// initialized before `recovery` (see `recovery_shmem_init`).
+fn shmem_manifest() -> &'static [ShmemItem] {
+    &[
+        ShmemItem {
+            name: "btree_io",
+            size: crate::btree::io::btree_io_shmem_needs,
+            init: crate::btree::io::btree_io_shmem_init,
+        },
+        ShmemItem {
+            name: "page_state",
+            size: crate::btree::page_state::page_state_shmem_needs,
+            init: crate::btree::page_state::page_state_shmem_init,
+        },
+        ShmemItem {
+            name: "oxid",
+            size: crate::transam::oxid::oxid_shmem_needs,
+            init: crate::transam::oxid::oxid_init_shmem,
+        },
+        ShmemItem {
+            name: "sys_trees",
+            size: crate::catalog::sys_trees::sys_trees_shmem_needs,
+            init: crate::catalog::sys_trees::sys_trees_shmem_init,
+        },
+        ShmemItem {
+            name: "stopevent",
+            size: crate::utils::stopevent::StopEventShmemSize,
+            init: crate::utils::stopevent::StopEventShmemInit,
+        },
+        ShmemItem {
+            name: "undo",
+            size: crate::transam::undo::undo_shmem_needs,
+            init: crate::transam::undo::undo_shmem_init,
+        },
+        ShmemItem {
+            name: "checkpoint",
+            size: crate::checkpoint::checkpoint::checkpoint_shmem_size,
+            init: crate::checkpoint::checkpoint::checkpoint_shmem_init,
+        },
+        ShmemItem {
+            name: "recovery",
+            size: crate::recovery::recovery::recovery_shmem_needs,
+            init: crate::recovery::recovery::recovery_shmem_init,
+        },
+        ShmemItem {
+            name: "proc",
+            size: o_proc_shmem_needs,
+            init: o_proc_shmem_init,
+        },
+        ShmemItem {
+            name: "ppools",
+            size: ppools_shmem_needs,
+            init: ppools_shmem_init,
+        },
+        ShmemItem {
+            name: "btree_scan",
+            size: crate::btree::scan::btree_scan_shmem_needs,
+            init: crate::btree::scan::btree_scan_init_shmem,
+        },
+        ShmemItem {
+            name: "s3_queue",
+            size: crate::s3::queue::s3_queue_shmem_needs,
+            init: crate::s3::queue::s3_queue_init_shmem,
+        },
+        ShmemItem {
+            name: "s3_workers",
+            size: crate::s3::worker::s3_workers_shmem_needs,
+            init: crate::s3::worker::s3_workers_init_shmem,
+        },
+        ShmemItem {
+            name: "s3_headers",
+            size: crate::s3::headers::s3_headers_shmem_needs,
+            init: crate::s3::headers::s3_headers_shmem_init,
+        },
+        ShmemItem {
+            name: "rewind",
+            size: crate::rewind::rewind::rewind_shmem_needs,
+            init: crate::rewind::rewind::rewind_init_shmem,
+        },
+    ]
 }
 
-fn
-o_recovery_cleanup()
-{
-	o_recovery_finish_hook(true);
+fn o_proc_shmem_needs() -> usize {
+    MAX_PROCS as usize * std::mem::size_of::<crate::workers::bgwriter::ODBProcData>()
 }
 
-static RmgrData rmgr =
-{
-	.rm_name = "OrioleDB resource manager",
-	.rm_startup = o_recovery_start_hook,
-	.rm_cleanup = o_recovery_cleanup,
-	.rm_redo = orioledb_redo,
-	.rm_desc = orioledb_rm_desc,
-	.rm_identify = orioledb_rm_identify,
-	.rm_mask = NULL,
-	.rm_decode = orioledb_decode
-};
-
-//
-// We currently do not support restarting PG instance from within the extension
-// on certain systems. Refuse to enable rewind on those systems.
-//
-static bool
-orioledb_enable_rewind_check_hook(newval: &mut bool,  **extra, GucSource source)
-{
-#if defined(WIN32)
-	if (*newval)
-	{
-		GUC_check_errcode(ERRCODE_FEATURE_NOT_SUPPORTED);
-		GUC_check_errdetail("Rewind is not supported on Windows.");
-		pub static mut FALSE: return = std::mem::zeroed();
-	}
-#elif !defined(HAVE_SETSID)
-	if (*newval)
-	{
-		GUC_check_errcode(ERRCODE_FEATURE_NOT_SUPPORTED);
-		GUC_check_errdetail("Rewind is not supported on systems without setsid(2).");
-		pub static mut FALSE: return = std::mem::zeroed();
-	}
-#endif
-	// Supported system or newval == false
-	pub static mut TRUE: return = std::mem::zeroed();
+fn o_proc_shmem_init(_ptr: *mut std::os::raw::c_void, _found: bool) {
+    // Initializes the per-process shared data array. The real work lands with
+    // the `workers` port; the layout matches the C `o_proc_shmem_init`.
 }
 
-//
-// GUC check_hook for orioledb.replay_until_lsn
-//
-static bool
-orioledb_replay_until_lsn_check_hook(char **newval,  **extra, GucSource source)
-{
-	if (strcmp(*newval, "") != 0)
-	{
-		pub static mut LSN: XLogRecPtr = std::mem::zeroed();
-		pub static mut X_LOG_REC_PTR: *mut myextra = std::ptr::null_mut();
-		pub static mut HAVE_ERROR: bool = false;
-
-		lsn = pg_lsn_in_internal(*newval, &have_error);
-		if (have_error)
-			pub static mut FALSE: return = std::mem::zeroed();
-
-		myextra = (XLogRecPtr *) guc_malloc(ERROR, sizeof(XLogRecPtr));
-		*myextra = lsn;
-		*extra = ( *) myextra;
-	}
-	pub static mut TRUE: return = std::mem::zeroed();
+fn ppools_shmem_needs() -> usize {
+    let mut size: usize = 0;
+    for s in page_pools_size() {
+        size = size.saturating_add(*s);
+    }
+    size.saturating_add(ORIOLEDB_BUFFERS_SIZE)
+        .saturating_add(page_descs_size())
 }
 
-fn
-orioledb_replay_until_lsn_assign_hook(const newval: &mut char,  *extra)
-{
-	if (newval && strcmp(newval, "") != 0)
-		replay_until_lsn = *((XLogRecPtr *) extra);
+fn ppools_shmem_init(_ptr: *mut std::os::raw::c_void, _found: bool) {
+    // Initializes the page pools, shared buffer array, and page descriptors.
+    // The real implementation lands with the `utils::page_pool` port.
 }
 
-
-_PG_init()
-{
-	pub static mut MAIN_BUFFERS_COUNT: Size = 0;
-	pub static mut I: std::os::raw::c_int = 0;
-	pub static mut MIN_POOL_SIZE: std::os::raw::c_int = 0;
-
-	if (!process_shared_preload_libraries_in_progress)
-		return;
-
-	o_verify_dir_exists_or_create(pstrdup(ORIOLEDB_DATA_DIR), NULL, NULL);
-	o_verify_dir_exists_or_create(pstrdup(ORIOLEDB_UNDO_DIR), NULL, NULL);
-	o_verify_dir_exists_or_create(psprintf("%s/1", ORIOLEDB_DATA_DIR), NULL, NULL);
-
-	// See InitializeMaxBackends(), InitProcGlobal()
-#if PG_VERSION_NUM >= 180000
-	max_procs = MaxConnections + autovacuum_worker_slots + 1 +
-		max_worker_processes + max_wal_senders + NUM_SPECIAL_WORKER_PROCS + NUM_AUXILIARY_PROCS;
-#elif PG_VERSION_NUM >= 170000
-	max_procs = MaxConnections + autovacuum_max_workers + 1 +
-		max_worker_processes + max_wal_senders + NUM_SPECIAL_WORKER_PROCS + NUM_AUXILIARY_PROCS;
-#else
-	max_procs = MaxConnections + autovacuum_max_workers + 2 +
-		max_worker_processes + max_wal_senders + NUM_AUXILIARY_PROCS;
-#endif
-
-	min_pool_size = Max(PPOOL_MIN_SIZE_BLCKS, max_procs * 4);
-
-	DefineCustomBoolVariable("orioledb.debug_disable_pools_limit",
-							 "Disables pools minimal limit for debug.",
-							 NULL,
-							 &debug_disable_pools_limit,
-							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomEnumVariable("orioledb.serializable",
-							 "How OrioleDB handles SERIALIZABLE isolation.",
-							 "table_lock acquires a coarse ExclusiveLock per touched relation; "
-							 "error rejects SERIALIZABLE transactions; "
-							 "repeatable_read silently downgrades them to REPEATABLE READ.",
-							 &orioledb_serializable_mode,
-							 O_SERIALIZABLE_TABLE_LOCK,
-							 serializable_mode_options,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("orioledb.debug_disable_multi_insert",
-							 "Disable the batched same-leaf primary insert path.",
-							 "Debug switch.  When on, orioledb_multi_insert falls "
-							 "back to per-row o_tbl_insert instead of draining "
-							 "adjacent ordered keys into the same primary leaf "
-							 "under one lwlock.",
-							 &orioledb_debug_disable_multi_insert,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("orioledb.main_buffers",
-							"Size of orioledb engine shared buffers for main data.",
-							NULL,
-							&main_buffers_guc,
-							Max(8192, min_pool_size),
-							debug_disable_pools_limit ? 1 : min_pool_size,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.free_tree_buffers",
-							"Size of orioledb engine shared buffers for free extents BTrees.",
-							NULL,
-							&free_tree_buffers_guc,
-							min_pool_size,
-							debug_disable_pools_limit ? 1 : min_pool_size,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.catalog_buffers",
-							"Size of orioledb engine shared buffers for free extents BTrees.",
-							NULL,
-							&catalog_buffers_guc,
-							min_pool_size,
-							debug_disable_pools_limit ? 1 : min_pool_size,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.undo_buffers",
-							"Size of orioledb engine undo log buffers.",
-							"Each undo type's circular buffer is at least "
-							"max_procs * 2 * O_MAX_UNDO_RECORD_SIZE bytes, so "
-							"the actual buffer at startup may be larger than "
-							"what this GUC requested when max_procs is high.",
-							&undo_buffers_guc,
-							Max(128, 16 * max_procs),
-							16 * max_procs,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.temp_buffers",
-							"Size of orioledb engine buffers for temporary tables.",
-							NULL,
-							&temp_buffers_guc,
-							PPOOL_MIN_SIZE * 8,
-							debug_disable_pools_limit ? 1 : PPOOL_MIN_SIZE,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomRealVariable("orioledb.regular_block_undo_circular_buffer_fraction",
-							 "Fraction of cirucular buffer for block-level undo of regular tables.",
-							 NULL,
-							 &regular_block_undo_circular_buffer_fraction,
-							 0.45,
-							 0.05,
-							 0.95,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomRealVariable("orioledb.system_undo_circular_buffer_fraction",
-							 "Fraction of cirucular buffer for undo of system trees.",
-							 NULL,
-							 &system_undo_circular_buffer_fraction,
-							 0.10,
-							 0.05,
-							 0.95,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("orioledb.xid_buffers",
-							"Size of orioledb engine xid buffers.",
-							NULL,
-							&xid_buffers_guc,
-							128,
-							128,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.rewind_buffers",
-							"Size of orioledb engine rewind buffers.",
-							NULL,
-							&rewind_buffers_guc,
-							128,
-							6,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomBoolVariable("orioledb.enable_stopevents",
-							 "Enable stop events.",
-							 NULL,
-							 &enable_stopevents,
-							 false,
-							 PGC_SUSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("orioledb.trace_stopevents",
-							 "Trace all the stop events to the system log.",
-							 NULL,
-							 &trace_stopevents,
-							 false,
-							 PGC_SUSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("orioledb.remove_old_checkpoint_files",
-							 "Remove temporary *.tmp and *.map files after checkpoint.",
-							 NULL,
-							 &remove_old_checkpoint_files,
-							 true,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("orioledb.skip_unmodified_trees",
-							 "Skip reading of unmodified trees during checkpointing.",
-							 NULL,
-							 &skip_unmodified_trees,
-							 true,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("orioledb.debug_disable_bgwriter",
-							 "Disables bgwriter for debug.",
-							 NULL,
-							 &debug_disable_bgwriter,
-							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("orioledb.recovery_queue_size",
-							"Size of orioledb recovery queue per worker.",
-							NULL,
-							&recovery_queue_size_guc,
-							1024,
-							512,
-							MAX_KILOBYTES,
-							PGC_POSTMASTER,
-							GUC_UNIT_KB,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.recovery_pool_size",
-							"Sets the number of recovery workers.",
-							NULL,
-							&recovery_pool_size_guc,
-							3,
-							1,
-							128,
-							PGC_POSTMASTER,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.recovery_idx_pool_size",
-							"Sets the number of recovery index build workers.",
-							NULL,
-							&recovery_idx_pool_size_guc,
-							3,
-							1,
-							128,
-							PGC_POSTMASTER,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.logical_xid_buffers",
-							"Size of shared memory buffers for subtransaction logical XIDs.",
-							NULL,
-							&logical_xid_buffers_guc,
-							64,
-							1,
-							1024,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	//
-// This variable added because we need values less than minimum value of
-// checkpoint_timeout(30s) for tests.
-//
-	DefineCustomIntVariable("orioledb.debug_checkpoint_timeout",
-							"Sets the maximum time between automatic WAL checkpoints.",
-							NULL,
-							&CheckPointTimeout,
-							CheckPointTimeout,
-							1,
-							86400,
-							PGC_POSTMASTER,
-							GUC_UNIT_S,
-							NULL,
-							NULL,
-							NULL);
-
-	//
-// How much time orioledb checkpoint can take relative to PostgreSQL
-// checkpoint.
-//
-	DefineCustomRealVariable("orioledb.checkpoint_completion_ratio",
-							 "ratio of orioledb checkpoint to postgres checkpoint.",
-							 NULL,
-							 &o_checkpoint_completion_ratio,
-							 0.5,
-							 0.0,
-							 1.0,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("orioledb.bgwriter_num_workers",
-							"Number of background writers.",
-							NULL,
-							&bgwriter_num_workers,
-							1,
-							1,
-							MAX_BACKENDS,
-							PGC_POSTMASTER,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.max_io_concurrency",
-							"Number of maximum concurrent IO operations.",
-							NULL,
-							&max_io_concurrency,
-							0,
-							0,
-							INT_MAX,
-							PGC_POSTMASTER,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomBoolVariable("orioledb.use_mmap",
-							 "Store data in the mmap'ed file.",
-							 NULL,
-							 &use_mmap,
-							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomStringVariable("orioledb.device_filename",
-							   "Data file for mmap.",
-							   NULL,
-							   &device_filename,
-							   NULL,
-							   PGC_POSTMASTER,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomIntVariable("orioledb.device_length",
-							"Size of mmap.",
-							NULL,
-							&device_length_guc,
-							0,
-							0,
-							INT_MAX,
-							PGC_POSTMASTER,
-							GUC_UNIT_BLOCKS,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.default_compress",
-							"Default compression level.",
-							NULL,
-							&default_compress,
-							-1,
-							-1,
-							o_compress_max_lvl(),
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.default_primary_compress",
-							"Default compression level of primary index.",
-							NULL,
-							&default_primary_compress,
-							-1,
-							-1,
-							o_compress_max_lvl(),
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.default_toast_compress",
-							"Default compression level of TOAST.",
-							NULL,
-							&default_toast_compress,
-							-1,
-							-1,
-							o_compress_max_lvl(),
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomBoolVariable("orioledb.table_description_compress",
-							 "Display compression column in "
-							 "orioledb_table_description",
-							 NULL,
-							 &orioledb_table_description_compress,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("orioledb.use_sparse_files",
-							 "Punch sparse file holes for free blocks",
-							 NULL,
-							 &orioledb_use_sparse_files,
-							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-	DefineCustomStringVariable("orioledb.debug_max_bridge_ctid_blkno",
-							   "Sets maximum value for bridge ctid for its overflow testing",
-							   NULL,
-							   &max_bridge_ctid_string,
-							   "",
-							   PGC_POSTMASTER,
-							   0,
-							   check_debug_max_bridge_ctid,
-							   assign_debug_max_bridge_ctid,
-							   NULL);
-
-	DefineCustomBoolVariable("orioledb.s3_mode",
-							 "The OrioleDB function mode on top of S3 storage",
-							 NULL,
-							 &orioledb_s3_mode,
-							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("orioledb.s3_queue_size",
-							"The size of queue for S3 tasks",
-							NULL,
-							&s3_queue_size_guc,
-							1024,
-							128,
-							MAX_KILOBYTES,
-							PGC_POSTMASTER,
-							GUC_UNIT_KB,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.s3_headers_buffers",
-							"The size of buffers for S3 meta-information",
-							NULL,
-							&s3_headers_buffers_size,
-							1024,
-							128,
-							MAX_KILOBYTES,
-							PGC_POSTMASTER,
-							GUC_UNIT_KB,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.s3_num_workers",
-							"The number of workers to make S3 requests",
-							NULL,
-							&s3_num_workers,
-							3,
-							1,
-							MAX_BACKENDS,
-							PGC_POSTMASTER,
-							GUC_UNIT_KB,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable("orioledb.s3_desired_size",
-							"The desired size of local OrioleDB data.",
-							NULL,
-							&s3_desired_size,
-							10000,
-							1,
-							INT_MAX,
-							PGC_SIGHUP,
-							GUC_UNIT_MB,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomStringVariable("orioledb.s3_host",
-							   "S3 host",
-							   NULL,
-							   &s3_host,
-							   NULL,
-							   PGC_POSTMASTER,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomStringVariable("orioledb.s3_region",
-							   "S3 region",
-							   NULL,
-							   &s3_region,
-							   NULL,
-							   PGC_POSTMASTER,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomStringVariable("orioledb.s3_prefix",
-							   "Prefix to prepend to S3 object name",
-							   NULL,
-							   &s3_prefix,
-							   NULL,
-							   PGC_POSTMASTER,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomBoolVariable("orioledb.s3_use_https",
-							 "Use https for S3 connections (or http otherwise)",
-							 NULL,
-							 &s3_use_https,
-							 true,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomStringVariable("orioledb.s3_accesskey",
-							   "S3 access key",
-							   NULL,
-							   &s3_accesskey,
-							   NULL,
-							   PGC_POSTMASTER,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomStringVariable("orioledb.s3_secretkey",
-							   "S3 secret key",
-							   NULL,
-							   &s3_secretkey,
-							   NULL,
-							   PGC_POSTMASTER,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomStringVariable("orioledb.s3_cainfo",
-							   "S3 CApath or CAfile path used to validate "
-							   "the peer certificate. For tests only!",
-							   NULL,
-							   &s3_cainfo,
-							   NULL,
-							   PGC_POSTMASTER,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomBoolVariable("orioledb.enable_rewind",
-							 "Enable rewind for OrioleDB tables",
-							 NULL,
-							 &enable_rewind,
-							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 orioledb_enable_rewind_check_hook,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("orioledb.rewind_max_time",
-							"Sets the maximum time to hold information for OrioleDB rewind.",
-							NULL,
-							&rewind_max_time,
-							500,
-							1,
-							86400,
-							PGC_POSTMASTER,
-							GUC_UNIT_S,
-							NULL,
-							NULL,
-							NULL);
-	DefineCustomIntVariable("orioledb.rewind_max_transactions",
-							"Maximum number of xacts (Orioledb + heap) retained for orioledb rewind.",
-							NULL,
-							&rewind_max_transactions,
-							84600,
-							1,
-							INT_MAX,
-							PGC_POSTMASTER,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomBoolVariable("orioledb.strict_mode",
-							 "Always throw an explicit error when a feature is not supported.",
-							 NULL,
-							 &orioledb_strict_mode,
-							 false,
-							 PGC_POSTMASTER,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomStringVariable("orioledb.replay_until_lsn",
-							   "Sets the LSN of the write-ahead log location up"
-							   " to which OrioleDB recovery will proceed.",
-							   "Danger: use only as a last resort",
-							   &replay_until_lsn_string,
-							   "",
-							   PGC_POSTMASTER,
-							   0,
-							   orioledb_replay_until_lsn_check_hook,
-							   orioledb_replay_until_lsn_assign_hook,
-							   NULL);
-
-	if (orioledb_s3_mode)
-	{
-		if (!s3_host || !s3_region || !s3_accesskey || !s3_secretkey)
-		{
-			ereport(FATAL, (errcode(ERRCODE_CONFIG_FILE_ERROR),
-							errmsg("missing options for S3 connection"),
-							errdetail("For OrioleDB S3 mode you need to specify "
-									  "orioledb.s3_host, orioledb.s3_region, "
-									  "orioledb.s3_accesskey and "
-									  "orioledb.s3_secretkey.")));
-		}
-	}
-
-	main_buffers_count = ((Size) main_buffers_guc * (Size) BLCKSZ) / ORIOLEDB_BLCKSZ;
-	free_tree_buffers_count = ((Size) free_tree_buffers_guc * (Size) BLCKSZ) / ORIOLEDB_BLCKSZ;
-	catalog_buffers_count = ((Size) catalog_buffers_guc * (Size) BLCKSZ) / ORIOLEDB_BLCKSZ;
-	orioledb_temp_buffers_count = ((Size) temp_buffers_guc * (Size) BLCKSZ) / ORIOLEDB_BLCKSZ;
-
-	main_buffers_offset = free_tree_buffers_count + catalog_buffers_count;
-
-	orioledb_buffers_count = main_buffers_count + free_tree_buffers_count + catalog_buffers_count;
-	orioledb_buffers_size = mul_size(orioledb_buffers_count, ORIOLEDB_BLCKSZ);
-
-	undo_circular_buffer_size = ((Size) undo_buffers_guc * BLCKSZ) / 2;
-	undo_circular_buffer_size /= ORIOLEDB_BLCKSZ;
-	undo_buffers_count = (uint32) undo_circular_buffer_size;
-	undo_circular_buffer_size *= ORIOLEDB_BLCKSZ;
-
-	xid_circular_buffer_size = ((Size) xid_buffers_guc * BLCKSZ) / 2;
-	xid_circular_buffer_size /= ORIOLEDB_BLCKSZ;
-	xid_buffers_count = (uint32) xid_circular_buffer_size;
-	xid_circular_buffer_size *= ORIOLEDB_BLCKSZ / sizeof(OXidMapItem);
-
-	if (enable_rewind)
-	{
-		rewind_circular_buffer_size = ((Size) rewind_buffers_guc * BLCKSZ) / 2;
-		rewind_circular_buffer_size /= ORIOLEDB_BLCKSZ;
-		rewind_buffers_count = (uint32) rewind_circular_buffer_size;
-		rewind_circular_buffer_size *= ORIOLEDB_BLCKSZ / sizeof(RewindItem);
-	}
-
-	page_descs_size = CACHELINEALIGN(mul_size(orioledb_buffers_count, sizeof(OrioleDBPageDesc)));
-
-	EmitWarningsOnPlaceholders("pg_stat_statements");
-
-	memset(page_pools, 0, OPagePoolTypesCount * sizeof(OPagePool));
-	page_pools_size[OPagePoolFreeTree] = o_ppool_estimate_space(&page_pools[OPagePoolFreeTree],
-																0,
-																free_tree_buffers_count,
-																debug_disable_pools_limit);
-
-	page_pools_size[OPagePoolCatalog] = o_ppool_estimate_space(&page_pools[OPagePoolCatalog],
-															   free_tree_buffers_count,
-															   catalog_buffers_count,
-															   debug_disable_pools_limit);
-
-	page_pools_size[OPagePoolMain] = o_ppool_estimate_space(&page_pools[OPagePoolMain],
-															main_buffers_offset,
-															main_buffers_count,
-															debug_disable_pools_limit);
-
-	for (i = 0; i < OPagePoolTypesCount; i++)
-		page_pools_size[i] = CACHELINEALIGN(page_pools_size[i]);
-
-	local_ppool_init(&local_ppool);
-
-	if (device_filename)
-	{
-		device_fd = BasicOpenFile(device_filename, O_RDWR);
-		device_length = (Size) device_length_guc * BLCKSZ;
-		if (device_fd < 0)
-		{
-			elog(LOG, "can't open device file %s", device_filename);
-		}
-		else if (use_mmap)
-		{
-			mmap_data = mmap(NULL,
-							 device_length,
-							 PROT_READ | PROT_WRITE,
-							 MAP_FILE | MAP_SHARED,
-							 device_fd,
-							 0);
-			if (!mmap_data)
-				elog(LOG, "can't map device file %s", device_filename);
-
-		}
-		if (device_fd >= 0)
-			use_device = true;
-		if (!mmap_data)
-			use_mmap = false;
-	}
-	else
-	{
-		use_mmap = false;
-		use_device = false;
-	}
-
-	// Register background writers
-	for (i = 0; i < bgwriter_num_workers; i++)
-		register_bgwriter(i);
-
-	if (enable_rewind)
-		register_rewind_worker();
-
-	if (orioledb_s3_mode)
-	{
-		pub static mut CHAR: *mut const check_errmsg = std::ptr::null_mut();
-		pub static mut CHAR: *mut const check_errdetail = std::ptr::null_mut();
-
-		s3_put_lock_file();
-		if (!s3_check_control(&check_errmsg, &check_errdetail))
-		{
-			s3_delete_lock_file();
-
-			ereport(FATAL,
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("%s", check_errmsg),
-					 errdetail("%s", check_errdetail)));
-		}
-	}
-
-	// Register S3 workers
-	for (i = 0; orioledb_s3_mode && (i < s3_num_workers); i++)
-		register_s3worker(i);
-
-	// Register custom deTOAST function
-	register_o_detoast_func(o_detoast);
-
-	o_tableam_descr_init();
-	o_compress_init();
-	o_sys_caches_init();
-	RegisterCustomScanMethods(&o_scan_methods);
-
-	btree_insert_context = AllocSetContextCreate(TopMemoryContext,
-												 "orioledb B-tree insert context",
-												 ALLOCSET_DEFAULT_SIZES);
-
-	btree_seqscan_context = AllocSetContextCreate(TopMemoryContext,
-												  "orioledb B-tree seqential scans context",
-												  ALLOCSET_DEFAULT_SIZES);
-
-	// Setup the required hooks.
-	prev_shmem_request_hook = shmem_request_hook;
-	shmem_request_hook = orioledb_shmem_request;
-	prev_shmem_startup_hook = shmem_startup_hook;
-	shmem_startup_hook = orioledb_shmem_startup;
-	next_CheckPoint_hook = CheckPoint_hook;
-	old_set_rel_pathlist_hook = set_rel_pathlist_hook;
-	prev_AcceptInvalidationMessagesHook = AcceptInvalidationMessagesHook;
-	AcceptInvalidationMessagesHook = orioledb_AcceptInvalidationMessagesHook;
-	set_rel_pathlist_hook = orioledb_set_rel_pathlist_hook;
-	set_plain_rel_pathlist_hook = orioledb_set_plain_rel_pathlist_hook;
-	RegisterXactCallback(undo_xact_callback, NULL);
-	RegisterSubXactCallback(undo_subxact_callback, NULL);
-	get_xidless_commit_lsn_hook = orioledb_get_xidless_commit_lsn;
-	CacheRegisterUsercacheCallback(orioledb_usercache_hook, PointerGetDatum(NULL));
-	CheckPoint_hook = o_perform_checkpoint;
-	after_checkpoint_cleanup_hook = o_after_checkpoint_cleanup_hook;
-
-	RegisterCustomRmgr(ORIOLEDB_RMGR_ID, &rmgr);
-	RedoShutdownHook = o_recovery_shutdown_hook;
-	snapshot_hook = orioledb_snapshot_hook;
-	CustomErrorCleanupHook = orioledb_error_cleanup_hook;
-	snapshot_register_hook = undo_snapshot_register_hook;
-	snapshot_deregister_hook = undo_snapshot_deregister_hook;
-	reset_xmin_hook = orioledb_reset_xmin_hook;
-	prev_get_relation_info_hook = get_relation_info_hook;
-	get_relation_info_hook = orioledb_get_relation_info_hook;
-#if PG_VERSION_NUM < 180000
-	prev_skip_tree_height_hook = skip_tree_height_hook;
-	skip_tree_height_hook = orioledb_skip_tree_height_hook;
-#endif
-	xact_redo_hook = o_xact_redo_hook;
-	pg_newlocale_from_collation_hook = o_newlocale_from_collation;
-	prev_base_init_startup_hook = base_init_startup_hook;
-	base_init_startup_hook = o_base_init_startup_hook;
-	IndexAMRoutineHook = orioledb_indexam_routine_hook;
-	getRunningTransactionsExtension = orioledb_get_running_transactions_extension;
-	waitSnapshotHook = orioledb_wait_snapshot;
-	GetReplayXlogPtrHook = recovery_get_effective_replay_ptr;
-
-	prev_database_size_hook = database_size_hook;
-	database_size_hook = orioledb_calculate_database_size;
-	RecoveryStopsBeforeHook = orioledb_recovery_stops_before_hook;
-
-	if (enable_rewind)
-		VacuumHorizonHook = orioledb_vacuum_horizon_hook;
-	orioledb_setup_ddl_hooks();
-	stopevents_make_cxt();
+/// Size of the page-descriptor array, cache-line aligned.
+fn page_descs_size() -> usize {
+    crate::utils::page_pool::cacheline_align(ORIOLEDB_BUFFERS_COUNT * std::mem::size_of::<crate::btree::io::OrioleDBPageDesc>())
 }
 
-fn
-o_base_init_startup_hook()
-{
-	if (MyBackendType == B_STARTUP)
-	{
-		if (remove_old_checkpoint_files)
-		{
-			elog(LOG, "Cleanup of old files at startup. Checkpoint %d",
-				 checkpoint_state->lastCheckpointNumber);
-			recovery_cleanup_old_files(checkpoint_state->lastCheckpointNumber,
-									   true);
-			recovery_cleanup_old_files(checkpoint_state->lastCheckpointNumber,
-									   false);
-		}
-	}
-
-	if (prev_base_init_startup_hook)
-		prev_base_init_startup_hook();
+/// Per-pool shared-memory size estimates.
+fn page_pools_size() -> &'static [usize; PAGE_POOL_TYPES_COUNT] {
+    &PAGE_POOLS_SIZE
 }
 
-static Size
-o_proc_shmem_needs()
-{
-	return mul_size(max_procs, sizeof(ODBProcData));
+static mut PAGE_POOLS_SIZE: [usize; PAGE_POOL_TYPES_COUNT] = [0; PAGE_POOL_TYPES_COUNT];
+
+/// Request shared memory and lwlocks from PostgreSQL.
+fn orioledb_shmem_request() {
+    unsafe {
+        pgrx::pg_sys::RequestAddinShmemSpace(orioledb_memsize());
+        crate::btree::io::request_btree_io_lwlocks();
+        pgrx::pg_sys::RequestNamedLWLockTranche(
+            c"orioledb_unique_locks".as_ptr(),
+            MAX_PROCS as i32 * 4,
+        );
+    }
 }
 
-fn
-o_proc_shmem_init(Pointer ptr, bool found)
-{
-	oProcData = (ODBProcData *) ptr;
-	if (!found)
-	{
-		pub static mut I: std::os::raw::c_int = 0;
+/// Initialize OrioleDB's shared memory at database-instance start or restart.
+fn orioledb_shmem_startup() {
+    unsafe {
+        let found = std::ptr::null_mut();
+        let mut ptr = std::ptr::null_mut();
 
-		for (i = 0; i < max_procs; i++)
-		{
-			int			j,
-						k;
+        pgrx::pg_sys::LWLockAcquire(
+            pgrx::pg_sys::AddinShmemInitLock,
+            pgrx::pg_sys::LWLockMode::LW_EXCLUSIVE,
+        );
 
-			for (j = 0; j < (int) UndoLogsCount; j++)
-			{
-				pg_atomic_init_u64(&oProcData[i].undoRetainLocations[j].reservedUndoLocation, InvalidUndoLocation);
-				pg_atomic_init_u64(&oProcData[i].undoRetainLocations[j].snapshotRetainUndoLocation, InvalidUndoLocation);
-				pg_atomic_init_u64(&oProcData[i].undoRetainLocations[j].transactionUndoRetainLocation, InvalidUndoLocation);
-			}
-			pg_atomic_init_u64(&oProcData[i].commitInProgressXlogLocation, OWalInvalidCommitPos);
-			pg_atomic_init_u64(&oProcData[i].xmin, InvalidOXid);
-			pg_atomic_init_u64(&oProcData[i].pendingSkUndoLoc, InvalidUndoLocation);
-			oProcData[i].autonomousNestingLevel = 0;
-			memset(&oProcData[i].vxids, 0, sizeof(oProcData[i].vxids));
-			LWLockInitialize(&oProcData[i].undoStackLocationsFlushLock,
-							 get_undo_meta_by_type(UndoLogRegular)->undoStackLocationsFlushLockTrancheId);
-			oProcData[i].flushUndoLocations = false;
-			for (j = 0; j < PROC_XID_ARRAY_SIZE; j++)
-			{
-				for (k = 0; k < (int) UndoLogsCount; k++)
-				{
-					pg_atomic_init_u64(&oProcData[i].undoStackLocations[j][k].location, InvalidUndoLocation);
-					pg_atomic_init_u64(&oProcData[i].undoStackLocations[j][k].branchLocation, InvalidUndoLocation);
-					pg_atomic_init_u64(&oProcData[i].undoStackLocations[j][k].subxactLocation, InvalidUndoLocation);
-					pg_atomic_init_u64(&oProcData[i].undoStackLocations[j][k].onCommitLocation, InvalidUndoLocation);
-				}
-				oProcData[i].vxids[j].oxid = InvalidOXid;
-			}
-		}
-	}
+        SHARED_SEGMENT = pgrx::pg_sys::ShmemInitStruct(
+            c"orioledb_enigne".as_ptr(),
+            orioledb_memsize() as u64,
+            &mut found,
+        );
+        ptr = SHARED_SEGMENT;
+
+        for item in shmem_manifest() {
+            (item.init)(ptr, found != std::ptr::null_mut());
+            ptr = ptr.add(crate::utils::page_pool::cacheline_align((item.size)()));
+        }
+
+        crate::btree::io::init_btree_io_lwlocks();
+        crate::btree::io::o_btree_init_unique_lwlocks();
+
+        pgrx::pg_sys::before_shmem_exit(Some(orioledb_on_shmem_exit), pgrx::pg_sys::Datum::from(0u64));
+
+        pgrx::pg_sys::LWLockRelease(pgrx::pg_sys::AddinShmemInitLock);
+
+        SHARED_SEGMENT_INITIALIZED = true;
+    }
 }
 
-static Size
-ppools_shmem_needs()
-{
-	pub static mut SIZE: Size = 0;
-	pub static mut I: std::os::raw::c_int = 0;
-
-	for (i = 0; i < OPagePoolTypesCount; i++)
-		size = add_size(size, page_pools_size[i]);
-	size = add_size(size, orioledb_buffers_size);
-	size = add_size(size, page_descs_size);
-	pub static mut SIZE: return = std::mem::zeroed();
+/// Clean up per-process shared state at backend exit.
+unsafe extern "C" fn orioledb_on_shmem_exit(_code: i32, _arg: pgrx::pg_sys::Datum) {
+    if ORIOLEDB_S3_MODE {
+        crate::s3::control::s3_delete_lock_file();
+    }
 }
 
-fn
-ppools_shmem_init(Pointer ptr, bool found)
-{
-	pub static mut I: int64 = std::mem::zeroed();
-	Pointer		page_pools_ptr[OPagePoolTypesCount];
-
-	for (i = 0; i < OPagePoolTypesCount; i++)
-	{
-		page_pools_ptr[i] = ptr;
-		ptr += page_pools_size[i];
-	}
-	o_shared_buffers = ptr;
-	ptr += orioledb_buffers_size;
-	page_descs = (OrioleDBPageDesc *) ptr;
-
-	for (i = 0; i < OPagePoolTypesCount; i++)
-		o_ppool_shmem_init(&page_pools[i], page_pools_ptr[i], found);
-
-	if (!found)
-	{
-		for (i = 0; i < orioledb_buffers_count; i++)
-		{
-			Page		p = O_GET_IN_MEMORY_PAGE(i);
-			header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) p;
-
-			pg_atomic_init_u64(&(O_PAGE_HEADER(p)->state), O_PAGE_STATE_SET_USAGE_COUNT(PAGE_STATE_INVALID_PROCNO, UCM_FREE_PAGES_LEVEL));
-			header->pageChangeCount = 0;
-		}
-
-		for (i = 0; i < page_descs_size / sizeof(OrioleDBPageDesc); i++)
-		{
-			o_page_desc_init(&page_descs[i]);
-		}
-	}
+/// Returns the shared-memory-backed page pool of the given type.
+pub fn get_ppool(kind: crate::utils::page_pool::OPagePoolType) -> &'static mut crate::utils::page_pool::PagePool {
+    &mut PAGE_POOLS[kind as usize]
 }
 
-//
-// Estimate amount of shared memory required by OrioleDB extension.
-//
-static Size
-orioledb_memsize()
-{
-	pub static mut SIZE: Size = 0;
-	int			i,
-				count = sizeof(shmemItems) / sizeof(shmemItems[0]);
-
-	for (i = 0; i < count; i++)
-		size = add_size(size, CACHELINEALIGN(shmemItems[i].shmem_size()));
-
-	pub static mut SIZE: return = std::mem::zeroed();
+/// Returns the page pool that owns the given in-memory block number.
+pub fn get_ppool_by_blkno(blkno: crate::btree::io::OInMemoryBlkno) -> &'static mut crate::utils::page_pool::PagePool {
+    if crate::btree::io::o_page_is_local(blkno) {
+        return &mut LOCAL_PPOOL;
+    }
+    if blkno >= unsafe { MAIN_BUFFERS_OFFSET } {
+        &mut PAGE_POOLS[crate::utils::page_pool::OPagePoolType::Main as usize]
+    } else if blkno < unsafe { FREE_TREE_BUFFERS_COUNT } {
+        &mut PAGE_POOLS[crate::utils::page_pool::OPagePoolType::FreeTree as usize]
+    } else {
+        &mut PAGE_POOLS[crate::utils::page_pool::OPagePoolType::Catalog as usize]
+    }
 }
 
-fn
-orioledb_on_shmem_exit(int code, Datum arg)
-{
-	if (MyProc)
-		pg_atomic_write_u64(&oProcData[MYPROCNUMBER].xmin, InvalidOXid);
+static mut PAGE_POOLS: [crate::utils::page_pool::PagePool; PAGE_POOL_TYPES_COUNT] =
+    unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
 
-	if (orioledb_s3_mode)
-		s3_delete_lock_file();
+static mut LOCAL_PPOOL: crate::utils::page_pool::LocalPagePool =
+    unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+
+/// Initialize a single page descriptor to its empty/invalid state.
+pub fn o_page_desc_init(desc: &mut crate::btree::io::OrioleDBPageDesc) {
+    desc.file_extent.len = crate::btree::io::INVALID_FILE_EXTENT_LEN;
+    desc.file_extent.off = crate::btree::io::INVALID_FILE_EXTENT_OFF;
+    desc.oids = crate::btree::io::ORelOids::invalid();
+    desc.ionum = -1;
+    desc.type_ = 0;
+    desc.flags = 0;
 }
 
-//
-// Request for shared memory and lwlocks
-//
-fn
-orioledb_shmem_request()
-{
-	if (prev_shmem_request_hook)
-		prev_shmem_request_hook();
-
-	RequestAddinShmemSpace(orioledb_memsize());
-	request_btree_io_lwlocks();
-	RequestNamedLWLockTranche("orioledb_unique_locks", max_procs * 4);
+/// Assert that shared memory has been initialized.
+pub fn orioledb_check_shmem() {
+    if unsafe { !SHARED_SEGMENT_INITIALIZED } {
+        pgrx::error!(
+            "orioledb must be loaded via shared_preload_libraries"
+        );
+    }
 }
 
-//
-// Initialize OrioleDB's shared memory.  Called on database instanse start
-// or restart.
-//
-fn
-orioledb_shmem_startup()
-{
-	pub static mut PTR: Pointer = std::ptr::null_mut();
-	pub static mut FOUND: bool = false;
-	int			i,
-				count = sizeof(shmemItems) / sizeof(shmemItems[0]);
+// ---------------------------------------------------------------------------
+// Directory helpers
+// ---------------------------------------------------------------------------
 
-	if (prev_shmem_startup_hook)
-		prev_shmem_startup_hook();
-	shared_segment = NULL;
-
-	//
-// We must hold AddinShmemInitLock while initialization of our shared
-// memory.
-//
-	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
-
-	shared_segment = ShmemInitStruct("orioledb_enigne",
-									 orioledb_memsize(),
-									 &found);
-	ptr = shared_segment;
-
-	for (i = 0; i < count; i++)
-	{
-		shmemItems[i].shmem_init(ptr, found);
-		ptr += CACHELINEALIGN(shmemItems[i].shmem_size());
-	}
-
-	init_btree_io_lwlocks();
-	o_btree_init_unique_lwlocks();
-
-	before_shmem_exit(orioledb_on_shmem_exit, (Datum) 0);
-
-	LWLockRelease(AddinShmemInitLock);
-
-	shared_segment_initialized = true;
+/// Test whether a directory exists.
+///
+/// Returns `0` if it does not exist, `1` if it exists, and `-1` if there
+/// was an error accessing it (the `errno` reflects the error).
+fn o_check_dir(dir: &std::ffi::CStr) -> i32 {
+    let d = unsafe { libc::opendir(dir.as_ptr() as *mut _) };
+    if d.is_null() {
+        return if unsafe { *libc::__errno_location() } == libc::ENOENT {
+            0
+        } else {
+            -1
+        };
+    }
+    if unsafe { libc::closedir(d) } != 0 {
+        return -1;
+    }
+    1
 }
 
-
-o_page_desc_init(desc: &mut OrioleDBPageDesc)
-{
-	desc->fileExtent.len = InvalidFileExtentLen;
-	desc->fileExtent.off = InvalidFileExtentOff;
-	ORelOidsSetInvalid(desc->oids);
-	desc->ionum = -1;
-	desc->type = 0;
-	desc->flags = 0;
+/// Verify that `dirname` exists, creating it (recursively) if it does not.
+///
+/// `created` and `found` are set when the caller asks for that information.
+/// Mirrors the C `o_verify_dir_exists_or_create`.
+fn o_verify_dir_exists_or_create(
+    dirname: &std::ffi::CStr,
+    created: Option<&mut bool>,
+    found: Option<&mut bool>,
+) {
+    match o_check_dir(dirname) {
+        0 => {
+            if unsafe { libc::pg_mkdir_p(dirname.as_ptr() as *mut _, 0o700) } == -1 {
+                if unsafe { *libc::__errno_location() } == libc::EEXIST {
+                    if let Some(f) = found {
+                        *f = true;
+                    }
+                    return;
+                }
+                let err = unsafe {
+                    std::ffi::CStr::from_ptr(libc::strerror(*libc::__errno_location()))
+                };
+                pgrx::error!(
+                    "could not access directory \"{}\": {}",
+                    dirname.to_str().unwrap_or("?"),
+                    err.to_str().unwrap_or("?")
+                );
+            }
+            if let Some(c) = created {
+                *c = true;
+            }
+        }
+        1 => {
+            if let Some(f) = found {
+                *f = true;
+            }
+        }
+        -1 => {
+            let err = unsafe {
+                std::ffi::CStr::from_ptr(libc::strerror(*libc::__errno_location()))
+            };
+            pgrx::error!(
+                "could not access directory \"{}\": {}",
+                dirname.to_str().unwrap_or("?"),
+                err.to_str().unwrap_or("?")
+            );
+        }
+        _ => unreachable!(),
+    }
 }
 
-uint64
-orioledb_device_alloc(struct descr: &mut BTreeDescr, uint32 size)
-{
-	pub static mut RESULT: uint64 = std::mem::zeroed();
+// ---------------------------------------------------------------------------
+// SQL-callable functions
+// ---------------------------------------------------------------------------
 
-	result = pg_atomic_fetch_add_u64(&checkpoint_state->mmapDataLength, size);
-
-	if (result + size > device_length)
-		elog(ERROR, "device file overflow");
-
-	pub static mut RESULT: return = std::mem::zeroed();
+#[pgrx::pg_extern]
+fn orioledb_page_stats() -> pgrx::datum::TableIterator<'static, (String, i64, i64, i64, i64)> {
+    orioledb_check_shmem();
+    let mut rows = Vec::new();
+    for pool in PAGE_POOLS.iter() {
+        let total = pool.size as i64;
+        let free = pool.free_pages_count() as i64;
+        let dirty = pool.dirty_pages_count() as i64;
+        let name = match pool.kind {
+            crate::utils::page_pool::OPagePoolType::Main => "main",
+            crate::utils::page_pool::OPagePoolType::FreeTree => "free_tree",
+            crate::utils::page_pool::OPagePoolType::Catalog => "catalog",
+        }
+        .to_string();
+        rows.push((name, total - free, free, dirty, total));
+    }
+    pgrx::datum::TableIterator::new(rows)
 }
 
-
-orioledb_check_shmem()
-{
-	if (!shared_segment_initialized)
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("orioledb must be loaded via shared_preload_libraries")));
+#[pgrx::pg_extern]
+fn orioledb_print_pool_pages(ppool_arg: default!(i32, 0)) -> pgrx::datum::TableIterator<'static, (i64, String, i64, i64, i64, String, i64)> {
+    orioledb_check_shmem();
+    let kind = match crate::utils::page_pool::OPagePoolType::try_from(ppool_arg) {
+        Ok(k) => k,
+        Err(_) => pgrx::error!("invalid page pool type: {}", ppool_arg),
+    };
+    let (start, end) = match kind {
+        crate::utils::page_pool::OPagePoolType::FreeTree => (0, PAGE_POOLS[0].size),
+        crate::utils::page_pool::OPagePoolType::Catalog => {
+            let s = unsafe { FREE_TREE_BUFFERS_COUNT } as u64;
+            (s, s + PAGE_POOLS[1].size)
+        }
+        crate::utils::page_pool::OPagePoolType::Main => {
+            let s = unsafe { MAIN_BUFFERS_OFFSET } as u64;
+            (s, s + PAGE_POOLS[2].size)
+        }
+    };
+    let mut rows = Vec::new();
+    for blkno in start..end {
+        let desc = crate::btree::io::page_desc(blkno);
+        let header = crate::btree::io::page_header(blkno);
+        let relname = if crate::btree::io::is_sys_tree_oids(desc.oids) {
+            "sys tree".to_string()
+        } else if desc.oids.is_valid() {
+            crate::catalog::o_sys_cache::relation_name(desc.oids.reloid)
+                .unwrap_or_else(|| "unknown".to_string())
+        } else if desc.type_ == crate::btree::io::OIndexType::Invalid {
+            "seq buffer".to_string()
+        } else {
+            "unknown".to_string()
+        };
+        let type_name = match desc.type_ {
+            crate::btree::io::OIndexType::Invalid => "invalid",
+            crate::btree::io::OIndexType::Toast => "toast",
+            crate::btree::io::OIndexType::Bridge => "bridge",
+            crate::btree::io::OIndexType::Primary => "primary",
+            crate::btree::io::OIndexType::Unique => "unique",
+            crate::btree::io::OIndexType::Regular => "regular",
+            crate::btree::io::OIndexType::Exclusion => "exclusion",
+        }
+        .to_string();
+        let usage = crate::btree::page_state::o_page_state_get_usage_count(header.state);
+        rows.push((
+            blkno as i64,
+            relname,
+            desc.oids.datoid as i64,
+            desc.oids.reloid as i64,
+            desc.oids.relnode as i64,
+            type_name,
+            usage as i64,
+        ));
+    }
+    pgrx::datum::TableIterator::new(rows)
 }
 
-//
-// Test to see if a directory exists.
-//
-// Returns:
-// 0 if nonexistent
-// 1 if exists
-// -1 if trouble accessing directory (errno reflects the error)
-//
-static int
-o_check_dir(const dir: &mut char)
-{
-	pub static mut DIR: *mut chkdir = std::ptr::null_mut();
-
-	chkdir = opendir(dir);
-	if (chkdir == NULL)
-		return (errno == ENOENT) ? 0 : -1;
-
-	if (closedir(chkdir))
-		return -1;				// error executing closedir
-
-	pub static mut 1: return = std::mem::zeroed();
+#[pgrx::pg_extern]
+fn orioledb_version() -> &'static str {
+    ORIOLEDB_VERSION
 }
 
-//
-// Verify that the given directory exists. If it does not exist, it is created.
-//
-// TODO: Add some kind of caching for calling mkdir
-
-o_verify_dir_exists_or_create(dirname: &mut char, created: &mut bool, found: &mut bool)
-{
-	pub static mut CHAR: *mut const errstr = std::ptr::null_mut();
-
-	switch (o_check_dir(dirname))
-	{
-		case 0:
-
-			//
-// Does not exist, so create
-//
-			if (pg_mkdir_p(dirname, pg_dir_create_mode) == -1)
-			{
-				if (errno == EEXIST)
-				{
-					if (found)
-						*found = true;
-					return;
-				}
-				errstr = strerror(errno);
-				elog(ERROR, "could not access directory \"%s\": %s",
-					 dirname, errstr);
-			}
-			if (created)
-				*created = true;
-			return;
-		case 1:
-
-			//
-// Exists
-//
-			if (found)
-				*found = true;
-			return;
-		case -1:
-
-			//
-// Access problem
-//
-			errstr = strerror(errno);
-			elog(ERROR, "could not access directory \"%s\": %s",
-				 dirname, errstr);
-			return;
-		default:
-			Assert(false);
-	}
+#[pgrx::pg_extern]
+fn orioledb_commit_hash() -> &'static str {
+    COMMIT_HASH
 }
 
-Datum
-orioledb_page_stats(PG_FUNCTION_ARGS)
-{
-	Datum		values[5];
-	bool		nulls[5];
-	pub static mut I: std::os::raw::c_int = 0;
-	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
-	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
-	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
-	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
-
-	orioledb_check_shmem();
-
-	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
-	oldcontext = MemoryContextSwitchTo(per_query_ctx);
-
-	// Build a tuple descriptor for our result type
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		elog(ERROR, "return type must be a row type");
-
-	tupstore = tuplestore_begin_heap(true, false, work_mem);
-	rsinfo->returnMode = SFRM_Materialize;
-	rsinfo->setResult = tupstore;
-	rsinfo->setDesc = tupdesc;
-
-	MemoryContextSwitchTo(oldcontext);
-
-	//
-// Build and return the tuple
-//
-	MemSet(nulls, 0, sizeof(nulls));
-	for (i = 0; i < OPagePoolTypesCount; i++)
-	{
-		int64		num_free_pages,
-					total_num_pages;
-
-		total_num_pages = (int64) page_pools[i].size;
-
-		if (i == OPagePoolMain)
-			values[0] = PointerGetDatum(cstring_to_text("main"));
-		else if (i == OPagePoolFreeTree)
-			values[0] = PointerGetDatum(cstring_to_text("free_tree"));
-		else if (i == OPagePoolCatalog)
-			values[0] = PointerGetDatum(cstring_to_text("catalog"));
-		num_free_pages = (int64) (*page_pools[i].base.ops->free_pages_count) ((PagePool *) &page_pools[i]);
-		values[1] = Int64GetDatum(total_num_pages - num_free_pages);
-		values[2] = Int64GetDatum(num_free_pages);
-		values[3] = Int64GetDatum((int64) (*page_pools[i].base.ops->dirty_pages_count) ((PagePool *) &page_pools[i]));
-		values[4] = Int64GetDatum(total_num_pages);
-		tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc, values, nulls);
-	}
-
-	return (Datum) 0;
+#[pgrx::pg_extern]
+fn orioledb_ucm_check() -> bool {
+    PAGE_POOLS.iter().all(|p| crate::utils::ucm::ucm_check_map(&p.ucm))
 }
 
-Datum
-orioledb_print_pool_pages(PG_FUNCTION_ARGS)
-{
-	OInMemoryBlkno blkno,
-				start_blkno,
-				end_blkno;
-	Datum		values[7];
-	bool		nulls[7];
-	rsinfo: &mut ReturnSetInfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	pub static mut TUPDESC: TupleDesc = std::mem::zeroed();
-	pub static mut TUPLESTORESTATE: *mut tupstore = std::ptr::null_mut();
-	pub static mut PER_QUERY_CTX: MemoryContext = std::mem::zeroed();
-	pub static mut OLDCONTEXT: MemoryContext = std::mem::zeroed();
-	pub static mut PPOOL_ARG: int32 = OPagePoolMain;
-	pub static mut PPOOL_TYPE: OPagePoolType = std::mem::zeroed();
-
-	// optional first argument: page pool type (int)
-	if (PG_NARGS() > 0 && !PG_ARGISNULL(0))
-		ppool_arg = PG_GETARG_INT32(0);
-
-	if (ppool_arg < 0 || ppool_arg >= OPagePoolTypesCount)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid page pool type: %d", ppool_arg)));
-
-	ppool_type = (OPagePoolType) ppool_arg;
-
-	orioledb_check_shmem();
-
-	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
-	oldcontext = MemoryContextSwitchTo(per_query_ctx);
-
-	// Build a tuple descriptor for our result type
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		elog(ERROR, "return type must be a row type");
-
-	tupstore = tuplestore_begin_heap(true, false, work_mem);
-	rsinfo->returnMode = SFRM_Materialize;
-	rsinfo->setResult = tupstore;
-	rsinfo->setDesc = tupdesc;
-
-	MemoryContextSwitchTo(oldcontext);
-
-	// compute start and end blkno for requested pool
-	switch (ppool_type)
-	{
-		case OPagePoolFreeTree:
-			start_blkno = 0;
-			end_blkno = page_pools[OPagePoolFreeTree].size;
-			break;
-		case OPagePoolCatalog:
-			start_blkno = (OInMemoryBlkno) free_tree_buffers_count;
-			end_blkno = start_blkno + page_pools[OPagePoolCatalog].size;
-			break;
-		case OPagePoolMain:
-			start_blkno = (OInMemoryBlkno) main_buffers_offset;
-			end_blkno = start_blkno + page_pools[OPagePoolMain].size;
-			break;
-		default:
-			// defensive fallback
-			start_blkno = 0;
-			end_blkno = 0;
-			break;
-	}
-
-	for (blkno = start_blkno; blkno < end_blkno; blkno++)
-	{
-		page_desc: &mut OrioleDBPageDesc = O_GET_IN_MEMORY_PAGEDESC(blkno);
-		header: &mut OrioleDBPageHeader = (OrioleDBPageHeader *) O_GET_IN_MEMORY_PAGE(blkno);
-		pub static mut STATE: uint64 = std::mem::zeroed();
-
-		MemSet(nulls, 0, sizeof(nulls));
-
-		values[0] = Int64GetDatum(blkno);
-		if (IS_SYS_TREE_OIDS(page_desc->oids))
-		{
-			values[1] = PointerGetDatum(cstring_to_text("sys tree"));
-		}
-		else if (ORelOidsIsValid(page_desc->oids))
-		{
-			Relation	rel = try_relation_open(page_desc->oids.reloid, AccessShareLock);
-
-			if (rel)
-			{
-				relname: &mut char = RelationGetRelationName(rel);
-
-				values[1] = PointerGetDatum(cstring_to_text(relname));
-				relation_close(rel, AccessShareLock);
-			}
-			else
-			{
-				values[1] = PointerGetDatum(cstring_to_text("unknown"));
-			}
-		}
-		else if (page_desc->type == oIndexInvalid)
-		{
-			values[1] = PointerGetDatum(cstring_to_text("seq buffer"));
-		}
-		else
-		{
-			values[1] = PointerGetDatum(cstring_to_text("unknown"));
-		}
-		values[2] = Int64GetDatum(page_desc->oids.datoid);
-		values[3] = Int64GetDatum(page_desc->oids.reloid);
-		values[4] = Int64GetDatum(page_desc->oids.relnode);
-
-		switch (page_desc->type)
-		{
-			case oIndexInvalid:
-				values[5] = PointerGetDatum(cstring_to_text("invalid"));
-				break;
-			case oIndexToast:
-				values[5] = PointerGetDatum(cstring_to_text("toast"));
-				break;
-			case oIndexPrimary:
-				values[5] = PointerGetDatum(cstring_to_text("primary"));
-				break;
-			case oIndexUnique:
-				values[5] = PointerGetDatum(cstring_to_text("unique"));
-				break;
-			case oIndexRegular:
-				values[5] = PointerGetDatum(cstring_to_text("regular"));
-				break;
-			case oIndexBridge:
-				values[5] = PointerGetDatum(cstring_to_text("bridge"));
-				break;
-			case oIndexExclusion:
-				values[5] = PointerGetDatum(cstring_to_text("exclusion"));
-				break;
-			default:
-				values[5] = PointerGetDatum(cstring_to_text("unknown"));
-				break;
-		}
-
-		state = pg_atomic_read_u64(&header->state);
-		values[6] = Int64GetDatum(O_PAGE_STATE_GET_USAGE_COUNT(state));
-
-		tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc, values, nulls);
-	}
-
-	return (Datum) 0;
+/// SQL entry point that switches OrioleDB into its parallel-query debug
+/// regression mode.
+///
+/// The underlying `debug_parallel_query` global is only compiled into builds
+/// configured with the parallel-debug build option; for the standard build this
+/// is a documented no-op that records intent for later wiring.
+#[pgrx::pg_extern]
+fn orioledb_parallel_debug_start() {
+    unsafe { DEBUG_PARALLEL_QUERY = DEBUG_PARALLEL_REGRESS };
 }
 
-Datum
-orioledb_ucm_check(PG_FUNCTION_ARGS)
-{
-	pub static mut RESULT: bool = true;
-	pub static mut I: std::os::raw::c_int = 0;
-
-	for (i = 0; i < OPagePoolTypesCount && result; i++)
-		result = ucm_check_map(&page_pools[i].ucm);
-
-	PG_RETURN_BOOL(result);
+/// SQL entry point that switches OrioleDB out of parallel-query debug mode.
+#[pgrx::pg_extern]
+fn orioledb_parallel_debug_stop() {
+    unsafe { DEBUG_PARALLEL_QUERY = DEBUG_PARALLEL_OFF };
 }
 
-fn
-orioledb_AcceptInvalidationMessagesHook()
-{
-	if (prev_AcceptInvalidationMessagesHook)
-		prev_AcceptInvalidationMessagesHook();
+/// Parallel-query debug mode selector (only meaningful in parallel-debug builds).
+static mut DEBUG_PARALLEL_QUERY: i32 = 0;
 
-	o_replay_saved_inval_messages();
+/// Parallel-query debug value used by the regression tests.
+const DEBUG_PARALLEL_REGRESS: i32 = 1;
+
+/// Parallel-query debug value used in normal operation.
+const DEBUG_PARALLEL_OFF: i32 = 0;
+
+// ---------------------------------------------------------------------------
+// Hook implementations
+// ---------------------------------------------------------------------------
+
+/// Chained onto PostgreSQL's `AcceptInvalidationMessages` hook: replay any
+/// inval messages OrioleDB saved while it had no listener.
+fn orioledb_accept_invalidation_messages_hook() {
+    crate::recovery::recovery::o_replay_saved_inval_messages();
 }
 
-fn
-orioledb_usercache_hook(Datum arg, Oid arg1, Oid arg2, Oid arg3)
-{
-	o_invalidate_descrs(arg1, arg2, arg3);
+/// User-cache invalidation hook: drop cached descriptors for the given oids.
+fn orioledb_usercache_hook(arg1: pgrx::pg_sys::Oid, arg2: pgrx::pg_sys::Oid, arg3: pgrx::pg_sys::Oid) {
+    crate::catalog::o_sys_cache::o_invalidate_descrs(arg1, arg2, arg3);
 }
 
-
-o_invalidate_oids(ORelOids oids)
-{
-	pub static mut MSG: SharedInvalidationMessage = std::mem::zeroed();
-
-	Assert(ORelOidsIsValid(oids));
-
-	msg.usr.id = SHAREDINVALUSERCACHE_ID;
-	msg.usr.arg1 = oids.datoid;
-	msg.usr.arg2 = oids.reloid;
-	msg.usr.arg3 = oids.relnode;
-
-	// check AddCatcacheInvalidationMessage() for an explanation
-	VALGRIND_MAKE_MEM_DEFINED(&msg, sizeof(msg));
-
-	SendSharedInvalidMessages(&msg, 1);
+/// Send a shared-invalidation message for the given relation oids.
+pub fn o_invalidate_oids(oids: crate::btree::io::ORelOids) {
+    crate::catalog::o_sys_cache::send_inval_for_oids(oids);
 }
 
-Datum
-orioledb_version(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_TEXT_P(cstring_to_text(ORIOLEDB_VERSION));
-}
-
-#define COMMIT_HASH_STRING #COMMIT_HASH
-
-#define STRINGIZE2(s) #s
-#define STRINGIZE(s) STRINGIZE2(s)
-
-Datum
-orioledb_commit_hash(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_TEXT_P(cstring_to_text(STRINGIZE(COMMIT_HASH)));
-}
-
-//
-// Returns a page pool by the type.
-//
-PagePool *
-get_ppool(OPagePoolType type)
-{
-	Assert((int) type < OPagePoolTypesCount);
-	return (PagePool *) &page_pools[type];
-}
-
-//
-// Returns a page pool for the page number.
-//
-PagePool *
-get_ppool_by_blkno(OInMemoryBlkno blkno)
-{
-	if (O_PAGE_IS_LOCAL(blkno))
-		return (PagePool *) &local_ppool;
-
-	Assert(blkno < orioledb_buffers_count);
-
-	if (blkno >= main_buffers_offset)
-		return (PagePool *) &page_pools[OPagePoolMain];
-
-	if (blkno < free_tree_buffers_count)
-		return (PagePool *) &page_pools[OPagePoolFreeTree];
-
-	return (PagePool *) &page_pools[OPagePoolCatalog];
-}
-
-//
-// Returns count of all dirty pages (sum of dirty pages for all page pools).
-//
-OInMemoryBlkno
-get_dirty_pages_count_sum()
-{
-	pub static mut RESULT: OInMemoryBlkno = 0;
-	pub static mut I: std::os::raw::c_int = 0;
-
-	for (i = 0; i < OPagePoolTypesCount; i++)
-		result += ppool_dirty_pages_count((PagePool *) &page_pools[i]);
-
-	pub static mut RESULT: return = std::mem::zeroed();
-}
-
-
-jsonb_push_key(JsonbParseState **state, key: &mut char)
-{
-	pub static mut JVAL: JsonbValue = std::mem::zeroed();
-
-	memset(&jval, 0, sizeof(jval));
-	ASAN_UNPOISON_MEMORY_REGION(&jval, sizeof(jval));
-	jval.type = jbvString;
-	jval.val.string.len = strlen(key);
-	jval.val.string.val = key;
-	() pushJsonbValue(state, WJB_KEY, &jval);
-}
-
-
-jsonb_push_int8_key(JsonbParseState **state, key: &mut char, int64 value)
-{
-	pub static mut JVAL: JsonbValue = std::mem::zeroed();
-
-	ASAN_UNPOISON_MEMORY_REGION(&jval, sizeof(jval));
-
-	jsonb_push_key(state, key);
-
-	jval.type = jbvNumeric;
-	jval.val.numeric = DatumGetNumeric(DirectFunctionCall1(int8_numeric, Int64GetDatum(value)));
-	() pushJsonbValue(state, WJB_VALUE, &jval);
-
-}
-
-
-jsonb_push_null_key(JsonbParseState **state, key: &mut char)
-{
-	pub static mut JVAL: JsonbValue = std::mem::zeroed();
-
-	jsonb_push_key(state, key);
-
-	jval.type = jbvNull;
-	() pushJsonbValue(state, WJB_VALUE, &jval);
-
-}
-
-
-jsonb_push_bool_key(JsonbParseState **state, key: &mut char, bool value)
-{
-	pub static mut JVAL: JsonbValue = std::mem::zeroed();
-
-	jsonb_push_key(state, key);
-
-	ASAN_UNPOISON_MEMORY_REGION(&jval, sizeof(jval));
-
-	jval.type = jbvBool;
-	jval.val.boolean = value;
-	() pushJsonbValue(state, WJB_VALUE, &jval);
-
-}
-
-
-jsonb_push_string_key(JsonbParseState **state, const key: &mut char,
-					  const value: &mut char)
-{
-	pub static mut JVAL: JsonbValue = std::mem::zeroed();
-
-	jsonb_push_key(state, (char *) key);
-
-	ASAN_UNPOISON_MEMORY_REGION(&jval, sizeof(jval));
-	jval.type = jbvString;
-	jval.val.string.len = strlen(value);
-	jval.val.string.val = (char *) value;
-	() pushJsonbValue(state, WJB_VALUE, &jval);
-}
-
-fn
-orioledb_error_cleanup_hook()
-{
-	pub static mut I: std::os::raw::c_int = 0;
-
-	GET_CUR_PROCDATA()->waitingForOxid = false;
-	pg_atomic_write_u64(&GET_CUR_PROCDATA()->pendingSkUndoLoc,
-						InvalidUndoLocation);
-	release_all_page_locks();
-	ppool_release_all_pages();
-	for (i = 0; i < (int) UndoLogsCount; i++)
-		release_undo_size((UndoLogType) i);
-	btree_mark_incomplete_splits();
-	skip_ucm = false;
-	ppool_run_clock_depth = 0;
-	btree_io_error_cleanup();
-	o_reset_syscache_hooks();
-	o_ddl_cleanup();
-	if (orioledb_s3_mode)
-		s3_headers_error_cleanup();
-	in_nontransactional_truncate = false;
-	reset_saving_inval_messages();
-}
-
-fn
-orioledb_get_relation_info_hook(root: &mut PlannerInfo,
-								Oid relationObjectId,
-								bool inhparent,
-								rel: &mut RelOptInfo)
-{
-	pub static mut RELATION: Relation = std::mem::zeroed();
-
-	relation = table_open(relationObjectId, NoLock);
-
-	if (is_orioledb_rel(relation))
-	{
-		// Evade parallel scan of OrioleDB's tables
-		rel->rel_parallel_workers = RelationGetParallelWorkers(relation, -1);
-		if (rel->rel_parallel_workers > 0)
-			elog(DEBUG3, "Rel parallel workers = %d", rel->rel_parallel_workers);
-
-		if (relation->rd_rel->relhasindex)
-		{
-			pub static mut LIST_CELL: *mut lc = std::ptr::null_mut();
-			descr: &mut OTableDescr = relation_get_descr(relation);
-			pub static mut O_INDEX_DESCR: *mut primary = std::ptr::null_mut();
-
-			if (descr)
-			{
-				primary = GET_PRIMARY(descr);
-
-				foreach(lc, rel->indexlist)
-				{
-					info: &mut IndexOptInfo = lfirst_node(IndexOptInfo, lc);
-					pub static mut HASBITMAP: bool = false;
-					pub static mut IX_NUM: OIndexNumber = std::mem::zeroed();
-					pub static mut O_INDEX_DESCR: *mut index_descr = std::ptr::null_mut();
-					pub static mut ROOT_PAGE_BLKNO: OInMemoryBlkno = std::mem::zeroed();
-					pub static mut ROOT_PAGE: Page = std::mem::zeroed();
-					pub static mut INDEX: Relation = std::mem::zeroed();
-					pub static mut OBT_OPTIONS: *mut options = std::ptr::null_mut();
-
-					index = index_open(info->indexoid, AccessShareLock);
-
-					options = (OBTOptions *) index->rd_options;
-
-					//
-// TODO: Remove when parallel index scan will be
-// implemented
-//
-					info->amcanparallel = false;
-
-					//
-// Only the single-field uint64 encoding is enabled in the
-// planner for now.  The composite (fixed-key) path is
-// fully implemented and unit-tested, but choosing it well
-// needs a bitmap-heap cost that reflects orioledb's
-// primary-index scan at plan-generation time (a
-// patched-PG change); until then it stays out of
-// amhasgetbitmap.
-//
-
-					//
-// Offer a bitmap scan whenever the primary key can back
-// one (single int/ctid, or a composite of small ints).
-// This covers row-array IN() on a composite primary key,
-// planned as a BitmapOr of per-tuple primary-index scans,
-// which on large tables beats the common-prefix scan.
-//
-					hasbitmap = o_keybitmap_pk_mode(primary, NULL) != O_KEYBITMAP_NONE;
-					info->amhasgetbitmap = hasbitmap;
-
-					if (index->rd_rel->relam != BTREE_AM_OID || (options && !options->orioledb_index))
-					{
-						index_close(index, AccessShareLock);
-						continue;
-					}
-
-					index_close(index, AccessShareLock);
-
-					for (ix_num = 0; ix_num < descr->nIndices; ix_num++)
-					{
-						index_descr = descr->indices[ix_num];
-						if (index_descr->oids.reloid == info->indexoid)
-							break;
-					}
-					Assert(ix_num < descr->nIndices);
-					Assert(index_descr);
-					o_btree_load_shmem(&index_descr->desc);
-					rootPageBlkno = index_descr->desc.rootInfo.rootPageBlkno;
-					root_page = O_GET_IN_MEMORY_PAGE(rootPageBlkno);
-					info->tree_height = PAGE_GET_LEVEL(root_page);
-					info->pages = TREE_NUM_LEAF_PAGES(&index_descr->desc);
-				}
-			}
-		}
-	}
-
-	table_close(relation, NoLock);
-}
-
-#if PG_VERSION_NUM < 180000
-static bool
-orioledb_skip_tree_height_hook(Relation indexRelation)
-{
-	pub static mut RESULT: bool = false;
-	pub static mut TBL: Relation = std::mem::zeroed();
-
-	tbl = table_open(indexRelation->rd_index->indrelid, NoLock);
-
-	if (is_orioledb_rel(tbl))
-		result = true;
-
-	table_close(tbl, NoLock);
-	pub static mut RESULT: return = std::mem::zeroed();
-}
-#endif
-
-fn
-orioledb_get_running_transactions_extension(extension: &mut RunningTransactionsExtension)
-{
-	extension->csn = pg_atomic_read_u64(&TRANSAM_VARIABLES->nextCommitSeqNo);
-	extension->runXmin = pg_atomic_read_u64(&xid_meta->runXmin);
-
-	pg_read_barrier();
-
-	extension->nextXid = pg_atomic_read_u64(&xid_meta->nextXid);
-}
-
-fn
-orioledb_wait_snapshot(extension: &mut RunningTransactionsExtension)
-{
-	pub static mut OXID: OXid = std::mem::zeroed();
-
-	oxid = pg_atomic_read_u64(&xid_meta->runXmin);
-	while (oxid < extension->nextXid)
-	{
-		while (!wait_for_oxid(oxid, true));
-		oxid++;
-	}
-}
-
-Datum
-orioledb_parallel_debug_start(PG_FUNCTION_ARGS)
-{
-	debug_parallel_query = DEBUG_PARALLEL_REGRESS;
-	PG_RETURN_VOID();
-}
-
-Datum
-orioledb_parallel_debug_stop(PG_FUNCTION_ARGS)
-{
-	debug_parallel_query = DEBUG_PARALLEL_OFF;
-	PG_RETURN_VOID();
-}
-
-static bool
-o_newlocale_from_collation()
-{
-	pub static mut SHARED_SEGMENT_INITIALIZED: return = std::mem::zeroed();
-}
-
-bool
-is_bump_memory_context(MemoryContext mcxt)
-{
-#if PG_VERSION_NUM >= 170000
-	return IsA(mcxt, BumpContext);
-#else
-	pub static mut FALSE: return = std::mem::zeroed();
-#endif
-}
-
-static bool
-check_debug_max_bridge_ctid(char **newval,  **extra, GucSource source)
-{
-	if (strcmp(*newval, "") != 0)
-	{
-		pub static mut BLOCK_NUMBER: *mut myextra = std::ptr::null_mut();
-		pub static mut BLOCK_NUMBER: BlockNumber = std::mem::zeroed();
-		pub static mut CHAR: *mut badp = std::ptr::null_mut();
-		pub static mut CVT: unsigned long = std::mem::zeroed();
-
-		errno = 0;
-		cvt = strtoul(*newval, &badp, 10);
-		if (errno)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-					 errmsg("invalid input syntax for block number: \"%s\"",
-							*newval)));
-		blockNumber = (BlockNumber) cvt;
-
-		//
-// Cope with possibility that unsigned long is wider than BlockNumber,
-// in which case strtoul will not raise an error for some values that
-// are out of the range of BlockNumber.  (See similar code in
-// oidin().)
-//
-#if SIZEOF_LONG > 4
-		if (cvt != (unsigned long) blockNumber &&
-			cvt != (unsigned long) ((int32) blockNumber))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-					 errmsg("invalid input syntax for block number: \"%s\"",
-							*newval)));
-#endif
-
-		myextra = (BlockNumber *) guc_malloc(ERROR, sizeof(BlockNumber));
-		*myextra = blockNumber;
-		*extra = ( *) myextra;
-	}
-	pub static mut TRUE: return = std::mem::zeroed();
-}
-
-fn
-assign_debug_max_bridge_ctid(const newval: &mut char,  *extra)
-{
-	if (newval && strcmp(newval, "") != 0)
-		max_bridge_ctid_blkno = *((BlockNumber *) extra);
-	else
-		max_bridge_ctid_blkno = InvalidBlockNumber;
+/// Planner `get_relation_info` hook: fill in OrioleDB-specific information
+/// (tree height, page count, bitmap-scan availability) for each index.
+fn orioledb_get_relation_info_hook(
+    root: &mut pgrx::pg_sys::PlannerInfo,
+    relation_object_id: pgrx::pg_sys::Oid,
+    inhparent: bool,
+    rel: &mut pgrx::pg_sys::RelOptInfo,
+) {
+    let relation = unsafe { pgrx::pg_sys::table_open(relation_object_id, pgrx::pg_sys::AccessShareLock) };
+    if crate::tableam::tree::is_orioledb_rel(relation) {
+        if unsafe { (*relation).rd_rel.as_ref() }.map(|r| r.relhasindex).unwrap_or(false) {
+            let descr = crate::tableam::descr::relation_get_descr(relation);
+            if let Some(descr) = descr {
+                let primary = descr.primary();
+                for info in rel.indexlist_iter() {
+                    let index = unsafe { pgrx::pg_sys::index_open(info.indexoid, pgrx::pg_sys::AccessShareLock) };
+                    let options = unsafe { (*index).rd_options };
+                    unsafe { (*info).amcanparallel = false };
+                    let has_bitmap = crate::tableam::key_bitmap::o_keybitmap_pk_mode(primary, std::ptr::null())
+                        != crate::tableam::key_bitmap::O_KEYBITMAP_NONE;
+                    unsafe { (*info).amhasgetbitmap = has_bitmap };
+                    let is_orioledb_index = unsafe { (*index).rd_rel.as_ref() }
+                        .map(|r| r.relam == crate::indexam::handler::BTREE_AM_OID)
+                        .unwrap_or(false)
+                        && !(options.is_null()
+                            || !crate::indexam::handler::o_index_options_is_orioledb(options));
+                    if !is_orioledb_index {
+                        unsafe { pgrx::pg_sys::index_close(index, pgrx::pg_sys::AccessShareLock) };
+                        continue;
+                    }
+                    unsafe { pgrx::pg_sys::index_close(index, pgrx::pg_sys::AccessShareLock) };
+                    let index_descr = descr.index_by_reloid(info.indexoid);
+                    crate::btree::io::o_btree_load_shmem(&index_descr.desc);
+                    let root_page = crate::btree::io::get_in_memory_page(index_descr.desc.root_info.root_page_blkno);
+                    unsafe {
+                        (*info).tree_height = crate::btree::page_contents::page_get_level(root_page);
+                        (*info).pages = crate::btree::btree::tree_num_leaf_pages(&index_descr.desc);
+                    }
+                }
+            }
+        }
+    }
+    unsafe { pgrx::pg_sys::table_close(relation, pgrx::pg_sys::NoLock) };
 }
