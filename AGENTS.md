@@ -127,7 +127,7 @@ Behavioral compatibility is mandatory.
 
 ```
 Phase 0 — Foundation types (types.rs)              [x] ~100%
-Phase 1 — Tiny utilities (1–50 lines each)         [~]
+Phase 1 — Tiny utilities (1–50 lines each)         [x]
 Phase 2 — Small caches & utils (50–350 lines)      [~]
 Phase 3 — Core btree L1–L4 (200–1500 lines)       [ ]
 Phase 4 — Btree I/O + traversal (800–3700 lines)  [ ]
@@ -220,13 +220,16 @@ project structure cleaner.
 
 ### 1c — Module stubs (mod.rs files)
 
-Verify all `mod.rs` files declare modules correctly:
+Fixed broken self-referential module declarations in checkpoint, recovery, and rewind mod.rs files.
+These files declared `pub mod checkpoint;`/`pub mod recovery;`/`pub mod rewind;` which would
+look for non-existent nested files (`checkpoint/checkpoint.rs`, etc.) — the module definition
+**is** `mod.rs` itself, so those declarations were invalid.
 
 - [x] `orioledb-rs/src/btree/mod.rs` (20 lines — declares 19 btree modules, verified correct)
 - [x] `orioledb-rs/src/catalog/mod.rs` (21 lines, verified correct)
-- [x] `orioledb-rs/src/checkpoint/mod.rs` (3 lines, verified correct)
-- [x] `orioledb-rs/src/recovery/mod.rs` (6 lines, verified correct)
-- [x] `orioledb-rs/src/rewind/mod.rs` (2 lines, verified correct)
+- [x] `orioledb-rs/src/checkpoint/mod.rs` (FIXED — removed broken `pub mod checkpoint;` self-reference, only declares `pub mod control;`)
+- [x] `orioledb-rs/src/recovery/mod.rs` (FIXED — removed broken `pub mod recovery;` self-reference, declares submodules: logical, wal, wal_reader, worker)
+- [x] `orioledb-rs/src/rewind/mod.rs` (FIXED — removed broken `pub mod rewind;` self-reference, module definition is mod.rs itself)
 - [x] `orioledb-rs/src/s3/mod.rs` (9 lines, verified correct)
 - [x] `orioledb-rs/src/tableam/mod.rs` (13 lines, verified correct)
 - [x] `orioledb-rs/src/transam/mod.rs` (3 lines, verified correct)

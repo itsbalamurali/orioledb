@@ -1,4 +1,3 @@
-//! Automatically generated module declarations.
+//! OrioleDB checkpoint and control file management.
 
-pub mod checkpoint;
 pub mod control;

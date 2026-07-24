@@ -1,3 +1,1 @@
-//! Automatically generated module declarations.
-
-pub mod rewind;
+//! OrioleDB rewind subsystem — recovery from replication lag and crash recovery.

@@ -1,7 +1,6 @@
-//! Automatically generated module declarations.
+//! OrioleDB recovery subsystem — WAL reading, replay, logical replication, and worker management.
 
 pub mod logical;
-pub mod recovery;
 pub mod wal;
 pub mod wal_reader;
 pub mod worker;
