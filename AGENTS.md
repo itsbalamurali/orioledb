@@ -209,7 +209,7 @@ project structure cleaner.
 **Module:** `orioledb-rs/src/workers/interrupt.rs`  **C source:** `src/workers/interrupt.c`
 **Size:** 46 C / 42 Rust lines  **Depends on:** `types`
 
-- [ ] Interrupt handler / signal handling
+- [x] Interrupt handler / signal handling
 
 ### 1b — Indexam (single-file module)
 
@@ -222,18 +222,18 @@ project structure cleaner.
 
 Verify all `mod.rs` files declare modules correctly:
 
-- [ ] `orioledb-rs/src/btree/mod.rs` (20 lines — declares 19 btree modules)
-- [ ] `orioledb-rs/src/catalog/mod.rs` (21 lines)
-- [ ] `orioledb-rs/src/checkpoint/mod.rs` (3 lines)
-- [ ] `orioledb-rs/src/recovery/mod.rs` (6 lines)
-- [ ] `orioledb-rs/src/rewind/mod.rs` (2 lines)
-- [ ] `orioledb-rs/src/s3/mod.rs` (9 lines)
-- [ ] `orioledb-rs/src/tableam/mod.rs` (13 lines)
-- [ ] `orioledb-rs/src/transam/mod.rs` (3 lines)
-- [ ] `orioledb-rs/src/tuple/mod.rs` (5 lines)
-- [ ] `orioledb-rs/src/utils/mod.rs` (8 lines)
-- [ ] `orioledb-rs/src/workers/mod.rs` (3 lines)
-- [ ] `orioledb-rs/src/indexam/mod.rs` (2 lines)
+- [x] `orioledb-rs/src/btree/mod.rs` (20 lines — declares 19 btree modules, verified correct)
+- [x] `orioledb-rs/src/catalog/mod.rs` (21 lines, verified correct)
+- [x] `orioledb-rs/src/checkpoint/mod.rs` (3 lines, verified correct)
+- [x] `orioledb-rs/src/recovery/mod.rs` (6 lines, verified correct)
+- [x] `orioledb-rs/src/rewind/mod.rs` (2 lines, verified correct)
+- [x] `orioledb-rs/src/s3/mod.rs` (9 lines, verified correct)
+- [x] `orioledb-rs/src/tableam/mod.rs` (13 lines, verified correct)
+- [x] `orioledb-rs/src/transam/mod.rs` (3 lines, verified correct)
+- [x] `orioledb-rs/src/tuple/mod.rs` (5 lines, verified correct)
+- [x] `orioledb-rs/src/utils/mod.rs` (8 lines, verified correct)
+- [x] `orioledb-rs/src/workers/mod.rs` (3 lines, verified correct)
+- [x] `orioledb-rs/src/indexam/mod.rs` (2 lines, verified correct)
 
 ---
 
