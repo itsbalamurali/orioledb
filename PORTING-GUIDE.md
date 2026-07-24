@@ -1,19 +1,13 @@
 # OrioleDB Rust Porting Guide
 
-This guide tracks the porting progress for the full OrioleDB Rust rewrite.
-Each checkbox can be ticked as work on that file or module is completed.
-
-**Strategy**: Start with small, self-contained files for quick wins, then work
-up to larger, more complex files. Dependencies always gate progress — you can't
-fix a file that depends on a broken one.
-
 ## Legend
-
 - `[x]` = **done** — idiomatic Rust, no C shims/stubs/TODOs
 - `[~]` = **in progress** — partially ported
 - `[ ]` = **not started**
 
 ## Quick-start checklist (order of execution)
+
+Port in dependency order. Each phase must be completed before phases that depend on it.
 
 ```
 Phase 0 — Foundation types (types.rs)              [~] 90% of types.rs
@@ -94,6 +88,8 @@ It is the single most important file — fix it first even though it is large.
 internal dependencies. Fixing these removes broken module stubs and makes the
 project structure cleaner.
 
+**Depends on:** Phase 0
+
 ### 1a — Workers (interrupt handling)
 
 **Module:** `orioledb-rs/src/workers/interrupt.rs`  **C source:** `src/workers/interrupt.c`
@@ -133,7 +129,7 @@ Verify all `mod.rs` files declare modules correctly:
 simple CRUD operations. Low risk, high satisfaction — each fix removes a broken
 translation.
 
-**Depends on:** `types`
+**Depends on:** Phase 0
 
 ### 2a — Compression & control
 
@@ -169,7 +165,7 @@ All these are cache lookup modules with simple struct + init + get functions:
 ## Phase 3 — Core btree layers (L1–L4)
 
 **Strategy:** These are the core btree internals. They depend on `types` and on
-each other. page_state.rs is the most complex here but also the most critical —
+each other. `page_state.rs` is the most complex here but also the most critical —
 the page locking protocol is the concurrency foundation.
 
 **Depends on:** Phase 0 (types), Phase 2 (utils)
@@ -248,6 +244,8 @@ atomic state words, lock-free waiter list, and semaphore-based wakeup.
 
 **Strategy:** These are the complex btree internals. They have cross-dependencies
 within the btree module and call into external modules (catalog, transam, s3).
+
+**Depends on:** Phase 3
 
 ### L5 — Shared buffer I/O
 
@@ -338,6 +336,8 @@ Split into sub-sections when porting:
 **Strategy:** These modules are larger but more straightforward — they compose
 the lower btree layers into usable APIs. Depends on phases 3–4 being complete.
 
+**Depends on:** Phase 4
+
 ### L9 — Scan
 
 **Module:** `orioledb-rs/src/btree/scan.rs`  **C source:** `src/btree/scan.c`
@@ -406,6 +406,8 @@ the lower btree layers into usable APIs. Depends on phases 3–4 being complete.
 
 **Strategy:** These are the biggest, most complex modules. They depend on
 lower phases being complete. Tackle these last.
+
+**Depends on:** Phase 5
 
 ### transam — Oxid (transaction IDs)
 
@@ -485,7 +487,6 @@ lower phases being complete. Tackle these last.
 - [ ] Integration tests
 - [ ] Regression test suite
 - [ ] Documentation (module-level docs, function docs)
-- [ ] Code review
 
 ---
 
@@ -526,24 +527,12 @@ types.rs (Phase 0)
 
 ---
 
-## Migration order summary
-
-1. **Phase 0** → `types.rs` (foundation — 90% done, fix remaining items)
-2. **Phase 1** → interrupt, indexam, mod.rs stubs (quick wins)
-3. **Phase 2** → compress, control, S3 small, catalog caches (~20 small files)
-4. **Phase 3** → page_state, page_contents, page_chunks, btree, utils (core)
-5. **Phase 4** → io, find, insert, split, merge, undo, modify, iterator (complex btree)
-6. **Phase 5** → scan, fastpath, build, check, print + tuple + tableam (high-level)
-7. **Phase 6** → transam, catalog large, recovery, checkpoint, s3 large, workers
-8. **Phase 7** → lib.rs, cleanup, tests, documentation
-
----
-
 ## Notes
 
-- Compilation via `cargo check` is not available without pgrx/PostgreSQL toolchain.
-- Verification criteria: brace/paren balance, no C syntax, faithful algorithm
-  reproduction, and proper Rust idioms.
-- Each file should be ported completely before moving to the next.
+- Compilation via `cargo check` is not available without the pgrx/PostgreSQL
+  toolchain (`$PGRX_HOME` + `pg_config`). Verification is done by: (1) reading
+  the real pgrx/zstd API from the cargo registry cache, (2) brace/paren balance,
+  (3) absence of C syntax, and (4) faithful algorithm reproduction.
 - The C code is the **specification** — never create wrappers around C code.
 - `extern "C"` exists only for PostgreSQL FFI boundaries (pgrx integration).
+- This file supersedes `ORDER.md`. You can delete `ORDER.md` now.
