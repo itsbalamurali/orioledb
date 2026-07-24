@@ -258,13 +258,16 @@ translation.
 
 ### 2b — S3 small modules
 
-All currently contain BROKEN Rust (C code with `pub static mut` garbage). Need full rewrite:
-
 - [x] `orioledb-rs/src/s3/checksum.rs` — S3 checksums (255 C / 310 Rust)
   - `S3FileChecksum` + `S3ChecksumState` structs, SHA-256 via `sha2` crate,
     `make_s3_checksum_state`, `free_s3_checksum_state`, `flush_s3_checksum_state`,
     `get_s3_file_checksum` using `HashMap` + `std::fs`
-- [ ] `orioledb-rs/src/s3/archive.rs` — S3 WAL archiving (178 C / 175 Rust)
+- [x] `orioledb-rs/src/s3/control.rs` — S3 control (295 C / 576 Rust)
+  - `s3_check_control`, `s3_put_lock_file`, `s3_delete_lock_file`,
+    `StringInfo` buffer type, `ORIOLEDB_DATA_DIR` constant,
+    conditional S3 upload with retry logic for concurrent lock detection
+- [ ] `orioledb-rs/src/s3/archive.rs` — S3 WAL archiving (178 C / 175 Rust) — **BLOCKED** by unported S3TaskLocation, ArchiveModuleCallbacks
+- [ ] `orioledb-rs/src/s3/queue.rs` — S3 request queue (348 C / 344 Rust) — **BLOCKED** by pg_atomic_uint64, ConditionVariable
 
 ### 2c — Catalog cache modules (tiny CRUD lookups)
 
