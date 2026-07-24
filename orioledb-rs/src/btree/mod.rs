@@ -16,4 +16,5 @@ pub mod page_state;
 pub mod print;
 pub mod scan;
 pub mod split;
+pub mod types;
 pub mod undo;
