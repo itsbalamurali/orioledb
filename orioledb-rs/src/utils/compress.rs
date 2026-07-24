@@ -5,48 +5,50 @@
 //! single compression and decompression context is reused across the whole
 //! process, matching the original C implementation.
 
-use pgrx::pg_sys;
+use std::sync::LazyLock;
 use zstd_safe;
 
 /// Compression level type, mirroring the C `OCompress` typedef (an `int`).
 pub type OCompress = i32;
 
 /// Reusable zstd compression context.
-static mut ZSTD_CCTX: Option<zstd_safe::CCtx<'static>> = None;
+///
+/// Initialized on first use via `LazyLock`, matching the C implementation's
+/// single global `ZSTD_CCtx` created during `o_compress_init()`.
+static ZSTD_CCTX: LazyLock<zstd_safe::CCtx<'static>> = LazyLock::new(|| zstd_safe::CCtx::create());
 
 /// Reusable zstd decompression context.
-static mut ZSTD_DCTX: Option<zstd_safe::DCtx<'static>> = None;
+static ZSTD_DCTX: LazyLock<zstd_safe::DCtx<'static>> = LazyLock::new(|| zstd_safe::DCtx::create());
 
-/// Reusable destination buffer for compression.
-static mut ZSTD_DST: Option<Vec<u8>> = None;
+/// Reusable destination buffer for compression, sized to worst case.
+static ZSTD_DST: LazyLock<Vec<u8>> =
+    LazyLock::new(|| vec![0u8; zstd_safe::compress_bound(crate::ORIOLEDB_BLCKSZ)]);
 
 /// Initializes the compression contexts.
 ///
-/// Allocates the compression context, the decompression context, and a reusable
-/// destination buffer sized to the worst-case compressed size of an OrioleDB
-/// page. Called once during extension startup.
+/// This function is a no-op in the Rust implementation because contexts are
+/// initialized lazily on first use via `LazyLock`. It exists for API
+/// compatibility with the C signature.
 pub fn o_compress_init() {
-    unsafe {
-        ZSTD_CCTX = Some(zstd_safe::CCtx::create());
-        ZSTD_DCTX = Some(zstd_safe::DCtx::create());
-        let dst_size = zstd_safe::compress_bound(crate::ORIOLEDB_BLCKSZ);
-        ZSTD_DST = Some(vec![0u8; dst_size]);
-    }
+    // Contexts are initialized lazily; ensure they exist.
+    let _ = ZSTD_CCTX.get();
+    let _ = ZSTD_DCTX.get();
+    let _ = ZSTD_DST.get();
 }
 
 /// Compresses a BTree page using zstd.
 ///
 /// `page` must be exactly one OrioleDB page. The result is written into the
 /// shared destination buffer and `(buffer, written_size)` is returned.
-pub fn o_compress_page(page: &[u8], lvl: OCompress) -> (&'static [u8], usize) {
-    let dst = unsafe { ZSTD_DST.as_mut().expect("o_compress_init not called") };
-    let cctx = unsafe { ZSTD_CCTX.as_mut().expect("o_compress_init not called") };
+pub fn o_compress_page(page: &[u8], lvl: OCompress) -> (&[u8], usize) {
+    let dst = ZSTD_DST.get();
+    let cctx = ZSTD_CCTX.get();
 
     let written = cctx
         .compress(dst, page, lvl)
         .unwrap_or_else(|e| pg_fatal_compress(e));
 
-    (dst, written)
+    (&dst[..written], written)
 }
 
 /// Decompresses a BTree page using zstd.
@@ -54,7 +56,7 @@ pub fn o_compress_page(page: &[u8], lvl: OCompress) -> (&'static [u8], usize) {
 /// `src` (of length `size`) is decompressed into `page`, which must be exactly
 /// one OrioleDB page. Panics on a zstd error or a size mismatch.
 pub fn o_decompress_page(src: &[u8], page: &mut [u8]) {
-    let dctx = unsafe { ZSTD_DCTX.as_mut().expect("o_compress_init not called") };
+    let dctx = ZSTD_DCTX.get();
 
     let written = dctx
         .decompress(page, src)

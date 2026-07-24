@@ -218,7 +218,7 @@ static mut MAX_BRIDGE_CTID_STRING: *mut std::os::raw::c_char = std::ptr::null_mu
 static mut MAX_BRIDGE_CTID_BLKNO: u32 = 0;
 
 /// Whether OrioleDB runs on top of S3 storage.
-static mut ORIOLEDB_S3_MODE: bool = false;
+pub(crate) static mut ORIOLEDB_S3_MODE: bool = false;
 
 /// Number of S3 request workers.
 static mut S3_NUM_WORKERS: i32 = 3;
@@ -374,14 +374,15 @@ fn orioledb_init() {
 
     // Translate the GUC block counts (expressed in `BLCKSZ` blocks) into
     // OrioleDB page counts.
-    let main_buffers_count = unsafe { pg_sys::main_buffers_guc as usize * pg_sys::BLCKSZ as usize }
-        / ORIOLEDB_BLCKSZ;
-    let free_tree_buffers_count = unsafe { pg_sys::free_tree_buffers_guc as usize * pg_sys::BLCKSZ as usize }
-        / ORIOLEDB_BLCKSZ;
-    let catalog_buffers_count = unsafe { pg_sys::catalog_buffers_guc as usize * pg_sys::BLCKSZ as usize }
-        / ORIOLEDB_BLCKSZ;
-    let temp_buffers_count = unsafe { pg_sys::temp_buffers_guc as usize * pg_sys::BLCKSZ as usize }
-        / ORIOLEDB_BLCKSZ;
+    let main_buffers_count =
+        unsafe { pg_sys::main_buffers_guc as usize * pg_sys::BLCKSZ as usize } / ORIOLEDB_BLCKSZ;
+    let free_tree_buffers_count =
+        unsafe { pg_sys::free_tree_buffers_guc as usize * pg_sys::BLCKSZ as usize }
+            / ORIOLEDB_BLCKSZ;
+    let catalog_buffers_count =
+        unsafe { pg_sys::catalog_buffers_guc as usize * pg_sys::BLCKSZ as usize } / ORIOLEDB_BLCKSZ;
+    let temp_buffers_count =
+        unsafe { pg_sys::temp_buffers_guc as usize * pg_sys::BLCKSZ as usize } / ORIOLEDB_BLCKSZ;
 
     unsafe {
         MAIN_BUFFERS_OFFSET = free_tree_buffers_count + catalog_buffers_count;
@@ -398,15 +399,14 @@ fn orioledb_init() {
         let mut xid = (pg_sys::xid_buffers_guc as usize * pg_sys::BLCKSZ as usize) / 2;
         xid /= ORIOLEDB_BLCKSZ;
         XID_BUFFERS_COUNT = xid as u32;
-        XID_CIRCULAR_BUFFER_SIZE = xid * ORIOLEDB_BLCKSZ
-            / std::mem::size_of::<OXidMapItem>();
+        XID_CIRCULAR_BUFFER_SIZE = xid * ORIOLEDB_BLCKSZ / std::mem::size_of::<OXidMapItem>();
 
         if ENABLE_REWIND {
             let mut rewind = (pg_sys::rewind_buffers_guc as usize * pg_sys::BLCKSZ as usize) / 2;
             rewind /= ORIOLEDB_BLCKSZ;
             REWIND_BUFFERS_COUNT = rewind as u32;
-            REWIND_CIRCULAR_BUFFER_SIZE = rewind * ORIOLEDB_BLCKSZ
-                / std::mem::size_of::<RewindItem>();
+            REWIND_CIRCULAR_BUFFER_SIZE =
+                rewind * ORIOLEDB_BLCKSZ / std::mem::size_of::<RewindItem>();
         }
     }
 
@@ -483,7 +483,11 @@ fn register_gucs(min_pool_size: usize) {
             None,
             pgrx::guc::GucSetting::<i32>::new(pg_sys::main_buffers_guc),
             (8192usize.max(min_pool_size)) as i32,
-            if DEBUG_DISABLE_POOLS_LIMIT { 1 } else { min_pool_size as i32 },
+            if DEBUG_DISABLE_POOLS_LIMIT {
+                1
+            } else {
+                min_pool_size as i32
+            },
             i32::MAX,
             postmaster,
             GUC_UNIT_BLOCKS as i32,
@@ -495,7 +499,11 @@ fn register_gucs(min_pool_size: usize) {
             None,
             pgrx::guc::GucSetting::<i32>::new(pg_sys::free_tree_buffers_guc),
             min_pool_size as i32,
-            if DEBUG_DISABLE_POOLS_LIMIT { 1 } else { min_pool_size as i32 },
+            if DEBUG_DISABLE_POOLS_LIMIT {
+                1
+            } else {
+                min_pool_size as i32
+            },
             i32::MAX,
             postmaster,
             GUC_UNIT_BLOCKS as i32,
@@ -507,7 +515,11 @@ fn register_gucs(min_pool_size: usize) {
             None,
             pgrx::guc::GucSetting::<i32>::new(pg_sys::catalog_buffers_guc),
             min_pool_size as i32,
-            if DEBUG_DISABLE_POOLS_LIMIT { 1 } else { min_pool_size as i32 },
+            if DEBUG_DISABLE_POOLS_LIMIT {
+                1
+            } else {
+                min_pool_size as i32
+            },
             i32::MAX,
             postmaster,
             GUC_UNIT_BLOCKS as i32,
@@ -1196,7 +1208,9 @@ fn ppools_shmem_init(_ptr: *mut std::os::raw::c_void, _found: bool) {
 
 /// Size of the page-descriptor array, cache-line aligned.
 fn page_descs_size() -> usize {
-    crate::utils::page_pool::cacheline_align(ORIOLEDB_BUFFERS_COUNT * std::mem::size_of::<crate::btree::io::OrioleDBPageDesc>())
+    crate::utils::page_pool::cacheline_align(
+        ORIOLEDB_BUFFERS_COUNT * std::mem::size_of::<crate::btree::io::OrioleDBPageDesc>(),
+    )
 }
 
 /// Per-pool shared-memory size estimates.
@@ -1244,7 +1258,10 @@ fn orioledb_shmem_startup() {
         crate::btree::io::init_btree_io_lwlocks();
         crate::btree::io::o_btree_init_unique_lwlocks();
 
-        pgrx::pg_sys::before_shmem_exit(Some(orioledb_on_shmem_exit), pgrx::pg_sys::Datum::from(0u64));
+        pgrx::pg_sys::before_shmem_exit(
+            Some(orioledb_on_shmem_exit),
+            pgrx::pg_sys::Datum::from(0u64),
+        );
 
         pgrx::pg_sys::LWLockRelease(pgrx::pg_sys::AddinShmemInitLock);
 
@@ -1260,12 +1277,16 @@ unsafe extern "C" fn orioledb_on_shmem_exit(_code: i32, _arg: pgrx::pg_sys::Datu
 }
 
 /// Returns the shared-memory-backed page pool of the given type.
-pub fn get_ppool(kind: crate::utils::page_pool::OPagePoolType) -> &'static mut crate::utils::page_pool::PagePool {
+pub fn get_ppool(
+    kind: crate::utils::page_pool::OPagePoolType,
+) -> &'static mut crate::utils::page_pool::PagePool {
     &mut PAGE_POOLS[kind as usize]
 }
 
 /// Returns the page pool that owns the given in-memory block number.
-pub fn get_ppool_by_blkno(blkno: crate::btree::io::OInMemoryBlkno) -> &'static mut crate::utils::page_pool::PagePool {
+pub fn get_ppool_by_blkno(
+    blkno: crate::btree::io::OInMemoryBlkno,
+) -> &'static mut crate::utils::page_pool::PagePool {
     if crate::btree::io::o_page_is_local(blkno) {
         return &mut LOCAL_PPOOL;
     }
@@ -1297,9 +1318,7 @@ pub fn o_page_desc_init(desc: &mut crate::btree::io::OrioleDBPageDesc) {
 /// Assert that shared memory has been initialized.
 pub fn orioledb_check_shmem() {
     if unsafe { !SHARED_SEGMENT_INITIALIZED } {
-        pgrx::error!(
-            "orioledb must be loaded via shared_preload_libraries"
-        );
+        pgrx::error!("orioledb must be loaded via shared_preload_libraries");
     }
 }
 
@@ -1344,9 +1363,8 @@ fn o_verify_dir_exists_or_create(
                     }
                     return;
                 }
-                let err = unsafe {
-                    std::ffi::CStr::from_ptr(libc::strerror(*libc::__errno_location()))
-                };
+                let err =
+                    unsafe { std::ffi::CStr::from_ptr(libc::strerror(*libc::__errno_location())) };
                 pgrx::error!(
                     "could not access directory \"{}\": {}",
                     dirname.to_str().unwrap_or("?"),
@@ -1363,9 +1381,8 @@ fn o_verify_dir_exists_or_create(
             }
         }
         -1 => {
-            let err = unsafe {
-                std::ffi::CStr::from_ptr(libc::strerror(*libc::__errno_location()))
-            };
+            let err =
+                unsafe { std::ffi::CStr::from_ptr(libc::strerror(*libc::__errno_location())) };
             pgrx::error!(
                 "could not access directory \"{}\": {}",
                 dirname.to_str().unwrap_or("?"),
@@ -1400,7 +1417,9 @@ fn orioledb_page_stats() -> pgrx::datum::TableIterator<'static, (String, i64, i6
 }
 
 #[pgrx::pg_extern]
-fn orioledb_print_pool_pages(ppool_arg: default!(i32, 0)) -> pgrx::datum::TableIterator<'static, (i64, String, i64, i64, i64, String, i64)> {
+fn orioledb_print_pool_pages(
+    ppool_arg: default!(i32, 0),
+) -> pgrx::datum::TableIterator<'static, (i64, String, i64, i64, i64, String, i64)> {
     orioledb_check_shmem();
     let kind = match crate::utils::page_pool::OPagePoolType::try_from(ppool_arg) {
         Ok(k) => k,
@@ -1467,7 +1486,9 @@ fn orioledb_commit_hash() -> &'static str {
 
 #[pgrx::pg_extern]
 fn orioledb_ucm_check() -> bool {
-    PAGE_POOLS.iter().all(|p| crate::utils::ucm::ucm_check_map(&p.ucm))
+    PAGE_POOLS
+        .iter()
+        .all(|p| crate::utils::ucm::ucm_check_map(&p.ucm))
 }
 
 /// SQL entry point that switches OrioleDB into its parallel-query debug
@@ -1507,7 +1528,11 @@ fn orioledb_accept_invalidation_messages_hook() {
 }
 
 /// User-cache invalidation hook: drop cached descriptors for the given oids.
-fn orioledb_usercache_hook(arg1: pgrx::pg_sys::Oid, arg2: pgrx::pg_sys::Oid, arg3: pgrx::pg_sys::Oid) {
+fn orioledb_usercache_hook(
+    arg1: pgrx::pg_sys::Oid,
+    arg2: pgrx::pg_sys::Oid,
+    arg3: pgrx::pg_sys::Oid,
+) {
     crate::catalog::o_sys_cache::o_invalidate_descrs(arg1, arg2, arg3);
 }
 
@@ -1524,18 +1549,25 @@ fn orioledb_get_relation_info_hook(
     inhparent: bool,
     rel: &mut pgrx::pg_sys::RelOptInfo,
 ) {
-    let relation = unsafe { pgrx::pg_sys::table_open(relation_object_id, pgrx::pg_sys::AccessShareLock) };
+    let relation =
+        unsafe { pgrx::pg_sys::table_open(relation_object_id, pgrx::pg_sys::AccessShareLock) };
     if crate::tableam::tree::is_orioledb_rel(relation) {
-        if unsafe { (*relation).rd_rel.as_ref() }.map(|r| r.relhasindex).unwrap_or(false) {
+        if unsafe { (*relation).rd_rel.as_ref() }
+            .map(|r| r.relhasindex)
+            .unwrap_or(false)
+        {
             let descr = crate::tableam::descr::relation_get_descr(relation);
             if let Some(descr) = descr {
                 let primary = descr.primary();
                 for info in rel.indexlist_iter() {
-                    let index = unsafe { pgrx::pg_sys::index_open(info.indexoid, pgrx::pg_sys::AccessShareLock) };
+                    let index = unsafe {
+                        pgrx::pg_sys::index_open(info.indexoid, pgrx::pg_sys::AccessShareLock)
+                    };
                     let options = unsafe { (*index).rd_options };
                     unsafe { (*info).amcanparallel = false };
-                    let has_bitmap = crate::tableam::key_bitmap::o_keybitmap_pk_mode(primary, std::ptr::null())
-                        != crate::tableam::key_bitmap::O_KEYBITMAP_NONE;
+                    let has_bitmap =
+                        crate::tableam::key_bitmap::o_keybitmap_pk_mode(primary, std::ptr::null())
+                            != crate::tableam::key_bitmap::O_KEYBITMAP_NONE;
                     unsafe { (*info).amhasgetbitmap = has_bitmap };
                     let is_orioledb_index = unsafe { (*index).rd_rel.as_ref() }
                         .map(|r| r.relam == crate::indexam::handler::BTREE_AM_OID)
@@ -1549,9 +1581,12 @@ fn orioledb_get_relation_info_hook(
                     unsafe { pgrx::pg_sys::index_close(index, pgrx::pg_sys::AccessShareLock) };
                     let index_descr = descr.index_by_reloid(info.indexoid);
                     crate::btree::io::o_btree_load_shmem(&index_descr.desc);
-                    let root_page = crate::btree::io::get_in_memory_page(index_descr.desc.root_info.root_page_blkno);
+                    let root_page = crate::btree::io::get_in_memory_page(
+                        index_descr.desc.root_info.root_page_blkno,
+                    );
                     unsafe {
-                        (*info).tree_height = crate::btree::page_contents::page_get_level(root_page);
+                        (*info).tree_height =
+                            crate::btree::page_contents::page_get_level(root_page);
                         (*info).pages = crate::btree::btree::tree_num_leaf_pages(&index_descr.desc);
                     }
                 }

@@ -247,8 +247,12 @@ translation.
 
 ### 2a — Compression & control
 
-- [ ] `orioledb-rs/src/utils/compress.rs` — zstd compression (112 C / 106 Rust)
-- [ ] `orioledb-rs/src/checkpoint/control.rs` — checkpoint control file (152 C / 147 Rust)
+- [x] `orioledb-rs/src/utils/compress.rs` — zstd compression (112 C / 106 Rust)
+  - `OCompress` type, `LazyLock`-based global contexts (`ZSTD_CCTX`, `ZSTD_DCTX`, `ZSTD_DST`),
+    `o_compress_init`, `o_compress_page`, `o_decompress_page`, `o_compress_max_lvl`, `validate_compress`
+- [x] `orioledb-rs/src/checkpoint/control.rs` — checkpoint control file (152 C / 416 Rust)
+  - `CheckpointControl` + `CheckpointUndoInfo` structs, CRC32C implementation,
+    `get_checkpoint_control_data`, `check_checkpoint_control`, `write_checkpoint_control`
 
 ### 2b — S3 small modules
 

@@ -1,59 +1,73 @@
-use crate::btree::undo;
-use crate::catalog::o_sys_cache;
-use crate::catalog::pg_tablespace_d;
-use crate::common::relpath;
-use crate::orioledb;
-use crate::recovery::recovery;
-use crate::tableam::descr;
-use crate::utils::syscache;
-use pgrx::pg_sys;
+//! Compute data directory prefixes for a given tablespace.
+//!
+//! Mirrors `src/catalog/o_tablespace_cache.c`. Provides utilities for
+//! determining the on-disk location of OrioleDB data files based on a
+//! tablespace OID.
 
-// -------------------------------------------------------------------------
-//
-// o_tablespace_cache.c
-// Routines to get tablespace path for relnode
-//
-// Copyright (c) 2021-2026, Oriole DB Inc.
-// Copyright (c) 2025-2026, Supabase Inc.
-//
-// IDENTIFICATION
-// contrib/orioledb/src/catalog/o_tablespace_cache.c
-//
-// -------------------------------------------------------------------------
-//
+use std::ffi::CStr;
 
-// Silent cppcheck
-#ifndef TABLESPACE_VERSION_DIRECTORY
-#define TABLESPACE_VERSION_DIRECTORY
-#endif
+/// Name of the OrioleDB data directory within a tablespace.
+const ORIOLEDB_DATA_DIR: &str = "orioledb_data";
 
+/// Version directory suffix for tablespaces (empty — cppcheck silence).
+const TABLESPACE_VERSION_DIRECTORY: &str = "";
 
-o_get_prefixes_for_tablespace(Oid datoid, Oid tablespace,
-							  char **prefix, char **db_prefix)
-{
-	static char pathbuf[MAXPGPATH];
-	pub static mut PATH_DATUM: Datum = std::mem::zeroed();
-	pub static mut TEXT: *mut path = std::ptr::null_mut();
-	pub static mut CHAR: *mut path_str = std::ptr::null_mut();
+/// Compute the data directory path and database-specific path for a given tablespace.
+///
+/// If `tablespace` is `0` (invalid/`InvalidOid`), defaults to PostgreSQL's
+/// default tablespace (`DEFAULTTABLESPACE_OID`). This covers system trees and
+/// trees whose tablespace has not been set yet.
+///
+/// # Returns
+/// A tuple `(prefix, db_prefix)` where:
+/// - `prefix` is the data directory path for the tablespace
+/// - `db_prefix` is the database-specific path (`prefix/datoid`)
+///
+/// # API Note
+/// The original C API uses output parameters (`char **prefix`, `char **db_prefix`)
+/// with a mixed static/allocated buffer pattern. This Rust implementation returns
+/// `(String, String)` instead, which is more idiomatic and avoids the manual
+/// memory management of the C version.
+pub fn o_get_prefixes_for_tablespace(datoid: u32, tablespace: u32) -> (String, String) {
+    // Treat InvalidOid as the default tablespace.
+    let tablespace = if tablespace == 0 {
+        pgrx::pg_sys::DEFAULTTABLESPACE_OID
+    } else {
+        tablespace
+    };
 
-	//
-// Treat InvalidOid as the default tablespace.  System trees and trees
-// whose tablespace has not been set yet use tablespace = 0.
-//
-	if (!OidIsValid(tablespace))
-		tablespace = DEFAULTTABLESPACE_OID;
-	path_datum = DirectFunctionCall1(pg_tablespace_location, ObjectIdGetDatum(tablespace));
-	path = DatumGetTextP(path_datum);
-	path_str = text_to_cstring(path);
+    // Get tablespace location via pg_tablespace_location().
+    let location_datum = unsafe {
+        pgrx::pg_sys::DirectFunctionCall1(
+            pgrx::pg_sys::pg_tablespace_location,
+            pgrx::pg_sys::ObjectIdGetDatum(tablespace),
+        )
+    };
+    let location_text = unsafe { pgrx::pg_sys::DatumGetTextP(location_datum) };
+    let cstr_ptr = unsafe { pgrx::pg_sys::text_to_cstring(location_text) };
+    let location = unsafe { CStr::from_ptr(cstr_ptr).to_string_lossy().into_owned() };
 
-	if (path_str[0] == '\0')
-		snprintf(pathbuf, sizeof(pathbuf), "%s", ORIOLEDB_DATA_DIR);
-	else
-		snprintf(pathbuf, sizeof(pathbuf), "%s/" TABLESPACE_VERSION_DIRECTORY "/%s", path_str, ORIOLEDB_DATA_DIR);
-	pfree(path_str);
-	pfree(path);
-	if (prefix)
-		*prefix = pathbuf;
-	if (db_prefix)
-		*db_prefix = psprintf("%s/%u", pathbuf, datoid);
+    // Free the C-allocated strings (matches C: pfree(path_str); pfree(path);)
+    unsafe {
+        pgrx::pg_sys::pfree(cstr_ptr as *mut _);
+        pgrx::pg_sys::pfree(location_text as *mut _);
+    }
+
+    // Build prefix path.
+    // When location is empty, the prefix is just ORIOLEDB_DATA_DIR.
+    // Otherwise: location/"/"TABLESPACE_VERSION_DIRECTORY"/"ORIOLODB_DATA_DIR
+    // (TABLESPACE_VERSION_DIRECTORY is empty, producing a // which the FS handles).
+    let prefix = if location.is_empty() {
+        ORIOLEDB_DATA_DIR.to_string()
+    } else {
+        format!(
+            "{}/{}/{}",
+            location, TABLESPACE_VERSION_DIRECTORY, ORIOLEDB_DATA_DIR
+        )
+    };
+
+    // Build database-specific prefix.
+    let db_prefix = format!("{}/{}", prefix, datoid);
+
+    (prefix, db_prefix)
 }
