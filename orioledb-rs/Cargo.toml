@@ -24,6 +24,8 @@ zstd = "0.13.3"
 zstd-safe = "7.2.4"
 libc = "0.2"
 memoffset = "0.9"
+sha2 = "0.10"
+hex = "0.4"
 
 [dependencies.pgrx-bench]
 version = "=0.19.1"

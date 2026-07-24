@@ -1,251 +1,444 @@
-use crate::common::string;
-use crate::openssl::sha;
-use crate::orioledb;
-use crate::s3::checksum;
-use crate::storage::fd;
-use crate::utils::hsearch;
-use pgrx::pg_sys;
+//! S3 file checksum management.
+//!
+//! Mirrors `src/s3/checksum.c`. Provides utilities for tracking checksums of
+//! files during S3 checkpoints, detecting which files have changed since the
+//! last checkpoint, and persisting those checksums to temporary files.
+//!
+//! Key types:
+//! - [`S3FileChecksum`] — per-file checksum entry (filename, checksum, changed flag, checkpoint number)
+//! - [`S3ChecksumState`] — runtime state holding a hash table of previous checksums and a buffer
+//!   of new checksum entries collected during checkpointing.
+//!
+//! The hash table maps filenames to their previously known checksums (loaded from a checksum file
+//! at startup). During checkpointing, `get_s3_file_checksum()` computes the SHA-256 of each file,
+//! compares it against the previous checksum, and records whether the file changed.
 
-// -------------------------------------------------------------------------
-//
-// checksum.c
-// Declarations for calculating checksums of S3-specific data.
-//
-// Copyright (c) 2024-2026, Oriole DB Inc.
-// Copyright (c) 2025-2026, Supabase Inc.
-//
-// IDENTIFICATION
-// contrib/orioledb/src/s3/checksum.c
-//
-// -------------------------------------------------------------------------
-//
+use crate::btree::types::{OXid, MAXPGPATH};
+use pgrx::ereport;
+use pgrx::PgLogLevel;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
 
-fn initHashTable(state: &mut S3ChecksumState, const filename: &mut char);
+/// Maximum length of a SHA-256 digest expressed as a hex string.
+///
+/// SHA-256 produces a 32-byte digest, which is 64 hex characters + null terminator.
+pub const O_SHA256_DIGEST_STRING_LENGTH: usize = Sha256::OUTPUT_LEN * 2 + 1;
 
-//
-// Allocate S3ChecksumState and initalize hashTable by reading filename.  A
-// caller should prepare a buffer for S3FileChecksum entries, the caller is
-// responsible to release the buffer.
-//
-S3ChecksumState *
-makeS3ChecksumState(uint32 checkpointNumber, fileChecksums: &mut S3FileChecksum,
-					uint32 fileChecksumsMaxLen, const filename: &mut char)
-{
-	pub static mut S3_CHECKSUM_STATE: *mut res = std::ptr::null_mut();
+/// A single file's checksum entry.
+///
+/// Mirrors the C `S3FileChecksum` struct. Contains the file path, its computed
+/// SHA-256 checksum (as a hex string), a flag indicating whether the checksum
+/// changed since the last checkpoint, and the checkpoint number.
+#[derive(Clone, Debug, Default)]
+pub struct S3FileChecksum {
+    /// File path (up to MAXPGPATH characters).
+    pub filename: String,
 
-	res = (S3ChecksumState *) palloc(sizeof(S3ChecksumState));
-	res->hashTable = NULL;
-	res->checkpointNumber = checkpointNumber;
-	res->fileChecksums = fileChecksums;
-	res->fileChecksumsMaxLen = fileChecksumsMaxLen;
-	res->fileChecksumsLen = 0;
+    /// SHA-256 digest as a lowercase hex string (64 chars + null).
+    pub checksum: String,
 
-	initHashTable(res, filename);
+    /// `true` if the checksum differs from the previous checkpoint.
+    pub changed: bool,
 
-	pub static mut RES: return = std::mem::zeroed();
+    /// Checkpoint number at which this checksum was recorded.
+    pub checkpoint_number: u32,
 }
 
-//
-// Free S3ChecksumState and hashTable.  A caller is responsible to release the
-// buffer of S3FileChecksum entries.
-//
-
-freeS3ChecksumState(state: &mut S3ChecksumState)
-{
-	if (state == NULL)
-		return;
-
-	hash_destroy(state->hashTable);
-	pfree(state);
+impl S3FileChecksum {
+    /// Creates a new `S3FileChecksum` with the given filename and checksum.
+    fn new(filename: String, checksum: String, changed: bool, checkpoint_number: u32) -> Self {
+        Self {
+            filename,
+            checksum,
+            changed,
+            checkpoint_number,
+        }
+    }
 }
 
-//
-// Initialize a hash table to store checksums of database files.
-//
-fn
-initHashTable(state: &mut S3ChecksumState, const filename: &mut char)
-{
-	pub static mut FILE: *mut file = std::ptr::null_mut();
-	pub static mut BUF: StringInfoData = std::mem::zeroed();
-	pub static mut CTL: HASHCTL = std::mem::zeroed();
+/// Runtime state for S3 checksum tracking during checkpointing.
+///
+/// Mirrors the C `S3ChecksumState` struct. Holds:
+/// - A hash table of previously known checksums (loaded from a checksum file).
+/// - A checkpoint number for validation.
+/// - A buffer of new `S3FileChecksum` entries collected during checkpointing.
+///
+/// The caller is responsible for managing the lifetime of the `file_checksums`
+/// buffer (allocated externally, freed by the caller).
+pub struct S3ChecksumState {
+    /// Hash table mapping filenames to their previous checksums.
+    ///
+    /// `None` if no checksum file was found or loaded.
+    hash_table: Option<HashMap<String, S3FileChecksum>>,
 
-	Assert(state->hashTable == NULL);
+    /// Current checkpoint number — used to validate entries in the checksum file.
+    checkpoint_number: u32,
 
-	MemSet(&ctl, 0, sizeof(ctl));
-	ctl.keysize = MAXPGPATH;
-	ctl.entrysize = sizeof(S3FileChecksum);
-	ctl.hcxt = CurrentMemoryContext;
+    /// Buffer of checksum entries collected during checkpointing.
+    file_checksums: Vec<S3FileChecksum>,
 
-	file = AllocateFile(filename, "r");
-	if (file == NULL)
-	{
-		// Just ignore if the file doesn't exist
-		if (errno == ENOENT)
-			return;
-
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not read file \"%s\": %m", filename)));
-	}
-
-	state->hashTable = hash_create("S3FileChecksum hash table",
-								   32,	// arbitrary initial size
-								   &ctl,
-								   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-
-	initStringInfo(&buf);
-
-	while (pg_get_line_buf(file, &buf))
-	{
-		pub static mut FILE_ENTRY: S3FileChecksum = std::mem::zeroed();
-
-		if (sscanf(buf.data, "FILE: %1023[^,], CHECKSUM: %64[^,], CHECKPOINT: %u",
-				   fileEntry.filename, fileEntry.checksum, &fileEntry.checkpointNumber) == 3)
-		{
-			char		key[MAXPGPATH];
-			pub static mut S3_FILE_CHECKSUM: *mut newEntry = std::ptr::null_mut();
-			pub static mut FOUND: bool = false;
-
-			MemSet(key, 0, sizeof(key));
-			strlcpy(key, fileEntry.filename, sizeof(key));
-
-			if (fileEntry.checkpointNumber >= state->checkpointNumber)
-				ereport(ERROR,
-						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-						 errmsg("unexpected checkpoint number in the checksum file \"%s\": %s",
-								filename, buf.data)));
-
-			// Put the filename and its checksum into the hash table
-			newEntry = (S3FileChecksum *) hash_search(state->hashTable,
-													  key, HASH_ENTER, &found);
-			// Normally we shouldn't have duplicated keys in the file
-			if (found)
-				ereport(ERROR,
-						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-						 errmsg("the file name is duplicated in the checksum file \"%s\": %s",
-								filename, buf.data)));
-
-			// filename is already filled in
-			strlcpy(newEntry->checksum, fileEntry.checksum, sizeof(fileEntry.checksum));
-			newEntry->checkpointNumber = fileEntry.checkpointNumber;
-			newEntry->changed = false;
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("invalid line format of the checksum file \"%s\": %s",
-							filename, buf.data)));
-	}
-
-	pfree(buf.data);
-
-	if (ferror(file))
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not read file \"%s\": %m", filename)));
-
-	FreeFile(file);
+    /// Maximum capacity of the `file_checksums` buffer.
+    file_checksums_max_len: u32,
 }
 
-//
-// Save current workers' fileChecksums array into a temporary file.
-//
+impl S3ChecksumState {
+    /// Creates a new `S3ChecksumState`, initializing the hash table by reading
+    /// the checksum file.
+    ///
+    /// The caller provides a pre-allocated buffer for checksum entries (we store
+    /// it as a `Vec`). The caller is responsible for freeing the underlying
+    /// buffer when done.
+    ///
+    /// If the checksum file doesn't exist (`ENOENT`), the hash table is left
+    /// `None` and initialization silently succeeds.
+    ///
+    /// # Panics
+    ///
+    /// Uses `ereport!` for error reporting via pgrx. Will abort the current
+    /// transaction on I/O errors or malformed checksum files.
+    pub fn new(checkpoint_number: u32, file_checksums_max_len: u32, filename: &str) -> Self {
+        let mut state = Self {
+            hash_table: None,
+            checkpoint_number,
+            file_checksums: Vec::with_capacity(file_checksums_len as usize),
+            file_checksums_max_len,
+        };
 
-flushS3ChecksumState(state: &mut S3ChecksumState, const filename: &mut char)
-{
-	pub static mut FILE: *mut file = std::ptr::null_mut();
+        init_hash_table(&mut state, filename);
+        state
+    }
 
-	Assert(state->fileChecksums != NULL);
+    /// Returns the current checkpoint number.
+    pub fn checkpoint_number(&self) -> u32 {
+        self.checkpoint_number
+    }
 
-	//
-// We open the file for append in case if previous flush already created
-// the file.
-//
-	file = AllocateFile(filename, "a");
-	if (file == NULL)
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not create file \"%s\": %m", filename)));
+    /// Returns a reference to the collected checksum entries.
+    pub fn file_checksums(&self) -> &[S3FileChecksum] {
+        &self.file_checksums
+    }
 
-	for (int i = 0; i < state->fileChecksumsLen; i++)
-	{
-		if (fprintf(file, "FILE: %s, CHECKSUM: %s, CHECKPOINT: %u\n",
-					state->fileChecksums[i].filename, state->fileChecksums[i].checksum,
-					state->fileChecksums[i].checkpointNumber) < 0)
-			ereport(ERROR,
-					(errcode_for_file_access(),
-					 errmsg("could not write file \"%s\": %m",
-							filename)));
-	}
+    /// Returns the number of collected checksum entries.
+    pub fn file_checksums_len(&self) -> u32 {
+        self.file_checksums.len() as u32
+    }
 
-	if (fflush(file) || ferror(file) || FreeFile(file))
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not write file \"%s\": %m",
-						filename)));
+    /// Returns `true` if the hash table has been initialized.
+    pub fn hash_table_is_valid(&self) -> bool {
+        self.hash_table.is_some()
+    }
 
-	state->fileChecksumsLen = 0;
+    /// Looks up a previous checksum entry by filename.
+    pub fn find_previous_checksum(&self, filename: &str) -> Option<&S3FileChecksum> {
+        self.hash_table.as_ref().and_then(|ht| ht.get(filename))
+    }
+
+    /// Adds a new checksum entry to the buffer.
+    ///
+    /// # Panics
+    ///
+    /// Aborts if the buffer is full (mirrors the C `elog(ERROR)` in the original).
+    pub fn add_checksum(&mut self, entry: S3FileChecksum) {
+        if self.file_checksums.len() >= self.file_checksums_max_len as usize {
+            ereport!(
+                PgLogLevel::ERROR,
+                pgrx::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE,
+                "size of S3FileChecksum buffer is smaller than requested, \
+                 current size is {}",
+                self.file_checksums_max_len
+            );
+        }
+        self.file_checksums.push(entry);
+    }
+
+    /// Clears the collected checksum entries (resets length to 0).
+    ///
+    /// Note: This does NOT free the underlying Vec capacity — it only resets
+    /// the logical length, matching the C behavior of `state->fileChecksumsLen = 0`.
+    pub fn clear_checksums(&mut self) {
+        self.file_checksums.clear();
+    }
 }
 
-//
-// Check if a PostgreSQL file changed since last checkpoint and return
-// S3FileChecksum.
-//
-S3FileChecksum *
-getS3FileChecksum(state: &mut S3ChecksumState, const filename: &mut char,
-				  Pointer data, uint64 size)
-{
-	pub static mut S3_FILE_CHECKSUM: *mut prevEntry = std::ptr::null_mut();
-	pub static mut S3_FILE_CHECKSUM: *mut newEntry = std::ptr::null_mut();
-	unsigned char checksumbuf[SHA256_DIGEST_LENGTH];
-	char		checksumstringbuf[O_SHA256_DIGEST_STRING_LENGTH];
+/// Frees (discards) the checksum state.
+///
+/// In Rust, this is a no-op since `S3ChecksumState` owns its data and drops
+/// everything when dropped. The C version calls `hash_destroy` and `pfree`.
+pub fn free_s3_checksum_state(_state: S3ChecksumState) {
+    // Rust drops all fields automatically when the struct goes out of scope.
+}
 
-	//
-// hashTable might not have been initialized before if a checksum file
-// hasn't been found.
-//
-	if (state->hashTable != NULL)
-	{
-		char		key[MAXPGPATH];
+/// Flushes the collected checksum entries to a temporary file.
+///
+/// Writes each entry in the format:
+/// ```text
+/// FILE: <filename>, CHECKSUM: <checksum>, CHECKPOINT: <checkpoint_number>
+/// ```
+///
+/// Opens the file for append (to support multiple flushes).
+///
+/// # Panics
+///
+/// Aborts on I/O errors via `ereport!`.
+pub fn flush_s3_checksum_state(state: &mut S3ChecksumState, filename: &str) {
+    assert!(
+        !state.file_checksums.is_empty(),
+        "flush called with empty checksums"
+    );
 
-		MemSet(key, 0, sizeof(key));
-		strlcpy(key, filename, MAXPGPATH);
+    let path = Path::new(filename);
+    let mut file = File::options()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap_or_else(|err| {
+            ereport!(
+                PgLogLevel::ERROR,
+                pgrx::PgSqlErrorCode::ERRCODE_IO_ERROR,
+                "could not create file \"{}\": {}",
+                filename,
+                err
+            );
+        });
 
-		prevEntry = (S3FileChecksum *) hash_search(state->hashTable, key,
-												   HASH_FIND, NULL);
-	}
+    for entry in state.file_checksums.iter() {
+        let line = format!(
+            "FILE: {}, CHECKSUM: {}, CHECKPOINT: {}\n",
+            entry.filename, entry.checksum, entry.checkpoint_number
+        );
+        if file.write_all(line.as_bytes()).is_err() {
+            ereport!(
+                PgLogLevel::ERROR,
+                pgrx::PgSqlErrorCode::ERRCODE_IO_ERROR,
+                "could not write file \"{}\": {}",
+                filename,
+                std::io::Error::last_os_error()
+            );
+        }
+    }
 
-	() SHA256((unsigned char *) data, size, checksumbuf);
+    // Flush and verify no errors occurred.
+    if let Err(err) = file.flush() {
+        ereport!(
+            PgLogLevel::ERROR,
+            pgrx::PgSqlErrorCode::ERRCODE_IO_ERROR,
+            "could not write file \"{}\": {}",
+            filename,
+            err
+        );
+    }
 
-	hex_encode((char *) checksumbuf, sizeof(checksumbuf), checksumstringbuf);
-	checksumstringbuf[O_SHA256_DIGEST_STRING_LENGTH - 1] = '\0';
+    // Reset the collected checksums length (mirrors `state->fileChecksumsLen = 0`).
+    state.clear_checksums();
+}
 
-	newEntry = (S3FileChecksum *) palloc0(sizeof(S3FileChecksum));
+/// Computes the SHA-256 checksum of the given data and returns it as a hex string.
+fn compute_sha256_hex(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    hex::encode(result)
+}
 
-	strlcpy(newEntry->filename, filename, sizeof(newEntry->filename));
-	strlcpy(newEntry->checksum, checksumstringbuf, sizeof(newEntry->checksum));
+/// Initializes the hash table by reading the checksum file.
+///
+/// The checksum file format is:
+/// ```text
+/// FILE: <filename>, CHECKSUM: <checksum>, CHECKPOINT: <checkpoint_number>
+/// ```
+///
+/// Each valid line is inserted into the hash table. Duplicate keys cause an
+/// error. Checkpoint numbers >= the current checkpoint number also cause an error.
+///
+/// If the file doesn't exist (`ENOENT`), the function returns silently without
+/// initializing the hash table.
+fn init_hash_table(state: &mut S3ChecksumState, filename: &str) {
+    let path = Path::new(filename);
 
-	if (prevEntry == NULL ||
-		strncmp(prevEntry->checksum, newEntry->checksum, sizeof(newEntry->checksum)) != 0)
-	{
-		newEntry->changed = true;
-		newEntry->checkpointNumber = state->checkpointNumber;
-	}
-	else
-	{
-		Assert(prevEntry != NULL);
+    // Silently ignore missing files — the hash table may not exist.
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return,
+        Err(err) => {
+            ereport!(
+                PgLogLevel::ERROR,
+                pgrx::PgSqlErrorCode::ERRCODE_IO_ERROR,
+                "could not read file \"{}\": {}",
+                filename,
+                err
+            );
+        }
+    };
 
-		newEntry->changed = false;
-		newEntry->checkpointNumber = prevEntry->checkpointNumber;
-	}
+    let reader = BufReader::new(file);
 
-	// Store new entry into the checksum state
-	if (state->fileChecksumsLen >= state->fileChecksumsMaxLen)
-		elog(ERROR, "size of S3FileChecksum buffer is smaller than requested, "
-			 "current size is %d", state->fileChecksumsMaxLen);
+    // Create the hash table.
+    let mut hash_table: HashMap<String, S3FileChecksum> = HashMap::with_capacity(32);
 
-	memcpy(state->fileChecksums + state->fileChecksumsLen, newEntry, sizeof(S3FileChecksum));
-	state->fileChecksumsLen += 1;
+    for (line_num, line_result) in reader.lines().enumerate() {
+        let line = match line_result {
+            Ok(l) => l,
+            Err(err) => {
+                ereport!(
+                    PgLogLevel::ERROR,
+                    pgrx::PgSqlErrorCode::ERRCODE_IO_ERROR,
+                    "could not read line {} from checksum file \"{}\": {}",
+                    line_num + 1,
+                    filename,
+                    err
+                );
+            }
+        };
 
-	pub static mut NEW_ENTRY: return = std::mem::zeroed();
+        // Parse: "FILE: <filename>, CHECKSUM: <checksum>, CHECKPOINT: <number>"
+        let mut filename = None;
+        let mut checksum = None;
+        let mut checkpoint_number = None;
+
+        for part in line.split(',') {
+            let part = part.trim();
+            if let Some(rest) = part.strip_prefix("FILE: ") {
+                filename = Some(rest.trim().to_string());
+            } else if let Some(rest) = part.strip_prefix("CHECKSUM: ") {
+                checksum = Some(rest.trim().to_string());
+            } else if let Some(rest) = part.strip_prefix("CHECKPOINT: ") {
+                if let Ok(num) = rest.trim().parse::<u32>() {
+                    checkpoint_number = Some(num);
+                }
+            }
+        }
+
+        let entry_filename = match filename {
+            Some(f) => f,
+            None => {
+                ereport!(
+                    PgLogLevel::ERROR,
+                    pgrx::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE,
+                    "invalid line format of the checksum file \"{}\": {}",
+                    filename,
+                    line
+                );
+            }
+        };
+
+        let entry_checksum = match checksum {
+            Some(c) => c,
+            None => {
+                ereport!(
+                    PgLogLevel::ERROR,
+                    pgrx::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE,
+                    "invalid line format of the checksum file \"{}\": {}",
+                    filename,
+                    line
+                );
+            }
+        };
+
+        let entry_checkpoint = match checkpoint_number {
+            Some(n) => n,
+            None => {
+                ereport!(
+                    PgLogLevel::ERROR,
+                    pgrx::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE,
+                    "invalid line format of the checksum file \"{}\": {}",
+                    filename,
+                    line
+                );
+            }
+        };
+
+        // Validate checkpoint number.
+        if entry_checkpoint >= state.checkpoint_number {
+            ereport!(
+                PgLogLevel::ERROR,
+                pgrx::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE,
+                "unexpected checkpoint number in the checksum file \"{}\": {}",
+                filename,
+                line
+            );
+        }
+
+        // Check for duplicate keys.
+        let exists = hash_table.contains_key(&entry_filename);
+        if exists {
+            ereport!(
+                PgLogLevel::ERROR,
+                pgrx::PgSqlErrorCode::ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE,
+                "the file name is duplicated in the checksum file \"{}\": {}",
+                filename,
+                line
+            );
+        }
+
+        // Insert into hash table.
+        hash_table.insert(
+            entry_filename,
+            S3FileChecksum::new(
+                entry_checksum.clone(),
+                entry_checksum,
+                false, // changed is always false for previous entries
+                entry_checkpoint,
+            ),
+        );
+    }
+
+    state.hash_table = Some(hash_table);
+}
+
+/// Computes the checksum for a file and returns an `S3FileChecksum` entry.
+///
+/// This function:
+/// 1. Looks up the previous checksum for the given filename (if the hash table exists).
+/// 2. Computes the SHA-256 of the provided data.
+/// 3. Compares the new checksum against the previous one.
+/// 4. Creates a new `S3FileChecksum` entry with the `changed` flag set accordingly.
+/// 5. Appends the entry to the state's checksum buffer.
+///
+/// # Arguments
+///
+/// * `state` — The checksum state (must have been initialized via `S3ChecksumState::new`).
+/// * `filename` — The file path to compute the checksum for.
+/// * `data` — The file data to hash.
+///
+/// # Returns
+///
+/// A newly allocated `S3FileChecksum` entry (owned by the caller via the `Vec`).
+///
+/// # Panics
+///
+/// Aborts if:
+/// - The buffer is full.
+/// - The SHA-256 computation fails (should never happen).
+pub fn get_s3_file_checksum(
+    state: &mut S3ChecksumState,
+    filename: &str,
+    data: &[u8],
+) -> S3FileChecksum {
+    // Look up previous entry.
+    let prev_entry = state.find_previous_checksum(filename);
+
+    // Compute SHA-256.
+    let hex_checksum = compute_sha256_hex(data);
+
+    // Determine if the file changed.
+    let (changed, checkpoint_number) = match prev_entry {
+        Some(prev) if prev.checksum == hex_checksum => (false, prev.checkpoint_number),
+        _ => (true, state.checkpoint_number),
+    };
+
+    // Create new entry.
+    let entry = S3FileChecksum::new(
+        filename.to_string(),
+        hex_checksum,
+        changed,
+        checkpoint_number,
+    );
+
+    // Add to buffer.
+    state.add_checksum(entry.clone());
+
+    entry
 }

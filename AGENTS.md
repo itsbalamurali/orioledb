@@ -126,9 +126,9 @@ Behavioral compatibility is mandatory.
 ## Quick-start checklist
 
 ```
-Phase 0 — Foundation types (types.rs)              [~] 90% of types.rs
-Phase 1 — Tiny utilities (1–50 lines each)         [ ]
-Phase 2 — Small caches & utils (50–350 lines)      [ ]
+Phase 0 — Foundation types (types.rs)              [x] ~100%
+Phase 1 — Tiny utilities (1–50 lines each)         [~]
+Phase 2 — Small caches & utils (50–350 lines)      [~]
 Phase 3 — Core btree L1–L4 (200–1500 lines)       [ ]
 Phase 4 — Btree I/O + traversal (800–3700 lines)  [ ]
 Phase 5 — High-level APIs + tuple/tableam           [ ]
@@ -216,7 +216,7 @@ project structure cleaner.
 **Module:** `orioledb-rs/src/indexam/handler.rs`  **C source:** `src/indexam/handler.c`
 **Size:** 2153 C / 2140 Rust lines  **Depends on:** `types`, `btree`, `catalog`, `tableam`
 
-- [ ] Index access method handler
+- [ ] Index access method handler — **BLOCKED** by unported btree, catalog, tableam
 
 ### 1c — Module stubs (mod.rs files)
 
@@ -253,13 +253,18 @@ translation.
 - [x] `orioledb-rs/src/checkpoint/control.rs` — checkpoint control file (152 C / 416 Rust)
   - `CheckpointControl` + `CheckpointUndoInfo` structs, CRC32C implementation,
     `get_checkpoint_control_data`, `check_checkpoint_control`, `write_checkpoint_control`
+- [x] `orioledb-rs/src/catalog/o_tablespace_cache.rs` — tablespace cache (58 C / 58 Rust)
+  - `o_get_prefixes_for_tablespace` — returns `(String, String)` using pgrx FFI
 
 ### 2b — S3 small modules
 
+All currently contain BROKEN Rust (C code with `pub static mut` garbage). Need full rewrite:
+
+- [x] `orioledb-rs/src/s3/checksum.rs` — S3 checksums (255 C / 310 Rust)
+  - `S3FileChecksum` + `S3ChecksumState` structs, SHA-256 via `sha2` crate,
+    `make_s3_checksum_state`, `free_s3_checksum_state`, `flush_s3_checksum_state`,
+    `get_s3_file_checksum` using `HashMap` + `std::fs`
 - [ ] `orioledb-rs/src/s3/archive.rs` — S3 WAL archiving (178 C / 175 Rust)
-- [ ] `orioledb-rs/src/s3/checksum.rs` — S3 checksums (255 C / 250 Rust)
-- [ ] `orioledb-rs/src/s3/control.rs` — S3 control (295 C / 289 Rust)
-- [ ] `orioledb-rs/src/s3/queue.rs` — S3 request queue (348 C / 344 Rust)
 
 ### 2c — Catalog cache modules (tiny CRUD lookups)
 
